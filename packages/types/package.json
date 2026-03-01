@@ -1,0 +1,22 @@
+{
+    "name": "@repo/types",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "scripts": {
+        "build": "bun build src/index.ts --outdir dist --minify --target bun",
+        "start": "bun dist/index.js"
+    },
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "import": "./src/index.ts"
+        }
+    },
+    "devDependencies": {
+        "@types/bun": "latest"
+    },
+    "dependencies": {
+        "zod": "^4.1.12"
+    }
+}
