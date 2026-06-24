@@ -2,20 +2,21 @@ import { Hono } from 'hono';
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { deviceMiddleware } from './middlewares/device.middleware';
+import authRoutes from './modules/access-control/auth/auth.routes';
 
 const BASE_PATH = process.env.BASE_PATH
 const app = BASE_PATH ? new Hono().basePath(BASE_PATH) : new Hono();
 
-const origin = process.env.NODE_ENV === "production" ?
-    ["https://hisab.loomsanck.in",] :
-    [
-        'http://localhost:5173',
-        'http://localhost:5174',
-        "https://hisab.loomsanck.in"
+const allowedOrigins = process.env.NODE_ENV === "production"
+    ? ["https://hisab.loomsanck.in"]
+    : [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://hisab.loomsanck.in",
     ];
 
 app.use('*', cors({
-    origin,
+    origin: allowedOrigins,
     credentials: true,
 }));
 
@@ -27,5 +28,7 @@ app.use('*', deviceMiddleware)
 app.get('/', (c) => {
     return c.text('Hello World');
 });
+
+app.route('/auth', authRoutes);
 
 export default app
