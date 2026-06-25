@@ -11,6 +11,7 @@ import type {
 } from "@repo/types";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
+type StoreDeviceSecretRow = { deviceSecretEncrypted: string };
 
 export const createOrganization = async (
     organizationData: CreateOrganizationREPO,
@@ -155,4 +156,40 @@ export const deviceNameExistsInStore = async (storeId: string, name: string): Pr
     `;
 
     return Boolean(result);
+};
+
+export const getStoreDeviceById = async (
+    organizationId: string,
+    storeId: string,
+    deviceId: string,
+): Promise<StoreDeviceDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM store_devices
+        WHERE id = ${deviceId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
+    return result ? snakeToCamel(result) : null;
+};
+
+export const getStoreDeviceSecretById = async (
+    organizationId: string,
+    storeId: string,
+    deviceId: string,
+): Promise<string | null> => {
+    const [result] = await pg`
+        SELECT device_secret_encrypted
+        FROM store_devices
+        WHERE id = ${deviceId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
+    if (!result) {
+        return null;
+    }
+
+    return mapRow<StoreDeviceSecretRow>(result).deviceSecretEncrypted;
 };

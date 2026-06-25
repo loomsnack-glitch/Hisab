@@ -18,7 +18,7 @@ import AuthShell from "@/components/auth/auth-shell";
 import OtpField from "@/components/auth/otp-field";
 import { useAuthActions } from "@/store/auth.store";
 
-const REGISTER_QUERY_KEY = ["auth", "me"] as const;
+import { authKeys } from "@/lib/query-keys";
 
 const defaultValues: RegisterJSON = {
     requestType: "user-info",
@@ -57,7 +57,7 @@ const RegisterPage = () => {
 
             if (response.status === "success" && response.data?.user) {
                 setUser(response.data.user);
-                queryClient.setQueryData(REGISTER_QUERY_KEY, response);
+                queryClient.setQueryData(authKeys.me, response);
                 toast.success(response.message);
                 navigate("/dashboard", { replace: true });
             }

@@ -14,6 +14,12 @@ const optionalAddressSchema = z
     ])
     .optional();
 
+const deviceSecretSchema = z
+    .string()
+    .trim()
+    .min(8, "Device secret must be at least 8 characters")
+    .max(128, "Device secret must be at most 128 characters");
+
 export const StoreDeviceStatusSchema = z.enum(["active", "inactive", "revoked"]);
 
 export const OrganizationDTOSchema = z.object({
@@ -60,4 +66,5 @@ export const CreateStoreSchema = z.object({
 
 export const CreateStoreDeviceSchema = z.object({
     name: nameSchema,
+    deviceSecret: deviceSecretSchema,
 });

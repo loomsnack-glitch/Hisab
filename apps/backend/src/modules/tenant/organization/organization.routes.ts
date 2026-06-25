@@ -124,6 +124,39 @@ router.get("/:organizationId/stores/:storeId/devices", async (c) => {
     }
 });
 
+router.get("/:organizationId/stores/:storeId/devices/:deviceId/secret", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const deviceId = c.req.param("deviceId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+        if (invalidStoreId) {
+            return c.json(invalidStoreId, invalidStoreId.code);
+        }
+
+        const invalidDeviceId = validateUuidParam(deviceId, "Invalid device id");
+        if (invalidDeviceId) {
+            return c.json(invalidDeviceId, invalidDeviceId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await organizationService.getStoreDeviceSecret(
+            authUser.id,
+            organizationId,
+            storeId,
+            deviceId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getStoreDeviceSecret", c, error);
+    }
+});
+
 router.post(
     "/:organizationId/stores/:storeId/devices",
     validateSchema("json", CreateStoreDeviceSchema),

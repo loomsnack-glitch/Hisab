@@ -8,10 +8,12 @@ import {
     type OrganizationsListResponse,
     type ServiceResponse,
     type StoreDeviceResponse,
+    type StoreDeviceSecretResponse,
     type StoreDevicesListResponse,
     type StoreResponse,
     type StoresListResponse,
 } from "@repo/types";
+import { decryptDeviceSecret, encryptDeviceSecret } from "@/helpers/deviceSecret.helper";
 import * as organizationRepository from "./organization.repository";
 
 const normalizeOptionalText = (value?: string) => {
@@ -25,6 +27,10 @@ const getOrganizationForUser = async (organizationId: string, userId: string) =>
 
 const getStoreForOrganization = async (organizationId: string, storeId: string) => {
     return organizationRepository.getStoreById(organizationId, storeId);
+};
+
+const getStoreDeviceForOrganization = async (organizationId: string, storeId: string, deviceId: string) => {
+    return organizationRepository.getStoreDeviceById(organizationId, storeId, deviceId);
 };
 
 export const getOrganizations = async (userId: string): Promise<ServiceResponse<OrganizationsListResponse>> => {
@@ -258,14 +264,13 @@ export const createStoreDevice = async (
         };
     }
 
-    const deviceSecret = crypto.randomUUID();
-    const deviceSecretHash = await Bun.password.hash(deviceSecret);
+    const deviceSecretEncrypted = await encryptDeviceSecret(deviceData.deviceSecret);
     const device = await organizationRepository.createStoreDevice({
         id: crypto.randomUUID(),
         organizationId,
         storeId,
         name: deviceData.name,
-        deviceSecretHash,
+        deviceSecretEncrypted,
         createdBy: userId,
     });
 
@@ -282,9 +287,74 @@ export const createStoreDevice = async (
         status: "success",
         data: {
             device,
-            deviceSecret,
         },
         message: "Device created successfully",
         code: STATUS_CODES.CREATED,
+    };
+};
+
+export const getStoreDeviceSecret = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    deviceId: string,
+): Promise<ServiceResponse<StoreDeviceSecretResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const store = await getStoreForOrganization(organizationId, storeId);
+    if (!store) {
+        return {
+            status: "error",
+            message: "Store not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const device = await getStoreDeviceForOrganization(organizationId, storeId, deviceId);
+    if (!device) {
+        return {
+            status: "error",
+            message: "Device not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const encryptedSecret = await organizationRepository.getStoreDeviceSecretById(organizationId, storeId, deviceId);
+    if (!encryptedSecret) {
+        return {
+            status: "error",
+            message: "Device secret is not available",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    let deviceSecret: string;
+    try {
+        deviceSecret = await decryptDeviceSecret(encryptedSecret);
+    } catch {
+        return {
+            status: "error",
+            message: "This device secret cannot be displayed because it was created before secret reveal was enabled",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    return {
+        status: "success",
+        data: { deviceSecret },
+        message: "Device secret fetched successfully",
+        code: STATUS_CODES.SUCCESS,
     };
 };

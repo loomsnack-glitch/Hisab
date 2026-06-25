@@ -16,7 +16,7 @@ const queryClient = new QueryClient({
 const Providers = ({ children }: { children: ReactNode }) => {
     return (
         <QueryClientProvider client={queryClient}>
-            <ThemeProvider attribute="class" defaultTheme="light">
+            <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
                 {children}
                 <Toaster position="top-right" closeButton />
             </ThemeProvider>

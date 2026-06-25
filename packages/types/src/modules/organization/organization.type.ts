@@ -35,7 +35,7 @@ export type CreateStoreDeviceREPO = Pick<
     StoreDeviceDTO,
     "id" | "storeId" | "organizationId" | "name" | "createdBy"
 > & {
-    deviceSecretHash: string;
+    deviceSecretEncrypted: string;
     updatedBy?: string | null;
 };
 
@@ -73,5 +73,8 @@ export type StoreDevicesListResponse = {
 
 export type StoreDeviceResponse = {
     device: StoreDeviceDTO;
+};
+
+export type StoreDeviceSecretResponse = {
     deviceSecret: string;
 };

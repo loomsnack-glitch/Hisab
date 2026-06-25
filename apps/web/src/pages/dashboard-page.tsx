@@ -1,159 +1,196 @@
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
-import { LogOut } from "lucide-react";
-import { userLogout } from "@repo/services";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { getOrganizations } from "@repo/services";
+import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@repo/ui/components/table";
-import { toast } from "sonner";
+import { ArrowRight, Building2, CheckCircle2, Layers3, Sparkles, Store } from "lucide-react";
 
-import { useAuthActions, useAuthUser } from "@/store/auth.store";
-
-type ProfileRow = {
-    label: string;
-    value: string;
-};
-
-const columnHelper = createColumnHelper<ProfileRow>();
-
-const columns = [
-    columnHelper.accessor("label", {
-        header: "Field",
-        cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("value", {
-        header: "Value",
-        cell: (info) => info.getValue(),
-    }),
-];
+import CreateOrganizationDialog from "@/components/organizations/create-organization-dialog";
+import { formatDateTime } from "@/lib/format";
+import { organizationKeys } from "@/lib/query-keys";
+import { useAuthUser } from "@/store/auth.store";
 
 const DashboardPage = () => {
-    const navigate = useNavigate();
-    const queryClient = useQueryClient();
     const authUser = useAuthUser();
-    const { clearUser } = useAuthActions();
 
-    const rows = useMemo<ProfileRow[]>(() => {
-        if (!authUser) return [];
-
-        return [
-            { label: "Salutation", value: authUser.salutation.toUpperCase() },
-            { label: "First name", value: authUser.firstName },
-            { label: "Last name", value: authUser.lastName },
-            { label: "Phone", value: authUser.phone },
-            { label: "Email", value: authUser.email ?? "Not provided" },
-        ];
-    }, [authUser]);
-
-    const table = useReactTable({
-        data: rows,
-        columns,
-        getCoreRowModel: getCoreRowModel(),
+    const organizationsQuery = useQuery({
+        queryKey: organizationKeys.list(),
+        queryFn: getOrganizations,
     });
 
-    const logoutMutation = useMutation({
-        mutationFn: userLogout,
-        onSuccess: () => {
-            clearUser();
-            queryClient.removeQueries({ queryKey: ["auth", "me"] });
-            toast.success("Logged out successfully");
-            navigate("/login", { replace: true });
-        },
-        onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Failed to logout");
-        },
-    });
+    const organizations =
+        organizationsQuery.data?.status === "success" ? organizationsQuery.data.data?.organizations ?? [] : [];
+    const organizationCount = organizations.length;
 
     return (
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.18),_transparent_30%),linear-gradient(180deg,_#fffbf5,_#ffffff)] px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-5xl space-y-6">
-                <Card className="overflow-hidden border-amber-100 bg-white shadow-[0_24px_80px_rgba(120,53,15,0.12)]">
-                    <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-                        <CardHeader className="space-y-4 p-8">
-                            <div className="inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs uppercase tracking-[0.24em] text-amber-700">
-                                Demo dashboard
-                            </div>
-                            <CardTitle className="text-3xl tracking-tight text-slate-950">
-                                Welcome, {authUser?.salutation} {authUser?.firstName} {authUser?.lastName}
-                            </CardTitle>
-                            <CardDescription className="max-w-xl text-sm leading-7 text-slate-600">
-                                This is the placeholder screen after authentication. It confirms the user is logged in,
-                                the cookie session is working, and shared data can be rendered through TanStack Table.
-                            </CardDescription>
-                            <div className="flex flex-wrap gap-3">
-                                <Button
-                                    className="rounded-xl bg-slate-950 text-white hover:bg-slate-900"
-                                    onClick={() => logoutMutation.mutate()}
-                                    disabled={logoutMutation.isPending}
-                                >
-                                    <LogOut className="mr-2 size-4" />
-                                    {logoutMutation.isPending ? "Logging out..." : "Logout"}
-                                </Button>
-                            </div>
-                        </CardHeader>
-
-                        <div className="bg-slate-950 p-8 text-white">
-                            <p className="text-xs uppercase tracking-[0.24em] text-amber-300">Session snapshot</p>
-                            <div className="mt-6 space-y-4">
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                                    <p className="text-xs text-slate-400">Phone login identifier</p>
-                                    <p className="mt-1 text-lg font-medium">{authUser?.phone}</p>
+        <div className="space-y-8">
+            <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+                <Card className="overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5 backdrop-blur">
+                    <CardContent className="relative p-0">
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.14),_transparent_28%)]" />
+                        <div className="relative grid gap-8 p-8 lg:grid-cols-[1.1fr_0.9fr]">
+                            <div className="space-y-6">
+                                <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
+                                    Workspace ready
+                                </Badge>
+                                <div className="space-y-3">
+                                    <h2 className="font-display text-4xl font-semibold tracking-tight text-foreground">
+                                        Welcome back, {authUser?.firstName}.
+                                    </h2>
+                                    <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+                                        Hisab is set up as your retail command center. Start with organizations, branch out
+                                        into stores, and keep device onboarding clean for every counter and cashier.
+                                    </p>
                                 </div>
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                                    <p className="text-xs text-slate-400">Optional email</p>
-                                    <p className="mt-1 text-lg font-medium">{authUser?.email ?? "Not provided"}</p>
+
+                                <div className="flex flex-wrap gap-3">
+                                    <CreateOrganizationDialog />
+                                    <Button variant="outline" className="rounded-full" render={<Link to="/organizations" />}>
+                                        Explore organizations
+                                        <ArrowRight className="ml-2 size-4" />
+                                    </Button>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <div className="rounded-3xl border border-border/60 bg-background/80 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                                            Organizations
+                                        </p>
+                                        <p className="mt-3 text-3xl font-semibold text-foreground">{organizationCount}</p>
+                                    </div>
+                                    <div className="rounded-3xl border border-border/60 bg-background/80 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                                            Access mode
+                                        </p>
+                                        <p className="mt-3 text-lg font-semibold text-foreground">Phone-first auth</p>
+                                    </div>
+                                    <div className="rounded-3xl border border-border/60 bg-background/80 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                                            Session owner
+                                        </p>
+                                        <p className="mt-3 text-lg font-semibold text-foreground">{authUser?.phone}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-[28px] border border-border/60 bg-slate-950 p-6 text-white shadow-xl shadow-black/20 dark:bg-slate-900">
+                                <div className="flex items-center gap-2 text-amber-300">
+                                    <Sparkles className="size-4" />
+                                    <p className="text-xs font-semibold uppercase tracking-[0.24em]">Setup momentum</p>
+                                </div>
+                                <div className="mt-5 space-y-4">
+                                    {[
+                                        {
+                                            title: "Create your tenant root",
+                                            description: "An organization becomes the top-level business workspace.",
+                                            icon: Building2,
+                                        },
+                                        {
+                                            title: "Add operating stores",
+                                            description: "Model every branch, outlet, or warehouse cleanly.",
+                                            icon: Store,
+                                        },
+                                        {
+                                            title: "Assign cashier devices",
+                                            description: "Use user-defined secrets and reveal them only when needed.",
+                                            icon: Layers3,
+                                        },
+                                    ].map((item) => {
+                                        const Icon = item.icon;
+                                        return (
+                                            <div key={item.title} className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
+                                                        <Icon className="size-4" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium text-white">{item.title}</p>
+                                                        <p className="mt-1 text-sm leading-6 text-slate-300">{item.description}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </Card>
-
-                <Card className="border-amber-100 bg-white shadow-[0_24px_80px_rgba(120,53,15,0.08)]">
-                    <CardHeader>
-                        <CardTitle className="text-xl text-slate-950">User profile table</CardTitle>
-                        <CardDescription>
-                            A small TanStack Table example using the authenticated user payload.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Table className="min-w-full">
-                            <TableHeader>
-                                {table.getHeaderGroups().map((headerGroup) => (
-                                    <TableRow key={headerGroup.id}>
-                                        {headerGroup.headers.map((header) => (
-                                            <TableHead key={header.id}>
-                                                {header.isPlaceholder
-                                                    ? null
-                                                    : flexRender(header.column.columnDef.header, header.getContext())}
-                                            </TableHead>
-                                        ))}
-                                    </TableRow>
-                                ))}
-                            </TableHeader>
-                            <TableBody>
-                                {table.getRowModel().rows.map((row) => (
-                                    <TableRow key={row.id}>
-                                        {row.getVisibleCells().map((cell) => (
-                                            <TableCell key={cell.id}>
-                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
                     </CardContent>
                 </Card>
-            </div>
+            </section>
+
+            <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5">
+                    <CardHeader>
+                        <CardTitle className="font-display text-2xl">Operating principles</CardTitle>
+                        <CardDescription>
+                            The new workspace is designed to feel like a polished SaaS back office instead of a basic CRUD
+                            screen.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {[
+                            "A persistent workspace shell with strong navigation and visual hierarchy.",
+                            "Privacy-aware device secrets with hidden-by-default reveal flows.",
+                            "Light and dark themes that stay readable without flattening the UI.",
+                        ].map((item) => (
+                            <div key={item} className="flex items-start gap-3 rounded-2xl border border-border/60 bg-background/70 p-4">
+                                <CheckCircle2 className="mt-0.5 size-4 text-emerald-500" />
+                                <p className="text-sm leading-6 text-muted-foreground">{item}</p>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+
+                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5">
+                    <CardHeader className="flex flex-row items-center justify-between gap-4">
+                        <div>
+                            <CardTitle className="font-display text-2xl">Recent organizations</CardTitle>
+                            <CardDescription>
+                                Your latest top-level workspaces for stores and POS device rollout.
+                            </CardDescription>
+                        </div>
+                        <Button variant="ghost" className="rounded-full" render={<Link to="/organizations" />}>
+                            See all
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {organizationCount === 0 ? (
+                            <div className="rounded-[28px] border border-dashed border-border bg-background/60 p-8 text-center">
+                                <p className="font-medium text-foreground">No organizations yet</p>
+                                <p className="mt-2 text-sm text-muted-foreground">
+                                    Create your first organization to unlock stores, device registration, and the rest of
+                                    the workspace flow.
+                                </p>
+                                <div className="mt-5 flex justify-center">
+                                    <CreateOrganizationDialog />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {organizations.slice(0, 4).map((organization, index) => (
+                                    <Link
+                                        key={organization.id}
+                                        to={`/organizations/${organization.id}`}
+                                        className="group flex items-center gap-4 rounded-[24px] border border-border/60 bg-background/70 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+                                    >
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-emerald-500/15 text-primary">
+                                            <span className="text-sm font-semibold">{String(index + 1).padStart(2, "0")}</span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate font-medium text-foreground">{organization.name}</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                Created {formatDateTime(organization.createdAt)}
+                                            </p>
+                                        </div>
+                                        <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </section>
         </div>
     );
 };

@@ -3,6 +3,8 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
+const useSyncExternalStoreShimDir = path.resolve(__dirname, "./src/shims/use-sync-external-store-shim");
+
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, __dirname, "");
 
@@ -14,6 +16,14 @@ export default defineConfig(({ mode }) => {
             "process.env.BASE_API_URL": JSON.stringify(env.BASE_API_URL),
         },
         plugins: [react(), tailwindcss()],
+        optimizeDeps: {
+            include: [
+                "use-sync-external-store/shim",
+                "use-sync-external-store/shim/index.js",
+                "use-sync-external-store/shim/with-selector",
+                "use-sync-external-store/shim/with-selector.js",
+            ],
+        },
         resolve: {
             preserveSymlinks: true,
             alias: {
@@ -22,6 +32,16 @@ export default defineConfig(({ mode }) => {
                 react: path.resolve(__dirname, "./node_modules/react"),
                 "react/jsx-runtime": path.resolve(__dirname, "./node_modules/react/jsx-runtime.js"),
                 "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
+                "use-sync-external-store/shim": useSyncExternalStoreShimDir,
+                "use-sync-external-store/shim/index.js": path.resolve(useSyncExternalStoreShimDir, "index.ts"),
+                "use-sync-external-store/shim/with-selector": path.resolve(
+                    useSyncExternalStoreShimDir,
+                    "with-selector.ts",
+                ),
+                "use-sync-external-store/shim/with-selector.js": path.resolve(
+                    useSyncExternalStoreShimDir,
+                    "with-selector.ts",
+                ),
             },
         },
         server: {

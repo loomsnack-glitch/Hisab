@@ -15,9 +15,8 @@ import { PasswordInput } from "@repo/ui/components/password-input";
 
 import AuthShell from "@/components/auth/auth-shell";
 import OtpField from "@/components/auth/otp-field";
+import { authKeys } from "@/lib/query-keys";
 import { useAuthActions } from "@/store/auth.store";
-
-const AUTH_QUERY_KEY = ["auth", "me"] as const;
 
 const defaultValues: LoginJSON = {
     requestType: "user-info",
@@ -50,7 +49,7 @@ const LoginPage = () => {
 
             if (response.status === "success" && response.data?.user) {
                 setUser(response.data.user);
-                queryClient.setQueryData(AUTH_QUERY_KEY, response);
+                queryClient.setQueryData(authKeys.me, response);
                 toast.success(response.message);
                 navigate("/dashboard", { replace: true });
                 return;
