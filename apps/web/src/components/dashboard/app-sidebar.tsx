@@ -12,7 +12,6 @@ import {
     Search,
     Settings2,
     Square,
-    Star,
     Triangle,
 } from "lucide-react";
 import logo from "@repo/assets/logo.png";
@@ -96,7 +95,7 @@ const AppSidebar = ({
 
     const isOrganizationsSection = location.pathname.startsWith("/organizations");
     const showOrgPanel = isOrganizationsSection && !isCollapsed && !isMobile;
-    const favorites = organizations.slice(0, 3);
+
 
     const filteredOrganizations = useMemo(() => {
         const query = orgSearch.trim().toLowerCase();
@@ -332,41 +331,9 @@ const AppSidebar = ({
                     </div>
 
                     <div className="flex-1 overflow-y-auto px-3 py-4">
-                        {favorites.length > 0 ? (
-                            <section className="mb-5">
-                                <p className="px-2 pb-2 text-[10px] font-semibold tracking-[0.22em] text-muted-foreground uppercase">
-                                    Favorites
-                                </p>
-                                <div className="space-y-0.5">
-                                    {favorites.map((organization, index) => {
-                                        const marker = orgMarkerStyles[index % orgMarkerStyles.length];
-                                        const MarkerIcon = marker.icon;
-                                        const isActive = organizationId === organization.id;
-
-                                        return (
-                                            <Link
-                                                key={organization.id}
-                                                to={`/organizations/${organization.id}`}
-                                                onClick={onNavigate}
-                                                className={cn(
-                                                    "flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm transition-colors duration-200",
-                                                    isActive
-                                                        ? "bg-primary/10 font-medium text-primary"
-                                                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                                )}
-                                            >
-                                                <MarkerIcon className={cn("size-3.5 shrink-0", marker.className)} />
-                                                <span className="truncate">{organization.name}</span>
-                                            </Link>
-                                        );
-                                    })}
-                                </div>
-                            </section>
-                        ) : null}
-
                         <section>
                             <p className="px-2 pb-2 text-[10px] font-semibold tracking-[0.22em] text-muted-foreground uppercase">
-                                All organizations
+                                Organizations
                             </p>
                             {organizationsQuery.isPending ? (
                                 <div className="space-y-2 px-2 py-1">
@@ -404,28 +371,7 @@ const AppSidebar = ({
                             )}
                         </section>
 
-                        {organizationId ? (
-                            <section className="mt-5 border-t border-border/50 pt-4">
-                                <p className="px-2 pb-2 text-[10px] font-semibold tracking-[0.22em] text-muted-foreground uppercase">
-                                    Workspace
-                                </p>
-                                <div className="relative ml-2 space-y-0.5 border-l border-border/70 pl-4">
-                                    <Link
-                                        to={`/organizations/${organizationId}`}
-                                        onClick={onNavigate}
-                                        className="flex h-8 items-center rounded-lg px-2 text-sm font-medium text-primary"
-                                    >
-                                        Overview
-                                    </Link>
-                                    <span className="flex h-8 items-center rounded-lg px-2 text-sm text-muted-foreground/70">
-                                        Stores
-                                    </span>
-                                    <span className="flex h-8 items-center rounded-lg px-2 text-sm text-muted-foreground/70">
-                                        Devices
-                                    </span>
-                                </div>
-                            </section>
-                        ) : null}
+
                     </div>
                 </div>
             </div>

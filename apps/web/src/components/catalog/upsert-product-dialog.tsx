@@ -24,7 +24,7 @@ import {
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
-import { Plus, UploadCloud, Pencil, ImageOff } from "lucide-react";
+import { Plus, UploadCloud, Pencil, ImageOff, Package2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { catalogKeys } from "@/lib/query-keys";
@@ -45,6 +45,14 @@ const defaultValues: CreateProductJSON = {
     status: "active",
 };
 
+const PREDEFINED_ICONS = [
+    "🍔", "🌭", "🥪", "🌯", "🌮", "🥞", "🍳", "🍗", "🥩", "🥓", "🍕", "🍟",
+    "🍜", "🍣", "🥗", "🍲", "🍿", "🍩", "🍰", "🧁", "🍦", "🍪", "🍫", "🍬",
+    "🥤", "🧋", "☕", "🍵", "🍺", "🍷", "🍹", "🍎", "🍌", "🍓", "🍉", "🍇",
+    "🍍", "🍋", "🍊", "🥑", "🥦", "🥕", "🧀", "🥚", "🍞", "🥐", "🥨", "🧅",
+    "🛍️", "📦", "🏷️", "🎟️", "💳", "📱", "💻", "🎮", "🔌", "🔋", "💡", "🔑"
+];
+
 const statusOptions = ProductStatusSchema.options;
 
 const getFileExtension = (fileName: string) => {
@@ -61,6 +69,9 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
     const [open, setOpen] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [removeCurrentImage, setRemoveCurrentImage] = useState(false);
+    const [imageType, setImageType] = useState<"icon" | "upload">("icon");
+    const [selectedIcon, setSelectedIcon] = useState<string>("🍔");
+    
     const queryClient = useQueryClient();
     const isEditMode = Boolean(product);
 
@@ -70,7 +81,16 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
     });
 
     useEffect(() => {
-        if (!open) {
+        if (open) {
+            if (product) {
+                const hasIcon = product.imagePath?.startsWith("icon:");
+                setImageType(hasIcon ? "icon" : product.imagePath ? "upload" : "icon");
+                setSelectedIcon(hasIcon ? product.imagePath.replace("icon:", "") : "🍔");
+            } else {
+                setImageType("icon");
+                setSelectedIcon("🍔");
+            }
+        } else {
             form.reset(
                 product
                     ? {
@@ -109,19 +129,23 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
 
     const mutation = useMutation({
         mutationFn: async (data: CreateProductJSON) => {
-            let nextImagePath = product?.imagePath ?? "";
+            let nextImagePath = "";
 
-            if (selectedFile) {
-                nextImagePath = createProductImagePath(organizationId, selectedFile);
-                const signedUploadResponse = await getSignedURLForUpload({ path: nextImagePath });
+            if (imageType === "icon") {
+                nextImagePath = `icon:${selectedIcon}`;
+            } else if (imageType === "upload") {
+                if (selectedFile) {
+                    nextImagePath = createProductImagePath(organizationId, selectedFile);
+                    const signedUploadResponse = await getSignedURLForUpload({ path: nextImagePath });
 
-                if (signedUploadResponse.status !== "success" || !signedUploadResponse.data) {
-                    throw new Error(signedUploadResponse.message || "Failed to prepare image upload");
+                    if (signedUploadResponse.status !== "success" || !signedUploadResponse.data) {
+                        throw new Error(signedUploadResponse.message || "Failed to prepare image upload");
+                    }
+
+                    await uploadFileToSignedURL(signedUploadResponse.data, selectedFile);
+                } else if (product?.imagePath && !product.imagePath.startsWith("icon:") && !removeCurrentImage) {
+                    nextImagePath = product.imagePath;
                 }
-
-                await uploadFileToSignedURL(signedUploadResponse.data, selectedFile);
-            } else if (removeCurrentImage) {
-                nextImagePath = "";
             }
 
             const payload: CreateProductJSON = {
@@ -172,19 +196,23 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                     )
                 }
             />
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle className="text-base font-semibold">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <Package2 className="size-5" />
+                    </div>
+                    <DialogTitle className="text-center text-lg font-semibold">
                         {isEditMode ? "Edit product" : "Create product"}
                     </DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription className="text-center">
                         {hasCategories
-                            ? "Capture product pricing, category placement, status, and optional image."
+                            ? "Set the product details — name, category, pricing, and icon."
                             : "Create a category first so products have somewhere to live."}
                     </DialogDescription>
                 </DialogHeader>
 
-                <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
+                    {/* Row 1: Category + Name */}
                     <Controller
                         control={form.control}
                         name="categoryId"
@@ -213,21 +241,22 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Product name</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="Orange Juice 1L" {...form.register("name")} />
+                            <Input className="h-11 rounded-xl" placeholder="e.g. Cheese Burger" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
 
+                    {/* Row 2: Price + Discount side by side */}
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field data-invalid={!!form.formState.errors.price}>
-                            <FieldLabel required>Price</FieldLabel>
+                            <FieldLabel required>Price (₹)</FieldLabel>
                             <FieldContent>
                                 <Input
                                     type="number"
                                     step="0.01"
                                     min="0"
                                     className="h-11 rounded-xl"
-                                    placeholder="199.00"
+                                    placeholder="e.g. 50.00"
                                     {...form.register("price", { valueAsNumber: true })}
                                 />
                                 <FieldError errors={[form.formState.errors.price]} />
@@ -235,14 +264,14 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                         </Field>
 
                         <Field data-invalid={!!form.formState.errors.discount}>
-                            <FieldLabel>Discount</FieldLabel>
+                            <FieldLabel>Discount (₹) <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
                             <FieldContent>
                                 <Input
                                     type="number"
                                     step="0.01"
                                     min="0"
                                     className="h-11 rounded-xl"
-                                    placeholder="0.00"
+                                    placeholder="e.g. 10.00"
                                     {...form.register("discount", { valueAsNumber: true })}
                                 />
                                 <FieldError errors={[form.formState.errors.discount]} />
@@ -250,6 +279,7 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                         </Field>
                     </div>
 
+                    {/* Row 3: Status */}
                     <Controller
                         control={form.control}
                         name="status"
@@ -275,56 +305,110 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                         )}
                     />
 
-                    <Field>
-                        <FieldLabel>Product image</FieldLabel>
-                        <FieldContent>
-                            <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-muted/40 p-5 text-center transition-colors hover:border-primary/40 hover:bg-primary/5">
-                                <UploadCloud className="size-5 text-primary" />
-                                <p className="mt-3 text-sm font-medium text-foreground">
-                                    {selectedFile ? selectedFile.name : "Choose product image"}
-                                </p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    JPG, PNG, or WebP. Upload is handled directly with a signed URL.
-                                </p>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="sr-only"
-                                    onChange={(event) => {
-                                        const file = event.target.files?.[0] ?? null;
-                                        setSelectedFile(file);
-                                        if (file) {
-                                            setRemoveCurrentImage(false);
-                                        }
-                                    }}
-                                />
-                            </label>
-                        </FieldContent>
-                    </Field>
-
-                    {imagePreview ? (
-                        <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/80">
-                            <img src={imagePreview} alt="Product preview" className="h-44 w-full object-cover" />
+                    {/* Row 4: Visual representation selector (emoji grid or custom upload) */}
+                    <div className="space-y-3.5">
+                        <FieldLabel>Product visual representation</FieldLabel>
+                        <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/50 p-1">
+                            <button
+                                type="button"
+                                onClick={() => setImageType("icon")}
+                                className={`rounded-lg py-1.5 text-sm font-semibold transition-all cursor-pointer ${
+                                    imageType === "icon"
+                                        ? "bg-card text-foreground shadow-sm font-bold"
+                                        : "text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                Predefined Icon
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setImageType("upload")}
+                                className={`rounded-lg py-1.5 text-sm font-semibold transition-all cursor-pointer ${
+                                    imageType === "upload"
+                                        ? "bg-card text-foreground shadow-sm font-bold"
+                                        : "text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                Custom Photo
+                            </button>
                         </div>
-                    ) : (
-                        <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border/70 bg-background/50 p-4 text-sm text-muted-foreground">
-                            <ImageOff className="size-4 text-muted-foreground" />
-                            No image attached yet
-                        </div>
-                    )}
 
-                    {product?.imagePath ? (
-                        <label className="flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-                            <input
-                                type="checkbox"
-                                checked={removeCurrentImage}
-                                onChange={(event) => setRemoveCurrentImage(event.target.checked)}
-                            />
-                            Remove the current image when saving
-                        </label>
-                    ) : null}
+                        {imageType === "icon" ? (
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-center p-4 bg-muted/20 border border-dashed border-border/60 rounded-xl">
+                                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary text-5xl select-none select-none-emoji shadow-inner">
+                                        {selectedIcon || "🍔"}
+                                    </div>
+                                </div>
+                                <div className="max-h-[140px] overflow-y-auto rounded-xl border border-border/50 bg-background/50 p-3">
+                                    <div className="grid grid-cols-8 gap-2">
+                                        {PREDEFINED_ICONS.map((icon) => (
+                                            <button
+                                                key={icon}
+                                                type="button"
+                                                onClick={() => setSelectedIcon(icon)}
+                                                className={`flex h-9 w-9 items-center justify-center rounded-lg text-2xl transition-all cursor-pointer select-none-emoji select-none hover:bg-primary/10 ${
+                                                    selectedIcon === icon
+                                                        ? "bg-primary/20 ring-2 ring-primary ring-offset-1"
+                                                        : "hover:scale-110"
+                                                }`}
+                                            >
+                                                {icon}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/30 p-4 text-center transition-colors hover:border-primary/40 hover:bg-primary/5">
+                                    <UploadCloud className="size-5 text-primary" />
+                                    <p className="mt-2 text-sm font-medium text-foreground">
+                                        {selectedFile ? selectedFile.name : "Click to upload image"}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-muted-foreground">
+                                        JPG, PNG, or WebP
+                                    </p>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="sr-only"
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0] ?? null;
+                                            setSelectedFile(file);
+                                            if (file) {
+                                                setRemoveCurrentImage(false);
+                                            }
+                                        }}
+                                    />
+                                </label>
 
-                    <DialogFooter className="border-0 bg-transparent p-0 sm:flex-row">
+                                {imagePreview ? (
+                                    <div className="overflow-hidden rounded-xl border border-border/70 bg-background/80 relative group/preview">
+                                        <img src={imagePreview} alt="Product preview" className="h-36 w-full object-cover" />
+                                        {product?.imagePath && !product.imagePath.startsWith("icon:") && !selectedFile && (
+                                            <label className="absolute bottom-2 right-2 flex items-center gap-2 rounded-lg bg-background/95 backdrop-blur-sm border border-border/60 px-3 py-1.5 text-xs text-muted-foreground shadow-sm cursor-pointer hover:text-foreground">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={removeCurrentImage}
+                                                    onChange={(event) => setRemoveCurrentImage(event.target.checked)}
+                                                    className="rounded border-border text-primary focus:ring-primary mr-1.5"
+                                                />
+                                                Remove current image
+                                            </label>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
+                                        <ImageOff className="size-4 shrink-0" />
+                                        No custom photo selected
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:flex-row">
                         <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
                             Cancel
                         </Button>

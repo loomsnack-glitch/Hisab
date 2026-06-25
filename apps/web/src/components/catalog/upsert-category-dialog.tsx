@@ -23,7 +23,7 @@ import {
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Tags } from "lucide-react";
 import { toast } from "sonner";
 
 import { catalogKeys } from "@/lib/query-keys";
@@ -100,21 +100,24 @@ const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCateg
             />
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle className="text-base font-semibold">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <Tags className="size-5" />
+                    </div>
+                    <DialogTitle className="text-center text-lg font-semibold">
                         {isEditMode ? "Edit category" : "Create category"}
                     </DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription className="text-center">
                         {isEditMode
-                            ? "Update the category name or status. Product assignments remain unchanged."
-                            : "Create a catalog bucket that products can be grouped under."}
+                            ? "Update the name or status. Products in this category stay linked."
+                            : "Create a group to organize products — e.g. Burgers, Drinks."}
                     </DialogDescription>
                 </DialogHeader>
 
-                <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Category name</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="Beverages" {...form.register("name")} />
+                            <Input className="h-11 rounded-xl" placeholder="e.g. Beverages" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
@@ -144,7 +147,7 @@ const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCateg
                         )}
                     />
 
-                    <DialogFooter className="border-0 bg-transparent p-0 sm:flex-row">
+                    <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:flex-row">
                         <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
                             Cancel
                         </Button>

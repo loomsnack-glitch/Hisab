@@ -17,7 +17,7 @@ import {
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
-import { Plus } from "lucide-react";
+import { Plus, Store } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
@@ -74,34 +74,37 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
             />
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle className="text-base font-semibold">Create store</DialogTitle>
-                    <DialogDescription>
-                        Add a branch or outlet under this organization. Each store can have its own POS devices.
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <Store className="size-5" />
+                    </div>
+                    <DialogTitle className="text-center text-lg font-semibold">Create store</DialogTitle>
+                    <DialogDescription className="text-center">
+                        Add a branch or outlet. Each store can have its own POS devices.
                     </DialogDescription>
                 </DialogHeader>
 
-                <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Store name</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="Main Street Branch" {...form.register("name")} />
+                            <Input className="h-11 rounded-xl" placeholder="e.g. Main Street Branch" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
 
                     <Field data-invalid={!!form.formState.errors.address}>
-                        <FieldLabel>Address</FieldLabel>
+                        <FieldLabel>Address <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
                         <FieldContent>
                             <Textarea
-                                className="min-h-24 rounded-xl"
-                                placeholder="Street, city, state (optional)"
+                                className="min-h-20 rounded-xl"
+                                placeholder="e.g. 123 Main St, City, State"
                                 {...form.register("address")}
                             />
                             <FieldError errors={[form.formState.errors.address]} />
                         </FieldContent>
                     </Field>
 
-                    <DialogFooter className="border-0 bg-transparent p-0 sm:flex-row">
+                    <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:flex-row">
                         <Button
                             type="button"
                             variant="outline"

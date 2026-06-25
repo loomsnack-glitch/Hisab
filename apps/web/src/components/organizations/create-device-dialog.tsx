@@ -16,7 +16,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Plus, ShieldCheck } from "lucide-react";
+import { MonitorSmartphone, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
@@ -79,19 +79,22 @@ const CreateDeviceDialog = ({ organizationId, storeId, storeName, trigger }: Cre
                 />
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle className="text-base font-semibold">Register POS device</DialogTitle>
-                        <DialogDescription>
-                            Create a device credential for <span className="font-medium text-foreground">{storeName}</span>.
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                            <MonitorSmartphone className="size-5" />
+                        </div>
+                        <DialogTitle className="text-center text-lg font-semibold">Register POS device</DialogTitle>
+                        <DialogDescription className="text-center">
+                            Add a device for <span className="font-medium text-foreground">{storeName}</span>. Set a name and secret.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                    <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                         <Field data-invalid={!!form.formState.errors.name}>
                             <FieldLabel required>Device name</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"
-                                    placeholder="Counter 1 / Front desk"
+                                    placeholder="e.g. Counter 1, Front Desk"
                                     {...form.register("name")}
                                 />
                                 <FieldError errors={[form.formState.errors.name]} />
@@ -108,7 +111,7 @@ const CreateDeviceDialog = ({ organizationId, storeId, storeName, trigger }: Cre
                                         <Input
                                             type="password"
                                             className="h-11 rounded-xl"
-                                            placeholder="Choose a secret for this cashier device"
+                                            placeholder="Choose a secure secret"
                                             value={field.value ?? ""}
                                             onChange={field.onChange}
                                             onBlur={field.onBlur}
@@ -122,17 +125,12 @@ const CreateDeviceDialog = ({ organizationId, storeId, storeName, trigger }: Cre
                             )}
                         />
 
-                        <div className="rounded-2xl border border-border/70 bg-muted/50 p-4 text-sm text-muted-foreground">
-                            <div className="flex items-start gap-3">
-                                <ShieldCheck className="mt-0.5 size-4 text-primary" />
-                                <p>
-                                    This secret is set by you, stored securely, and can be revealed later from the device
-                                    row when needed.
-                                </p>
-                            </div>
+                        <div className="flex items-start gap-2.5 rounded-xl border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
+                            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+                            <p>This secret is stored securely. You can reveal it later from the device list.</p>
                         </div>
 
-                        <DialogFooter className="border-0 bg-transparent p-0 sm:flex-row">
+                        <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:flex-row">
                             <Button
                                 type="button"
                                 variant="outline"

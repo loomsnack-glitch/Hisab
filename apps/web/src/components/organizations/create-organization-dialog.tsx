@@ -16,7 +16,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Plus } from "lucide-react";
+import { Building2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
@@ -72,26 +72,29 @@ const CreateOrganizationDialog = ({ trigger }: CreateOrganizationDialogProps) =>
             />
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle className="text-base font-semibold">Create organization</DialogTitle>
-                    <DialogDescription>
-                        Add a new business organization. You can create stores and POS devices under it next.
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <Building2 className="size-5" />
+                    </div>
+                    <DialogTitle className="text-center text-lg font-semibold">Create organization</DialogTitle>
+                    <DialogDescription className="text-center">
+                        Add a new business entity. You can set up stores and POS devices inside it next.
                     </DialogDescription>
                 </DialogHeader>
 
-                <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Organization name</FieldLabel>
                         <FieldContent>
                             <Input
                                 className="h-11 rounded-xl"
-                                placeholder="Acme Retail Pvt Ltd"
+                                placeholder="e.g. Panini House Pvt Ltd"
                                 {...form.register("name")}
                             />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
 
-                    <DialogFooter className="border-0 bg-transparent p-0 sm:flex-row">
+                    <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:flex-row">
                         <Button
                             type="button"
                             variant="outline"

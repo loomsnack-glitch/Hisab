@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCategories, getProducts } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
@@ -6,8 +6,8 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui/components/table";
-import { Layers3, Package2, PlusCircle, RefreshCw, Tags } from "lucide-react";
+import { Input } from "@repo/ui/components/input";
+import { Layers3, Package2, Pencil, PlusCircle, RefreshCw, Tags, Trash2, Search, ChevronDown, ChevronUp } from "lucide-react";
 
 import DeleteCategoryButton from "@/components/catalog/delete-category-button";
 import DeleteProductButton from "@/components/catalog/delete-product-button";
@@ -23,6 +23,10 @@ type CatalogSectionProps = {
 };
 
 const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
+    const [searchQuery, setSearchQuery] = useState("");
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
+    const [showCategories, setShowCategories] = useState(false);
+
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
         queryFn: () => getCategories(organizationId),
@@ -53,8 +57,21 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
         return grouped;
     }, [products]);
 
-    const activeCategoryCount = categories.filter((category) => category.status === "active").length;
-    const activeProductCount = products.filter((product) => product.status === "active").length;
+    // Product search and pill filter logic
+    const filteredProducts = useMemo(() => {
+        return products.filter((product) => {
+            if (selectedCategoryFilter !== "all" && product.categoryId !== selectedCategoryFilter) {
+                return false;
+            }
+            if (searchQuery.trim()) {
+                const query = searchQuery.toLowerCase().trim();
+                const productName = product.name.toLowerCase();
+                const categoryName = categoryMap.get(product.categoryId)?.name.toLowerCase() ?? "";
+                return productName.includes(query) || categoryName.includes(query);
+            }
+            return true;
+        });
+    }, [products, selectedCategoryFilter, searchQuery, categoryMap]);
 
     if (categoriesQuery.isPending || productsQuery.isPending) {
         return (
@@ -107,71 +124,50 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
 
     return (
         <div className="space-y-6">
-            {/* Consolidated stats — 2 instead of 4 */}
-            <section className="grid gap-4 sm:grid-cols-2">
-                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5 transition-colors duration-200 hover:border-primary/20">
-                    <CardContent className="p-5">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                                <Tags className="size-4" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                                    Categories
-                                </p>
-                                <p className="text-2xl font-semibold text-foreground">
-                                    {categories.length}
-                                    <span className="ml-1.5 text-sm font-normal text-muted-foreground">
-                                        ({activeCategoryCount} active)
-                                    </span>
-                                </p>
-                            </div>
+            {/* ── Part A: Categories (Collapsible for cleaner space management) ──────────────── */}
+            <Card className="border-border/60 bg-card/80 shadow-md shadow-black/5 overflow-hidden">
+                <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-4">
+                    <button
+                        type="button"
+                        onClick={() => setShowCategories(!showCategories)}
+                        className="flex items-center gap-3 text-left focus:outline-none group/title cursor-pointer"
+                    >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover/title:bg-primary/20">
+                            <Tags className="size-4" />
                         </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5 transition-colors duration-200 hover:border-primary/20">
-                    <CardContent className="p-5">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                                <Package2 className="size-4" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                                    Products
-                                </p>
-                                <p className="text-2xl font-semibold text-foreground">
-                                    {products.length}
-                                    <span className="ml-1.5 text-sm font-normal text-muted-foreground">
-                                        ({activeProductCount} active)
-                                    </span>
-                                </p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </section>
-
-            <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-                {/* Categories */}
-                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                    <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                            <CardTitle className="font-display text-2xl">Categories</CardTitle>
-                            <CardDescription>
-                                Organize products into clean catalog groups before they appear across your selling flows.
+                            <CardTitle className="font-display text-lg flex items-center gap-2">
+                                Manage Categories
+                                {categories.length > 0 && (
+                                    <span className="text-sm font-normal text-muted-foreground">
+                                        ({categories.length})
+                                    </span>
+                                )}
+                                {showCategories ? (
+                                    <ChevronUp className="size-4 text-muted-foreground transition-transform" />
+                                ) : (
+                                    <ChevronDown className="size-4 text-muted-foreground transition-transform" />
+                                )}
+                            </CardTitle>
+                            <CardDescription className="text-xs">
+                                Create, edit, and delete product categories.
                             </CardDescription>
                         </div>
+                    </button>
+                    {showCategories && (
                         <UpsertCategoryDialog
                             organizationId={organizationId}
                             trigger={
-                                <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90">
-                                    <PlusCircle className="mr-2 size-4" />
+                                <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs">
+                                    <PlusCircle className="mr-2 size-3.5" />
                                     Add category
                                 </Button>
                             }
                         />
-                    </CardHeader>
-                    <CardContent>
+                    )}
+                </CardHeader>
+                {showCategories && (
+                    <CardContent className="border-t border-border/40 pt-4">
                         {categories.length === 0 ? (
                             <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
                                 <EmptyHeader>
@@ -180,8 +176,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                     </EmptyMedia>
                                     <EmptyTitle>No categories yet</EmptyTitle>
                                     <EmptyDescription>
-                                        Start with a category like beverages, groceries, or household to structure the
-                                        product catalog.
+                                        Start by creating a category like "Beverages" or "Snacks" to organize your product catalog.
                                     </EmptyDescription>
                                 </EmptyHeader>
                                 <EmptyContent>
@@ -189,66 +184,102 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 </EmptyContent>
                             </Empty>
                         ) : (
-                            <div className="space-y-3">
-                                {categories.map((category) => {
-                                    const categoryProducts = productsByCategoryId.get(category.id) ?? [];
-                                    return (
-                                        <div
-                                            key={category.id}
-                                            className="rounded-2xl border border-border/60 bg-background/70 p-4 transition-colors duration-200 hover:border-border"
-                                        >
-                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                                        <Tags className="size-3.5" />
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="font-semibold text-foreground">{category.name}</p>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {formatDateTime(category.createdAt)}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <CategoryStatusBadge status={category.status} />
-                                                    <Badge variant="outline" className="rounded-full text-xs">
-                                                        {categoryProducts.length} product{categoryProducts.length === 1 ? "" : "s"}
-                                                    </Badge>
-                                                    <UpsertCategoryDialog
-                                                        organizationId={organizationId}
-                                                        category={category}
-                                                        trigger={
-                                                            <Button variant="outline" size="sm" className="rounded-full">
-                                                                Edit
-                                                            </Button>
-                                                        }
-                                                    />
-                                                    <DeleteCategoryButton organizationId={organizationId} category={category} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                            <div className="overflow-x-auto rounded-2xl border border-border/60">
+                                <table className="min-w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-border/50 bg-muted/20 text-left text-muted-foreground">
+                                            <th className="px-4 py-3 font-medium">Category name</th>
+                                            <th className="px-4 py-3 font-medium">Status</th>
+                                            <th className="px-4 py-3 font-medium">Products</th>
+                                            <th className="px-4 py-3 font-medium">Created</th>
+                                            <th className="px-4 py-3 font-medium text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border/40">
+                                        {categories.map((category, index) => {
+                                            const categoryProducts = productsByCategoryId.get(category.id) ?? [];
+                                            return (
+                                                <tr
+                                                    key={category.id}
+                                                    className={`transition-colors duration-150 hover:bg-muted/30 ${index % 2 !== 0 ? "bg-muted/10" : ""}`}
+                                                >
+                                                    <td className="px-4 py-3.5">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                                <Tags className="size-3.5" />
+                                                            </div>
+                                                            <span className="font-medium text-foreground">{category.name}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3.5">
+                                                        <CategoryStatusBadge status={category.status} />
+                                                    </td>
+                                                    <td className="px-4 py-3.5">
+                                                        <Badge variant="outline" className="rounded-full text-xs">
+                                                            {categoryProducts.length} product{categoryProducts.length === 1 ? "" : "s"}
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-4 py-3.5 text-muted-foreground">
+                                                        {formatDateTime(category.createdAt)}
+                                                    </td>
+                                                    <td className="px-4 py-3.5">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <UpsertCategoryDialog
+                                                                organizationId={organizationId}
+                                                                category={category}
+                                                                trigger={
+                                                                    <Button variant="outline" size="sm" className="rounded-full">
+                                                                        <Pencil className="mr-1.5 size-3" />
+                                                                        Edit
+                                                                    </Button>
+                                                                }
+                                                            />
+                                                            <DeleteCategoryButton organizationId={organizationId} category={category} />
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
                             </div>
                         )}
                     </CardContent>
-                </Card>
+                )}
+            </Card>
 
-                {/* Products */}
-                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                    <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                            <CardTitle className="font-display text-2xl">Products</CardTitle>
-                            <CardDescription>
-                                Create products, attach optional images, and keep pricing and status current for the web app.
-                            </CardDescription>
-                        </div>
+            {/* ── Part B: Products Grid & Search ──────────────────────── */}
+            <div className="space-y-5">
+                {/* Search & Actions bar */}
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            type="text"
+                            placeholder="Search products..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 h-11 rounded-full border-border/60 bg-card/60 focus-visible:ring-primary w-full"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {/* Manage categories toggle shortcut button */}
+                        <Button
+                            variant="outline"
+                            className="rounded-full border-border/60 text-muted-foreground hover:text-foreground h-11 px-4 cursor-pointer"
+                            onClick={() => setShowCategories(!showCategories)}
+                        >
+                            <Layers3 className="mr-2 size-4" />
+                            {showCategories ? "Hide categories" : "Manage categories"}
+                        </Button>
+
                         <UpsertProductDialog
                             organizationId={organizationId}
                             categories={categories}
                             trigger={
                                 <Button
-                                    className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                                    className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-5"
                                     disabled={categories.length === 0}
                                 >
                                     <PlusCircle className="mr-2 size-4" />
@@ -256,111 +287,149 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 </Button>
                             }
                         />
-                    </CardHeader>
-                    <CardContent>
-                        {categories.length === 0 ? (
+                    </div>
+                </div>
+
+                {/* Category filter pills */}
+                {categories.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pb-1">
+                        <Button
+                            variant={selectedCategoryFilter === "all" ? "default" : "outline"}
+                            className="rounded-full px-5 h-9 font-medium text-xs transition-all cursor-pointer"
+                            onClick={() => setSelectedCategoryFilter("all")}
+                        >
+                            All
+                        </Button>
+                        {categories.map((category) => (
+                            <Button
+                                key={category.id}
+                                variant={selectedCategoryFilter === category.id ? "default" : "outline"}
+                                className="rounded-full px-5 h-9 font-medium text-xs transition-all cursor-pointer"
+                                onClick={() => setSelectedCategoryFilter(category.id)}
+                            >
+                                {category.name}
+                            </Button>
+                        ))}
+                    </div>
+                )}
+
+                {/* Product Grid */}
+                {categories.length === 0 ? (
+                    <Card className="border-border/60 bg-card/80 shadow-md">
+                        <CardContent className="pt-6">
                             <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
                                 <EmptyHeader>
                                     <EmptyMedia variant="icon">
                                         <Layers3 />
                                     </EmptyMedia>
-                                    <EmptyTitle>Categories come first</EmptyTitle>
+                                    <EmptyTitle>Create a category first</EmptyTitle>
                                     <EmptyDescription>
-                                        Create at least one category before adding products so the catalog has clear structure.
+                                        Products need a category. Expand the "Manage Categories" card above and create one first.
                                     </EmptyDescription>
                                 </EmptyHeader>
                             </Empty>
-                        ) : products.length === 0 ? (
+                        </CardContent>
+                    </Card>
+                ) : filteredProducts.length === 0 ? (
+                    <Card className="border-border/60 bg-card/80 shadow-md">
+                        <CardContent className="pt-6">
                             <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
                                 <EmptyHeader>
                                     <EmptyMedia variant="icon">
                                         <Package2 />
                                     </EmptyMedia>
-                                    <EmptyTitle>No products yet</EmptyTitle>
+                                    <EmptyTitle>No products found</EmptyTitle>
                                     <EmptyDescription>
-                                        Add the first product with its category, pricing, and optional image to start building
-                                        the sales catalog.
+                                        {searchQuery || selectedCategoryFilter !== "all"
+                                            ? "Try adjusting your search query or category filter."
+                                            : "Add your first product to start building the catalog."}
                                     </EmptyDescription>
                                 </EmptyHeader>
-                                <EmptyContent>
-                                    <UpsertProductDialog organizationId={organizationId} categories={categories} />
-                                </EmptyContent>
+                                {!(searchQuery || selectedCategoryFilter !== "all") && (
+                                    <EmptyContent>
+                                        <UpsertProductDialog organizationId={organizationId} categories={categories} />
+                                    </EmptyContent>
+                                )}
                             </Empty>
-                        ) : (
-                            <Table tableContainerClassname="rounded-2xl border border-border/60 bg-background/70">
-                                <TableHeader>
-                                    <TableRow className="hover:bg-transparent">
-                                        <TableHead className="px-4 py-3">Product</TableHead>
-                                        <TableHead className="px-4 py-3">Category</TableHead>
-                                        <TableHead className="px-4 py-3">Status</TableHead>
-                                        <TableHead className="px-4 py-3">Price</TableHead>
-                                        <TableHead className="px-4 py-3">Discount</TableHead>
-                                        <TableHead className="px-4 py-3">Updated</TableHead>
-                                        <TableHead className="px-4 py-3">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {products.map((product) => (
-                                        <TableRow key={product.id}>
-                                            <TableCell className="px-4 py-3.5 align-top">
-                                                <div className="flex items-start gap-3">
-                                                    {product.imageSignedUrl ? (
-                                                        <img
-                                                            src={product.imageSignedUrl}
-                                                            alt={product.name}
-                                                            className="h-12 w-12 rounded-xl border border-border/70 object-cover"
-                                                        />
-                                                    ) : (
-                                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/40 text-muted-foreground">
-                                                            <Package2 className="size-4" />
-                                                        </div>
-                                                    )}
-                                                    <div className="min-w-0">
-                                                        <p className="font-medium text-foreground">{product.name}</p>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Created {formatDateTime(product.createdAt)}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="px-4 py-3.5 text-muted-foreground">
-                                                {categoryMap.get(product.categoryId)?.name ?? "Unknown category"}
-                                            </TableCell>
-                                            <TableCell className="px-4 py-3.5">
-                                                <ProductStatusBadge status={product.status} />
-                                            </TableCell>
-                                            <TableCell className="px-4 py-3.5 font-medium text-foreground">
-                                                {formatCurrency(product.price)}
-                                            </TableCell>
-                                            <TableCell className="px-4 py-3.5 text-muted-foreground">
-                                                {formatCurrency(product.discount)}
-                                            </TableCell>
-                                            <TableCell className="px-4 py-3.5 text-muted-foreground">
-                                                {formatDateTime(product.updatedAt)}
-                                            </TableCell>
-                                            <TableCell className="px-4 py-3.5">
-                                                <div className="flex flex-wrap gap-2">
-                                                    <UpsertProductDialog
-                                                        organizationId={organizationId}
-                                                        categories={categories}
-                                                        product={product}
-                                                        trigger={
-                                                            <Button variant="outline" size="sm" className="rounded-full">
-                                                                Edit
-                                                            </Button>
-                                                        }
-                                                    />
-                                                    <DeleteProductButton organizationId={organizationId} product={product} />
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </CardContent>
-                </Card>
-            </section>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                        {filteredProducts.map((product) => (
+                            <Card
+                                key={product.id}
+                                className="group relative overflow-hidden rounded-[24px] border border-border/65 bg-card/80 p-6 shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary/30 hover:bg-card flex flex-col items-center text-center"
+                            >
+                                {/* Inactive status badge indicator */}
+                                {product.status === "inactive" && (
+                                    <div className="absolute top-3.5 right-3.5">
+                                        <ProductStatusBadge status={product.status} />
+                                    </div>
+                                )}
+
+                                {/* Product Image or Predefined Icon container */}
+                                <div className="relative mb-5 flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
+                                    {product.imagePath?.startsWith("icon:") ? (
+                                        <span className="text-5xl select-none select-none-emoji">{product.imagePath.replace("icon:", "")}</span>
+                                    ) : product.imageSignedUrl ? (
+                                        <img
+                                            src={product.imageSignedUrl}
+                                            alt={product.name}
+                                            className="h-full w-full rounded-full object-cover border border-border/40"
+                                        />
+                                    ) : (
+                                        <Package2 className="size-10 text-muted-foreground/60" />
+                                    )}
+                                </div>
+
+                                {/* Product Name */}
+                                <h4 className="font-display font-semibold text-foreground text-base tracking-tight mb-0.5 w-full truncate px-1">
+                                    {product.name}
+                                </h4>
+
+                                {/* Category Name */}
+                                <span className="text-xs font-medium text-muted-foreground/80 mb-3 block">
+                                    {categoryMap.get(product.categoryId)?.name ?? "Unknown"}
+                                </span>
+
+                                {/* Price and Discount */}
+                                <div className="mt-auto">
+                                    <p className="text-lg font-bold text-foreground">{formatCurrency(product.price)}</p>
+                                    {Number(product.discount) > 0 && (
+                                        <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                            -{formatCurrency(product.discount)} off
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Hover action overlay (edit & delete buttons) */}
+                                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-background/95 backdrop-blur-sm border border-border/80 shadow-lg px-3 py-1.5 rounded-full opacity-0 translate-y-2 scale-95 transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100">
+                                    <UpsertProductDialog
+                                        organizationId={organizationId}
+                                        categories={categories}
+                                        product={product}
+                                        trigger={
+                                            <Button variant="outline" size="sm" className="h-7 px-3 text-xs rounded-full border-border/60 hover:bg-muted/50 cursor-pointer">
+                                                <Pencil className="mr-1.5 size-3" />
+                                                Edit
+                                            </Button>
+                                        }
+                                    />
+                                    <DeleteProductButton
+                                        organizationId={organizationId}
+                                        product={product}
+                                        trigger={
+                                            <Button variant="destructive" size="icon" className="h-7 w-7 rounded-full shrink-0 flex items-center justify-center p-0 cursor-pointer">
+                                                <Trash2 className="size-3.5" />
+                                            </Button>
+                                        }
+                                    />
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
