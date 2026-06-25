@@ -73,7 +73,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
         return (
             <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
                 <CardContent className="p-0">
-                    <Empty className="rounded-[28px] border-0">
+                    <Empty className="rounded-2xl border-0">
                         <EmptyHeader>
                             <EmptyMedia variant="icon">
                                 <RefreshCw />
@@ -107,42 +107,52 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
 
     return (
         <div className="space-y-6">
-            <section className="grid gap-4 md:grid-cols-4">
-                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5">
+            {/* Consolidated stats — 2 instead of 4 */}
+            <section className="grid gap-4 sm:grid-cols-2">
+                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5 transition-colors duration-200 hover:border-primary/20">
                     <CardContent className="p-5">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                            Categories
-                        </p>
-                        <p className="mt-3 text-3xl font-semibold text-foreground">{categories.length}</p>
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                <Tags className="size-4" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                                    Categories
+                                </p>
+                                <p className="text-2xl font-semibold text-foreground">
+                                    {categories.length}
+                                    <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+                                        ({activeCategoryCount} active)
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5">
+                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5 transition-colors duration-200 hover:border-primary/20">
                     <CardContent className="p-5">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                            Products
-                        </p>
-                        <p className="mt-3 text-3xl font-semibold text-foreground">{products.length}</p>
-                    </CardContent>
-                </Card>
-                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5">
-                    <CardContent className="p-5">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                            Active categories
-                        </p>
-                        <p className="mt-3 text-3xl font-semibold text-foreground">{activeCategoryCount}</p>
-                    </CardContent>
-                </Card>
-                <Card className="border-border/60 bg-card/80 shadow-lg shadow-black/5">
-                    <CardContent className="p-5">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                            Active products
-                        </p>
-                        <p className="mt-3 text-3xl font-semibold text-foreground">{activeProductCount}</p>
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                <Package2 className="size-4" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                                    Products
+                                </p>
+                                <p className="text-2xl font-semibold text-foreground">
+                                    {products.length}
+                                    <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+                                        ({activeProductCount} active)
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
             </section>
 
             <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+                {/* Categories */}
                 <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
                     <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
@@ -163,7 +173,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                     </CardHeader>
                     <CardContent>
                         {categories.length === 0 ? (
-                            <Empty className="rounded-[28px] border border-dashed border-border bg-background/60">
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
                                 <EmptyHeader>
                                     <EmptyMedia variant="icon">
                                         <Tags />
@@ -179,40 +189,36 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 </EmptyContent>
                             </Empty>
                         ) : (
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                                 {categories.map((category) => {
                                     const categoryProducts = productsByCategoryId.get(category.id) ?? [];
                                     return (
                                         <div
                                             key={category.id}
-                                            className="rounded-[24px] border border-border/60 bg-background/70 p-5"
+                                            className="rounded-2xl border border-border/60 bg-background/70 p-4 transition-colors duration-200 hover:border-border"
                                         >
-                                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                                <div className="space-y-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                                                            <Tags className="size-4" />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-lg font-semibold text-foreground">{category.name}</p>
-                                                            <p className="text-sm text-muted-foreground">
-                                                                Created {formatDateTime(category.createdAt)}
-                                                            </p>
-                                                        </div>
+                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                        <Tags className="size-3.5" />
                                                     </div>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        <CategoryStatusBadge status={category.status} />
-                                                        <Badge variant="outline" className="rounded-full">
-                                                            {categoryProducts.length} product{categoryProducts.length === 1 ? "" : "s"}
-                                                        </Badge>
+                                                    <div className="min-w-0">
+                                                        <p className="font-semibold text-foreground">{category.name}</p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {formatDateTime(category.createdAt)}
+                                                        </p>
                                                     </div>
                                                 </div>
-                                                <div className="flex flex-wrap gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <CategoryStatusBadge status={category.status} />
+                                                    <Badge variant="outline" className="rounded-full text-xs">
+                                                        {categoryProducts.length} product{categoryProducts.length === 1 ? "" : "s"}
+                                                    </Badge>
                                                     <UpsertCategoryDialog
                                                         organizationId={organizationId}
                                                         category={category}
                                                         trigger={
-                                                            <Button variant="outline" className="rounded-full">
+                                                            <Button variant="outline" size="sm" className="rounded-full">
                                                                 Edit
                                                             </Button>
                                                         }
@@ -228,6 +234,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                     </CardContent>
                 </Card>
 
+                {/* Products */}
                 <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
                     <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
@@ -252,7 +259,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                     </CardHeader>
                     <CardContent>
                         {categories.length === 0 ? (
-                            <Empty className="rounded-[28px] border border-dashed border-border bg-background/60">
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
                                 <EmptyHeader>
                                     <EmptyMedia variant="icon">
                                         <Layers3 />
@@ -264,7 +271,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 </EmptyHeader>
                             </Empty>
                         ) : products.length === 0 ? (
-                            <Empty className="rounded-[28px] border border-dashed border-border bg-background/60">
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
                                 <EmptyHeader>
                                     <EmptyMedia variant="icon">
                                         <Package2 />
@@ -280,7 +287,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 </EmptyContent>
                             </Empty>
                         ) : (
-                            <Table tableContainerClassname="rounded-[24px] border border-border/60 bg-background/70">
+                            <Table tableContainerClassname="rounded-2xl border border-border/60 bg-background/70">
                                 <TableHeader>
                                     <TableRow className="hover:bg-transparent">
                                         <TableHead className="px-4 py-3">Product</TableHead>
@@ -295,16 +302,16 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 <TableBody>
                                     {products.map((product) => (
                                         <TableRow key={product.id}>
-                                            <TableCell className="px-4 py-4 align-top">
+                                            <TableCell className="px-4 py-3.5 align-top">
                                                 <div className="flex items-start gap-3">
                                                     {product.imageSignedUrl ? (
                                                         <img
                                                             src={product.imageSignedUrl}
                                                             alt={product.name}
-                                                            className="h-14 w-14 rounded-2xl border border-border/70 object-cover"
+                                                            className="h-12 w-12 rounded-xl border border-border/70 object-cover"
                                                         />
                                                     ) : (
-                                                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/40 text-muted-foreground">
+                                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/40 text-muted-foreground">
                                                             <Package2 className="size-4" />
                                                         </div>
                                                     )}
@@ -316,22 +323,22 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                                     </div>
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="px-4 py-4 text-muted-foreground">
+                                            <TableCell className="px-4 py-3.5 text-muted-foreground">
                                                 {categoryMap.get(product.categoryId)?.name ?? "Unknown category"}
                                             </TableCell>
-                                            <TableCell className="px-4 py-4">
+                                            <TableCell className="px-4 py-3.5">
                                                 <ProductStatusBadge status={product.status} />
                                             </TableCell>
-                                            <TableCell className="px-4 py-4 font-medium text-foreground">
+                                            <TableCell className="px-4 py-3.5 font-medium text-foreground">
                                                 {formatCurrency(product.price)}
                                             </TableCell>
-                                            <TableCell className="px-4 py-4 text-muted-foreground">
+                                            <TableCell className="px-4 py-3.5 text-muted-foreground">
                                                 {formatCurrency(product.discount)}
                                             </TableCell>
-                                            <TableCell className="px-4 py-4 text-muted-foreground">
+                                            <TableCell className="px-4 py-3.5 text-muted-foreground">
                                                 {formatDateTime(product.updatedAt)}
                                             </TableCell>
-                                            <TableCell className="px-4 py-4">
+                                            <TableCell className="px-4 py-3.5">
                                                 <div className="flex flex-wrap gap-2">
                                                     <UpsertProductDialog
                                                         organizationId={organizationId}

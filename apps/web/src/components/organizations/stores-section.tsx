@@ -21,7 +21,7 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
         return (
             <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
                 <CardContent className="p-0">
-                    <Empty className="rounded-[28px] border-0">
+                    <Empty className="rounded-2xl border-0">
                         <EmptyHeader>
                             <EmptyMedia variant="icon">
                                 <Store />
@@ -42,20 +42,31 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
 
     return (
         <section className="space-y-5">
+            {/* Global security note — shown once instead of per-store */}
+            <div className="flex items-center gap-2.5 rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
+                <ShieldCheck className="size-4 shrink-0 text-primary" />
+                <p className="text-sm text-muted-foreground">
+                    Device secrets are hidden by default. Reveal them on demand from the device table.
+                </p>
+            </div>
+
             {stores.map((store) => (
                 <Card key={store.id} className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
                     <CardHeader className="gap-4 border-b border-border/50">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div className="space-y-3">
                                 <div className="flex flex-wrap items-center gap-3">
-                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                                         <Store className="size-4" />
                                     </div>
                                     <div>
                                         <CardTitle className="font-display text-2xl">{store.name}</CardTitle>
-                                        <CardDescription>
-                                            {store.address ?? "Address not added yet"} - Created {formatDateTime(store.createdAt)}
+                                        <CardDescription className="mt-0.5">
+                                            {store.address ?? "Address not added yet"}
                                         </CardDescription>
+                                        <p className="text-xs text-muted-foreground/70">
+                                            Created {formatDateTime(store.createdAt)}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
@@ -86,7 +97,7 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                     </CardHeader>
                     <CardContent className="pt-6">
                         {store.devices.length === 0 ? (
-                            <Empty className="rounded-[28px] border border-dashed border-border bg-background/60">
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
                                 <EmptyHeader>
                                     <EmptyMedia variant="icon">
                                         <MonitorSmartphone />
@@ -106,41 +117,44 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                 </EmptyContent>
                             </Empty>
                         ) : (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-border/60 text-sm">
+                            <div className="overflow-x-auto rounded-2xl border border-border/60">
+                                <table className="min-w-full text-sm">
                                     <thead>
-                                        <tr className="text-left text-muted-foreground">
-                                            <th className="px-3 py-3 font-medium">Device</th>
-                                            <th className="px-3 py-3 font-medium">Status</th>
-                                            <th className="px-3 py-3 font-medium">Last seen</th>
-                                            <th className="px-3 py-3 font-medium">Created</th>
-                                            <th className="px-3 py-3 font-medium">Secret</th>
+                                        <tr className="border-b border-border/50 bg-muted/20 text-left text-muted-foreground">
+                                            <th className="px-4 py-3 font-medium">Device</th>
+                                            <th className="px-4 py-3 font-medium">Status</th>
+                                            <th className="px-4 py-3 font-medium">Last seen</th>
+                                            <th className="px-4 py-3 font-medium">Created</th>
+                                            <th className="px-4 py-3 font-medium">Secret</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-border/50">
-                                        {store.devices.map((device) => (
-                                            <tr key={device.id} className="transition-colors hover:bg-muted/30">
-                                                <td className="px-3 py-4">
+                                    <tbody className="divide-y divide-border/40">
+                                        {store.devices.map((device, index) => (
+                                            <tr
+                                                key={device.id}
+                                                className={`transition-colors duration-150 hover:bg-muted/30 ${index % 2 === 0 ? "" : "bg-muted/10"}`}
+                                            >
+                                                <td className="px-4 py-3.5">
                                                     <div>
                                                         <p className="font-medium text-foreground">{device.name}</p>
                                                         <p className="text-xs text-muted-foreground">
-                                                            Device ID: {device.id.slice(0, 8)}
+                                                            ID: {device.id.slice(0, 8)}
                                                         </p>
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-4">
+                                                <td className="px-4 py-3.5">
                                                     <DeviceStatusBadge status={device.status} />
                                                 </td>
-                                                <td className="px-3 py-4 text-muted-foreground">
+                                                <td className="px-4 py-3.5 text-muted-foreground">
                                                     {formatDateTime(device.lastSeenAt)}
                                                 </td>
-                                                <td className="px-3 py-4 text-muted-foreground">
+                                                <td className="px-4 py-3.5 text-muted-foreground">
                                                     {formatDateTime(device.createdAt)}
                                                 </td>
-                                                <td className="px-3 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <code className="rounded-full border border-border/70 bg-muted/50 px-3 py-1 text-xs text-muted-foreground">
-                                                            ********
+                                                <td className="px-4 py-3.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <code className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-xs text-muted-foreground">
+                                                            ••••••••
                                                         </code>
                                                         <RevealDeviceSecretButton
                                                             organizationId={organizationId}
@@ -156,16 +170,6 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                 </table>
                             </div>
                         )}
-
-                        <div className="mt-6 rounded-[24px] border border-border/60 bg-muted/40 p-4">
-                            <div className="flex items-start gap-3">
-                                <ShieldCheck className="mt-0.5 size-4 text-primary" />
-                                <p className="text-sm leading-6 text-muted-foreground">
-                                    Device secrets are hidden by default and can be revealed on demand from the table above.
-                                    This keeps setup practical without exposing secrets across the UI.
-                                </p>
-                            </div>
-                        </div>
                     </CardContent>
                 </Card>
             ))}
