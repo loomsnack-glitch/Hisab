@@ -147,7 +147,7 @@ const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCateg
                         )}
                     />
 
-                    <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:flex-row">
+                    <DialogFooter>
                         <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
                             Cancel
                         </Button>

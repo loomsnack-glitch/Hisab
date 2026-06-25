@@ -201,7 +201,7 @@ export function ImageCropper({
                         </ReactCrop>
                     )}
                 </div>
-                <DialogFooter className="sm:justify-end">
+                <DialogFooter>
                     <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                         {cancelLabel}
                     </Button>

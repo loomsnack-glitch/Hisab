@@ -130,7 +130,7 @@ const CreateDeviceDialog = ({ organizationId, storeId, storeName, trigger }: Cre
                             <p>This secret is stored securely. You can reveal it later from the device list.</p>
                         </div>
 
-                        <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:flex-row">
+                        <DialogFooter>
                             <Button
                                 type="button"
                                 variant="outline"

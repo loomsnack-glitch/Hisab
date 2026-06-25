@@ -99,7 +99,7 @@ const EditOrganizationDialog = ({ organization, trigger }: EditOrganizationDialo
                         </FieldContent>
                     </Field>
 
-                    <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:flex-row">
+                    <DialogFooter>
                         <Button
                             type="button"
                             variant="outline"

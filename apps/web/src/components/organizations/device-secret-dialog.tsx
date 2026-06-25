@@ -126,7 +126,7 @@ const DeviceSecretDialog = ({
                     </div>
                 )}
 
-                <DialogFooter className="border-0 bg-transparent p-0 sm:flex-row sm:justify-between">
+                <DialogFooter className="sm:justify-between">
                     {errorMessage && onRetry ? (
                         <Button type="button" variant="outline" className="rounded-full" onClick={onRetry}>
                             <RotateCcw className="mr-2 size-4" />
