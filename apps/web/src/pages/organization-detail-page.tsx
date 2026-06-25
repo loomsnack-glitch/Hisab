@@ -184,29 +184,29 @@ const OrganizationDetailPage = () => {
                 >
                     <TabsTrigger
                         value="stores"
-                        className="h-auto gap-2 rounded-none border-b-2 border-transparent px-1 py-3 text-sm font-semibold transition-all hover:text-foreground data-active:border-primary data-active:text-primary sm:text-base cursor-pointer"
+                        className="h-auto gap-2 rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-1 py-3 text-sm font-semibold transition-all hover:text-foreground data-active:border-b-primary data-active:text-primary sm:text-base cursor-pointer"
                     >
                         <Store className="size-4" />
-                        Stores & Devices
-                        <Badge variant="secondary" className="rounded-full bg-muted/60 px-2 py-0.5 text-xs font-normal">
+                        Stores
+                        <span className="rounded-full bg-primary/10 text-primary dark:bg-primary/20 px-2 py-0.5 text-xs font-semibold shadow-inner border border-primary/10">
                             {storeCount}
-                        </Badge>
+                        </span>
                     </TabsTrigger>
                     <TabsTrigger
                         value="catalog"
-                        className="h-auto gap-2 rounded-none border-b-2 border-transparent px-1 py-3 text-sm font-semibold transition-all hover:text-foreground data-active:border-primary data-active:text-primary sm:text-base cursor-pointer"
+                        className="h-auto gap-2 rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-1 py-3 text-sm font-semibold transition-all hover:text-foreground data-active:border-b-primary data-active:text-primary sm:text-base cursor-pointer"
                     >
                         <Package2 className="size-4" />
-                        Categories & Products
+                        Products
                         {(!categoriesQuery.isPending && !productsQuery.isPending) && (
-                            <Badge variant="secondary" className="rounded-full bg-muted/60 px-2 py-0.5 text-xs font-normal">
-                                {productCount} {productCount === 1 ? "product" : "products"}
-                            </Badge>
+                            <span className="rounded-full bg-primary/10 text-primary dark:bg-primary/20 px-2 py-0.5 text-xs font-semibold shadow-inner border border-primary/10">
+                                {productCount}
+                            </span>
                         )}
                     </TabsTrigger>
                 </TabsList>
 
-                {/* ─── STEP 1: Stores & Devices ────────────────────────────── */}
+                {/* ─── Stores Panel ────────────────────────────── */}
                 <TabsContent value="stores" className="space-y-4 focus-visible:outline-none">
                     <section className="space-y-4">
                         <div className="flex items-center gap-3">
@@ -215,10 +215,10 @@ const OrganizationDetailPage = () => {
                             </div>
                             <div>
                                 <h3 className="font-display text-xl font-semibold text-foreground">
-                                    Step 1 — Stores & Devices
+                                    Stores
                                 </h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Add your branches first, then register POS devices under each store.
+                                    Manage your store branches and registered devices.
                                 </p>
                             </div>
                         </div>
@@ -226,7 +226,7 @@ const OrganizationDetailPage = () => {
                     </section>
                 </TabsContent>
 
-                {/* ─── STEP 2: Categories & Products ───────────────────────── */}
+                {/* ─── Products Panel ───────────────────────── */}
                 <TabsContent value="catalog" className="space-y-4 focus-visible:outline-none">
                     <section className="space-y-4">
                         <div className="flex items-center gap-3">
@@ -235,10 +235,10 @@ const OrganizationDetailPage = () => {
                             </div>
                             <div>
                                 <h3 className="font-display text-xl font-semibold text-foreground">
-                                    Step 2 — Categories & Products
+                                    Products
                                 </h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Create categories to group items, then add products with pricing and images.
+                                    Manage your categories and product menu.
                                 </p>
                             </div>
                         </div>
@@ -251,4 +251,3 @@ const OrganizationDetailPage = () => {
 };
 
 export default OrganizationDetailPage;
-
