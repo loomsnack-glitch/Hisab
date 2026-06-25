@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { configureDeviceIdProvider } from "@repo/services";
 
-const DEVICE_ID_KEY = "hisab_device_id";
+const DEVICE_ID_KEY = "ganatri_device_id";
 
 const createDeviceId = () => {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {

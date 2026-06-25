@@ -20,7 +20,7 @@ const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
         >
             <View className="mb-6 gap-2">
                 <Text className="text-xs font-bold uppercase tracking-[2px] text-amber-800">Loomsnack</Text>
-                <Text className="text-3xl font-bold text-stone-950">Hisab</Text>
+                <Text className="text-3xl font-bold text-stone-950">Ganatri</Text>
             </View>
 
             <View className="mb-6 gap-2">

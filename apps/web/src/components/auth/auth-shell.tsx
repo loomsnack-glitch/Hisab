@@ -24,11 +24,11 @@ const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
 
                     <div className="relative z-10 flex items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 shadow-lg shadow-black/20">
-                            <img src={logo} alt="Hisab" className="h-7 w-7 object-contain brightness-0 invert" />
+                            <img src={logo} alt="Ganatri" className="h-7 w-7 object-contain brightness-0 invert" />
                         </div>
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-300">Loomsnack</p>
-                            <h1 className="font-display text-2xl font-semibold tracking-tight">Hisab</h1>
+                            <h1 className="font-display text-2xl font-semibold tracking-tight">Ganatri</h1>
                         </div>
                     </div>
 
@@ -84,11 +84,11 @@ const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
                         <div className="mb-10 flex items-center justify-between lg:hidden">
                             <Link to="/" className="inline-flex items-center gap-3">
                                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-amber-400 to-orange-500">
-                                    <img src={logo} alt="Hisab" className="h-7 w-7 object-contain brightness-0 invert" />
+                                    <img src={logo} alt="Ganatri" className="h-7 w-7 object-contain brightness-0 invert" />
                                 </div>
                                 <div>
                                     <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary/80">Loomsnack</p>
-                                    <p className="font-display text-2xl font-semibold tracking-tight text-foreground">Hisab</p>
+                                    <p className="font-display text-2xl font-semibold tracking-tight text-foreground">Ganatri</p>
                                 </div>
                             </Link>
                             <Badge variant="outline" className="rounded-full">

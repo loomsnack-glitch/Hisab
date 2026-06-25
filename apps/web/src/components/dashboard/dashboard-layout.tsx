@@ -101,13 +101,13 @@ const DashboardLayout = () => {
             <div className={cn("px-4", isMobile ? "pt-6" : "pt-5")}>
                 <Link to="/dashboard" className="flex items-center gap-3">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-amber-400 to-orange-500 shadow-lg shadow-primary/20">
-                        <img src={logo} alt="Hisab" className="h-7 w-7 object-contain brightness-0 invert" />
+                        <img src={logo} alt="Ganatri" className="h-7 w-7 object-contain brightness-0 invert" />
                     </div>
                     <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/80">
                             Loomsnack
                         </p>
-                        <p className="font-display text-2xl font-semibold tracking-tight text-foreground">Hisab</p>
+                        <p className="font-display text-2xl font-semibold tracking-tight text-foreground">Ganatri</p>
                     </div>
                 </Link>
             </div>

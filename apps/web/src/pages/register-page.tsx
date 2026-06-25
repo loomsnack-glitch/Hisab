@@ -89,7 +89,7 @@ const RegisterPage = () => {
 
     return (
         <AuthShell
-            title="Create your Hisab account"
+            title="Create your Ganatri account"
             subtitle="Register with your phone number, verify the OTP on WhatsApp, and you will be logged in immediately."
         >
             <Card className="border-amber-100 shadow-none">

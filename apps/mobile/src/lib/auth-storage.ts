@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { configureAuthTokenStorage } from "@repo/services";
 
-const AUTH_TOKEN_KEY = "hisab_auth_token";
+const AUTH_TOKEN_KEY = "ganatri_auth_token";
 
 configureAuthTokenStorage({
     getItem: () => SecureStore.getItemAsync(AUTH_TOKEN_KEY),

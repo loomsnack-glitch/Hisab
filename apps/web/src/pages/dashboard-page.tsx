@@ -39,7 +39,7 @@ const DashboardPage = () => {
                                         Welcome back, {authUser?.firstName}.
                                     </h2>
                                     <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
-                                        Hisab is set up as your retail command center. Start with organizations, branch out
+                                        Ganatri is set up as your retail command center. Start with organizations, branch out
                                         into stores, and keep device onboarding clean for every counter and cashier.
                                     </p>
                                 </div>
