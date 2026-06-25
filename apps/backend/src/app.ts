@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { deviceMiddleware } from './middlewares/device.middleware';
 import authRoutes from './modules/access-control/auth/auth.routes';
+import organizationRoutes from './modules/tenant/organization/organization.routes';
 
 const BASE_PATH = process.env.BASE_PATH
 const app = BASE_PATH ? new Hono().basePath(BASE_PATH) : new Hono();
@@ -30,5 +31,6 @@ app.get('/', (c) => {
 });
 
 app.route('/auth', authRoutes);
+app.route('/organizations', organizationRoutes);
 
 export default app

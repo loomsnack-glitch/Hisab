@@ -4,15 +4,15 @@ import {
     LoginSchema,
     RegisterSchema,
     STATUS_CODES,
-    type ServiceConfig,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { validateSchema } from "@/middlewares/validate";
+import type { AppVariables } from "@/types/hono";
 import * as authService from "./auth.service";
 
 const FILE_NAME = "auth.routes";
 
-const router = new Hono<{ Variables: ServiceConfig }>();
+const router = new Hono<{ Variables: AppVariables }>();
 
 const setAuthCookie = (c: Parameters<typeof setCookie>[0], token: string) => {
     setCookie(c, "token", token, {
