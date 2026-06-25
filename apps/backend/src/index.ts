@@ -5,6 +5,7 @@ import { handleShutdown } from "./helpers/server.helper";
 const port = 8000;
 
 Bun.serve({
+  hostname: "0.0.0.0",
   port: port,
   fetch: app.fetch,
 });

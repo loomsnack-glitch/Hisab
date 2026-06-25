@@ -1,4 +1,6 @@
 import axios, { AxiosError } from "axios";
+import { getAuthToken } from "./auth-token";
+import { getDeviceId } from "./device-id";
 
 const FALLBACK_BASE_API_URL = "http://localhost:8000/api";
 
@@ -42,6 +44,7 @@ let baseApiUrl = resolveBaseApiUrl();
 export const api = axios.create({
     baseURL: baseApiUrl,
     withCredentials: !isReactNativeRuntime(),
+    timeout: isReactNativeRuntime() ? 30_000 : undefined,
 });
 
 export const setApiBaseUrl = (value: string) => {
@@ -52,14 +55,51 @@ export const setApiBaseUrl = (value: string) => {
 
 export const getApiBaseUrl = () => baseApiUrl;
 
+api.interceptors.request.use(async (config) => {
+    if (!isReactNativeRuntime()) {
+        return config;
+    }
+
+    const token = await getAuthToken();
+    if (token) {
+        config.headers.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+    }
+
+    const deviceId = await getDeviceId();
+    if (deviceId) {
+        config.headers["X-Device-Id"] = deviceId;
+    }
+
+    return config;
+});
+
 api.interceptors.response.use(
     response => response,
     error => Promise.reject(error),
 );
 
-export const handleApiError = (error: any) => {
-    if (error instanceof AxiosError && error.response?.data) {
-        throw error.response.data;
+export const handleApiError = (error: unknown) => {
+    if (error instanceof AxiosError) {
+        if (error.response?.data) {
+            throw error.response.data;
+        }
+
+        if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+            throw {
+                message: `Cannot reach the API at ${error.config?.baseURL ?? getApiBaseUrl()}. On a physical phone, set EXPO_PUBLIC_BASE_API_URL to your PC's LAN IP in apps/mobile/.env (not localhost or 10.0.2.2).`,
+            };
+        }
+
+        if (error.code === "ECONNABORTED") {
+            throw {
+                message: `The API request timed out at ${error.config?.baseURL ?? getApiBaseUrl()}. Check that the backend is running on port 8000.`,
+            };
+        }
+
+        throw {
+            message: error.message || "Request failed",
+        };
     }
+
     throw error;
 };

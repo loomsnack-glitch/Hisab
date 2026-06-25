@@ -3,24 +3,38 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@react-navigation/native": "^7.3.4",
+    "@react-navigation/native-stack": "^7.17.6",
     "@repo/services": "workspace:*",
     "@repo/types": "workspace:*",
+    "@tanstack/react-query": "^5.101.1",
     "expo": "~56.0.12",
+    "expo-constants": "^56.0.18",
+    "expo-device": "^56.0.4",
+    "expo-secure-store": "^56.0.4",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
+    "react-hook-form": "^7.80.0",
     "react-native": "0.85.3",
+    "react-native-safe-area-context": "^5.8.0",
+    "react-native-screens": "^4.25.2",
     "tailwindcss": "^4.3.1",
-    "uniwind": "^1.9.0"
+    "uniwind": "^1.9.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
     "typescript": "5.9.3"
   },
   "scripts": {
-    "dev": "expo start",
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "android:native": "expo run:android",
+    "android:native:device": "expo run:android --device",
+    "android:native:emulator": "expo run:android",
+    "android:reverse": "adb reverse tcp:8000 tcp:8000",
+    "prebuild:android": "expo prebuild --platform android --bun",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "uniwind:generate": "uniwind generate-artifacts --css ./global.css --dts ./uniwind-types.d.ts"
   },

@@ -8,3 +8,404 @@ Waiting on http://localhost:8084
 Logs for your project will appear below.
 Android Bundled 34743ms apps\mobile\index.ts (1002 modules)
 Android Bundled 1375ms apps\mobile\index.ts (1 module)
+ ERROR  Error: Got unexpected undefined
+    at nullthrows (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\nullthrows\nullthrows.js:7:15)
+    at Graph._recursivelyCommitModule (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:203:51)
+    at Graph._addDependency (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:304:25)
+    at Graph._recursivelyCommitModule (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:248:16)
+    at Graph._addDependency (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:304:25)
+    at Graph._recursivelyCommitModule (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:248:16)
+    at Graph._addDependency (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:304:25)
+    at Graph._recursivelyCommitModule (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:248:16)
+    at Graph._addDependency (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:304:25)
+    at Graph._recursivelyCommitModule (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:248:16)
+    at Graph._addDependency (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:304:25)
+    at Graph._recursivelyCommitModule (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:248:16)
+    at Graph.traverseDependencies (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\Graph.js:102:14)
+    at async DeltaCalculator._getChangedDependencies (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\DeltaCalculator.js:200:42)
+    at async DeltaCalculator.getDelta (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler\DeltaCalculator.js:74:16)
+    at async DeltaBundler.getDelta (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\DeltaBundler.js:55:12)
+    at async IncrementalBundler.updateGraph (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\IncrementalBundler.js:251:19)
+    at async hmrServer._prepareMessage (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\@expo\cli\build\src\start\server\metro\instantiateMetro.js:458:45)
+    at async HmrServer._handleFileChange (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\HmrServer.js:268:21)
+    at async C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\HmrServer.js:161:11
+    at async execute (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\lib\debounceAsyncQueue.js:16:17)
+    at async Timeout._onTimeout (C:\Users\smarty\Desktop\loomsnack\Hisab\node_modules\metro\src\lib\debounceAsyncQueue.js:34:11)
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+
+Unable to resolve "expo-secure-store" from "apps\mobile\src\lib\auth-storage.ts"
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSecureStore[39m [36mfrom[39m [32m"expo-secure-store"[39m[33m;[39m
+ [90m   |[39m                               [31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { configureAuthTokenStorage } [36mfrom[39m [32m"@repo/services"[39m[33m;[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mAUTH_TOKEN_KEY[39m [33m=[39m [32m"hisab_auth_token"[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\lib\auth-storage.ts
+ | import "expo-secure-store"
+
+ apps\mobile\App.tsx
+ | import "./src/lib/auth-storage"
+
+ apps\mobile\index.ts
+ | import "./App"
+
+ 
+ | import "./apps/mobile/index.ts"
+

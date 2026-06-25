@@ -2,9 +2,18 @@ import type { Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 
 export const getDeviceId = (c: Context) => {
-    const existingDeviceId = getCookie(c, 'deviceId');
-    return existingDeviceId;
-}
+    const fromCookie = getCookie(c, "deviceId");
+    if (fromCookie) {
+        return fromCookie;
+    }
+
+    const fromHeader = c.req.header("X-Device-Id")?.trim();
+    if (fromHeader) {
+        return fromHeader;
+    }
+
+    return undefined;
+};
 
 export const setDeviceId = (c: Context) => {
     const isProduction = process.env.NODE_ENV === 'production'
