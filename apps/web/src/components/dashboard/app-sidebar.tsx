@@ -305,7 +305,7 @@ const AppSidebar = ({
                     variant="outline"
                     size="icon-sm"
                     aria-label="Expand sidebar"
-                    className="sidebar-edge-toggle pointer-events-auto absolute top-3.5 left-[68px] z-[60] ml-1.5 size-7 rounded-full border-border/70 bg-card shadow-md"
+                    className="sidebar-edge-toggle pointer-events-auto absolute top-3.5 left-[68px] z-[60] ml-1.5 size-7 rounded-lg border-border/70 bg-card shadow-md"
                     onClick={onToggle}
                 >
                     <ChevronRight className="size-3.5" />
