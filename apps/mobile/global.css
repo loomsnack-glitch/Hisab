@@ -2,8 +2,12 @@
 @import "uniwind";
 
 @theme static {
+  --color-primary: #3b82f6;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e5e7eb;
+  --color-secondary-foreground: #374151;
   --color-brand-sand: #f5f1e8;
   --color-brand-cream: #fff7ed;
   --color-brand-ink: #1c1917;
-  --color-brand-accent: #92400e;
+  --color-brand-accent: #3b82f6;
 }

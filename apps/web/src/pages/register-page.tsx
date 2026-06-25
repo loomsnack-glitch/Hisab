@@ -6,21 +6,23 @@ import { useForm, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
 import { ChevronLeft } from "lucide-react";
 import { register as registerUser } from "@repo/services";
-import { RegisterSchema, SALUTATION_OPTIONS, type RegisterJSON } from "@repo/types";
+import { RegisterFormSchema, SALUTATION_OPTIONS, formatIndianPhoneDisplay, type RegisterFormJSON } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { PasswordInput } from "@repo/ui/components/password-input";
+import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Controller } from "react-hook-form";
 
 import AuthShell from "@/components/auth/auth-shell";
 import OtpField from "@/components/auth/otp-field";
+import PhoneNumberField from "@/components/auth/phone-number-field";
 import { useAuthActions } from "@/store/auth.store";
 
 import { authKeys } from "@/lib/query-keys";
 
-const defaultValues: RegisterJSON = {
+const defaultValues: RegisterFormJSON = {
     requestType: "user-info",
     salutation: "mr.",
     firstName: "",
@@ -38,8 +40,8 @@ const RegisterPage = () => {
     const [step, setStep] = useState<"user-info" | "otp-verification">("user-info");
     const [cooldown, setCooldown] = useState(0);
 
-    const form = useForm<RegisterJSON>({
-        resolver: zodResolver(RegisterSchema),
+    const form = useForm<RegisterFormJSON>({
+        resolver: zodResolver(RegisterFormSchema),
         defaultValues,
     });
 
@@ -73,7 +75,7 @@ const RegisterPage = () => {
         return () => window.clearTimeout(timer);
     }, [cooldown]);
 
-    const onSubmit: SubmitHandler<RegisterJSON> = (values) => {
+    const onSubmit: SubmitHandler<RegisterFormJSON> = (values) => {
         registerMutation.mutate(values);
     };
 
@@ -92,44 +94,45 @@ const RegisterPage = () => {
             title="Create your Ganatri account"
             subtitle="Register with your phone number, verify the OTP on WhatsApp, and you will be logged in immediately."
         >
-            <Card className="border-amber-100 shadow-none">
+            <Card className="border-border/70 shadow-sm transition-shadow duration-300 hover:shadow-md">
                 <CardContent className="p-6 sm:p-8">
                     <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
                         {step === "otp-verification" ? (
                             <>
-                                <div className="flex items-center justify-between border-b border-dashed border-amber-200 pb-4">
+                                <div className="flex items-center justify-between border-b border-dashed border-border pb-4">
                                     <div className="flex items-center gap-3">
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="icon"
+                                            className="rounded-xl"
                                             onClick={() => {
                                                 setStep("user-info");
                                                 form.setValue("requestType", "user-info");
                                             }}
                                         >
-                                            <ChevronLeft className="size-4" />
+                                            <ChevronLeft className="size-4 transition-transform duration-200 group-hover/button:-translate-x-0.5" />
                                         </Button>
                                         <div>
-                                            <p className="text-sm font-medium text-slate-900">{form.getValues("phone")}</p>
-                                            <p className="text-xs text-slate-500">Verification in progress</p>
+                                            <p className="text-sm font-medium text-foreground">{formatIndianPhoneDisplay(form.getValues("phone"))}</p>
+                                            <p className="text-xs text-muted-foreground">Verification in progress</p>
                                         </div>
                                     </div>
 
                                     {cooldown > 0 ? (
-                                        <p className="text-xs font-medium text-slate-500">Resend in {cooldown}s</p>
+                                        <p className="text-xs font-medium text-muted-foreground">Resend in {cooldown}s</p>
                                     ) : (
-                                        <Button type="button" variant="link" className="px-0 text-amber-700" onClick={resendOtp}>
+                                        <Button type="button" variant="link" className="px-0" onClick={resendOtp}>
                                             Resend OTP
                                         </Button>
                                     )}
                                 </div>
 
-                                <OtpField control={form.control} name="otp" />
+                                <OtpField key="otp-verification" control={form.control} name="otp" />
 
                                 <Button
                                     type="submit"
-                                    className="h-11 w-full rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400"
+                                    className="h-11 w-full rounded-xl transition-all duration-200"
                                     disabled={registerMutation.isPending || form.watch("otp")?.length !== 6}
                                 >
                                     Verify and continue
@@ -145,17 +148,14 @@ const RegisterPage = () => {
                                             <Field data-invalid={fieldState.invalid}>
                                                 <FieldLabel required>Salutation</FieldLabel>
                                                 <FieldContent>
-                                                    <select
-                                                        value={field.value}
-                                                        onChange={field.onChange}
-                                                        className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-11 w-full rounded-xl border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
-                                                    >
-                                                        {SALUTATION_OPTIONS.map((option) => (
-                                                            <option key={option.value} value={option.value}>
-                                                                {option.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                    <ReactSelect
+                                                        options={SALUTATION_OPTIONS}
+                                                        value={SALUTATION_OPTIONS.find((option) => option.value === field.value) ?? null}
+                                                        onChange={(option) => field.onChange(option?.value ?? "mr.")}
+                                                        classNames={{
+                                                            control: () => "!min-h-11 rounded-xl",
+                                                        }}
+                                                    />
                                                     <FieldError errors={[fieldState.error]} />
                                                 </FieldContent>
                                             </Field>
@@ -165,7 +165,7 @@ const RegisterPage = () => {
                                     <Field data-invalid={!!form.formState.errors.firstName} className="sm:col-span-1">
                                         <FieldLabel required>First name</FieldLabel>
                                         <FieldContent>
-                                            <Input className="h-11 rounded-xl" {...form.register("firstName")} />
+                                            <Input className="h-11 rounded-xl transition-colors duration-200" {...form.register("firstName")} />
                                             <FieldError errors={[form.formState.errors.firstName]} />
                                         </FieldContent>
                                     </Field>
@@ -173,24 +173,30 @@ const RegisterPage = () => {
                                     <Field data-invalid={!!form.formState.errors.lastName} className="sm:col-span-1">
                                         <FieldLabel required>Last name</FieldLabel>
                                         <FieldContent>
-                                            <Input className="h-11 rounded-xl" {...form.register("lastName")} />
+                                            <Input className="h-11 rounded-xl transition-colors duration-200" {...form.register("lastName")} />
                                             <FieldError errors={[form.formState.errors.lastName]} />
                                         </FieldContent>
                                     </Field>
                                 </FieldGroup>
 
-                                <Field data-invalid={!!form.formState.errors.phone}>
-                                    <FieldLabel required>Phone number</FieldLabel>
-                                    <FieldContent>
-                                        <Input className="h-11 rounded-xl" placeholder="+919876543210" {...form.register("phone")} />
-                                        <FieldError errors={[form.formState.errors.phone]} />
-                                    </FieldContent>
-                                </Field>
+                                <Controller
+                                    control={form.control}
+                                    name="phone"
+                                    render={({ field, fieldState }) => (
+                                        <PhoneNumberField
+                                            value={field.value}
+                                            onChange={field.onChange}
+                                            onBlur={field.onBlur}
+                                            error={fieldState.error}
+                                            required
+                                        />
+                                    )}
+                                />
 
                                 <Field data-invalid={!!form.formState.errors.email}>
                                     <FieldLabel>Email</FieldLabel>
                                     <FieldContent>
-                                        <Input className="h-11 rounded-xl" placeholder="Optional" {...form.register("email")} />
+                                        <Input className="h-11 rounded-xl transition-colors duration-200" placeholder="Optional" {...form.register("email")} />
                                         <FieldError errors={[form.formState.errors.email]} />
                                     </FieldContent>
                                 </Field>
@@ -199,7 +205,7 @@ const RegisterPage = () => {
                                     <Field data-invalid={!!form.formState.errors.password}>
                                         <FieldLabel required>Password</FieldLabel>
                                         <FieldContent>
-                                            <PasswordInput className="h-11 rounded-xl" {...form.register("password")} />
+                                            <PasswordInput className="h-11 rounded-xl transition-colors duration-200" {...form.register("password")} />
                                             <FieldError errors={[form.formState.errors.password]} />
                                         </FieldContent>
                                     </Field>
@@ -207,7 +213,7 @@ const RegisterPage = () => {
                                     <Field data-invalid={!!form.formState.errors.confirmPassword}>
                                         <FieldLabel required>Confirm password</FieldLabel>
                                         <FieldContent>
-                                            <PasswordInput className="h-11 rounded-xl" {...form.register("confirmPassword")} />
+                                            <PasswordInput className="h-11 rounded-xl transition-colors duration-200" {...form.register("confirmPassword")} />
                                             <FieldError errors={[form.formState.errors.confirmPassword]} />
                                         </FieldContent>
                                     </Field>
@@ -215,7 +221,7 @@ const RegisterPage = () => {
 
                                 <Button
                                     type="submit"
-                                    className="h-11 w-full rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400"
+                                    className="h-11 w-full rounded-xl transition-all duration-200"
                                     disabled={registerMutation.isPending}
                                 >
                                     {registerMutation.isPending ? "Sending OTP..." : "Send OTP"}
@@ -223,9 +229,9 @@ const RegisterPage = () => {
                             </>
                         )}
 
-                        <p className="text-center text-sm text-slate-500">
+                        <p className="text-center text-sm text-muted-foreground">
                             Already have an account?{" "}
-                            <Link to="/login" className="font-medium text-amber-700 hover:text-amber-800">
+                            <Link to="/login" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
                                 Login here
                             </Link>
                         </p>

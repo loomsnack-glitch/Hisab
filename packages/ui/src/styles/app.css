@@ -1,3 +1,17 @@
+.auth-feature-card .auth-feature-icon {
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.auth-feature-card:hover .auth-feature-icon {
+    transform: translateY(-3px) scale(1.06);
+}
+
+.auth-panel-pattern {
+    background-size: 32px 32px;
+    background-image: linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+}
+
 .grid-bg {
     background-size: 40px 40px;
     background-image: linear-gradient(to right, #e4e4e7 1px, transparent 1px),

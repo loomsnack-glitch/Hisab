@@ -20,10 +20,10 @@ const menuStyles =
 const groupHeadingStyles =
     'py-2 px-1 text-secondary-foreground text-sm font-semibold';
 const optionStyles = {
-    base: 'hover:cursor-pointer px-2 py-1.5 rounded-xs !text-sm cursor-default !select-none !outline-none',
-    focus: 'bg-primary/20',
+    base: 'hover:cursor-pointer px-2 py-1.5 rounded-xs !text-sm cursor-default !select-none !outline-none text-popover-foreground',
+    focus: 'bg-primary/20 text-foreground',
     disabled: 'pointer-events-none opacity-60',
-    selected: 'bg-primary hover:bg-primary text-accent-foreground font-semibold'
+    selected: 'bg-primary hover:bg-primary text-primary-foreground font-semibold'
 };
 const noOptionsMessageStyles =
     'text-accent-foreground p-2 bg-accent border border-dashed border-border rounded-xs';

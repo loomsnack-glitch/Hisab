@@ -22,6 +22,9 @@ export default defineConfig(({ mode }) => {
                 "use-sync-external-store/shim/index.js",
                 "use-sync-external-store/shim/with-selector",
                 "use-sync-external-store/shim/with-selector.js",
+                "react-select",
+                "@emotion/react",
+                "hoist-non-react-statics",
             ],
             exclude: [
                 "@repo/assets",
@@ -32,23 +35,39 @@ export default defineConfig(({ mode }) => {
         },
         resolve: {
             preserveSymlinks: true,
-            alias: {
-                "@": path.resolve(__dirname, "./src"),
-                "next-themes": path.resolve(__dirname, "./node_modules/next-themes/dist/index.mjs"),
-                react: path.resolve(__dirname, "./node_modules/react"),
-                "react/jsx-runtime": path.resolve(__dirname, "./node_modules/react/jsx-runtime.js"),
-                "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
-                "use-sync-external-store/shim": useSyncExternalStoreShimDir,
-                "use-sync-external-store/shim/index.js": path.resolve(useSyncExternalStoreShimDir, "index.ts"),
-                "use-sync-external-store/shim/with-selector": path.resolve(
-                    useSyncExternalStoreShimDir,
-                    "with-selector.ts",
-                ),
-                "use-sync-external-store/shim/with-selector.js": path.resolve(
-                    useSyncExternalStoreShimDir,
-                    "with-selector.ts",
-                ),
-            },
+            alias: [
+                { find: "@", replacement: path.resolve(__dirname, "./src") },
+                {
+                    find: /^hoist-non-react-statics$/,
+                    replacement: path.resolve(__dirname, "./src/shims/hoist-non-react-statics.ts"),
+                },
+                {
+                    find: "next-themes",
+                    replacement: path.resolve(__dirname, "./node_modules/next-themes/dist/index.mjs"),
+                },
+                { find: "react", replacement: path.resolve(__dirname, "./node_modules/react") },
+                {
+                    find: "react/jsx-runtime",
+                    replacement: path.resolve(__dirname, "./node_modules/react/jsx-runtime.js"),
+                },
+                { find: "react-dom", replacement: path.resolve(__dirname, "./node_modules/react-dom") },
+                {
+                    find: "use-sync-external-store/shim",
+                    replacement: useSyncExternalStoreShimDir,
+                },
+                {
+                    find: "use-sync-external-store/shim/index.js",
+                    replacement: path.resolve(useSyncExternalStoreShimDir, "index.ts"),
+                },
+                {
+                    find: "use-sync-external-store/shim/with-selector",
+                    replacement: path.resolve(useSyncExternalStoreShimDir, "with-selector.ts"),
+                },
+                {
+                    find: "use-sync-external-store/shim/with-selector.js",
+                    replacement: path.resolve(useSyncExternalStoreShimDir, "with-selector.ts"),
+                },
+            ],
         },
         server: {
             port: 5173,

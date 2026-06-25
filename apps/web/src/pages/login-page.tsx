@@ -2,23 +2,24 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, type SubmitHandler } from "react-hook-form";
+import { useForm, Controller, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
 import { ChevronLeft, KeyRound, MessageSquareText } from "lucide-react";
+import whatsAppIcon from "@repo/assets/services/whatsapp.webp";
 import { userLogin } from "@repo/services";
-import { LoginSchema, type LoginJSON } from "@repo/types";
+import { LoginFormSchema, formatIndianPhoneDisplay, type LoginFormJSON } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
-import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
-import { Input } from "@repo/ui/components/input";
+import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { PasswordInput } from "@repo/ui/components/password-input";
 
 import AuthShell from "@/components/auth/auth-shell";
 import OtpField from "@/components/auth/otp-field";
+import PhoneNumberField from "@/components/auth/phone-number-field";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions } from "@/store/auth.store";
 
-const defaultValues: LoginJSON = {
+const defaultValues: LoginFormJSON = {
     requestType: "user-info",
     phone: "",
     password: "",
@@ -31,8 +32,8 @@ const LoginPage = () => {
     const [method, setMethod] = useState<"password" | "otp">("password");
     const [cooldown, setCooldown] = useState(0);
 
-    const form = useForm<LoginJSON>({
-        resolver: zodResolver(LoginSchema),
+    const form = useForm<LoginFormJSON>({
+        resolver: zodResolver(LoginFormSchema),
         defaultValues,
     });
 
@@ -70,11 +71,16 @@ const LoginPage = () => {
         return () => window.clearTimeout(timer);
     }, [cooldown]);
 
-    const submitForm: SubmitHandler<LoginJSON> = (values) => {
+    const submitForm: SubmitHandler<LoginFormJSON> = (values) => {
         loginMutation.mutate(values);
     };
 
-    const startOtpFlow = () => {
+    const startOtpFlow = async () => {
+        const isPhoneValid = await form.trigger("phone");
+        if (!isPhoneValid) {
+            return;
+        }
+
         const values = form.getValues();
         loginMutation.mutate({
             phone: values.phone,
@@ -93,57 +99,67 @@ const LoginPage = () => {
             title="Welcome back"
             subtitle="Login with your password or request an OTP on WhatsApp when you need a quick sign-in."
         >
-            <Card className="border-amber-100 shadow-none">
+            <Card className="border-border/70 shadow-sm transition-shadow duration-300 hover:shadow-md">
                 <CardContent className="space-y-6 p-6 sm:p-8">
-                    <div className="grid grid-cols-2 gap-3 rounded-2xl bg-amber-50 p-2">
+                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary p-1.5">
                         <Button
                             type="button"
                             variant={method === "password" ? "default" : "ghost"}
-                            className={method === "password" ? "bg-slate-950 text-white hover:bg-slate-900" : "text-slate-700"}
+                            className={`h-11 rounded-xl transition-all duration-200 ${
+                                method === "password" ? "" : "text-secondary-foreground hover:bg-secondary/80"
+                            }`}
                             onClick={() => {
                                 setMethod("password");
                                 form.reset({ phone: form.getValues("phone"), requestType: "user-info", password: "" });
                             }}
                         >
-                            <KeyRound className="mr-2 size-4" />
+                            <KeyRound className="mr-2 size-4 transition-transform duration-200 group-hover/button:-translate-y-0.5" />
                             Password
                         </Button>
                         <Button
                             type="button"
                             variant={method === "otp" ? "default" : "ghost"}
-                            className={method === "otp" ? "bg-slate-950 text-white hover:bg-slate-900" : "text-slate-700"}
+                            className={`h-11 rounded-xl transition-all duration-200 ${
+                                method === "otp" ? "" : "text-secondary-foreground hover:bg-secondary/80"
+                            }`}
                             onClick={() => {
                                 setMethod("otp");
                                 form.reset({ phone: form.getValues("phone"), requestType: "otp-info" });
                             }}
                         >
-                            <MessageSquareText className="mr-2 size-4" />
+                            <MessageSquareText className="mr-2 size-4 transition-transform duration-200 group-hover/button:-translate-y-0.5" />
                             OTP
                         </Button>
                     </div>
 
                     <form className="space-y-5" onSubmit={form.handleSubmit(submitForm)}>
-                        <Field data-invalid={!!form.formState.errors.phone}>
-                            <FieldLabel required>Phone number</FieldLabel>
-                            <FieldContent>
-                                <Input className="h-11 rounded-xl" placeholder="+919876543210" {...form.register("phone")} />
-                                <FieldError errors={[form.formState.errors.phone]} />
-                            </FieldContent>
-                        </Field>
+                        <Controller
+                            control={form.control}
+                            name="phone"
+                            render={({ field, fieldState }) => (
+                                <PhoneNumberField
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    onBlur={field.onBlur}
+                                    error={fieldState.error}
+                                    required
+                                />
+                            )}
+                        />
 
                         {method === "password" ? (
                             <>
                                 <Field data-invalid={!!form.formState.errors.password}>
                                     <FieldLabel required>Password</FieldLabel>
                                     <FieldContent>
-                                        <PasswordInput className="h-11 rounded-xl" {...form.register("password")} />
+                                        <PasswordInput className="h-11 rounded-xl transition-colors duration-200" {...form.register("password")} />
                                         <FieldError errors={[form.formState.errors.password]} />
                                     </FieldContent>
                                 </Field>
 
                                 <Button
                                     type="submit"
-                                    className="h-11 w-full rounded-xl bg-slate-950 text-white hover:bg-slate-900"
+                                    className="h-11 w-full rounded-xl transition-all duration-200"
                                     disabled={loginMutation.isPending}
                                 >
                                     {loginMutation.isPending ? "Logging in..." : "Login"}
@@ -151,58 +167,57 @@ const LoginPage = () => {
                             </>
                         ) : form.watch("requestType") === "otp-verification" ? (
                             <>
-                                <div className="flex items-center justify-between border-b border-dashed border-amber-200 pb-4">
+                                <div className="flex items-center justify-between border-b border-dashed border-border pb-4">
                                     <div className="flex items-center gap-3">
-                                        <Button type="button" variant="ghost" size="icon" onClick={backToOtpStart}>
-                                            <ChevronLeft className="size-4" />
+                                        <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={backToOtpStart}>
+                                            <ChevronLeft className="size-4 transition-transform duration-200 group-hover/button:-translate-x-0.5" />
                                         </Button>
                                         <div>
-                                            <p className="text-sm font-medium text-slate-900">{form.getValues("phone")}</p>
-                                            <p className="text-xs text-slate-500">OTP verification</p>
+                                            <p className="text-sm font-medium text-foreground">{formatIndianPhoneDisplay(form.getValues("phone"))}</p>
+                                            <p className="text-xs text-muted-foreground">OTP verification</p>
                                         </div>
                                     </div>
 
                                     {cooldown > 0 ? (
-                                        <p className="text-xs font-medium text-slate-500">Resend in {cooldown}s</p>
+                                        <p className="text-xs font-medium text-muted-foreground">Resend in {cooldown}s</p>
                                     ) : (
-                                        <Button type="button" variant="link" className="px-0 text-amber-700" onClick={startOtpFlow}>
+                                        <Button type="button" variant="link" className="px-0" onClick={startOtpFlow}>
                                             Resend OTP
                                         </Button>
                                     )}
                                 </div>
 
-                                <OtpField control={form.control} name="otp" />
+                                <OtpField key="otp-verification" control={form.control} name="otp" />
 
                                 <Button
                                     type="submit"
-                                    className="h-11 w-full rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400"
+                                    className="h-11 w-full rounded-xl transition-all duration-200"
                                     disabled={loginMutation.isPending || form.watch("otp")?.length !== 6}
                                 >
                                     Verify and login
                                 </Button>
                             </>
                         ) : (
-                            <>
-                                <FieldGroup className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/60 p-4">
-                                    <p className="text-sm leading-6 text-slate-600">
-                                        Use WhatsApp OTP if you want a quick login without typing your password.
-                                    </p>
-                                </FieldGroup>
-
-                                <Button
-                                    type="button"
-                                    className="h-11 w-full rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400"
-                                    disabled={loginMutation.isPending}
-                                    onClick={startOtpFlow}
-                                >
-                                    {loginMutation.isPending ? "Sending OTP..." : "Send OTP"}
-                                </Button>
-                            </>
+                            <Button
+                                type="button"
+                                className="h-11 w-full rounded-xl transition-all duration-200"
+                                disabled={loginMutation.isPending}
+                                onClick={startOtpFlow}
+                            >
+                                {loginMutation.isPending ? (
+                                    "Sending OTP..."
+                                ) : (
+                                    <>
+                                        <img src={whatsAppIcon} alt="" className="mr-2 size-4" />
+                                        Send OTP on WhatsApp
+                                    </>
+                                )}
+                            </Button>
                         )}
 
-                        <p className="text-center text-sm text-slate-500">
+                        <p className="text-center text-sm text-muted-foreground">
                             Need a new account?{" "}
-                            <Link to="/register" className="font-medium text-amber-700 hover:text-amber-800">
+                            <Link to="/register" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
                                 Register here
                             </Link>
                         </p>

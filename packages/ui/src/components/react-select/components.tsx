@@ -35,9 +35,14 @@ export const MultiValueRemove = (props: any) => {
 export const Option = (props: any) => {
     return (
         <components.Option {...props}>
-            <div className={cn("flex items-center justify-between", props.isSelected && '')}>
+            <div
+                className={cn(
+                    "flex items-center justify-between",
+                    props.isSelected && "text-primary-foreground",
+                )}
+            >
                 <div>{props.data.label}</div>
-                {props.isSelected && <Check size={16} />}
+                {props.isSelected && <Check size={16} className="text-primary-foreground" />}
                 {props.data?.role && <Chip className="p-0 px-1" variant='light' size='xs' color='indigo'>{props.data?.role}</Chip>}
             </div>
         </components.Option>

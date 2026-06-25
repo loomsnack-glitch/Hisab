@@ -5,6 +5,7 @@
   "dependencies": {
     "@react-navigation/native": "^7.3.4",
     "@react-navigation/native-stack": "^7.17.6",
+    "@repo/assets": "workspace:*",
     "@repo/services": "workspace:*",
     "@repo/types": "workspace:*",
     "@tanstack/react-query": "^5.101.1",

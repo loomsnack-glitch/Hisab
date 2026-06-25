@@ -4,10 +4,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { register as registerUser, setAuthToken } from "@repo/services";
-import { RegisterSchema, SALUTATION_OPTIONS, type RegisterJSON } from "@repo/types";
+import { RegisterFormSchema, SALUTATION_OPTIONS, formatIndianPhoneDisplay, type RegisterFormJSON } from "@repo/types";
 
 import AuthShell from "../components/auth-shell";
 import OtpField from "../components/otp-field";
+import PhoneNumberField from "../components/phone-number-field";
 import PrimaryButton from "../components/primary-button";
 import TextField from "../components/text-field";
 import { AUTH_QUERY_KEY } from "../hooks/use-auth-bootstrap";
@@ -17,7 +18,7 @@ import { useAuthActions } from "../store/auth.store";
 
 type RegisterScreenProps = NativeStackScreenProps<RootStackParamList, "Register">;
 
-const defaultValues: RegisterJSON = {
+const defaultValues: RegisterFormJSON = {
     requestType: "user-info",
     salutation: "mr.",
     firstName: "",
@@ -34,8 +35,8 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
     const [step, setStep] = useState<"user-info" | "otp-verification">("user-info");
     const [cooldown, setCooldown] = useState(0);
 
-    const form = useForm<RegisterJSON>({
-        resolver: createZodResolver(RegisterSchema),
+    const form = useForm<RegisterFormJSON>({
+        resolver: createZodResolver(RegisterFormSchema),
         defaultValues,
     });
 
@@ -71,7 +72,7 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
         return () => clearTimeout(timer);
     }, [cooldown]);
 
-    const onSubmit: SubmitHandler<RegisterJSON> = (values) => {
+    const onSubmit: SubmitHandler<RegisterFormJSON> = (values) => {
         registerMutation.mutate(values);
     };
 
@@ -92,34 +93,35 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
         >
             {step === "otp-verification" ? (
                 <>
-                    <View className="flex-row items-center justify-between border-b border-dashed border-amber-200 pb-4">
+                    <View className="flex-row items-center justify-between border-b border-dashed border-secondary pb-4">
                         <Pressable
                             onPress={() => {
                                 setStep("user-info");
                                 form.setValue("requestType", "user-info");
                             }}
                         >
-                            <Text className="text-sm font-medium text-amber-800">Back</Text>
+                            <Text className="text-sm font-medium text-primary">Back</Text>
                         </Pressable>
                         <View className="items-end">
-                            <Text className="text-sm font-medium text-stone-900">{form.getValues("phone")}</Text>
-                            <Text className="text-xs text-stone-500">Verification in progress</Text>
+                            <Text className="text-sm font-medium text-secondary-foreground">
+                                {formatIndianPhoneDisplay(form.getValues("phone"))}
+                            </Text>
+                            <Text className="text-xs text-secondary-foreground/60">Verification in progress</Text>
                         </View>
                     </View>
 
-                    <OtpField control={form.control} name="otp" />
+                    <OtpField key="otp-verification" control={form.control} name="otp" />
 
                     {cooldown > 0 ? (
-                        <Text className="text-center text-xs text-stone-500">Resend in {cooldown}s</Text>
+                        <Text className="text-center text-xs text-secondary-foreground/60">Resend in {cooldown}s</Text>
                     ) : (
                         <Pressable onPress={resendOtp}>
-                            <Text className="text-center text-sm font-medium text-amber-700">Resend OTP</Text>
+                            <Text className="text-center text-sm font-medium text-primary">Resend OTP</Text>
                         </Pressable>
                     )}
 
                     <PrimaryButton
                         label="Verify and continue"
-                        variant="accent"
                         loading={registerMutation.isPending}
                         disabled={form.watch("otp")?.length !== 6}
                         onPress={form.handleSubmit(onSubmit)}
@@ -128,8 +130,8 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
             ) : (
                 <>
                     <View className="gap-2">
-                        <Text className="text-sm font-medium text-stone-800">
-                            Salutation <Text className="text-amber-700">*</Text>
+                        <Text className="text-sm font-medium text-secondary-foreground">
+                            Salutation <Text className="text-primary">*</Text>
                         </Text>
                         <View className="flex-row gap-2">
                             {SALUTATION_OPTIONS.map((option) => (
@@ -141,14 +143,14 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
                                         <Pressable
                                             className={`rounded-xl border px-4 py-3 ${
                                                 value === option.value
-                                                    ? "border-stone-950 bg-stone-950"
-                                                    : "border-stone-300 bg-white"
+                                                    ? "border-primary bg-primary"
+                                                    : "border-secondary bg-white"
                                             }`}
                                             onPress={() => onChange(option.value)}
                                         >
                                             <Text
                                                 className={`text-sm font-medium ${
-                                                    value === option.value ? "text-white" : "text-stone-700"
+                                                    value === option.value ? "text-primary-foreground" : "text-secondary-foreground"
                                                 }`}
                                             >
                                                 {option.label}
@@ -192,15 +194,12 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
                         control={form.control}
                         name="phone"
                         render={({ field: { onChange, value }, fieldState }) => (
-                            <TextField
+                            <PhoneNumberField
                                 label="Phone number"
                                 value={value}
                                 onChangeText={onChange}
-                                placeholder="+919876543210"
                                 error={fieldState.error?.message}
                                 required
-                                keyboardType="phone-pad"
-                                autoCapitalize="none"
                             />
                         )}
                     />
@@ -255,7 +254,6 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
 
                     <PrimaryButton
                         label={registerMutation.isPending ? "Sending OTP..." : "Send OTP"}
-                        variant="accent"
                         loading={registerMutation.isPending}
                         onPress={form.handleSubmit(onSubmit)}
                     />
@@ -263,8 +261,8 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
             )}
 
             <Pressable onPress={() => navigation.navigate("Login")}>
-                <Text className="text-center text-sm text-stone-500">
-                    Already have an account? <Text className="font-medium text-amber-700">Login here</Text>
+                <Text className="text-center text-sm text-secondary-foreground/70">
+                    Already have an account? <Text className="font-medium text-primary">Login here</Text>
                 </Text>
             </Pressable>
         </AuthShell>
