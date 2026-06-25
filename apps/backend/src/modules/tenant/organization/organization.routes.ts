@@ -5,6 +5,7 @@ import {
     CreateStoreDeviceSchema,
     CreateStoreSchema,
     STATUS_CODES,
+    UpdateOrganizationSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
@@ -50,6 +51,23 @@ router.post("/", validateSchema("json", CreateOrganizationSchema), async (c) => 
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "createOrganization", c, error);
+    }
+});
+
+router.patch("/:organizationId", validateSchema("json", UpdateOrganizationSchema), async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidParam = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidParam) {
+            return c.json(invalidParam, invalidParam.code);
+        }
+
+        const authUser = c.get("authUser");
+        const body = c.req.valid("json");
+        const serviceResponse = await organizationService.updateOrganization(authUser.id, organizationId, body);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "updateOrganization", c, error);
     }
 });
 

@@ -1,25 +1,18 @@
-import { useMemo, useState } from "react";
-import { Link, NavLink, useLocation, useParams } from "react-router-dom";
+import { useMemo } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
     Bell,
     Building2,
     ChevronLeft,
     ChevronRight,
-    Circle,
     HelpCircle,
     LayoutDashboard,
-    Search,
     Settings2,
-    Square,
-    Star,
-    Triangle,
 } from "lucide-react";
 import logo from "@repo/assets/logo.png";
 import { getOrganizations } from "@repo/services";
-import { Avatar, AvatarFallback } from "@repo/ui/components/avatar";
 import { Button } from "@repo/ui/components/button";
-import { Input } from "@repo/ui/components/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -27,12 +20,7 @@ import { organizationKeys } from "@/lib/query-keys";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
-const orgMarkerStyles = [
-    { icon: Star, className: "text-amber-500" },
-    { icon: Circle, className: "text-violet-500" },
-    { icon: Square, className: "text-pink-500" },
-    { icon: Triangle, className: "text-emerald-500" },
-] as const;
+
 
 const mainNavItems = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -57,9 +45,7 @@ type AppSidebarProps = {
     };
 };
 
-const getInitials = (firstName?: string, lastName?: string) => {
-    return `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toUpperCase() || "HS";
-};
+
 
 export const readSidebarCollapsed = () => {
     if (typeof window === "undefined") {
@@ -78,11 +64,8 @@ const AppSidebar = ({
     isCollapsed,
     onToggle,
     onNavigate,
-    user,
 }: AppSidebarProps) => {
     const location = useLocation();
-    const { organizationId } = useParams();
-    const [orgSearch, setOrgSearch] = useState("");
 
     const organizationsQuery = useQuery({
         queryKey: organizationKeys.list(),
@@ -93,19 +76,6 @@ const AppSidebar = ({
         () => (organizationsQuery.data?.status === "success" ? organizationsQuery.data.data?.organizations ?? [] : []),
         [organizationsQuery.data],
     );
-
-    const isOrganizationsSection = location.pathname.startsWith("/organizations");
-    const showOrgPanel = isOrganizationsSection && !isCollapsed && !isMobile;
-
-
-    const filteredOrganizations = useMemo(() => {
-        const query = orgSearch.trim().toLowerCase();
-        if (!query) {
-            return organizations;
-        }
-
-        return organizations.filter((organization) => organization.name.toLowerCase().includes(query));
-    }, [orgSearch, organizations]);
 
     const expandedNavRowClass = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3";
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";
@@ -275,28 +245,6 @@ const AppSidebar = ({
                     ))}
                 </nav>
 
-                <div className={cn("border-t border-border/50 p-3", isCollapsed && !isMobile ? "px-2" : "")}>
-                    <div
-                        className={cn(
-                            "flex items-center gap-2.5 rounded-xl bg-muted/40 p-2",
-                            isCollapsed && !isMobile ? "justify-center" : "",
-                        )}
-                    >
-                        <Avatar size="sm" className="ring-1 ring-border/60">
-                            <AvatarFallback className="text-[10px]">
-                                {getInitials(user?.firstName, user?.lastName)}
-                            </AvatarFallback>
-                        </Avatar>
-                        {!isCollapsed || isMobile ? (
-                            <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-medium text-foreground">
-                                    {user?.firstName} {user?.lastName}
-                                </p>
-                                <p className="truncate text-[10px] text-muted-foreground">{user?.phone}</p>
-                            </div>
-                        ) : null}
-                    </div>
-                </div>
             </div>
 
             {!isMobile && isCollapsed ? (
@@ -311,71 +259,6 @@ const AppSidebar = ({
                     <ChevronRight className="size-3.5" />
                 </Button>
             ) : null}
-
-            <div
-                className={cn(
-                    "sidebar-detail-panel flex h-full shrink-0 flex-col overflow-hidden border-r border-border/60 bg-background/95 backdrop-blur-xl",
-                    showOrgPanel ? "sidebar-detail-panel--open w-[240px]" : "sidebar-detail-panel--closed w-0",
-                )}
-            >
-                <div className="sidebar-detail-inner flex h-full w-[240px] flex-col">
-                    <div className="border-b border-border/50 p-4">
-                        <div className="relative">
-                            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                value={orgSearch}
-                                onChange={(event) => setOrgSearch(event.target.value)}
-                                placeholder="Search..."
-                                className="h-9 rounded-xl border-border/70 bg-muted/30 pl-9 text-sm shadow-none"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto px-3 py-4">
-                        <section>
-                            <p className="px-2 pb-2 text-[10px] font-semibold tracking-[0.22em] text-muted-foreground uppercase">
-                                Organizations
-                            </p>
-                            {organizationsQuery.isPending ? (
-                                <div className="space-y-2 px-2 py-1">
-                                    {Array.from({ length: 4 }).map((_, index) => (
-                                        <div key={index} className="h-8 animate-pulse rounded-lg bg-muted/60" />
-                                    ))}
-                                </div>
-                            ) : filteredOrganizations.length === 0 ? (
-                                <p className="px-2 text-xs text-muted-foreground">No organizations found.</p>
-                            ) : (
-                                <div className="space-y-0.5">
-                                    {filteredOrganizations.map((organization, index) => {
-                                        const marker = orgMarkerStyles[(index + 1) % orgMarkerStyles.length];
-                                        const MarkerIcon = marker.icon;
-                                        const isActive = organizationId === organization.id;
-
-                                        return (
-                                            <Link
-                                                key={organization.id}
-                                                to={`/organizations/${organization.id}`}
-                                                onClick={onNavigate}
-                                                className={cn(
-                                                    "flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm transition-colors duration-200",
-                                                    isActive
-                                                        ? "bg-primary/10 font-medium text-primary"
-                                                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                                )}
-                                            >
-                                                <MarkerIcon className={cn("size-3.5 shrink-0", marker.className)} />
-                                                <span className="truncate">{organization.name}</span>
-                                            </Link>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </section>
-
-
-                    </div>
-                </div>
-            </div>
         </div>
     );
 };

@@ -6,12 +6,10 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@repo/ui/components/tabs";
-import { ArrowLeft, MonitorSmartphone, Package2, PlusCircle, Store } from "lucide-react";
+import { ArrowLeft, Package2, Store } from "lucide-react";
 
 import CatalogSection from "@/components/catalog/catalog-section";
-import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
-import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
-import CreateStoreDialog from "@/components/organizations/create-store-dialog";
+import EditOrganizationDialog from "@/components/organizations/edit-organization-dialog";
 import StoresSection from "@/components/organizations/stores-section";
 import { formatDateTime } from "@/lib/format";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
@@ -41,9 +39,6 @@ const OrganizationDetailPage = () => {
 
     const organization =
         organizationQuery.data?.status === "success" ? organizationQuery.data.data?.organization : null;
-
-    const categories =
-        categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? [] : [];
 
     const products =
         productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? [] : [];
@@ -98,7 +93,7 @@ const OrganizationDetailPage = () => {
 
             {/* Hero — org name, date, inline stats, and CTA */}
             <Card className="overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardContent className="relative p-6 sm:p-8">
+                <CardContent className="relative p-6 sm:px-8">
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.10),_transparent_25%),radial-gradient(circle_at_bottom_right,_rgba(251,191,36,0.10),_transparent_30%)]" />
                     <div className="relative flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                         <div className="space-y-3">
@@ -112,24 +107,11 @@ const OrganizationDetailPage = () => {
                                 Created {formatDateTime(organization.createdAt)} · Stores, devices, and catalog in one
                                 operational view.
                             </p>
-
-                            {/* Inline stat badges */}
-                            <div className="flex flex-wrap gap-2 pt-1">
-                                <Badge variant="outline" className="rounded-full border-border/70 bg-background/80 px-3 py-1 text-sm">
-                                    <Store className="mr-1.5 size-3.5 text-primary" />
-                                    {storeCount} {storeCount === 1 ? "store" : "stores"}
-                                </Badge>
-                                <Badge variant="outline" className="rounded-full border-border/70 bg-background/80 px-3 py-1 text-sm">
-                                    <MonitorSmartphone className="mr-1.5 size-3.5 text-primary" />
-                                    {deviceCount} {deviceCount === 1 ? "device" : "devices"}
-                                </Badge>
-                                <Badge variant="outline" className="rounded-full border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-700 dark:text-emerald-300">
-                                    {activeDeviceCount} active
-                                </Badge>
-                            </div>
                         </div>
 
-
+                        <div className="flex shrink-0 justify-end">
+                            <EditOrganizationDialog organization={organization} />
+                        </div>
                     </div>
                 </CardContent>
             </Card>

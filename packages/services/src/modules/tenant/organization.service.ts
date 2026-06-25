@@ -2,6 +2,7 @@ import type {
     CreateOrganizationJSON,
     CreateStoreDeviceJSON,
     CreateStoreJSON,
+    UpdateOrganizationJSON,
     OrganizationDetailsResponse,
     OrganizationResponse,
     OrganizationsListResponse,
@@ -28,6 +29,18 @@ export const createOrganization = async (
 ): Promise<ServiceResponse<OrganizationResponse | null>> => {
     try {
         const response = await api.post("/organizations", data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateOrganization = async (
+    organizationId: string,
+    data: UpdateOrganizationJSON,
+): Promise<ServiceResponse<OrganizationResponse | null>> => {
+    try {
+        const response = await api.patch(`/organizations/${organizationId}`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

@@ -59,6 +59,10 @@ export const CreateOrganizationSchema = z.object({
     name: nameSchema,
 });
 
+export const UpdateOrganizationSchema = z.object({
+    name: nameSchema,
+});
+
 export const CreateStoreSchema = z.object({
     name: nameSchema,
     address: optionalAddressSchema,

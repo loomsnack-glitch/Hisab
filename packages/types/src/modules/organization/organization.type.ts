@@ -6,6 +6,7 @@ import type {
     OrganizationDTOSchema,
     StoreDeviceDTOSchema,
     StoreDTOSchema,
+    UpdateOrganizationSchema,
 } from "./organization.schema";
 
 export type OrganizationDTO = z.infer<typeof OrganizationDTOSchema>;
@@ -16,6 +17,9 @@ export type StoreDeviceStatus = StoreDeviceDTO["status"];
 export type CreateOrganizationJSON = z.infer<typeof CreateOrganizationSchema>;
 export type CreateOrganizationSVC = CreateOrganizationJSON;
 
+export type UpdateOrganizationJSON = z.infer<typeof UpdateOrganizationSchema>;
+export type UpdateOrganizationSVC = UpdateOrganizationJSON;
+
 export type CreateStoreJSON = z.infer<typeof CreateStoreSchema>;
 export type CreateStoreSVC = CreateStoreJSON;
 
@@ -24,6 +28,10 @@ export type CreateStoreDeviceSVC = CreateStoreDeviceJSON;
 
 export type CreateOrganizationREPO = Pick<OrganizationDTO, "id" | "name" | "createdBy"> & {
     updatedBy?: string | null;
+};
+
+export type UpdateOrganizationREPO = Pick<OrganizationDTO, "id" | "name"> & {
+    updatedBy: string;
 };
 
 export type CreateStoreREPO = Pick<StoreDTO, "id" | "organizationId" | "name" | "createdBy"> & {

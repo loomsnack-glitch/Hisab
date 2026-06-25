@@ -3,6 +3,7 @@ import {
     type CreateOrganizationSVC,
     type CreateStoreDeviceSVC,
     type CreateStoreSVC,
+    type UpdateOrganizationSVC,
     type OrganizationDetailsResponse,
     type OrganizationResponse,
     type OrganizationsListResponse,
@@ -78,6 +79,62 @@ export const createOrganization = async (
         data: { organization },
         message: "Organization created successfully",
         code: STATUS_CODES.CREATED,
+    };
+};
+
+export const updateOrganization = async (
+    userId: string,
+    organizationId: string,
+    organizationData: UpdateOrganizationSVC,
+): Promise<ServiceResponse<OrganizationResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const nextName = organizationData.name.trim();
+
+    if (nextName.toLowerCase() !== organization.name.toLowerCase()) {
+        const alreadyExists = await organizationRepository.organizationNameExistsForUser(
+            userId,
+            nextName,
+            organizationId,
+        );
+        if (alreadyExists) {
+            return {
+                status: "error",
+                message: "Organization with the same name already exists",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
+    const updatedOrganization = await organizationRepository.updateOrganization({
+        id: organizationId,
+        name: nextName,
+        updatedBy: userId,
+    });
+
+    if (!updatedOrganization) {
+        return {
+            status: "error",
+            message: "Failed to update organization",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    return {
+        status: "success",
+        data: { organization: updatedOrganization },
+        message: "Organization updated successfully",
+        code: STATUS_CODES.SUCCESS,
     };
 };
 

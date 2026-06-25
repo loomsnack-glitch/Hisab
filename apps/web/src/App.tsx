@@ -51,6 +51,10 @@ const App = () => {
         }
     }, [authUser]);
 
+    const authenticatedUser =
+        authUser ??
+        (authQuery.data?.status === "success" ? authQuery.data.data?.user ?? null : null);
+
     if (authQuery.isPending) {
         return <div className="min-h-screen bg-background" aria-busy="true" aria-label="Loading" />;
     }
@@ -58,11 +62,14 @@ const App = () => {
     return (
         <>
             <Routes>
-                <Route path="/" element={<Navigate to={authUser ? "/dashboard" : "/login"} replace />} />
-                <Route path="/login" element={authUser ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-                <Route path="/register" element={authUser ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
+                <Route path="/" element={<Navigate to={authenticatedUser ? "/dashboard" : "/login"} replace />} />
+                <Route path="/login" element={authenticatedUser ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
                 <Route
-                    element={authUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
+                    path="/register"
+                    element={authenticatedUser ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
+                />
+                <Route
+                    element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                 >
                     <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/organizations" element={<OrganizationsPage />} />

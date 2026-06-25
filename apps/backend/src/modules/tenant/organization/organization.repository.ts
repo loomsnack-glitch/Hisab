@@ -8,6 +8,7 @@ import type {
     OrganizationDTO,
     StoreDeviceDTO,
     StoreDTO,
+    UpdateOrganizationREPO,
 } from "@repo/types";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
@@ -51,16 +52,44 @@ export const getOrganizationByIdForUser = async (
     return result ? snakeToCamel(result) : null;
 };
 
-export const organizationNameExistsForUser = async (userId: string, name: string): Promise<boolean> => {
+export const organizationNameExistsForUser = async (
+    userId: string,
+    name: string,
+    excludeId?: string,
+): Promise<boolean> => {
+    const results = excludeId
+        ? await pg`
+            SELECT 1
+            FROM organizations
+            WHERE created_by = ${userId}
+              AND LOWER(name) = LOWER(${name})
+              AND id <> ${excludeId}
+            LIMIT 1
+        `
+        : await pg`
+            SELECT 1
+            FROM organizations
+            WHERE created_by = ${userId}
+              AND LOWER(name) = LOWER(${name})
+            LIMIT 1
+        `;
+
+    return Boolean(results[0]);
+};
+
+export const updateOrganization = async (
+    organizationData: UpdateOrganizationREPO,
+): Promise<OrganizationDTO | null> => {
     const [result] = await pg`
-        SELECT 1
-        FROM organizations
-        WHERE created_by = ${userId}
-          AND LOWER(name) = LOWER(${name})
-        LIMIT 1
+        UPDATE organizations
+        SET name = ${organizationData.name},
+            updated_by = ${organizationData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${organizationData.id}
+        RETURNING *
     `;
 
-    return Boolean(result);
+    return result ? snakeToCamel(result) : null;
 };
 
 export const createStore = async (storeData: CreateStoreREPO, tx?: Bun.TransactionSQL): Promise<StoreDTO | null> => {
