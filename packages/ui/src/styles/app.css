@@ -30,3 +30,69 @@
     max-width: 80% !important;
     height: fit-content !important;
 }
+
+.splash-ambient {
+    background:
+        radial-gradient(circle at 50% 42%, color-mix(in oklab, var(--primary) 16%, transparent), transparent 48%),
+        linear-gradient(180deg, var(--background), color-mix(in oklab, var(--muted) 35%, var(--background)));
+}
+
+.dark .splash-ambient {
+    background:
+        radial-gradient(circle at 50% 42%, color-mix(in oklab, var(--primary) 20%, transparent), transparent 50%),
+        linear-gradient(180deg, var(--background), color-mix(in oklab, var(--card) 50%, var(--background)));
+}
+
+.splash-light-sweep {
+    background: linear-gradient(
+        115deg,
+        transparent 40%,
+        color-mix(in oklab, var(--primary) 10%, transparent) 50%,
+        transparent 60%
+    );
+    animation: splash-sweep 2.4s ease-in-out infinite;
+}
+
+@keyframes splash-sweep {
+    0% {
+        transform: translateX(-30%) translateY(-10%);
+        opacity: 0;
+    }
+    30% {
+        opacity: 1;
+    }
+    70% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateX(30%) translateY(10%);
+        opacity: 0;
+    }
+}
+
+.splash-ripple {
+    pointer-events: none;
+}
+
+.splash-shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--foreground) 0%,
+        color-mix(in oklab, var(--primary) 70%, var(--foreground)) 45%,
+        var(--foreground) 90%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: splash-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes splash-shimmer {
+    0% {
+        background-position: 100% 0;
+    }
+    100% {
+        background-position: -100% 0;
+    }
+}
