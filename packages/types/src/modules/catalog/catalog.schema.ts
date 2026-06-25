@@ -1,0 +1,102 @@
+import { z } from "zod";
+import { dtoDateSchema } from "../../common";
+
+const nameSchema = z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(255, "Name must be at most 255 characters");
+
+const priceSchema = z
+    .number({ error: "Price is required" })
+    .min(0, "Price must be 0 or more");
+
+const discountSchema = z
+    .number({ error: "Discount is required" })
+    .min(0, "Discount must be 0 or more");
+
+const optionalImagePathSchema = z
+    .union([
+        z.literal(""),
+        z.string().trim().max(512, "Image path must be at most 512 characters"),
+    ])
+    .nullable()
+    .optional();
+
+export const CategoryStatusSchema = z.enum(["active", "inactive"]);
+export const ProductStatusSchema = z.enum(["active", "inactive"]);
+
+export const CategoryDTOSchema = z.object({
+    id: z.uuid("Invalid category id"),
+    organizationId: z.uuid("Invalid organization id"),
+    name: nameSchema,
+    status: CategoryStatusSchema,
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const ProductDTOSchema = z.object({
+    id: z.uuid("Invalid product id"),
+    organizationId: z.uuid("Invalid organization id"),
+    categoryId: z.uuid("Invalid category id"),
+    name: nameSchema,
+    price: priceSchema,
+    discount: discountSchema,
+    imagePath: z.string().nullable().optional(),
+    status: ProductStatusSchema,
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const ProductResponseDTOSchema = ProductDTOSchema.extend({
+    imageSignedUrl: z.string().nullable(),
+});
+
+export const CreateCategorySchema = z.object({
+    name: nameSchema,
+    status: CategoryStatusSchema.optional(),
+});
+
+export const UpdateCategorySchema = z
+    .object({
+        name: nameSchema.optional(),
+        status: CategoryStatusSchema.optional(),
+    })
+    .refine((value) => value.name !== undefined || value.status !== undefined, {
+        message: "At least one field is required",
+    });
+
+export const CreateProductSchema = z.object({
+    categoryId: z.uuid("Invalid category id"),
+    name: nameSchema,
+    price: priceSchema,
+    discount: discountSchema.optional(),
+    imagePath: optionalImagePathSchema,
+    status: ProductStatusSchema.optional(),
+});
+
+export const UpdateProductSchema = z
+    .object({
+        categoryId: z.uuid("Invalid category id").optional(),
+        name: nameSchema.optional(),
+        price: priceSchema.optional(),
+        discount: discountSchema.optional(),
+        imagePath: optionalImagePathSchema,
+        status: ProductStatusSchema.optional(),
+    })
+    .refine(
+        (value) =>
+            value.categoryId !== undefined
+            || value.name !== undefined
+            || value.price !== undefined
+            || value.discount !== undefined
+            || value.imagePath !== undefined
+            || value.status !== undefined,
+        {
+            message: "At least one field is required",
+        },
+    );

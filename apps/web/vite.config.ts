@@ -23,6 +23,12 @@ export default defineConfig(({ mode }) => {
                 "use-sync-external-store/shim/with-selector",
                 "use-sync-external-store/shim/with-selector.js",
             ],
+            exclude: [
+                "@repo/assets",
+                "@repo/services",
+                "@repo/types",
+                "@repo/ui",
+            ],
         },
         resolve: {
             preserveSymlinks: true,

@@ -85,8 +85,34 @@ export const handleApiError = (error: unknown) => {
         }
 
         if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+            const requestUrl = error.config?.url;
+            const requestBaseUrl = error.config?.baseURL ?? getApiBaseUrl();
+            const resolvedTarget = (() => {
+                if (!requestUrl) {
+                    return requestBaseUrl;
+                }
+
+                try {
+                    return new URL(requestUrl, requestBaseUrl).toString();
+                } catch {
+                    return requestUrl;
+                }
+            })();
+
+            if (isReactNativeRuntime()) {
+                throw {
+                    message: `Cannot reach the API at ${requestBaseUrl}. On a physical phone, set EXPO_PUBLIC_BASE_API_URL to your PC's LAN IP in apps/mobile/.env (not localhost or 10.0.2.2).`,
+                };
+            }
+
+            if (requestUrl && /^https?:\/\//i.test(requestUrl)) {
+                throw {
+                    message: `Cannot reach the file upload endpoint at ${resolvedTarget}. This is usually a storage URL or CORS issue rather than the main API.`,
+                };
+            }
+
             throw {
-                message: `Cannot reach the API at ${error.config?.baseURL ?? getApiBaseUrl()}. On a physical phone, set EXPO_PUBLIC_BASE_API_URL to your PC's LAN IP in apps/mobile/.env (not localhost or 10.0.2.2).`,
+                message: `Cannot reach the API at ${requestBaseUrl}. Check that the backend is running and that the web app is pointing to the correct API base URL.`,
             };
         }
 
