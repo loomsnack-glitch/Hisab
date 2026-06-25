@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
-import { Layers3, Package2, Pencil, PlusCircle, RefreshCw, Tags, Trash2, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Layers3, Package2, Pencil, PlusCircle, RefreshCw, Trash2, Search } from "lucide-react";
 
 import DeleteCategoryButton from "@/components/catalog/delete-category-button";
 import DeleteProductButton from "@/components/catalog/delete-product-button";
@@ -15,6 +15,7 @@ import CategoryStatusBadge from "@/components/catalog/category-status-badge";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
+import ManageCategoriesDialog from "@/components/catalog/manage-categories-dialog";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
 
@@ -25,7 +26,6 @@ type CatalogSectionProps = {
 const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
-    const [showCategories, setShowCategories] = useState(false);
 
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
@@ -124,129 +124,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
 
     return (
         <div className="space-y-6">
-            {/* ── Part A: Categories (Collapsible for cleaner space management) ──────────────── */}
-            <Card className="border-border/60 bg-card/80 shadow-md shadow-black/5 overflow-hidden">
-                <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-4">
-                    <button
-                        type="button"
-                        onClick={() => setShowCategories(!showCategories)}
-                        className="flex items-center gap-3 text-left focus:outline-none group/title cursor-pointer"
-                    >
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover/title:bg-primary/20">
-                            <Tags className="size-4" />
-                        </div>
-                        <div>
-                            <CardTitle className="font-display text-lg flex items-center gap-2">
-                                Manage Categories
-                                {categories.length > 0 && (
-                                    <span className="text-sm font-normal text-muted-foreground">
-                                        ({categories.length})
-                                    </span>
-                                )}
-                                {showCategories ? (
-                                    <ChevronUp className="size-4 text-muted-foreground transition-transform" />
-                                ) : (
-                                    <ChevronDown className="size-4 text-muted-foreground transition-transform" />
-                                )}
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                                Create, edit, and delete product categories.
-                            </CardDescription>
-                        </div>
-                    </button>
-                    {showCategories && (
-                        <UpsertCategoryDialog
-                            organizationId={organizationId}
-                            trigger={
-                                <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs">
-                                    <PlusCircle className="mr-2 size-3.5" />
-                                    Add category
-                                </Button>
-                            }
-                        />
-                    )}
-                </CardHeader>
-                {showCategories && (
-                    <CardContent className="border-t border-border/40 pt-4">
-                        {categories.length === 0 ? (
-                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
-                                <EmptyHeader>
-                                    <EmptyMedia variant="icon">
-                                        <Tags />
-                                    </EmptyMedia>
-                                    <EmptyTitle>No categories yet</EmptyTitle>
-                                    <EmptyDescription>
-                                        Start by creating a category like "Beverages" or "Snacks" to organize your product catalog.
-                                    </EmptyDescription>
-                                </EmptyHeader>
-                                <EmptyContent>
-                                    <UpsertCategoryDialog organizationId={organizationId} />
-                                </EmptyContent>
-                            </Empty>
-                        ) : (
-                            <div className="overflow-x-auto rounded-2xl border border-border/60">
-                                <table className="min-w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-border/50 bg-muted/20 text-left text-muted-foreground">
-                                            <th className="px-4 py-3 font-medium">Category name</th>
-                                            <th className="px-4 py-3 font-medium">Status</th>
-                                            <th className="px-4 py-3 font-medium">Products</th>
-                                            <th className="px-4 py-3 font-medium">Created</th>
-                                            <th className="px-4 py-3 font-medium text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border/40">
-                                        {categories.map((category, index) => {
-                                            const categoryProducts = productsByCategoryId.get(category.id) ?? [];
-                                            return (
-                                                <tr
-                                                    key={category.id}
-                                                    className={`transition-colors duration-150 hover:bg-muted/30 ${index % 2 !== 0 ? "bg-muted/10" : ""}`}
-                                                >
-                                                    <td className="px-4 py-3.5">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                                                <Tags className="size-3.5" />
-                                                            </div>
-                                                            <span className="font-medium text-foreground">{category.name}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3.5">
-                                                        <CategoryStatusBadge status={category.status} />
-                                                    </td>
-                                                    <td className="px-4 py-3.5">
-                                                        <Badge variant="outline" className="rounded-full text-xs">
-                                                            {categoryProducts.length} product{categoryProducts.length === 1 ? "" : "s"}
-                                                        </Badge>
-                                                    </td>
-                                                    <td className="px-4 py-3.5 text-muted-foreground">
-                                                        {formatDateTime(category.createdAt)}
-                                                    </td>
-                                                    <td className="px-4 py-3.5">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            <UpsertCategoryDialog
-                                                                organizationId={organizationId}
-                                                                category={category}
-                                                                trigger={
-                                                                    <Button variant="outline" size="sm" className="rounded-full">
-                                                                        <Pencil className="mr-1.5 size-3" />
-                                                                        Edit
-                                                                    </Button>
-                                                                }
-                                                            />
-                                                            <DeleteCategoryButton organizationId={organizationId} category={category} />
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </CardContent>
-                )}
-            </Card>
+
 
             {/* ── Part B: Products Grid & Search ──────────────────────── */}
             <div className="space-y-5">
@@ -264,15 +142,20 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* Manage categories toggle shortcut button */}
-                        <Button
-                            variant="outline"
-                            className="rounded-full border-border/60 text-muted-foreground hover:text-foreground h-11 px-4 cursor-pointer"
-                            onClick={() => setShowCategories(!showCategories)}
-                        >
-                            <Layers3 className="mr-2 size-4" />
-                            {showCategories ? "Hide categories" : "Manage categories"}
-                        </Button>
+                        <ManageCategoriesDialog
+                            organizationId={organizationId}
+                            categories={categories}
+                            productsByCategoryId={productsByCategoryId}
+                            trigger={
+                                <Button
+                                    variant="outline"
+                                    className="rounded-full border-border/60 text-muted-foreground hover:text-foreground h-11 px-4 cursor-pointer"
+                                >
+                                    <Layers3 className="mr-2 size-4" />
+                                    Manage categories
+                                </Button>
+                            }
+                        />
 
                         <UpsertProductDialog
                             organizationId={organizationId}
@@ -324,9 +207,22 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                     </EmptyMedia>
                                     <EmptyTitle>Create a category first</EmptyTitle>
                                     <EmptyDescription>
-                                        Products need a category. Expand the "Manage Categories" card above and create one first.
+                                        Products need a category. Manage categories to create one first.
                                     </EmptyDescription>
                                 </EmptyHeader>
+                                <EmptyContent>
+                                    <ManageCategoriesDialog
+                                        organizationId={organizationId}
+                                        categories={categories}
+                                        productsByCategoryId={productsByCategoryId}
+                                        trigger={
+                                            <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-5">
+                                                <Layers3 className="mr-2 size-4" />
+                                                Manage categories
+                                            </Button>
+                                        }
+                                    />
+                                </EmptyContent>
                             </Empty>
                         </CardContent>
                     </Card>

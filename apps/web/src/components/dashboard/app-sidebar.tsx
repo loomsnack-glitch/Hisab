@@ -12,6 +12,7 @@ import {
     Search,
     Settings2,
     Square,
+    Star,
     Triangle,
 } from "lucide-react";
 import logo from "@repo/assets/logo.png";

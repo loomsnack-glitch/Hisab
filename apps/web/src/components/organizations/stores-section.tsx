@@ -52,16 +52,30 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
 
     return (
         <section className="space-y-5">
-            {/* Search store branches bar */}
-            <div className="relative w-full max-w-md">
-                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                    type="text"
-                    placeholder="Search stores..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 h-11 rounded-full border-border/60 bg-card/60 focus-visible:ring-primary w-full"
-                />
+            {/* Search & Actions bar */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        type="text"
+                        placeholder="Search stores..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 h-11 rounded-full border-border/60 bg-card/60 focus-visible:ring-primary w-full"
+                    />
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <CreateStoreDialog
+                        organizationId={organizationId}
+                        trigger={
+                            <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-5">
+                                <PlusCircle className="mr-2 size-4" />
+                                Add store
+                            </Button>
+                        }
+                    />
+                </div>
             </div>
 
             {filteredStores.length === 0 ? (

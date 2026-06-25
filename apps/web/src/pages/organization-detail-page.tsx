@@ -129,44 +129,7 @@ const OrganizationDetailPage = () => {
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-3">
-                            {activeTab === "stores" ? (
-                                <CreateStoreDialog
-                                    organizationId={organization.id}
-                                    trigger={
-                                        <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90">
-                                            <PlusCircle className="mr-2 size-4" />
-                                            Add store
-                                        </Button>
-                                    }
-                                />
-                            ) : (
-                                <>
-                                    <UpsertCategoryDialog
-                                        organizationId={organization.id}
-                                        trigger={
-                                            <Button variant="outline" className="rounded-full border-border/70 hover:bg-muted/50">
-                                                <PlusCircle className="mr-2 size-4" />
-                                                Add category
-                                            </Button>
-                                        }
-                                    />
-                                    <UpsertProductDialog
-                                        organizationId={organization.id}
-                                        categories={categories}
-                                        trigger={
-                                            <Button
-                                                className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
-                                                disabled={categories.length === 0}
-                                            >
-                                                <PlusCircle className="mr-2 size-4" />
-                                                Add product
-                                            </Button>
-                                        }
-                                    />
-                                </>
-                            )}
-                        </div>
+
                     </div>
                 </CardContent>
             </Card>
@@ -184,7 +147,7 @@ const OrganizationDetailPage = () => {
                 >
                     <TabsTrigger
                         value="stores"
-                        className="h-auto gap-2 rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-1 py-3 text-sm font-semibold transition-all hover:text-foreground data-active:border-b-primary data-active:text-primary sm:text-base cursor-pointer"
+                        className="h-auto gap-2 rounded-none px-1 py-3 text-sm font-semibold transition-all hover:text-foreground data-active:text-primary sm:text-base cursor-pointer"
                     >
                         <Store className="size-4" />
                         Stores
@@ -194,7 +157,7 @@ const OrganizationDetailPage = () => {
                     </TabsTrigger>
                     <TabsTrigger
                         value="catalog"
-                        className="h-auto gap-2 rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-1 py-3 text-sm font-semibold transition-all hover:text-foreground data-active:border-b-primary data-active:text-primary sm:text-base cursor-pointer"
+                        className="h-auto gap-2 rounded-none px-1 py-3 text-sm font-semibold transition-all hover:text-foreground data-active:text-primary sm:text-base cursor-pointer"
                     >
                         <Package2 className="size-4" />
                         Products
