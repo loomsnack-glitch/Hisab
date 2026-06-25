@@ -11,19 +11,17 @@ const sanitizeBaseUrl = (value?: string | null): string | undefined => {
     return trimmed.replace(/\/+$/, "");
 };
 
-const resolveBaseApiUrl = (): string => {
+const isReactNativeRuntime = (): boolean =>
+    typeof navigator !== "undefined"
+    && (navigator as Navigator & { product?: string }).product === "ReactNative";
+
+export const resolveBaseApiUrl = (): string => {
     const processEnvBaseUrl = sanitizeBaseUrl(
         typeof process !== "undefined"
-            ? process.env.NEXT_PUBLIC_BASE_API_URL
+            ? process.env.EXPO_PUBLIC_BASE_API_URL
+            ?? process.env.NEXT_PUBLIC_BASE_API_URL
             ?? process.env.API_BASE_URL
             ?? process.env.BASE_API_URL
-            : undefined,
-    );
-
-    const importMetaBaseUrl = sanitizeBaseUrl(
-        typeof import.meta !== "undefined"
-            ? ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL)
-            ?? ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_BASE_API_URL)
             : undefined,
     );
 
@@ -34,19 +32,16 @@ const resolveBaseApiUrl = (): string => {
     );
 
     const baseUrl = processEnvBaseUrl
-        ?? importMetaBaseUrl
         ?? globalBaseUrl
         ?? FALLBACK_BASE_API_URL;
-    console.log("baseUrl", baseUrl);
     return baseUrl;
 };
 
 let baseApiUrl = resolveBaseApiUrl();
-console.log("baseApiUrl", baseApiUrl);
 
 export const api = axios.create({
     baseURL: baseApiUrl,
-    withCredentials: true,
+    withCredentials: !isReactNativeRuntime(),
 });
 
 export const setApiBaseUrl = (value: string) => {

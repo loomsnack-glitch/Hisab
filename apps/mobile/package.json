@@ -1,0 +1,28 @@
+{
+  "name": "hisab-mobile",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@repo/services": "workspace:*",
+    "@repo/types": "workspace:*",
+    "expo": "~56.0.12",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
+    "tailwindcss": "^4.3.1",
+    "uniwind": "^1.9.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "dev": "expo start",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "uniwind:generate": "uniwind generate-artifacts --css ./global.css --dts ./uniwind-types.d.ts"
+  },
+  "private": true
+}

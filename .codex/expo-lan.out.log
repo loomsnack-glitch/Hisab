@@ -1,0 +1,10 @@
+Starting project at C:\Users\smarty\Desktop\loomsnack\Hisab\apps\mobile
+Expo Autolinking module resolution enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8084
+1 package may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.
+Android Bundled 34743ms apps\mobile\index.ts (1002 modules)
+Android Bundled 1375ms apps\mobile\index.ts (1 module)

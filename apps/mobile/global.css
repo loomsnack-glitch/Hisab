@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@import "uniwind";
+
+@theme static {
+  --color-brand-sand: #f5f1e8;
+  --color-brand-cream: #fff7ed;
+  --color-brand-ink: #1c1917;
+  --color-brand-accent: #92400e;
+}

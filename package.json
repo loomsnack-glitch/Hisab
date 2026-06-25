@@ -5,6 +5,10 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
+    "dev:mobile": "bun --cwd apps/mobile run start",
+    "android:mobile": "bun --cwd apps/mobile run android",
+    "ios:mobile": "bun --cwd apps/mobile run ios",
+    "web:mobile": "bun --cwd apps/mobile run web",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
