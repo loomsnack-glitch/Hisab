@@ -23,7 +23,6 @@ import type {
 } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent } from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
@@ -32,17 +31,20 @@ import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
+    Banknote,
     CircleDollarSign,
+    CreditCard,
     LayoutGrid,
     Minus,
     Plus,
     Receipt,
     ReceiptText,
     Search,
-    ShoppingBag,
+    ShoppingCart,
+    Smartphone,
     Store,
     Trash2,
-    UserPlus2,
+    User,
     WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -69,14 +71,6 @@ type PaymentSplit = {
     notes: string;
 };
 
-const historyTabs = [
-    { value: "all", label: "All bills" },
-    { value: "draft", label: "Drafts" },
-    { value: "open", label: "Open dues" },
-    { value: "paid", label: "Paid" },
-    { value: "voided", label: "Voided" },
-] as const;
-
 const paymentMethods: Array<{ value: PaymentMethod; label: string }> = [
     { value: "cash", label: "Cash" },
     { value: "upi", label: "UPI" },
@@ -84,6 +78,14 @@ const paymentMethods: Array<{ value: PaymentMethod; label: string }> = [
     { value: "bank_transfer", label: "Bank transfer" },
     { value: "other", label: "Other" },
 ];
+
+const historyTabs = [
+    { value: "all", label: "All bills" },
+    { value: "draft", label: "Drafts" },
+    { value: "open", label: "Open dues" },
+    { value: "paid", label: "Paid" },
+    { value: "voided", label: "Voided" },
+] as const;
 
 const saleStatusStyles: Record<string, string> = {
     draft: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -107,6 +109,56 @@ const createPaymentSplit = (amount = ""): PaymentSplit => ({
     notes: "",
 });
 
+/* ---------- emoji map for product categories ---------- */
+const categoryEmojis: Record<string, string> = {
+    burger: "🍔",
+    burgers: "🍔",
+    pizza: "🍕",
+    pizzas: "🍕",
+    drink: "🥤",
+    drinks: "🥤",
+    beverage: "🥤",
+    beverages: "🥤",
+    dessert: "🍰",
+    desserts: "🍰",
+    sides: "🍟",
+    side: "🍟",
+    fries: "🍟",
+    shake: "🥛",
+    shakes: "🥛",
+    coffee: "☕",
+    tea: "🍵",
+    ice: "🧊",
+    icecream: "🍦",
+    sandwich: "🥪",
+    wrap: "🌯",
+    salad: "🥗",
+    chicken: "🍗",
+    noodles: "🍜",
+    pasta: "🍝",
+    snack: "🍿",
+    snacks: "🍿",
+};
+
+const getProductEmoji = (categoryName: string) => {
+    const key = categoryName.toLowerCase().trim();
+    if (categoryEmojis[key]) return categoryEmojis[key];
+    // partial match
+    for (const [k, v] of Object.entries(categoryEmojis)) {
+        if (key.includes(k) || k.includes(key)) return v;
+    }
+    return "🛒";
+};
+
+const formatDate = () => {
+    return new Date().toLocaleDateString("en-IN", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+    });
+};
+
 const BillingPage = () => {
     const queryClient = useQueryClient();
     const { organizationId = "" } = useParams();
@@ -121,9 +173,12 @@ const BillingPage = () => {
     const [productSearch, setProductSearch] = useState("");
     const [salesSearch, setSalesSearch] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("all");
-    const [historyFilter, setHistoryFilter] = useState<(typeof historyTabs)[number]["value"]>("all");
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | "due">("cash");
+    const [discountInput, setDiscountInput] = useState("");
+    const [historyFilter, setHistoryFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
+    const [leftPanelTab, setLeftPanelTab] = useState<"products" | "bills">("products");
 
     const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
@@ -239,15 +294,11 @@ const BillingPage = () => {
 
     const subtotal = items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
     const discountTotal = items.reduce((total, item) => total + item.unitDiscount * item.quantity, 0);
-    const grandTotal = Math.max(subtotal - discountTotal, 0);
+    const extraDiscount = Number(discountInput || 0);
+    const grandTotal = Math.max(subtotal - discountTotal - extraDiscount, 0);
     const collectedTotal = paymentSplits.reduce((total, split) => total + Number(split.amount || 0), 0);
     const dueTotal = Math.max(grandTotal - collectedTotal, 0);
     const isOverpaid = collectedTotal > grandTotal;
-    const openDueCount = sales.filter((sale) => sale.status === "completed" && sale.paymentStatus !== "paid").length;
-    const draftCount = sales.filter((sale) => sale.status === "draft").length;
-    const receivableBalance = sales
-        .filter((sale) => sale.status === "completed" && sale.paymentStatus !== "paid")
-        .reduce((total, sale) => total + Number(sale.dueTotal ?? 0), 0);
 
     const invalidateBillingQueries = () => {
         queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
@@ -260,6 +311,8 @@ const BillingPage = () => {
         setNotes("");
         setItems([]);
         setPaymentSplits([]);
+        setDiscountInput("");
+        setSelectedPaymentMethod("cash");
     };
 
     const addProductToBill = (product: ProductResponseDTO) => {
@@ -303,13 +356,17 @@ const BillingPage = () => {
         );
     };
 
-    const setFullPaymentPreset = (method: PaymentMethod) => {
-        if (grandTotal <= 0) {
-            return;
-        }
-
-        setPaymentSplits([createPaymentSplit(String(grandTotal))].map((split) => ({ ...split, method })));
+    const setFullPaymentPreset = (method: PaymentMethod | "due") => {
+        setSelectedPaymentMethod(method);
     };
+
+    useEffect(() => {
+        if (grandTotal > 0 && selectedPaymentMethod !== "due") {
+            setPaymentSplits([createPaymentSplit(String(grandTotal))].map((split) => ({ ...split, method: selectedPaymentMethod })));
+        } else {
+            setPaymentSplits([]);
+        }
+    }, [grandTotal, selectedPaymentMethod]);
 
     const ensureCustomerForDue = () => {
         if (dueTotal <= 0 || selectedCustomerId) {
@@ -441,6 +498,8 @@ const BillingPage = () => {
         onSuccess: (sale) => {
             setActiveDraftId(sale.id);
             setSelectedCustomerId(sale.customerId ?? "");
+            const cust = customers.find((c) => c.id === sale.customerId);
+            setCustomerSearch(cust ? (cust.phone || cust.name) : "");
             setNotes(sale.notes ?? "");
             setItems(
                 sale.items.map((item) => ({
@@ -453,6 +512,7 @@ const BillingPage = () => {
                 })),
             );
             setPaymentSplits([]);
+            setLeftPanelTab("products");
             window.scrollTo({ top: 0, behavior: "smooth" });
             toast.success("Draft loaded into the composer");
         },
@@ -468,6 +528,22 @@ const BillingPage = () => {
         resetComposer();
     };
 
+    const handleFindCustomer = () => {
+        if (!customerSearch.trim()) return;
+        const match = customers.find(
+            (c) =>
+                c.phone?.includes(customerSearch.trim()) ||
+                c.name.toLowerCase().includes(customerSearch.trim().toLowerCase()),
+        );
+        if (match) {
+            setSelectedCustomerId(match.id);
+            setCustomerSearch(match.phone || match.name);
+            toast.success(`Customer found: ${match.name}`);
+        } else {
+            toast.error("No customer found");
+        }
+    };
+
     if (organizationQuery.isPending) {
         return (
             <div className="flex min-h-[50vh] items-center justify-center">
@@ -478,19 +554,17 @@ const BillingPage = () => {
 
     if (organizationQuery.isError || organizationQuery.data?.status === "error" || !organization) {
         return (
-            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardContent className="space-y-4 p-8">
-                    <p className="font-display text-2xl font-semibold text-foreground">Billing workspace unavailable</p>
-                    <p className="text-sm text-muted-foreground">
-                        {organizationQuery.data?.message
-                            || (organizationQuery.error as { message?: string })?.message
-                            || "This organization could not be loaded."}
-                    </p>
-                    <Button variant="outline" className="rounded-full" render={<Link to="/organizations" />}>
-                        Back to organizations
-                    </Button>
-                </CardContent>
-            </Card>
+            <div className="rounded-2xl border border-border/60 bg-card/80 p-8 shadow-xl shadow-black/5">
+                <p className="font-display text-2xl font-semibold text-foreground">Billing workspace unavailable</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                    {organizationQuery.data?.message
+                        || (organizationQuery.error as { message?: string })?.message
+                        || "This organization could not be loaded."}
+                </p>
+                <Button variant="outline" className="mt-4 rounded-full" render={<Link to="/organizations" />}>
+                    Back to organizations
+                </Button>
+            </div>
         );
     }
 
@@ -506,673 +580,658 @@ const BillingPage = () => {
                     Back to organization
                 </Button>
 
-                <Card className="overflow-hidden rounded-[32px] border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                    <CardContent className="relative p-8">
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.14),_transparent_30%)]" />
-                        <div className="relative space-y-4">
-                            <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
-                                Billing needs a counter
-                            </Badge>
-                            <h1 className="font-display text-4xl font-semibold tracking-tight text-foreground">
-                                Add a store before starting billing.
-                            </h1>
-                            <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
-                                Billing is store-scoped so the cashier workspace needs at least one branch. Once a store exists,
-                                this screen becomes the high-speed bill entry surface for that counter.
-                            </p>
-                            <Button className="rounded-full" render={<Link to={`/organizations/${organization.id}`} />}>
-                                Go to store setup
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                <div className="rounded-2xl border border-border/60 bg-card/80 p-8 shadow-xl shadow-black/5">
+                    <h1 className="font-display text-3xl font-semibold text-foreground">
+                        Add a store before starting billing.
+                    </h1>
+                    <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                        Billing is store-scoped. Once a store exists, this screen becomes the POS billing surface.
+                    </p>
+                    <Button className="mt-4 rounded-full" render={<Link to={`/organizations/${organization.id}`} />}>
+                        Go to store setup
+                    </Button>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-8">
-            <section className="overflow-hidden rounded-[32px] border border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <div className="relative px-6 py-7 sm:px-8">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.18),_transparent_26%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.14),_transparent_30%)]" />
-                    <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-                        <div className="space-y-4">
-                            <Button
-                                variant="ghost"
-                                className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                                render={<Link to={`/organizations/${organization.id}`} />}
-                            >
-                                <ArrowLeft className="mr-2 size-4" />
-                                Back to organization
-                            </Button>
-
-                            <div className="space-y-3">
-                                <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
-                                    Cashier workspace
-                                </Badge>
-                                <h1 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-                                    Butter-smooth billing for {organization.name}
-                                </h1>
-                                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-                                    Build the bill on the left, settle it on the right, and keep drafts plus dues close at hand.
-                                    The flow is optimized for fast counter work, not back-office friction.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[420px]">
-                            <div className="rounded-[24px] border border-border/60 bg-background/75 p-4 shadow-sm">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Open dues</p>
-                                <p className="mt-3 text-2xl font-semibold text-foreground">{openDueCount}</p>
-                            </div>
-                            <div className="rounded-[24px] border border-border/60 bg-background/75 p-4 shadow-sm">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Draft bills</p>
-                                <p className="mt-3 text-2xl font-semibold text-foreground">{draftCount}</p>
-                            </div>
-                            <div className="rounded-[24px] border border-border/60 bg-slate-950 p-4 text-white shadow-sm">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/60">Receivable total</p>
-                                <p className="mt-3 text-2xl font-semibold">{formatCurrency(receivableBalance)}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="relative mt-6 flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-2 text-sm">
-                            <Store className="size-4 text-primary" />
-                            <span className="text-muted-foreground">Counter</span>
-                        </div>
-                        <Select value={selectedStoreId} onValueChange={setStore}>
-                            <SelectTrigger className="h-11 min-w-[220px] rounded-2xl bg-background/80 px-4">
-                                <SelectValue placeholder="Choose a store" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {organization.stores.map((store) => (
-                                    <SelectItem key={store.id} value={store.id}>
-                                        {store.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {selectedStore ? (
-                            <p className="text-sm text-muted-foreground">
-                                {selectedStore.address || "This store is ready for active billing."}
-                            </p>
-                        ) : null}
-                    </div>
+        <div className="billing-pos-layout flex flex-col gap-0" style={{ minHeight: "calc(100vh - 3.5rem)" }}>
+            {/* ─── Compact Header Bar ─── */}
+            <header className="flex items-center justify-between border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm">
+                <div className="flex items-center gap-4">
+                    <h1 className="font-display text-xl font-bold tracking-tight text-foreground">POS Billing</h1>
+                    <span className="text-sm text-muted-foreground">{formatDate()}</span>
                 </div>
-            </section>
 
-            <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-                <div className="space-y-6">
-                    <Card className="rounded-[32px] border-border/60 bg-card/80 shadow-lg shadow-black/5">
-                        <CardContent className="space-y-5 p-5 sm:p-6">
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <LayoutGrid className="size-4 text-amber-600 dark:text-amber-400" />
-                                        <h2 className="font-display text-2xl font-semibold text-foreground">Product shelf</h2>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        Search, tap, and stack products into the active bill.
-                                    </p>
-                                </div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Store className="size-4" />
+                        <span className="hidden sm:inline">Counter:</span>
+                    </div>
+                    <Select value={selectedStoreId} onValueChange={setStore}>
+                        <SelectTrigger className="h-9 min-w-[160px] rounded-xl bg-background/80 px-3 text-sm">
+                            <SelectValue placeholder="Choose store" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {organization.stores.map((store) => (
+                                <SelectItem key={store.id} value={store.id}>
+                                    {store.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </header>
 
-                                <div className="flex flex-1 flex-col gap-3 lg:max-w-xl lg:flex-row">
-                                    <div className="relative flex-1">
-                                        <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
-                                        <Input
-                                            className="h-11 rounded-2xl pl-11"
-                                            placeholder="Search product by name"
-                                            value={productSearch}
-                                            onChange={(event) => setProductSearch(event.target.value)}
-                                        />
-                                    </div>
-                                </div>
+            {/* ─── Main Two-Panel Layout ─── */}
+            <div className="flex flex-1 flex-col xl:flex-row">
+                {/* ─── LEFT PANEL: Product Grid ─── */}
+                <div className="flex-1 overflow-y-auto p-5" style={{ maxHeight: "calc(100vh - 3.5rem - 57px)" }}>
+                    {/* Tab Switcher */}
+                    <div className="mb-5 flex gap-2 border-b border-border/40 pb-3">
+                        <button
+                            type="button"
+                            onClick={() => setLeftPanelTab("products")}
+                            className={cn(
+                                "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
+                                leftPanelTab === "products"
+                                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                            )}
+                        >
+                            <LayoutGrid className="size-4" />
+                            Products Shelf
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setLeftPanelTab("bills")}
+                            className={cn(
+                                "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
+                                leftPanelTab === "bills"
+                                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                            )}
+                        >
+                            <ReceiptText className="size-4" />
+                            Recent Bills & Drafts
+                            {sales.length > 0 && (
+                                <span className="flex h-5 items-center justify-center rounded-full bg-background/25 px-1.5 text-[10px] font-bold text-foreground">
+                                    {sales.length}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+
+                    {leftPanelTab === "products" ? (
+                        <>
+                            {/* Search Bar */}
+                            <div className="relative mb-4">
+                                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    className="h-10 rounded-xl bg-background/80 pl-10 text-sm"
+                                    placeholder="Search products..."
+                                    value={productSearch}
+                                    onChange={(event) => setProductSearch(event.target.value)}
+                                />
                             </div>
 
-                            <div className="flex flex-wrap gap-2">
-                                <Button
+                            {/* Category Filter Pills */}
+                            <div className="mb-5 flex flex-wrap gap-2">
+                                <button
                                     type="button"
-                                    variant={categoryFilter === "all" ? "default" : "outline"}
-                                    className="rounded-full"
                                     onClick={() => setCategoryFilter("all")}
+                                    className={cn(
+                                        "rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
+                                        categoryFilter === "all"
+                                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                            : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                    )}
                                 >
-                                    All products
-                                </Button>
+                                    All
+                                </button>
                                 {categories.map((category) => (
-                                    <Button
+                                    <button
                                         key={category.id}
                                         type="button"
-                                        variant={categoryFilter === category.id ? "default" : "outline"}
-                                        className="rounded-full"
                                         onClick={() => setCategoryFilter(category.id)}
+                                        className={cn(
+                                            "rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
+                                            categoryFilter === category.id
+                                                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                        )}
                                     >
                                         {category.name}
-                                    </Button>
+                                    </button>
                                 ))}
                             </div>
 
+                            {/* Product Grid */}
                             {productsQuery.isPending ? (
                                 <div className="flex min-h-[320px] items-center justify-center">
                                     <Spinner className="size-6 text-primary" />
                                 </div>
                             ) : filteredProducts.length === 0 ? (
-                                <div className="rounded-[28px] border border-dashed border-border/70 bg-background/60 px-5 py-14 text-center">
-                                    <ShoppingBag className="mx-auto size-6 text-muted-foreground" />
-                                    <p className="mt-4 font-medium text-foreground">No products match this view</p>
-                                    <p className="mt-2 text-sm text-muted-foreground">
-                                        Try a different search or category, or add products in the catalog first.
+                                <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40">
+                                    <ShoppingCart className="size-8 text-muted-foreground/50" />
+                                    <p className="mt-3 font-medium text-foreground">No products found</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Try a different search or category.
                                     </p>
                                 </div>
                             ) : (
-                                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-                                    {filteredProducts.map((product) => (
-                                        <button
-                                            key={product.id}
-                                            type="button"
-                                            onClick={() => addProductToBill(product)}
-                                            className="group rounded-[26px] border border-border/60 bg-background/80 p-4 text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg"
-                                        >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <p className="font-medium text-foreground">{product.name}</p>
-                                                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                                        {categories.find((category) => category.id === product.categoryId)?.name || "Catalog item"}
-                                                    </p>
-                                                </div>
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-105">
-                                                    <Plus className="size-4" />
-                                                </div>
-                                            </div>
-                                            <div className="mt-5 flex items-end justify-between gap-3">
-                                                <div>
-                                                    <p className="text-lg font-semibold text-foreground">
-                                                        {formatCurrency(product.price)}
-                                                    </p>
-                                                    {Number(product.discount) > 0 ? (
-                                                        <p className="text-sm text-emerald-600 dark:text-emerald-400">
-                                                            {formatCurrency(product.discount)} off per unit
-                                                        </p>
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+                                    {filteredProducts.map((product) => {
+                                        const catName = categories.find((c) => c.id === product.categoryId)?.name || "Item";
+                                        const emoji = getProductEmoji(catName);
+                                        const isInCart = items.some((item) => item.productId === product.id);
+
+                                        return (
+                                            <button
+                                                key={product.id}
+                                                type="button"
+                                                onClick={() => addProductToBill(product)}
+                                                className={cn(
+                                                    "group relative flex flex-col items-center rounded-2xl border p-4 text-center transition-all duration-200",
+                                                    "hover:-translate-y-0.5 hover:shadow-lg",
+                                                    isInCart
+                                                        ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
+                                                        : "border-border/50 bg-card/80 hover:border-primary/30",
+                                                )}
+                                            >
+                                                {isInCart && (
+                                                    <div className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm">
+                                                        {items.find((i) => i.productId === product.id)?.quantity}
+                                                    </div>
+                                                )}
+                                                <div className="relative mb-2.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
+                                                    {product.imagePath?.startsWith("icon:") ? (
+                                                        <span className="text-3xl select-none select-none-emoji">{product.imagePath.replace("icon:", "")}</span>
+                                                    ) : product.imageSignedUrl ? (
+                                                        <img
+                                                            src={product.imageSignedUrl}
+                                                            alt={product.name}
+                                                            className="h-full w-full rounded-full object-cover border border-border/40"
+                                                        />
                                                     ) : (
-                                                        <p className="text-sm text-muted-foreground">No auto discount</p>
+                                                        <span className="text-3xl select-none select-none-emoji">{emoji}</span>
                                                     )}
                                                 </div>
-                                                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                                    Tap to add
-                                                </span>
+                                                <p className="mt-2.5 text-sm font-semibold leading-tight text-foreground">
+                                                    {product.name}
+                                                </p>
+                                                <p className="mt-0.5 text-xs text-muted-foreground">{catName}</p>
+                                                <p className="mt-2 text-base font-bold text-primary">
+                                                    {formatCurrency(product.price)}
+                                                </p>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <>
+                            {/* Recent Bills Shelf Search */}
+                            <div className="relative mb-4">
+                                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    className="h-10 rounded-xl bg-background/80 pl-10 text-sm"
+                                    placeholder="Search bills by number or customer..."
+                                    value={salesSearch}
+                                    onChange={(event) => setSalesSearch(event.target.value)}
+                                />
+                            </div>
+
+                            {/* History Filter Tabs */}
+                            <div className="mb-5 flex flex-wrap gap-2">
+                                {historyTabs.map((tab) => (
+                                    <button
+                                        key={tab.value}
+                                        type="button"
+                                        onClick={() => setHistoryFilter(tab.value)}
+                                        className={cn(
+                                            "rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
+                                            historyFilter === tab.value
+                                                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                        )}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Bills List */}
+                            {salesQuery.isPending ? (
+                                <div className="flex min-h-[320px] items-center justify-center">
+                                    <Spinner className="size-6 text-primary" />
+                                </div>
+                            ) : salesQuery.isError || salesQuery.data?.status === "error" ? (
+                                <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/20 bg-destructive/5 p-5 text-center">
+                                    <ReceiptText className="size-8 text-destructive/70" />
+                                    <p className="mt-3 font-medium text-foreground">Recent bills failed to load</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        {salesQuery.data?.message || "Please refresh the page."}
+                                    </p>
+                                </div>
+                            ) : filteredSales.length === 0 ? (
+                                <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
+                                    <ReceiptText className="size-8 text-muted-foreground/50" />
+                                    <p className="mt-3 font-medium text-foreground">No bills found</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        No bills in this view yet.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {filteredSales.map((sale) => (
+                                        <div
+                                            key={sale.id}
+                                            className="flex flex-col justify-between rounded-2xl border border-border/50 bg-card/85 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                                        >
+                                            <div className="space-y-2">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <p className="font-semibold text-foreground text-sm">
+                                                        {sale.saleNumber ? `Bill #${sale.saleNumber}` : "Draft bill"}
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-1 justify-end">
+                                                        <Badge className={cn("rounded-full border text-[10px] px-2 py-0 leading-none", saleStatusStyles[sale.status])}>
+                                                            {sale.status}
+                                                        </Badge>
+                                                        <Badge className={cn("rounded-full border text-[10px] px-2 py-0 leading-none", paymentStatusStyles[sale.paymentStatus])}>
+                                                            {sale.paymentStatus}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs text-muted-foreground space-y-1">
+                                                    <p className="truncate font-semibold text-foreground/80">{sale.customer?.name || "Walk-in Customer"}</p>
+                                                    <p>{sale.itemCount} items • {formatDateTime(sale.createdAt)}</p>
+                                                </div>
+                                                <div className="flex justify-between border-t border-border/40 pt-2 text-[11px] gap-2">
+                                                    <div>
+                                                        <span className="text-muted-foreground block text-[9px] uppercase">Total</span>
+                                                        <p className="font-bold text-foreground">{formatCurrency(sale.grandTotal)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-muted-foreground block text-[9px] uppercase">Collected</span>
+                                                        <p className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(sale.paidTotal)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-muted-foreground block text-[9px] uppercase">Due</span>
+                                                        <p className="font-bold text-foreground">{formatCurrency(sale.dueTotal)}</p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </button>
+                                            <div className="mt-4 pt-2 border-t border-border/40 flex justify-end gap-2">
+                                                {sale.status === "draft" ? (
+                                                    <Button
+                                                        size="sm"
+                                                        className="w-full rounded-xl text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90"
+                                                        disabled={resumeDraftMutation.isPending}
+                                                        onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                                    >
+                                                        {resumeDraftMutation.isPending ? "Loading..." : "Resume draft"}
+                                                    </Button>
+                                                ) : (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="w-full rounded-xl text-xs h-8"
+                                                        onClick={() => {
+                                                            setSelectedSaleId(sale.id);
+                                                            setSaleDialogOpen(true);
+                                                        }}
+                                                    >
+                                                        Open details
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="rounded-[32px] border-border/60 bg-card/80 shadow-lg shadow-black/5">
-                        <CardContent className="space-y-5 p-5 sm:p-6">
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <Receipt className="size-4 text-sky-600 dark:text-sky-400" />
-                                        <h2 className="font-display text-2xl font-semibold text-foreground">Recent bills</h2>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        Re-open drafts, inspect bill lines, or collect more money from pending bills.
-                                    </p>
-                                </div>
-                                <div className="relative w-full lg:max-w-sm">
-                                    <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        className="h-11 rounded-2xl pl-11"
-                                        placeholder="Search by bill number or customer"
-                                        value={salesSearch}
-                                        onChange={(event) => setSalesSearch(event.target.value)}
-                                    />
-                                </div>
-                            </div>
-
-                            <Tabs value={historyFilter} onValueChange={(value) => setHistoryFilter(value as typeof historyFilter)}>
-                                <TabsList variant="line" color="primary" className="w-full justify-start gap-4 border-b border-border/60 bg-transparent p-0 pb-px">
-                                    {historyTabs.map((tab) => (
-                                        <TabsTrigger
-                                            key={tab.value}
-                                            value={tab.value}
-                                            className="h-auto rounded-none px-1 py-3 text-sm font-semibold"
-                                        >
-                                            {tab.label}
-                                        </TabsTrigger>
-                                    ))}
-                                </TabsList>
-
-                                <TabsContent value={historyFilter} className="pt-5">
-                                    {salesQuery.isPending ? (
-                                        <div className="flex min-h-[220px] items-center justify-center">
-                                            <Spinner className="size-6 text-primary" />
-                                        </div>
-                                    ) : salesQuery.isError || salesQuery.data?.status === "error" ? (
-                                        <div className="rounded-[28px] border border-destructive/20 bg-destructive/5 px-5 py-12 text-center">
-                                            <ReceiptText className="mx-auto size-6 text-destructive" />
-                                            <p className="mt-4 font-medium text-foreground">Recent bills failed to load</p>
-                                            <p className="mt-2 text-sm text-muted-foreground">
-                                                {salesQuery.data?.message
-                                                    || (salesQuery.error as { message?: string })?.message
-                                                    || "Please refresh the page and try again."}
-                                            </p>
-                                        </div>
-                                    ) : filteredSales.length === 0 ? (
-                                        <div className="rounded-[28px] border border-dashed border-border/70 bg-background/60 px-5 py-12 text-center">
-                                            <ReceiptText className="mx-auto size-6 text-muted-foreground" />
-                                            <p className="mt-4 font-medium text-foreground">No bills in this view yet</p>
-                                            <p className="mt-2 text-sm text-muted-foreground">
-                                                Bills completed at this counter will start appearing here immediately.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="grid gap-3">
-                                            {filteredSales.map((sale) => (
-                                                <div
-                                                    key={sale.id}
-                                                    className="grid gap-4 rounded-[28px] border border-border/60 bg-background/75 p-4 transition-all hover:border-primary/25 hover:shadow-md lg:grid-cols-[1fr_auto]"
-                                                >
-                                                    <div className="space-y-3">
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <p className="font-semibold text-foreground">
-                                                                {sale.saleNumber ? `Bill #${sale.saleNumber}` : "Draft bill"}
-                                                            </p>
-                                                            <Badge className={cn("rounded-full border text-xs", saleStatusStyles[sale.status])}>
-                                                                {sale.status}
-                                                            </Badge>
-                                                            <Badge className={cn("rounded-full border text-xs", paymentStatusStyles[sale.paymentStatus])}>
-                                                                {sale.paymentStatus}
-                                                            </Badge>
-                                                        </div>
-                                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                                                            <span>{sale.customer?.name || "Walk-in"}</span>
-                                                            <span>{sale.itemCount} items</span>
-                                                            <span>Created {formatDateTime(sale.createdAt)}</span>
-                                                        </div>
-                                                        <div className="flex flex-wrap gap-4 text-sm">
-                                                            <div>
-                                                                <span className="text-muted-foreground">Total</span>
-                                                                <p className="font-semibold text-foreground">{formatCurrency(sale.grandTotal)}</p>
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-muted-foreground">Collected</span>
-                                                                <p className="font-semibold text-foreground">{formatCurrency(sale.paidTotal)}</p>
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-muted-foreground">Due</span>
-                                                                <p className="font-semibold text-foreground">{formatCurrency(sale.dueTotal)}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-end lg:justify-between">
-                                                        {sale.status === "draft" ? (
-                                                            <Button
-                                                                className="rounded-2xl"
-                                                                disabled={resumeDraftMutation.isPending}
-                                                                onClick={() => resumeDraftMutation.mutate(sale.id)}
-                                                            >
-                                                                {resumeDraftMutation.isPending ? "Loading..." : "Resume draft"}
-                                                            </Button>
-                                                        ) : (
-                                                            <Button
-                                                                variant="outline"
-                                                                className="rounded-2xl"
-                                                                onClick={() => {
-                                                                    setSelectedSaleId(sale.id);
-                                                                    setSaleDialogOpen(true);
-                                                                }}
-                                                            >
-                                                                Open details
-                                                            </Button>
-                                                        )}
-
-                                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                                            {sale.status === "draft" ? "Editable bill" : "Live record"}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </TabsContent>
-                            </Tabs>
-                        </CardContent>
-                    </Card>
+                        </>
+                    )}
                 </div>
 
-                <div className="space-y-6 xl:sticky xl:top-20 xl:self-start">
-                    <Card className="overflow-hidden rounded-[32px] border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                        <CardContent className="space-y-6 p-5 sm:p-6">
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <WalletCards className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                        <h2 className="font-display text-2xl font-semibold text-foreground">Active bill</h2>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {activeDraftId ? "This bill is linked to a saved draft." : "Build a bill and settle it in one smooth pass."}
-                                    </p>
-                                </div>
+                {/* ─── RIGHT PANEL: Current Order ─── */}
+                <aside
+                    className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm xl:w-[380px] xl:border-t-0 xl:border-l"
+                    style={{ maxHeight: "calc(100vh - 3.5rem - 57px)" }}
+                >
+                    {/* Order Header */}
+                    <div className="border-b border-border/40 px-5 py-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-foreground">Current Order</h2>
+                                <p className="text-sm text-muted-foreground">
+                                    {items.length === 0
+                                        ? "0 items in cart"
+                                        : `${items.reduce((s, i) => s + i.quantity, 0)} item${items.reduce((s, i) => s + i.quantity, 0) !== 1 ? "s" : ""} in cart`}
+                                </p>
+                            </div>
+                            {items.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={resetComposer}
+                                    className="text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
+                                >
+                                    Clear all
+                                </button>
+                            )}
+                        </div>
+                    </div>
 
-                                {(items.length > 0 || paymentSplits.length > 0 || selectedCustomerId || notes) ? (
-                                    <Button variant="ghost" className="rounded-full text-muted-foreground" onClick={resetComposer}>
-                                        Reset
-                                    </Button>
-                                ) : null}
+                    {/* Scrollable content area */}
+                    <div className="flex flex-1 flex-col overflow-y-auto">
+                        {/* Phone Number / Customer Search */}
+                        <div className="border-b border-border/40 px-5 py-3">
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <User className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        className="h-10 rounded-xl bg-background/70 pl-9 text-sm"
+                                        placeholder="Phone number"
+                                        value={customerSearch}
+                                        onChange={(event) => {
+                                            setCustomerSearch(event.target.value);
+                                            if (!event.target.value) setSelectedCustomerId("");
+                                        }}
+                                        onKeyDown={(e) => e.key === "Enter" && handleFindCustomer()}
+                                    />
+                                </div>
+                                <Button
+                                    type="button"
+                                    className="h-10 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+                                    onClick={handleFindCustomer}
+                                >
+                                    Find
+                                </Button>
                             </div>
 
-                            <div className="space-y-4 rounded-[28px] border border-border/60 bg-background/75 p-4">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                        <p className="text-sm font-semibold text-foreground">Customer</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            Required only when this bill will carry a due balance.
-                                        </p>
-                                    </div>
+                            {selectedCustomer && (
+                                <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs">
+                                    <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                                        {selectedCustomer.name}
+                                    </span>
+                                    <span className="text-emerald-600/70 dark:text-emerald-300/70">
+                                        {selectedCustomer.phone || "No phone"}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="ml-auto text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-200"
+                                        onClick={() => { setSelectedCustomerId(""); setCustomerSearch(""); }}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Customer quick-create (hidden trigger, accessible from phone search) */}
+                            {customerSearch && !selectedCustomer && filteredCustomers.length === 0 && (
+                                <div className="mt-2">
                                     <CustomerQuickCreateDialog
                                         organizationId={organizationId}
                                         suggestedName={customerSearch}
                                         onCreated={(customer) => {
                                             setSelectedCustomerId(customer.id);
-                                            setCustomerSearch(customer.name);
+                                            setCustomerSearch(customer.phone || customer.name);
                                         }}
                                         trigger={
-                                            <Button variant="outline" className="rounded-full">
-                                                <UserPlus2 className="mr-2 size-4" />
-                                                Quick add
-                                            </Button>
+                                            <button
+                                                type="button"
+                                                className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                                            >
+                                                <Plus className="size-3.5" />
+                                                <span>Create new customer "{customerSearch}"</span>
+                                            </button>
                                         }
                                     />
                                 </div>
+                            )}
 
-                                <Input
-                                    className="h-11 rounded-2xl"
-                                    placeholder="Search customer by name or phone"
-                                    value={customerSearch}
-                                    onChange={(event) => setCustomerSearch(event.target.value)}
-                                />
-
-                                <div className="flex flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        className={cn(
-                                            "rounded-2xl border px-3 py-2 text-left text-sm transition-all",
-                                            !selectedCustomerId
-                                                ? "border-primary/30 bg-primary/10 text-primary"
-                                                : "border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
-                                        )}
-                                        onClick={() => setSelectedCustomerId("")}
-                                    >
-                                        Walk-in customer
-                                    </button>
-                                    {filteredCustomers.map((customer) => (
+                            {/* Customer search dropdown results */}
+                            {customerSearch && !selectedCustomer && filteredCustomers.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                    {filteredCustomers.slice(0, 4).map((c) => (
                                         <button
-                                            key={customer.id}
+                                            key={c.id}
                                             type="button"
-                                            className={cn(
-                                                "rounded-2xl border px-3 py-2 text-left text-sm transition-all",
-                                                selectedCustomerId === customer.id
-                                                    ? "border-primary/30 bg-primary/10 text-primary"
-                                                    : "border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
-                                            )}
+                                            className="flex w-full items-center gap-2 rounded-lg bg-background/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
                                             onClick={() => {
-                                                setSelectedCustomerId(customer.id);
-                                                setCustomerSearch(customer.name);
+                                                setSelectedCustomerId(c.id);
+                                                setCustomerSearch(c.phone || c.name);
                                             }}
                                         >
-                                            <p className="font-medium">{customer.name}</p>
-                                            <p className="text-xs opacity-70">
-                                                {customer.phone || "No phone"} • Balance {formatCurrency(customer.balance)}
-                                            </p>
+                                            <User className="size-3 shrink-0" />
+                                            <span className="font-medium">{c.name}</span>
+                                            <span className="ml-auto text-[10px] opacity-60">{c.phone || ""}</span>
                                         </button>
                                     ))}
                                 </div>
+                            )}
+                        </div>
 
-                                {selectedCustomer ? (
-                                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm">
-                                        <p className="font-medium text-emerald-800 dark:text-emerald-200">
-                                            Billing for {selectedCustomer.name}
-                                        </p>
-                                        <p className="mt-1 text-emerald-700/80 dark:text-emerald-200/80">
-                                            {selectedCustomer.phone || "No phone on file"} • Current balance {formatCurrency(selectedCustomer.balance)}
-                                        </p>
-                                    </div>
-                                ) : null}
-                            </div>
+                        {/* Cart Items */}
+                        <div className="flex-1 px-5 py-3">
+                            {items.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-center">
+                                    <ShoppingCart className="size-10 text-muted-foreground/30" />
+                                    <p className="mt-3 text-sm font-medium text-muted-foreground">Cart is empty</p>
+                                    <p className="mt-1 text-xs text-muted-foreground/60">Click products to add</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {items.map((item) => {
+                                        const associatedProduct = products.find((p) => p.id === item.productId);
+                                        const catName = categories.find((c) => c.id === item.categoryId)?.name || "Item";
+                                        const emoji = getProductEmoji(catName);
+                                        const lineTotal = (item.unitPrice - item.unitDiscount) * item.quantity;
 
-                            <div className="space-y-3">
-                                {items.length === 0 ? (
-                                    <div className="rounded-[28px] border border-dashed border-border/70 bg-background/60 px-5 py-14 text-center">
-                                        <ShoppingBag className="mx-auto size-6 text-muted-foreground" />
-                                        <p className="mt-4 font-medium text-foreground">No products on this bill yet</p>
-                                        <p className="mt-2 text-sm text-muted-foreground">
-                                            Tap products from the shelf to start building a bill.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    items.map((item) => (
-                                        <div
-                                            key={item.productId}
-                                            className="rounded-[24px] border border-border/60 bg-background/75 p-4"
-                                        >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <p className="font-medium text-foreground">{item.name}</p>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {formatCurrency(item.unitPrice)} each
-                                                        {item.unitDiscount > 0 ? ` • ${formatCurrency(item.unitDiscount)} off/unit` : ""}
+                                        return (
+                                            <div
+                                                key={item.productId}
+                                                className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/60 px-3 py-2.5"
+                                            >
+                                                {/* Image/Emoji */}
+                                                <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner">
+                                                    {associatedProduct?.imagePath?.startsWith("icon:") ? (
+                                                        <span className="text-lg select-none select-none-emoji">{associatedProduct.imagePath.replace("icon:", "")}</span>
+                                                    ) : associatedProduct?.imageSignedUrl ? (
+                                                        <img
+                                                            src={associatedProduct.imageSignedUrl}
+                                                            alt={item.name}
+                                                            className="h-full w-full rounded-full object-cover border border-border/40"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-lg select-none select-none-emoji">{emoji}</span>
+                                                    )}
+                                                </div>
+
+                                                {/* Name & Price */}
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-semibold text-foreground">
+                                                        {item.name}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {formatCurrency(item.unitPrice)}
                                                     </p>
                                                 </div>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon-sm"
-                                                    className="rounded-full text-muted-foreground"
-                                                    onClick={() => updateItemQuantity(item.productId, 0)}
-                                                >
-                                                    <Trash2 className="size-4" />
-                                                </Button>
-                                            </div>
 
-                                            <div className="mt-4 flex items-center justify-between gap-4">
-                                                <div className="inline-flex items-center rounded-full border border-border/70 bg-background px-2 py-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        className="size-8 rounded-full"
+                                                {/* Quantity Controls */}
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    <button
+                                                        type="button"
                                                         onClick={() => updateItemQuantity(item.productId, item.quantity - 1)}
+                                                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                                     >
-                                                        <Minus className="size-4" />
-                                                    </Button>
-                                                    <span className="min-w-10 text-center text-sm font-semibold text-foreground">
+                                                        <Minus className="size-3" />
+                                                    </button>
+                                                    <span className="w-6 text-center text-sm font-bold text-foreground">
                                                         {item.quantity}
                                                     </span>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        className="size-8 rounded-full"
+                                                    <button
+                                                        type="button"
                                                         onClick={() => updateItemQuantity(item.productId, item.quantity + 1)}
+                                                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
                                                     >
-                                                        <Plus className="size-4" />
-                                                    </Button>
+                                                        <Plus className="size-3" />
+                                                    </button>
                                                 </div>
 
-                                                <div className="text-right">
-                                                    <p className="text-sm text-muted-foreground">
-                                                        Discount {formatCurrency(item.unitDiscount * item.quantity)}
-                                                    </p>
-                                                    <p className="text-lg font-semibold text-foreground">
-                                                        {formatCurrency((item.unitPrice - item.unitDiscount) * item.quantity)}
-                                                    </p>
-                                                </div>
+                                                {/* Line Total */}
+                                                <p className="w-16 text-right text-sm font-bold text-foreground shrink-0">
+                                                    {formatCurrency(lineTotal)}
+                                                </p>
+
+                                                {/* Delete */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateItemQuantity(item.productId, 0)}
+                                                    className="text-muted-foreground/50 transition-colors hover:text-destructive shrink-0"
+                                                >
+                                                    <Trash2 className="size-4" />
+                                                </button>
                                             </div>
-                                        </div>
-                                    ))
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ─── Bottom Checkout Area (always visible) ─── */}
+                    <div className="border-t border-border/40 bg-card px-5 py-4">
+                        {/* Discount Input */}
+                        <div className="mb-3">
+                            <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                className="h-10 rounded-xl bg-background/60 text-sm"
+                                placeholder="Discount ₹"
+                                value={discountInput}
+                                onChange={(e) => setDiscountInput(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Summary */}
+                        <div className="mb-3 space-y-1.5 text-sm">
+                            <div className="flex justify-between text-muted-foreground">
+                                <span>Subtotal</span>
+                                <span>{formatCurrency(subtotal)}</span>
+                            </div>
+                            {discountTotal + extraDiscount > 0 && (
+                                <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                    <span>Discount</span>
+                                    <span>-{formatCurrency(discountTotal + extraDiscount)}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between pt-1.5 text-lg font-bold text-foreground">
+                                <span>Total</span>
+                                <span>{formatCurrency(grandTotal)}</span>
+                            </div>
+                        </div>
+
+                        {/* Payment Method Pills */}
+                        <div className="mb-3 grid grid-cols-4 gap-1.5">
+                            <button
+                                type="button"
+                                onClick={() => setFullPaymentPreset("cash")}
+                                className={cn(
+                                    "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                    selectedPaymentMethod === "cash"
+                                        ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
+                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
                                 )}
+                            >
+                                <Banknote className="size-3.5" />
+                                Cash
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFullPaymentPreset("upi")}
+                                className={cn(
+                                    "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                    selectedPaymentMethod === "upi"
+                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                                )}
+                            >
+                                <Smartphone className="size-3.5" />
+                                UPI
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFullPaymentPreset("card")}
+                                className={cn(
+                                    "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                    selectedPaymentMethod === "card"
+                                        ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
+                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
+                                )}
+                            >
+                                <CreditCard className="size-3.5" />
+                                Card
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFullPaymentPreset("due")}
+                                className={cn(
+                                    "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                    selectedPaymentMethod === "due"
+                                        ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
+                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
+                                )}
+                            >
+                                <Receipt className="size-3.5" />
+                                Due
+                            </button>
+                        </div>
+
+                        {/* Warnings */}
+                        {isOverpaid && (
+                            <div className="mb-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                Collected amount exceeds the bill total.
                             </div>
+                        )}
 
-                            <div className="space-y-4 rounded-[28px] border border-border/60 bg-slate-950 p-5 text-white shadow-lg">
-                                <div className="space-y-1">
-                                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/60">Checkout summary</p>
-                                    <p className="text-3xl font-semibold tracking-tight">{formatCurrency(grandTotal)}</p>
-                                </div>
-
-                                <div className="space-y-3 text-sm">
-                                    <div className="flex items-center justify-between text-white/75">
-                                        <span>Subtotal</span>
-                                        <span>{formatCurrency(subtotal)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-white/75">
-                                        <span>Discount</span>
-                                        <span>{formatCurrency(discountTotal)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-white/75">
-                                        <span>Collected now</span>
-                                        <span>{formatCurrency(collectedTotal)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold">
-                                        <span>Due after checkout</span>
-                                        <span>{formatCurrency(dueTotal)}</span>
-                                    </div>
-                                </div>
+                        {!selectedCustomerId && dueTotal > 0 && items.length > 0 && (
+                            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                                Attach a customer for partial/pending bills.
                             </div>
+                        )}
 
-                            <div className="space-y-4 rounded-[28px] border border-border/60 bg-background/75 p-4">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <Button type="button" variant="outline" className="rounded-full" onClick={() => setFullPaymentPreset("cash")}>
-                                        Full cash
-                                    </Button>
-                                    <Button type="button" variant="outline" className="rounded-full" onClick={() => setFullPaymentPreset("upi")}>
-                                        Full UPI
-                                    </Button>
-                                    <Button type="button" variant="outline" className="rounded-full" onClick={() => setFullPaymentPreset("card")}>
-                                        Full card
-                                    </Button>
-                                    <Button type="button" variant="ghost" className="rounded-full text-muted-foreground" onClick={() => setPaymentSplits([])}>
-                                        Leave as due
-                                    </Button>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {paymentSplits.map((split) => (
-                                        <div key={split.id} className="grid gap-3 rounded-2xl border border-border/60 bg-background p-3 md:grid-cols-[0.95fr_0.9fr_auto]">
-                                            <Select
-                                                value={split.method}
-                                                onValueChange={(value) =>
-                                                    setPaymentSplits((current) =>
-                                                        current.map((entry) =>
-                                                            entry.id === split.id
-                                                                ? { ...entry, method: value as PaymentMethod }
-                                                                : entry,
-                                                        ),
-                                                    )
-                                                }
-                                            >
-                                                <SelectTrigger className="h-11 w-full rounded-2xl">
-                                                    <SelectValue placeholder="Method" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {paymentMethods.map((method) => (
-                                                        <SelectItem key={method.value} value={method.value}>
-                                                            {method.label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-
-                                            <Input
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
-                                                className="h-11 rounded-2xl"
-                                                placeholder="Amount"
-                                                value={split.amount}
-                                                onChange={(event) =>
-                                                    setPaymentSplits((current) =>
-                                                        current.map((entry) =>
-                                                            entry.id === split.id
-                                                                ? { ...entry, amount: event.target.value }
-                                                                : entry,
-                                                        ),
-                                                    )
-                                                }
-                                            />
-
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                className="h-11 rounded-2xl text-muted-foreground"
-                                                onClick={() =>
-                                                    setPaymentSplits((current) => current.filter((entry) => entry.id !== split.id))
-                                                }
-                                            >
-                                                Remove
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {grandTotal > 0 ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="w-full rounded-2xl"
-                                        onClick={() => setPaymentSplits((current) => [...current, createPaymentSplit(String(dueTotal || grandTotal))])}
-                                    >
-                                        Add payment split
-                                    </Button>
-                                ) : null}
-
-                                {isOverpaid ? (
-                                    <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                                        Collected money cannot exceed the bill total.
-                                    </div>
-                                ) : null}
-
-                                {!selectedCustomerId && dueTotal > 0 ? (
-                                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-                                        Choose a customer if this bill will remain pending or partial after checkout.
-                                    </div>
-                                ) : null}
-                            </div>
-
-                            <div className="space-y-3 rounded-[28px] border border-border/60 bg-background/75 p-4">
-                                <p className="text-sm font-semibold text-foreground">Bill note</p>
-                                <Textarea
-                                    className="min-h-28 rounded-2xl"
-                                    placeholder="Optional cashier note for this bill"
-                                    value={notes}
-                                    onChange={(event) => setNotes(event.target.value)}
-                                />
-                            </div>
-
-                            <div className="grid gap-3 sm:grid-cols-2">
-                                <Button
-                                    variant="outline"
-                                    className="h-12 rounded-2xl"
-                                    disabled={saveDraftMutation.isPending || completeSaleMutation.isPending || items.length === 0}
-                                    onClick={() => saveDraftMutation.mutate()}
-                                >
-                                    {saveDraftMutation.isPending
-                                        ? "Saving..."
-                                        : activeDraftId
-                                            ? "Update draft"
-                                            : "Save draft"}
-                                </Button>
-                                <Button
-                                    className="h-12 rounded-2xl"
-                                    disabled={completeSaleMutation.isPending || saveDraftMutation.isPending || items.length === 0 || isOverpaid}
-                                    onClick={() => completeSaleMutation.mutate()}
-                                >
-                                    {completeSaleMutation.isPending ? "Completing..." : "Complete sale"}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </section>
+                        <div className="grid grid-cols-2 gap-3 mt-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-11 rounded-xl text-sm font-semibold"
+                                disabled={saveDraftMutation.isPending || completeSaleMutation.isPending || items.length === 0}
+                                onClick={() => saveDraftMutation.mutate()}
+                            >
+                                {saveDraftMutation.isPending
+                                    ? "Saving..."
+                                    : activeDraftId
+                                        ? "Update draft"
+                                        : "Save draft"}
+                            </Button>
+                            <Button
+                                type="button"
+                                className="h-11 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/20 hover:bg-primary/90 text-sm"
+                                disabled={completeSaleMutation.isPending || saveDraftMutation.isPending || items.length === 0 || isOverpaid}
+                                onClick={() => completeSaleMutation.mutate()}
+                            >
+                                {completeSaleMutation.isPending
+                                    ? "Completing..."
+                                    : `Place Order — ${formatCurrency(grandTotal)}`}
+                            </Button>
+                        </div>
+                    </div>
+                </aside>
+            </div>
 
             <SaleDetailDialog
                 open={saleDialogOpen}

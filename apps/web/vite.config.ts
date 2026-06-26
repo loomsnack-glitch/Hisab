@@ -1,8 +1,10 @@
 import path from "path";
+import { createRequire } from "module";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
+const require = createRequire(import.meta.url);
 const useSyncExternalStoreShimDir = path.resolve(__dirname, "./src/shims/use-sync-external-store-shim");
 
 export default defineConfig(({ mode }) => {
@@ -43,14 +45,14 @@ export default defineConfig(({ mode }) => {
                 },
                 {
                     find: "next-themes",
-                    replacement: path.resolve(__dirname, "./node_modules/next-themes/dist/index.mjs"),
+                    replacement: require.resolve("next-themes"),
                 },
-                { find: "react", replacement: path.resolve(__dirname, "./node_modules/react") },
+                { find: "react", replacement: path.dirname(require.resolve("react")) },
                 {
                     find: "react/jsx-runtime",
-                    replacement: path.resolve(__dirname, "./node_modules/react/jsx-runtime.js"),
+                    replacement: require.resolve("react/jsx-runtime"),
                 },
-                { find: "react-dom", replacement: path.resolve(__dirname, "./node_modules/react-dom") },
+                { find: "react-dom", replacement: path.dirname(require.resolve("react-dom")) },
                 {
                     find: "use-sync-external-store/shim",
                     replacement: useSyncExternalStoreShimDir,

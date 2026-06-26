@@ -1,3 +1,8 @@
+\restrict dbmate
+
+-- Dumped from database version 18.1
+-- Dumped by pg_dump version 18.1
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -11,166 +16,150 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: inventory_reference_type; Type: TYPE; Schema: public; Owner: -
+-- Name: category_status_enum; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.inventory_reference_type AS ENUM (
-    'purchase',
-    'sale',
-    'manual',
-    'return'
+CREATE TYPE public.category_status_enum AS ENUM (
+    'active',
+    'inactive'
 );
 
 
 --
--- Name: inventory_transaction_type; Type: TYPE; Schema: public; Owner: -
+-- Name: customer_ledger_entry_type_enum; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.inventory_transaction_type AS ENUM (
-    'in',
-    'out',
+CREATE TYPE public.customer_ledger_entry_type_enum AS ENUM (
+    'sale',
+    'payment',
+    'void',
     'adjustment'
 );
 
 
 --
--- Name: ledger_entry_type; Type: TYPE; Schema: public; Owner: -
+-- Name: payment_method_enum; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.ledger_entry_type AS ENUM (
-    'sale',
-    'payment',
-    'adjustment',
-    'refund'
-);
-
-
---
--- Name: payment_direction; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.payment_direction AS ENUM (
-    'in',
-    'out'
-);
-
-
---
--- Name: payment_method; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.payment_method AS ENUM (
+CREATE TYPE public.payment_method_enum AS ENUM (
     'cash',
     'upi',
     'card',
-    'credit',
+    'bank_transfer',
     'other'
 );
 
 
 --
--- Name: payment_status; Type: TYPE; Schema: public; Owner: -
+-- Name: payment_status_enum; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.payment_status AS ENUM (
+CREATE TYPE public.payment_status_enum AS ENUM (
     'pending',
-    'paid',
-    'partial'
+    'partial',
+    'paid'
 );
 
 
 --
--- Name: sale_status; Type: TYPE; Schema: public; Owner: -
+-- Name: product_status_enum; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.sale_status AS ENUM (
+CREATE TYPE public.product_status_enum AS ENUM (
+    'active',
+    'inactive'
+);
+
+
+--
+-- Name: sale_status_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.sale_status_enum AS ENUM (
     'draft',
     'completed',
-    'voided',
-    'refunded'
+    'voided'
 );
 
 
 --
--- Name: session_status; Type: TYPE; Schema: public; Owner: -
+-- Name: salutation_enum; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.session_status AS ENUM (
-    'open',
-    'closed',
-    'discrepancy'
+CREATE TYPE public.salutation_enum AS ENUM (
+    'mr.',
+    'mrs.',
+    'ms.'
 );
 
 
 --
--- Name: txn_status; Type: TYPE; Schema: public; Owner: -
+-- Name: store_device_status_enum; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.txn_status AS ENUM (
-    'pending',
-    'completed',
-    'failed',
-    'refunded'
+CREATE TYPE public.store_device_status_enum AS ENUM (
+    'active',
+    'inactive',
+    'revoked'
 );
 
 
 --
--- Name: user_role; Type: TYPE; Schema: public; Owner: -
+-- Name: ensure_payment_sale_is_completed(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE TYPE public.user_role AS ENUM (
-    'admin',
-    'manager',
-    'cashier'
-);
+CREATE FUNCTION public.ensure_payment_sale_is_completed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    sale_row RECORD;
+BEGIN
+    SELECT id, status
+    INTO sale_row
+    FROM sales
+    WHERE id = NEW.sale_id
+      AND organization_id = NEW.organization_id
+      AND store_id = NEW.store_id;
+
+    IF sale_row.id IS NULL THEN
+        RAISE EXCEPTION 'payment sale does not exist in the same organization/store';
+    END IF;
+
+    IF sale_row.status <> 'completed' THEN
+        RAISE EXCEPTION 'payments can only be collected against completed sales';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: prevent_voided_sale_with_payments(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_voided_sale_with_payments() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.status = 'voided'
+       AND OLD.status <> 'voided'
+       AND EXISTS (
+           SELECT 1
+           FROM payments
+           WHERE sale_id = NEW.id
+       ) THEN
+        RAISE EXCEPTION 'sales with collected payments cannot be voided';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
 
 
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
-
---
--- Name: audit_logs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.audit_logs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    organization_id uuid NOT NULL,
-    user_id uuid,
-    action character varying(50) NOT NULL,
-    entity_type character varying(50) NOT NULL,
-    entity_id uuid NOT NULL,
-    previous_state jsonb,
-    new_state jsonb,
-    ip_address character varying(45),
-    created_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: cash_register_sessions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.cash_register_sessions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    organization_id uuid NOT NULL,
-    store_id uuid NOT NULL,
-    opened_by uuid NOT NULL,
-    closed_by uuid,
-    opened_at timestamp with time zone DEFAULT now() NOT NULL,
-    closed_at timestamp with time zone,
-    opening_balance numeric(12,2) DEFAULT 0.00 NOT NULL,
-    closing_balance numeric(12,2),
-    expected_balance numeric(12,2),
-    status public.session_status DEFAULT 'open'::public.session_status NOT NULL,
-    notes text,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT cash_register_sessions_closing_balance_check CHECK ((closing_balance >= (0)::numeric)),
-    CONSTRAINT cash_register_sessions_expected_balance_check CHECK ((expected_balance >= (0)::numeric)),
-    CONSTRAINT cash_register_sessions_opening_balance_check CHECK ((opening_balance >= (0)::numeric))
-);
-
 
 --
 -- Name: categories; Type: TABLE; Schema: public; Owner: -
@@ -180,8 +169,11 @@ CREATE TABLE public.categories (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     organization_id uuid NOT NULL,
     name character varying(255) NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    status public.category_status_enum DEFAULT 'active'::public.category_status_enum NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -193,13 +185,15 @@ CREATE TABLE public.customer_ledger (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     organization_id uuid NOT NULL,
     customer_id uuid NOT NULL,
-    type public.ledger_entry_type NOT NULL,
+    sale_id uuid,
+    payment_id uuid,
+    entry_type public.customer_ledger_entry_type_enum NOT NULL,
     amount numeric(12,2) NOT NULL,
     balance_after numeric(12,2) NOT NULL,
-    reference_type character varying(50),
-    reference_id uuid,
     notes text,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT customer_ledger_amount_check CHECK ((amount <> (0)::numeric)),
+    CONSTRAINT customer_ledger_balance_after_check CHECK ((balance_after >= (0)::numeric))
 );
 
 
@@ -210,35 +204,15 @@ CREATE TABLE public.customer_ledger (
 CREATE TABLE public.customers (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     organization_id uuid NOT NULL,
-    phone character varying(20) NOT NULL,
-    name character varying(255),
-    loyalty_points integer DEFAULT 0,
-    balance numeric(12,2) DEFAULT 0.00 NOT NULL,
+    name character varying(255) NOT NULL,
+    phone character varying(20),
+    balance numeric(12,2) DEFAULT 0 NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
-    sync_id uuid DEFAULT gen_random_uuid(),
-    sync_version integer DEFAULT 1,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: inventory_transactions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.inventory_transactions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    organization_id uuid NOT NULL,
-    store_id uuid NOT NULL,
-    product_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    type public.inventory_transaction_type NOT NULL,
-    quantity numeric(10,3) NOT NULL,
-    reference_type public.inventory_reference_type NOT NULL,
-    reference_id uuid,
-    notes text,
-    created_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT inventory_transactions_quantity_check CHECK ((quantity <> (0)::numeric))
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT customers_balance_check CHECK ((balance >= (0)::numeric))
 );
 
 
@@ -249,8 +223,10 @@ CREATE TABLE public.inventory_transactions (
 CREATE TABLE public.organizations (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name character varying(255) NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -262,16 +238,15 @@ CREATE TABLE public.payments (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     organization_id uuid NOT NULL,
     store_id uuid NOT NULL,
-    sale_id uuid,
-    session_id uuid,
+    sale_id uuid NOT NULL,
+    collected_by uuid NOT NULL,
     amount numeric(12,2) NOT NULL,
-    direction public.payment_direction DEFAULT 'in'::public.payment_direction NOT NULL,
-    method public.payment_method NOT NULL,
-    status public.txn_status DEFAULT 'completed'::public.txn_status NOT NULL,
+    method public.payment_method_enum NOT NULL,
     reference_number character varying(255),
     notes text,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
+    collected_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT payments_amount_check CHECK ((amount > (0)::numeric))
 );
 
@@ -283,25 +258,18 @@ CREATE TABLE public.payments (
 CREATE TABLE public.products (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     organization_id uuid NOT NULL,
-    store_id uuid,
-    category_id uuid,
-    barcode character varying(255) NOT NULL,
-    sku character varying(255),
+    category_id uuid NOT NULL,
     name character varying(255) NOT NULL,
-    description text,
     price numeric(10,2) NOT NULL,
-    cost_price numeric(10,2),
-    tax_rate numeric(5,2) DEFAULT 0.00 NOT NULL,
-    current_stock numeric(10,3) DEFAULT 0.000 NOT NULL,
-    low_stock_threshold numeric(10,3) DEFAULT 0.000 NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    sync_id uuid DEFAULT gen_random_uuid(),
-    sync_version integer DEFAULT 1,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT products_cost_price_check CHECK ((cost_price >= (0)::numeric)),
-    CONSTRAINT products_price_check CHECK ((price >= (0)::numeric)),
-    CONSTRAINT products_tax_rate_check CHECK (((tax_rate >= (0)::numeric) AND (tax_rate <= (100)::numeric)))
+    discount numeric(10,2) DEFAULT 0 NOT NULL,
+    image_path character varying(512),
+    status public.product_status_enum DEFAULT 'active'::public.product_status_enum NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT products_discount_check CHECK ((discount >= (0)::numeric)),
+    CONSTRAINT products_price_check CHECK ((price >= (0)::numeric))
 );
 
 
@@ -314,20 +282,20 @@ CREATE TABLE public.sale_items (
     organization_id uuid NOT NULL,
     store_id uuid NOT NULL,
     sale_id uuid NOT NULL,
-    product_id uuid,
+    product_id uuid NOT NULL,
     quantity numeric(10,3) NOT NULL,
     product_name_snapshot character varying(255) NOT NULL,
-    price_snapshot numeric(10,2) NOT NULL,
-    cost_price_snapshot numeric(10,2) NOT NULL,
-    tax_rate_snapshot numeric(5,2) DEFAULT 0.00 NOT NULL,
-    discount_amount numeric(10,2) DEFAULT 0.00 NOT NULL,
+    unit_price_snapshot numeric(10,2) NOT NULL,
+    discount_amount numeric(10,2) DEFAULT 0 NOT NULL,
+    line_subtotal numeric(12,2) NOT NULL,
     line_total numeric(12,2) NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT sale_items_cost_price_snapshot_check CHECK ((cost_price_snapshot >= (0)::numeric)),
-    CONSTRAINT sale_items_discount_amount_check CHECK ((discount_amount >= (0)::numeric)),
-    CONSTRAINT sale_items_price_snapshot_check CHECK ((price_snapshot >= (0)::numeric)),
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sale_items_discount_amount_check CHECK (((discount_amount >= (0)::numeric) AND (discount_amount <= line_subtotal))),
+    CONSTRAINT sale_items_line_subtotal_check CHECK ((line_subtotal >= (0)::numeric)),
+    CONSTRAINT sale_items_line_total_check CHECK (((line_total >= (0)::numeric) AND (line_total = (line_subtotal - discount_amount)))),
     CONSTRAINT sale_items_quantity_check CHECK ((quantity > (0)::numeric)),
-    CONSTRAINT sale_items_tax_rate_snapshot_check CHECK (((tax_rate_snapshot >= (0)::numeric) AND (tax_rate_snapshot <= (100)::numeric)))
+    CONSTRAINT sale_items_unit_price_snapshot_check CHECK ((unit_price_snapshot >= (0)::numeric))
 );
 
 
@@ -337,29 +305,30 @@ CREATE TABLE public.sale_items (
 
 CREATE TABLE public.sales (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    sale_number bigint NOT NULL,
     organization_id uuid NOT NULL,
     store_id uuid NOT NULL,
-    session_id uuid,
+    sale_number bigint,
     customer_id uuid,
     user_id uuid NOT NULL,
-    status public.sale_status DEFAULT 'draft'::public.sale_status NOT NULL,
-    subtotal numeric(12,2) DEFAULT 0.00 NOT NULL,
-    tax_total numeric(12,2) DEFAULT 0.00 NOT NULL,
-    discount_total numeric(12,2) DEFAULT 0.00 NOT NULL,
-    grand_total numeric(12,2) DEFAULT 0.00 NOT NULL,
-    payment_status public.payment_status DEFAULT 'pending'::public.payment_status NOT NULL,
+    status public.sale_status_enum DEFAULT 'draft'::public.sale_status_enum NOT NULL,
+    payment_status public.payment_status_enum DEFAULT 'pending'::public.payment_status_enum NOT NULL,
+    subtotal numeric(12,2) DEFAULT 0 NOT NULL,
+    discount_total numeric(12,2) DEFAULT 0 NOT NULL,
+    grand_total numeric(12,2) DEFAULT 0 NOT NULL,
+    notes text,
+    committed_at timestamp with time zone,
     voided_at timestamp with time zone,
     void_reason text,
-    cancelled_by uuid,
-    sync_id uuid DEFAULT gen_random_uuid(),
-    sync_version integer DEFAULT 1,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT sales_discount_total_check CHECK ((discount_total >= (0)::numeric)),
-    CONSTRAINT sales_grand_total_check CHECK ((grand_total >= (0)::numeric)),
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sales_discount_total_check CHECK (((discount_total >= (0)::numeric) AND (discount_total <= subtotal))),
+    CONSTRAINT sales_draft_commit_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (committed_at IS NULL) AND (payment_status = 'pending'::public.payment_status_enum)) OR ((status <> 'draft'::public.sale_status_enum) AND (committed_at IS NOT NULL)))),
+    CONSTRAINT sales_draft_sale_number_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL)))),
+    CONSTRAINT sales_grand_total_check CHECK (((grand_total >= (0)::numeric) AND (grand_total = (subtotal - discount_total)))),
+    CONSTRAINT sales_receivable_customer_check CHECK (((status = 'draft'::public.sale_status_enum) OR (payment_status = 'paid'::public.payment_status_enum) OR (customer_id IS NOT NULL))),
     CONSTRAINT sales_subtotal_check CHECK ((subtotal >= (0)::numeric)),
-    CONSTRAINT sales_tax_total_check CHECK ((tax_total >= (0)::numeric))
+    CONSTRAINT sales_void_metadata_check CHECK (((status <> 'voided'::public.sale_status_enum) OR ((payment_status = 'pending'::public.payment_status_enum) AND (voided_at IS NOT NULL) AND (void_reason IS NOT NULL)))),
+    CONSTRAINT sales_walk_in_payment_check CHECK (((status = 'draft'::public.sale_status_enum) OR (customer_id IS NOT NULL) OR (payment_status = 'paid'::public.payment_status_enum)))
 );
 
 
@@ -373,13 +342,34 @@ CREATE TABLE public.schema_migrations (
 
 
 --
--- Name: store_counters; Type: TABLE; Schema: public; Owner: -
+-- Name: store_devices; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.store_counters (
+CREATE TABLE public.store_devices (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
     store_id uuid NOT NULL,
-    sale_counter bigint DEFAULT 0 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now()
+    organization_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    device_secret_encrypted character varying(255) CONSTRAINT store_devices_device_secret_hash_not_null NOT NULL,
+    status public.store_device_status_enum DEFAULT 'active'::public.store_device_status_enum NOT NULL,
+    last_seen_at timestamp with time zone,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: store_sale_counters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.store_sale_counters (
+    store_id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    next_sale_number bigint DEFAULT 1 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT store_sale_counters_next_sale_number_check CHECK ((next_sale_number > 0))
 );
 
 
@@ -392,20 +382,10 @@ CREATE TABLE public.stores (
     organization_id uuid NOT NULL,
     name character varying(255) NOT NULL,
     address text,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: user_stores; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.user_stores (
-    user_id uuid NOT NULL,
-    store_id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    created_at timestamp with time zone DEFAULT now()
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -415,33 +395,32 @@ CREATE TABLE public.user_stores (
 
 CREATE TABLE public.users (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    organization_id uuid NOT NULL,
-    store_id uuid,
-    role public.user_role DEFAULT 'cashier'::public.user_role NOT NULL,
-    name character varying(255) NOT NULL,
+    salutation public.salutation_enum NOT NULL,
+    first_name character varying(255) NOT NULL,
+    last_name character varying(255) NOT NULL,
+    phone character varying(20) NOT NULL,
     email character varying(255),
-    phone character varying(20),
     pin_hash character varying(255),
     password_hash character varying(255),
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
 --
--- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: categories categories_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.audit_logs
-    ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.categories
+    ADD CONSTRAINT categories_id_organization_id_key UNIQUE (id, organization_id);
 
 
 --
--- Name: cash_register_sessions cash_register_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: categories categories_organization_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.cash_register_sessions
-    ADD CONSTRAINT cash_register_sessions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.categories
+    ADD CONSTRAINT categories_organization_id_name_key UNIQUE (organization_id, name);
 
 
 --
@@ -461,6 +440,14 @@ ALTER TABLE ONLY public.customer_ledger
 
 
 --
+-- Name: customers customers_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_id_organization_id_key UNIQUE (id, organization_id);
+
+
+--
 -- Name: customers customers_organization_id_phone_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -469,27 +456,11 @@ ALTER TABLE ONLY public.customers
 
 
 --
--- Name: customers customers_organization_id_sync_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.customers
-    ADD CONSTRAINT customers_organization_id_sync_id_key UNIQUE (organization_id, sync_id);
-
-
---
 -- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customers
     ADD CONSTRAINT customers_pkey PRIMARY KEY (id);
-
-
---
--- Name: inventory_transactions inventory_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.inventory_transactions
-    ADD CONSTRAINT inventory_transactions_pkey PRIMARY KEY (id);
 
 
 --
@@ -509,27 +480,19 @@ ALTER TABLE ONLY public.payments
 
 
 --
--- Name: products products_organization_id_barcode_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: products products_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.products
-    ADD CONSTRAINT products_organization_id_barcode_key UNIQUE (organization_id, barcode);
+    ADD CONSTRAINT products_id_organization_id_key UNIQUE (id, organization_id);
 
 
 --
--- Name: products products_organization_id_sku_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.products
-    ADD CONSTRAINT products_organization_id_sku_key UNIQUE (organization_id, sku);
-
-
---
--- Name: products products_organization_id_sync_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: products products_organization_id_category_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.products
-    ADD CONSTRAINT products_organization_id_sync_id_key UNIQUE (organization_id, sync_id);
+    ADD CONSTRAINT products_organization_id_category_id_name_key UNIQUE (organization_id, category_id, name);
 
 
 --
@@ -549,11 +512,11 @@ ALTER TABLE ONLY public.sale_items
 
 
 --
--- Name: sales sales_organization_id_sync_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: sales sales_id_organization_id_store_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.sales
-    ADD CONSTRAINT sales_organization_id_sync_id_key UNIQUE (organization_id, sync_id);
+    ADD CONSTRAINT sales_id_organization_id_store_id_key UNIQUE (id, organization_id, store_id);
 
 
 --
@@ -581,11 +544,27 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
--- Name: store_counters store_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: store_devices store_devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.store_counters
-    ADD CONSTRAINT store_counters_pkey PRIMARY KEY (store_id);
+ALTER TABLE ONLY public.store_devices
+    ADD CONSTRAINT store_devices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: store_devices store_devices_store_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_devices
+    ADD CONSTRAINT store_devices_store_id_name_key UNIQUE (store_id, name);
+
+
+--
+-- Name: store_sale_counters store_sale_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_sale_counters
+    ADD CONSTRAINT store_sale_counters_pkey PRIMARY KEY (store_id);
 
 
 --
@@ -597,6 +576,14 @@ ALTER TABLE ONLY public.stores
 
 
 --
+-- Name: stores stores_organization_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stores
+    ADD CONSTRAINT stores_organization_id_name_key UNIQUE (organization_id, name);
+
+
+--
 -- Name: stores stores_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -605,27 +592,11 @@ ALTER TABLE ONLY public.stores
 
 
 --
--- Name: user_stores user_stores_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.user_stores
-    ADD CONSTRAINT user_stores_pkey PRIMARY KEY (user_id, store_id);
-
-
---
--- Name: users users_organization_id_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: users users_phone_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_organization_id_email_key UNIQUE (organization_id, email);
-
-
---
--- Name: users users_organization_id_phone_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_organization_id_phone_key UNIQUE (organization_id, phone);
+    ADD CONSTRAINT users_phone_key UNIQUE (phone);
 
 
 --
@@ -637,66 +608,45 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: idx_audit_logs_created; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_categories_organization_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_audit_logs_created ON public.audit_logs USING btree (organization_id, created_at);
-
-
---
--- Name: idx_audit_logs_org_entity; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_audit_logs_org_entity ON public.audit_logs USING btree (organization_id, entity_type, entity_id);
+CREATE INDEX idx_categories_organization_id ON public.categories USING btree (organization_id);
 
 
 --
--- Name: idx_customers_org_phone; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_categories_organization_status; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_customers_org_phone ON public.customers USING btree (organization_id, phone);
-
-
---
--- Name: idx_customers_updated_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_customers_updated_at ON public.customers USING btree (updated_at);
+CREATE INDEX idx_categories_organization_status ON public.categories USING btree (organization_id, status);
 
 
 --
--- Name: idx_inventory_txn_org_store_created; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_customer_ledger_customer_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_inventory_txn_org_store_created ON public.inventory_transactions USING btree (organization_id, store_id, created_at);
-
-
---
--- Name: idx_inventory_txn_product; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_inventory_txn_product ON public.inventory_transactions USING btree (product_id);
+CREATE INDEX idx_customer_ledger_customer_created_at ON public.customer_ledger USING btree (customer_id, created_at DESC);
 
 
 --
--- Name: idx_inventory_txn_product_store; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_customers_organization_active; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_inventory_txn_product_store ON public.inventory_transactions USING btree (product_id, store_id);
-
-
---
--- Name: idx_ledger_customer_created; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_ledger_customer_created ON public.customer_ledger USING btree (customer_id, created_at DESC);
+CREATE INDEX idx_customers_organization_active ON public.customers USING btree (organization_id, is_active);
 
 
 --
--- Name: idx_payments_org_store_created; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_customers_organization_phone; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_payments_org_store_created ON public.payments USING btree (organization_id, store_id, created_at);
+CREATE INDEX idx_customers_organization_phone ON public.customers USING btree (organization_id, phone);
+
+
+--
+-- Name: idx_payments_organization_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payments_organization_created_at ON public.payments USING btree (organization_id, created_at);
 
 
 --
@@ -707,45 +657,31 @@ CREATE INDEX idx_payments_sale_id ON public.payments USING btree (sale_id);
 
 
 --
--- Name: idx_payments_updated_at; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_products_category_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_payments_updated_at ON public.payments USING btree (updated_at);
-
-
---
--- Name: idx_products_org_barcode; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_products_org_barcode ON public.products USING btree (organization_id, barcode);
+CREATE INDEX idx_products_category_id ON public.products USING btree (category_id);
 
 
 --
--- Name: idx_products_store_active; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_products_organization_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_products_store_active ON public.products USING btree (store_id, is_active);
-
-
---
--- Name: idx_products_store_created; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_products_store_created ON public.products USING btree (store_id, created_at);
+CREATE INDEX idx_products_organization_id ON public.products USING btree (organization_id);
 
 
 --
--- Name: idx_products_updated_at; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_products_organization_status; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_products_updated_at ON public.products USING btree (updated_at);
+CREATE INDEX idx_products_organization_status ON public.products USING btree (organization_id, status);
 
 
 --
--- Name: idx_sale_items_org_store; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_sale_items_product_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_sale_items_org_store ON public.sale_items USING btree (organization_id, store_id);
+CREATE INDEX idx_sale_items_product_id ON public.sale_items USING btree (product_id);
 
 
 --
@@ -756,101 +692,67 @@ CREATE INDEX idx_sale_items_sale_id ON public.sale_items USING btree (sale_id);
 
 
 --
--- Name: idx_sales_customer; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_sales_customer_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_sales_customer ON public.sales USING btree (customer_id);
-
-
---
--- Name: idx_sales_number; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sales_number ON public.sales USING btree (store_id, sale_number);
+CREATE INDEX idx_sales_customer_id ON public.sales USING btree (customer_id);
 
 
 --
--- Name: idx_sales_org_created; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_sales_organization_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_sales_org_created ON public.sales USING btree (organization_id, created_at);
-
-
---
--- Name: idx_sales_store_session; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sales_store_session ON public.sales USING btree (store_id, session_id);
+CREATE INDEX idx_sales_organization_created_at ON public.sales USING btree (organization_id, created_at);
 
 
 --
--- Name: idx_sales_updated_at; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_sales_status; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_sales_updated_at ON public.sales USING btree (updated_at);
-
-
---
--- Name: idx_sessions_store_opened; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_store_opened ON public.cash_register_sessions USING btree (store_id, opened_at);
+CREATE INDEX idx_sales_status ON public.sales USING btree (organization_id, status, payment_status);
 
 
 --
--- Name: sales prevent_sales_delete; Type: RULE; Schema: public; Owner: -
+-- Name: idx_sales_store_sale_number; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE RULE prevent_sales_delete AS
-    ON DELETE TO public.sales DO INSTEAD NOTHING;
-
-
---
--- Name: audit_logs audit_logs_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.audit_logs
-    ADD CONSTRAINT audit_logs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+CREATE INDEX idx_sales_store_sale_number ON public.sales USING btree (store_id, sale_number);
 
 
 --
--- Name: audit_logs audit_logs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: idx_store_devices_store_id; Type: INDEX; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.audit_logs
-    ADD CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
-
-
---
--- Name: cash_register_sessions cash_register_sessions_closed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.cash_register_sessions
-    ADD CONSTRAINT cash_register_sessions_closed_by_fkey FOREIGN KEY (closed_by) REFERENCES public.users(id);
+CREATE INDEX idx_store_devices_store_id ON public.store_devices USING btree (store_id);
 
 
 --
--- Name: cash_register_sessions cash_register_sessions_opened_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: idx_stores_organization_id; Type: INDEX; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.cash_register_sessions
-    ADD CONSTRAINT cash_register_sessions_opened_by_fkey FOREIGN KEY (opened_by) REFERENCES public.users(id);
-
-
---
--- Name: cash_register_sessions cash_register_sessions_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.cash_register_sessions
-    ADD CONSTRAINT cash_register_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+CREATE INDEX idx_stores_organization_id ON public.stores USING btree (organization_id);
 
 
 --
--- Name: cash_register_sessions cash_register_sessions_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: payments trg_payments_require_completed_sale; Type: TRIGGER; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.cash_register_sessions
-    ADD CONSTRAINT cash_register_sessions_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+CREATE TRIGGER trg_payments_require_completed_sale BEFORE INSERT OR UPDATE ON public.payments FOR EACH ROW EXECUTE FUNCTION public.ensure_payment_sale_is_completed();
+
+
+--
+-- Name: sales trg_sales_prevent_void_with_payments; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_sales_prevent_void_with_payments BEFORE UPDATE ON public.sales FOR EACH ROW EXECUTE FUNCTION public.prevent_voided_sale_with_payments();
+
+
+--
+-- Name: categories categories_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.categories
+    ADD CONSTRAINT categories_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
@@ -862,11 +764,19 @@ ALTER TABLE ONLY public.categories
 
 
 --
--- Name: customer_ledger customer_ledger_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: categories categories_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.categories
+    ADD CONSTRAINT categories_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: customer_ledger customer_ledger_customer_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_ledger
-    ADD CONSTRAINT customer_ledger_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+    ADD CONSTRAINT customer_ledger_customer_id_organization_id_fkey FOREIGN KEY (customer_id, organization_id) REFERENCES public.customers(id, organization_id) ON DELETE CASCADE;
 
 
 --
@@ -878,6 +788,30 @@ ALTER TABLE ONLY public.customer_ledger
 
 
 --
+-- Name: customer_ledger customer_ledger_payment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_ledger
+    ADD CONSTRAINT customer_ledger_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.payments(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: customer_ledger customer_ledger_sale_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_ledger
+    ADD CONSTRAINT customer_ledger_sale_id_fkey FOREIGN KEY (sale_id) REFERENCES public.sales(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: customers customers_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
 -- Name: customers customers_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -886,35 +820,35 @@ ALTER TABLE ONLY public.customers
 
 
 --
--- Name: inventory_transactions inventory_transactions_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: customers customers_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.inventory_transactions
-    ADD CONSTRAINT inventory_transactions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: inventory_transactions inventory_transactions_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.inventory_transactions
-    ADD CONSTRAINT inventory_transactions_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
--- Name: inventory_transactions inventory_transactions_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: organizations organizations_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.inventory_transactions
-    ADD CONSTRAINT inventory_transactions_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.organizations
+    ADD CONSTRAINT organizations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
--- Name: inventory_transactions inventory_transactions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: organizations organizations_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.inventory_transactions
-    ADD CONSTRAINT inventory_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+ALTER TABLE ONLY public.organizations
+    ADD CONSTRAINT organizations_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: payments payments_collected_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_collected_by_fkey FOREIGN KEY (collected_by) REFERENCES public.users(id);
 
 
 --
@@ -926,19 +860,11 @@ ALTER TABLE ONLY public.payments
 
 
 --
--- Name: payments payments_sale_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: payments payments_sale_id_organization_id_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payments
-    ADD CONSTRAINT payments_sale_id_fkey FOREIGN KEY (sale_id) REFERENCES public.sales(id) ON DELETE RESTRICT;
-
-
---
--- Name: payments payments_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.payments
-    ADD CONSTRAINT payments_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.cash_register_sessions(id);
+    ADD CONSTRAINT payments_sale_id_organization_id_store_id_fkey FOREIGN KEY (sale_id, organization_id, store_id) REFERENCES public.sales(id, organization_id, store_id) ON DELETE RESTRICT;
 
 
 --
@@ -950,11 +876,19 @@ ALTER TABLE ONLY public.payments
 
 
 --
--- Name: products products_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: products products_category_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.products
-    ADD CONSTRAINT products_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id) ON DELETE SET NULL;
+    ADD CONSTRAINT products_category_id_organization_id_fkey FOREIGN KEY (category_id, organization_id) REFERENCES public.categories(id, organization_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: products products_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
@@ -966,11 +900,11 @@ ALTER TABLE ONLY public.products
 
 
 --
--- Name: products products_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: products products_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.products
-    ADD CONSTRAINT products_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+    ADD CONSTRAINT products_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -982,19 +916,19 @@ ALTER TABLE ONLY public.sale_items
 
 
 --
--- Name: sale_items sale_items_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: sale_items sale_items_product_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.sale_items
-    ADD CONSTRAINT sale_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE SET NULL;
+    ADD CONSTRAINT sale_items_product_id_organization_id_fkey FOREIGN KEY (product_id, organization_id) REFERENCES public.products(id, organization_id) ON DELETE RESTRICT;
 
 
 --
--- Name: sale_items sale_items_sale_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: sale_items sale_items_sale_id_organization_id_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.sale_items
-    ADD CONSTRAINT sale_items_sale_id_fkey FOREIGN KEY (sale_id) REFERENCES public.sales(id) ON DELETE CASCADE;
+    ADD CONSTRAINT sale_items_sale_id_organization_id_store_id_fkey FOREIGN KEY (sale_id, organization_id, store_id) REFERENCES public.sales(id, organization_id, store_id) ON DELETE CASCADE;
 
 
 --
@@ -1006,19 +940,11 @@ ALTER TABLE ONLY public.sale_items
 
 
 --
--- Name: sales sales_cancelled_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: sales sales_customer_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.sales
-    ADD CONSTRAINT sales_cancelled_by_fkey FOREIGN KEY (cancelled_by) REFERENCES public.users(id);
-
-
---
--- Name: sales sales_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sales
-    ADD CONSTRAINT sales_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+    ADD CONSTRAINT sales_customer_id_organization_id_fkey FOREIGN KEY (customer_id, organization_id) REFERENCES public.customers(id, organization_id) ON DELETE RESTRICT;
 
 
 --
@@ -1027,14 +953,6 @@ ALTER TABLE ONLY public.sales
 
 ALTER TABLE ONLY public.sales
     ADD CONSTRAINT sales_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: sales sales_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sales
-    ADD CONSTRAINT sales_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.cash_register_sessions(id);
 
 
 --
@@ -1054,11 +972,43 @@ ALTER TABLE ONLY public.sales
 
 
 --
--- Name: store_counters store_counters_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: store_devices store_devices_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.store_counters
-    ADD CONSTRAINT store_counters_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.store_devices
+    ADD CONSTRAINT store_devices_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: store_devices store_devices_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_devices
+    ADD CONSTRAINT store_devices_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: store_devices store_devices_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_devices
+    ADD CONSTRAINT store_devices_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: store_sale_counters store_sale_counters_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_sale_counters
+    ADD CONSTRAINT store_sale_counters_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: stores stores_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stores
+    ADD CONSTRAINT stores_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
@@ -1070,56 +1020,18 @@ ALTER TABLE ONLY public.stores
 
 
 --
--- Name: user_stores user_stores_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: stores stores_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.user_stores
-    ADD CONSTRAINT user_stores_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: user_stores user_stores_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.user_stores
-    ADD CONSTRAINT user_stores_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id) ON DELETE CASCADE;
-
-
---
--- Name: user_stores user_stores_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.user_stores
-    ADD CONSTRAINT user_stores_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id);
-
-
---
--- Name: user_stores user_stores_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.user_stores
-    ADD CONSTRAINT user_stores_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-
---
--- Name: users users_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: users users_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.stores
+    ADD CONSTRAINT stores_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
 -- PostgreSQL database dump complete
 --
+
+\unrestrict dbmate
 
 
 --
@@ -1127,4 +1039,8 @@ ALTER TABLE ONLY public.users
 --
 
 INSERT INTO public.schema_migrations (version) VALUES
-    ('20260301111014');
+    ('20260301111014'),
+    ('20260625143000'),
+    ('20260625150000'),
+    ('20260626120000'),
+    ('20260626123000');
