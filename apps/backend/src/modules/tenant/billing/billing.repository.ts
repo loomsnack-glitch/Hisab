@@ -57,6 +57,8 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
         discountTotal: Number(summary.discountTotal ?? 0),
         grandTotal: Number(summary.grandTotal ?? 0),
         itemCount: Number(summary.itemCount ?? 0),
+        itemsSummary: (summary.itemsSummary as string | undefined | null) ?? null,
+        paymentMethods: (summary.paymentMethods as string | undefined | null) ?? null,
         customer,
     };
 };
@@ -227,6 +229,8 @@ export const getSalesByStore = async (
         SELECT
             s.*,
             COALESCE(item_stats.item_count, 0) AS item_count,
+            COALESCE(item_stats.items_summary, '') AS items_summary,
+            COALESCE(payment_stats.payment_methods, '') AS payment_methods,
             COALESCE(payment_stats.paid_total, 0) AS paid_total,
             GREATEST(s.grand_total - COALESCE(payment_stats.paid_total, 0), 0) AS due_total,
             c.name AS customer_name,
@@ -237,13 +241,19 @@ export const getSalesByStore = async (
         LEFT JOIN customers c
             ON c.id = s.customer_id
         LEFT JOIN (
-            SELECT sale_id, COUNT(*)::int AS item_count
+            SELECT 
+                sale_id, 
+                COUNT(*)::int AS item_count,
+                STRING_AGG(product_name_snapshot, ', ') AS items_summary
             FROM sale_items
             GROUP BY sale_id
         ) item_stats
             ON item_stats.sale_id = s.id
         LEFT JOIN (
-            SELECT sale_id, COALESCE(SUM(amount), 0) AS paid_total
+            SELECT 
+                sale_id, 
+                COALESCE(SUM(amount), 0) AS paid_total,
+                STRING_AGG(DISTINCT method::text, ', ') AS payment_methods
             FROM payments
             GROUP BY sale_id
         ) payment_stats
@@ -277,6 +287,8 @@ export const getSaleById = async (
         SELECT
             s.*,
             COALESCE(item_stats.item_count, 0) AS item_count,
+            COALESCE(item_stats.items_summary, '') AS items_summary,
+            COALESCE(payment_stats.payment_methods, '') AS payment_methods,
             COALESCE(payment_stats.paid_total, 0) AS paid_total,
             GREATEST(s.grand_total - COALESCE(payment_stats.paid_total, 0), 0) AS due_total,
             c.name AS customer_name,
@@ -287,13 +299,19 @@ export const getSaleById = async (
         LEFT JOIN customers c
             ON c.id = s.customer_id
         LEFT JOIN (
-            SELECT sale_id, COUNT(*)::int AS item_count
+            SELECT 
+                sale_id, 
+                COUNT(*)::int AS item_count,
+                STRING_AGG(product_name_snapshot, ', ') AS items_summary
             FROM sale_items
             GROUP BY sale_id
         ) item_stats
             ON item_stats.sale_id = s.id
         LEFT JOIN (
-            SELECT sale_id, COALESCE(SUM(amount), 0) AS paid_total
+            SELECT 
+                sale_id, 
+                COALESCE(SUM(amount), 0) AS paid_total,
+                STRING_AGG(DISTINCT method::text, ', ') AS payment_methods
             FROM payments
             GROUP BY sale_id
         ) payment_stats

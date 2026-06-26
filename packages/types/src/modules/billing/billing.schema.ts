@@ -132,6 +132,8 @@ export const SaleSummaryDTOSchema = z.object({
     createdAt: dtoDateSchema,
     updatedAt: dtoDateSchema,
     itemCount: z.number().int().min(0),
+    itemsSummary: z.string().nullable().optional(),
+    paymentMethods: z.string().nullable().optional(),
     customer: CustomerSummaryDTOSchema.nullable(),
 });
 

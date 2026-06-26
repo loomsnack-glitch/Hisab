@@ -31,10 +31,15 @@ import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
+    ArrowUpDown,
     Banknote,
+    Calendar,
     CircleDollarSign,
     CreditCard,
+    Filter,
+    Grid,
     LayoutGrid,
+    List,
     Minus,
     Plus,
     Receipt,
@@ -180,6 +185,11 @@ const BillingPage = () => {
     const [historyFilter, setHistoryFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
     const [leftPanelTab, setLeftPanelTab] = useState<"products" | "bills">("products");
 
+    const [sortBy, setSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
+    const [viewLayout, setViewLayout] = useState<"large" | "small" | "list">("large");
+    const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "cash" | "upi" | "card">("all");
+    const [dateFilter, setDateFilter] = useState<"all" | "today" | "yesterday" | "this-week">("all");
+
     const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
     const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
@@ -267,30 +277,67 @@ const BillingPage = () => {
             || (customer.phone ?? "").toLowerCase().includes(deferredCustomerSearch);
     }).slice(0, 6);
 
-    const filteredSales = sales.filter((sale) => {
-        const matchesHistoryFilter = (() => {
-            switch (historyFilter) {
-                case "draft":
-                    return sale.status === "draft";
-                case "open":
-                    return sale.status === "completed" && sale.paymentStatus !== "paid";
-                case "paid":
-                    return sale.paymentStatus === "paid";
-                case "voided":
-                    return sale.status === "voided";
-                default:
-                    return true;
+    const filteredSales = sales
+        .filter((sale) => {
+            const matchesHistoryFilter = (() => {
+                switch (historyFilter) {
+                    case "draft":
+                        return sale.status === "draft";
+                    case "open":
+                        return sale.status === "completed" && sale.paymentStatus !== "paid";
+                    case "paid":
+                        return sale.paymentStatus === "paid";
+                    case "voided":
+                        return sale.status === "voided";
+                    default:
+                        return true;
+                }
+            })();
+
+            const customerName = sale.customer?.name?.toLowerCase() ?? "";
+            const saleNumberText = sale.saleNumber ? String(sale.saleNumber) : "";
+            const matchesSearch = !deferredSalesSearch
+                || customerName.includes(deferredSalesSearch)
+                || saleNumberText.includes(deferredSalesSearch);
+
+            const matchesPaymentMethod = (() => {
+                if (paymentMethodFilter === "all") return true;
+                return (sale.paymentMethods ?? "").toLowerCase().includes(paymentMethodFilter);
+            })();
+
+            const matchesDate = (() => {
+                if (dateFilter === "all") return true;
+                const created = new Date(sale.createdAt);
+                const now = new Date();
+                const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const startOfYesterday = new Date(startOfToday);
+                startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+                const startOfThisWeek = new Date(startOfToday);
+                startOfThisWeek.setDate(startOfThisWeek.getDate() - 7);
+
+                if (dateFilter === "today") return created >= startOfToday;
+                if (dateFilter === "yesterday") return created >= startOfYesterday && created < startOfToday;
+                if (dateFilter === "this-week") return created >= startOfThisWeek;
+                return true;
+            })();
+
+            return matchesHistoryFilter && matchesSearch && matchesPaymentMethod && matchesDate;
+        })
+        .sort((a, b) => {
+            if (sortBy === "newest") {
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             }
-        })();
-
-        const customerName = sale.customer?.name?.toLowerCase() ?? "";
-        const saleNumberText = sale.saleNumber ? String(sale.saleNumber) : "";
-        const matchesSearch = !deferredSalesSearch
-            || customerName.includes(deferredSalesSearch)
-            || saleNumberText.includes(deferredSalesSearch);
-
-        return matchesHistoryFilter && matchesSearch;
-    });
+            if (sortBy === "oldest") {
+                return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            }
+            if (sortBy === "highest") {
+                return b.grandTotal - a.grandTotal;
+            }
+            if (sortBy === "lowest") {
+                return a.grandTotal - b.grandTotal;
+            }
+            return 0;
+        });
 
     const subtotal = items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
     const discountTotal = items.reduce((total, item) => total + item.unitDiscount * item.quantity, 0);
@@ -773,34 +820,140 @@ const BillingPage = () => {
                         </>
                     ) : (
                         <>
-                            {/* Recent Bills Shelf Search */}
-                            <div className="relative mb-4">
-                                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    className="h-10 rounded-xl bg-background/80 pl-10 text-sm"
-                                    placeholder="Search bills by number or customer..."
-                                    value={salesSearch}
-                                    onChange={(event) => setSalesSearch(event.target.value)}
-                                />
-                            </div>
+                            {/* Filters & Control Panel */}
+                            <div className="mb-6 space-y-4">
+                                {/* First Row: Search, Sort, View, Count */}
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    {/* Search input */}
+                                    <div className="relative flex-1 max-w-md">
+                                        <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                                        <Input
+                                            className="h-10 rounded-xl bg-background/80 pl-10 text-sm"
+                                            placeholder="Search by ID or customer..."
+                                            value={salesSearch}
+                                            onChange={(event) => setSalesSearch(event.target.value)}
+                                        />
+                                    </div>
 
-                            {/* History Filter Tabs */}
-                            <div className="mb-5 flex flex-wrap gap-2">
-                                {historyTabs.map((tab) => (
-                                    <button
-                                        key={tab.value}
-                                        type="button"
-                                        onClick={() => setHistoryFilter(tab.value)}
-                                        className={cn(
-                                            "rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
-                                            historyFilter === tab.value
-                                                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                        )}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
+                                    {/* Sort Controls */}
+                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground text-xs font-semibold uppercase tracking-wider mr-1">
+                                            <ArrowUpDown className="size-3.5" />
+                                        </div>
+                                        {[
+                                            { value: "newest", label: "Newest" },
+                                            { value: "oldest", label: "Oldest" },
+                                            { value: "highest", label: "Highest \u20B9" },
+                                            { value: "lowest", label: "Lowest \u20B9" },
+                                        ].map((opt) => (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => setSortBy(opt.value as any)}
+                                                className={cn(
+                                                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
+                                                    sortBy === opt.value
+                                                        ? "bg-foreground text-background shadow-md shadow-foreground/5"
+                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                )}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Layout controls & count */}
+                                    <div className="flex items-center gap-3 self-end lg:self-auto shrink-0">
+                                        <div className="flex items-center rounded-xl bg-muted/30 p-1 border border-border/10">
+                                            {[
+                                                { value: "large", label: "Large", icon: LayoutGrid },
+                                                { value: "small", label: "Small", icon: Grid },
+                                                { value: "list", label: "List", icon: List },
+                                            ].map((layout) => {
+                                                const IconComponent = layout.icon;
+                                                return (
+                                                    <button
+                                                        key={layout.value}
+                                                        type="button"
+                                                        onClick={() => setViewLayout(layout.value as any)}
+                                                        className={cn(
+                                                            "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer",
+                                                            viewLayout === layout.value
+                                                                ? "bg-primary text-primary-foreground shadow-sm"
+                                                                : "text-muted-foreground hover:text-foreground"
+                                                        )}
+                                                    >
+                                                        <IconComponent className="size-3.5" />
+                                                        <span>{layout.label}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <span className="text-xs font-medium text-muted-foreground shrink-0">
+                                            {filteredSales.length} {filteredSales.length === 1 ? "order" : "orders"}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Second Row: Filters (Payment & Date) */}
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center border-t border-border/40 pt-4">
+                                    {/* Payment Method Filters */}
+                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
+                                            <Filter className="size-3.5" />
+                                        </div>
+                                        {[
+                                            { value: "all", label: "All" },
+                                            { value: "cash", label: "Cash" },
+                                            { value: "upi", label: "UPI" },
+                                            { value: "card", label: "Card" },
+                                        ].map((opt) => (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => setPaymentMethodFilter(opt.value as any)}
+                                                className={cn(
+                                                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
+                                                    paymentMethodFilter === opt.value
+                                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                )}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Divider for sm and up */}
+                                    <div className="hidden sm:block h-4 w-px bg-border/40 mx-2" />
+
+                                    {/* Date range Filters */}
+                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
+                                            <Calendar className="size-3.5" />
+                                        </div>
+                                        {[
+                                            { value: "all", label: "All" },
+                                            { value: "today", label: "Today" },
+                                            { value: "yesterday", label: "Yesterday" },
+                                            { value: "this-week", label: "This Week" },
+                                        ].map((opt) => (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => setDateFilter(opt.value as any)}
+                                                className={cn(
+                                                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
+                                                    dateFilter === opt.value
+                                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                )}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Bills List */}
@@ -825,72 +978,254 @@ const BillingPage = () => {
                                     </p>
                                 </div>
                             ) : (
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    {filteredSales.map((sale) => (
-                                        <div
-                                            key={sale.id}
-                                            className="flex flex-col justify-between rounded-2xl border border-border/50 bg-card/85 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-                                        >
-                                            <div className="space-y-2">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <p className="font-semibold text-foreground text-sm">
-                                                        {sale.saleNumber ? `Bill #${sale.saleNumber}` : "Draft bill"}
-                                                    </p>
-                                                    <div className="flex flex-wrap gap-1 justify-end">
-                                                        <Badge className={cn("rounded-full border text-[10px] px-2 py-0 leading-none", saleStatusStyles[sale.status])}>
-                                                            {sale.status}
-                                                        </Badge>
-                                                        <Badge className={cn("rounded-full border text-[10px] px-2 py-0 leading-none", paymentStatusStyles[sale.paymentStatus])}>
-                                                            {sale.paymentStatus}
-                                                        </Badge>
-                                                    </div>
+                                <>
+                                    {/* Render payment badges helper function */}
+                                    {(() => {
+                                        const renderPaymentMethodBadges = (sale: any) => {
+                                            if (sale.status === "draft") {
+                                                return (
+                                                    <span className="rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                                        Draft
+                                                    </span>
+                                                );
+                                            }
+                                            const methods = (sale.paymentMethods || "").toLowerCase();
+                                            const badges: React.ReactNode[] = [];
+                                            if (methods.includes("cash")) {
+                                                badges.push(
+                                                    <span key="cash" className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                                        Cash
+                                                    </span>
+                                                );
+                                            }
+                                            if (methods.includes("upi")) {
+                                                badges.push(
+                                                    <span key="upi" className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                                                        UPI
+                                                    </span>
+                                                );
+                                            }
+                                            if (methods.includes("card")) {
+                                                badges.push(
+                                                    <span key="card" className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                                                        Card
+                                                    </span>
+                                                );
+                                            }
+                                            if (badges.length === 0) {
+                                                return (
+                                                    <span className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                                                        Unpaid
+                                                    </span>
+                                                );
+                                            }
+                                            return <div className="flex gap-1">{badges}</div>;
+                                        };
+
+                                        if (viewLayout === "large") {
+                                            return (
+                                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                                    {filteredSales.map((sale) => (
+                                                        <div
+                                                            key={sale.id}
+                                                            className="group flex flex-col justify-between rounded-2xl border border-border/50 bg-card/85 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                                                        >
+                                                            <div>
+                                                                <div className="flex items-center justify-between gap-2 mb-2.5">
+                                                                    <p className="font-bold text-amber-500 dark:text-amber-400 text-sm">
+                                                                        {sale.saleNumber ? `#${sale.saleNumber}` : "Draft Bill"}
+                                                                    </p>
+                                                                    {renderPaymentMethodBadges(sale)}
+                                                                </div>
+                                                                
+                                                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                                    <Calendar className="size-3.5 text-muted-foreground/70" />
+                                                                    <span>{formatDateTime(sale.createdAt)}</span>
+                                                                </div>
+
+                                                                <p className="text-sm font-semibold text-foreground/90 line-clamp-2 mt-3.5 leading-relaxed min-h-[40px]">
+                                                                    {sale.itemsSummary || "No items"}
+                                                                </p>
+
+                                                                <div className="flex items-center justify-between mt-4 pt-3.5 border-t border-border/40">
+                                                                    <span className="text-xs text-muted-foreground truncate max-w-[160px]">
+                                                                        {sale.customer?.name || "Walk-in"} • {sale.itemCount} item{sale.itemCount !== 1 ? "s" : ""}
+                                                                    </span>
+                                                                    <span className="text-lg font-bold text-foreground">
+                                                                        {formatCurrency(sale.grandTotal)}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between mt-5 pt-3 border-t border-border/40">
+                                                                <div className="text-[11px] font-bold text-emerald-500 dark:text-emerald-400">
+                                                                    {sale.grandTotal > 0 ? `+${Math.round(sale.grandTotal / 10)} pts` : ""}
+                                                                </div>
+                                                                <div>
+                                                                    {sale.status === "draft" ? (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            className="rounded-xl text-xs h-8 px-4 bg-primary text-primary-foreground hover:bg-primary/90"
+                                                                            disabled={resumeDraftMutation.isPending}
+                                                                            onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                                                        >
+                                                                            {resumeDraftMutation.isPending ? "Loading..." : "Resume draft"}
+                                                                        </Button>
+                                                                    ) : (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="outline"
+                                                                            className="rounded-xl text-xs h-8 px-4"
+                                                                            onClick={() => {
+                                                                                setSelectedSaleId(sale.id);
+                                                                                setSaleDialogOpen(true);
+                                                                            }}
+                                                                        >
+                                                                            Open details
+                                                                        </Button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground space-y-1">
-                                                    <p className="truncate font-semibold text-foreground/80">{sale.customer?.name || "Walk-in Customer"}</p>
-                                                    <p>{sale.itemCount} items • {formatDateTime(sale.createdAt)}</p>
+                                            );
+                                        }
+
+                                        if (viewLayout === "small") {
+                                            return (
+                                                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                                                    {filteredSales.map((sale) => (
+                                                        <div
+                                                            key={sale.id}
+                                                            className="flex flex-col justify-between rounded-xl border border-border/40 bg-card/75 p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
+                                                        >
+                                                            <div className="space-y-2">
+                                                                <div className="flex items-center justify-between gap-1">
+                                                                    <p className="font-bold text-amber-500 dark:text-amber-400 text-xs">
+                                                                        {sale.saleNumber ? `#${sale.saleNumber}` : "Draft"}
+                                                                    </p>
+                                                                    {renderPaymentMethodBadges(sale)}
+                                                                </div>
+                                                                
+                                                                <div className="text-[10px] text-muted-foreground truncate">
+                                                                    {formatDateTime(sale.createdAt)}
+                                                                </div>
+
+                                                                <div className="flex items-center justify-between border-t border-border/30 pt-2">
+                                                                    <span className="text-[11px] text-muted-foreground truncate max-w-[90px]">
+                                                                        {sale.customer?.name || "Walk-in"}
+                                                                    </span>
+                                                                    <span className="text-sm font-bold text-foreground">
+                                                                        {formatCurrency(sale.grandTotal)}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="mt-3.5">
+                                                                {sale.status === "draft" ? (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        className="w-full rounded-lg text-[11px] h-7 bg-primary text-primary-foreground hover:bg-primary/90"
+                                                                        disabled={resumeDraftMutation.isPending}
+                                                                        onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                                                    >
+                                                                        Resume
+                                                                    </Button>
+                                                                ) : (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="w-full rounded-lg text-[11px] h-7"
+                                                                        onClick={() => {
+                                                                            setSelectedSaleId(sale.id);
+                                                                            setSaleDialogOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        Details
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                <div className="flex justify-between border-t border-border/40 pt-2 text-[11px] gap-2">
-                                                    <div>
-                                                        <span className="text-muted-foreground block text-[9px] uppercase">Total</span>
-                                                        <p className="font-bold text-foreground">{formatCurrency(sale.grandTotal)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-muted-foreground block text-[9px] uppercase">Collected</span>
-                                                        <p className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(sale.paidTotal)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-muted-foreground block text-[9px] uppercase">Due</span>
-                                                        <p className="font-bold text-foreground">{formatCurrency(sale.dueTotal)}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="mt-4 pt-2 border-t border-border/40 flex justify-end gap-2">
-                                                {sale.status === "draft" ? (
-                                                    <Button
-                                                        size="sm"
-                                                        className="w-full rounded-xl text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90"
-                                                        disabled={resumeDraftMutation.isPending}
-                                                        onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                            );
+                                        }
+
+                                        // list view
+                                        return (
+                                            <div className="flex flex-col gap-2">
+                                                {filteredSales.map((sale) => (
+                                                    <div
+                                                        key={sale.id}
+                                                        className="flex items-center justify-between border border-border/40 bg-card/70 px-4 py-3 rounded-xl transition-all hover:bg-card/90 hover:border-primary/20 hover:shadow-xs"
                                                     >
-                                                        {resumeDraftMutation.isPending ? "Loading..." : "Resume draft"}
-                                                    </Button>
-                                                ) : (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="w-full rounded-xl text-xs h-8"
-                                                        onClick={() => {
-                                                            setSelectedSaleId(sale.id);
-                                                            setSaleDialogOpen(true);
-                                                        }}
-                                                    >
-                                                        Open details
-                                                    </Button>
-                                                )}
+                                                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                            <div className="w-14 shrink-0">
+                                                                <p className="font-bold text-amber-500 dark:text-amber-400 text-sm">
+                                                                    {sale.saleNumber ? `#${sale.saleNumber}` : "Draft"}
+                                                                </p>
+                                                            </div>
+                                                            
+                                                            <div className="w-32 shrink-0 hidden md:block text-xs text-muted-foreground">
+                                                                {formatDateTime(sale.createdAt)}
+                                                            </div>
+
+                                                            <div className="min-w-0 flex-1 pr-4">
+                                                                <p className="text-xs font-semibold text-foreground/80 truncate">
+                                                                    {sale.customer?.name || "Walk-in"} • {sale.itemCount} item{sale.itemCount !== 1 ? "s" : ""}
+                                                                </p>
+                                                                <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                                                    {sale.itemsSummary || "No items"}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-4 shrink-0">
+                                                            <div className="hidden sm:block">
+                                                                {renderPaymentMethodBadges(sale)}
+                                                            </div>
+
+                                                            <div className="w-20 text-right">
+                                                                <p className="text-sm font-bold text-foreground">
+                                                                    {formatCurrency(sale.grandTotal)}
+                                                                </p>
+                                                                <p className="text-[9px] font-bold text-emerald-500 dark:text-emerald-400 mt-0.5">
+                                                                    {sale.grandTotal > 0 ? `+${Math.round(sale.grandTotal / 10)} pts` : ""}
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="w-24 text-right">
+                                                                {sale.status === "draft" ? (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        className="rounded-lg text-[11px] h-7 px-2.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                                                                        disabled={resumeDraftMutation.isPending}
+                                                                        onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                                                    >
+                                                                        Resume
+                                                                    </Button>
+                                                                ) : (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="rounded-lg text-[11px] h-7 px-2.5"
+                                                                        onClick={() => {
+                                                                            setSelectedSaleId(sale.id);
+                                                                            setSaleDialogOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        Open Details
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        );
+                                    })()}
+                                </>
                             )}
                         </>
                     )}
