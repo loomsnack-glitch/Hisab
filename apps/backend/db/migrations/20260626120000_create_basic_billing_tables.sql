@@ -73,7 +73,8 @@ CREATE TABLE sales (
         OR customer_id IS NOT NULL
     ),
     CONSTRAINT sales_walk_in_payment_check CHECK (
-        customer_id IS NOT NULL
+        status = 'draft'
+        OR customer_id IS NOT NULL
         OR payment_status = 'paid'
     ),
     CONSTRAINT sales_void_metadata_check CHECK (

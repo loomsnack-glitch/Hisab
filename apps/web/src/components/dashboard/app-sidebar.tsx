@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
     Bell,
@@ -8,6 +8,7 @@ import {
     ChevronRight,
     HelpCircle,
     LayoutDashboard,
+    ReceiptText,
     Settings2,
 } from "lucide-react";
 import logo from "@repo/assets/logo.png";
@@ -19,13 +20,6 @@ import { cn } from "@repo/ui/lib/utils";
 import { organizationKeys } from "@/lib/query-keys";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
-
-
-
-const mainNavItems = [
-    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
-    { to: "/organizations", label: "Organizations", icon: Building2, end: false },
-] as const;
 
 const secondaryNavItems = [
     { label: "Notifications", icon: Bell, disabled: true },
@@ -66,6 +60,7 @@ const AppSidebar = ({
     onNavigate,
 }: AppSidebarProps) => {
     const location = useLocation();
+    const { organizationId } = useParams();
 
     const organizationsQuery = useQuery({
         queryKey: organizationKeys.list(),
@@ -80,6 +75,14 @@ const AppSidebar = ({
     const expandedNavRowClass = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3";
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";
     const collapsedNavRowClass = "relative mx-auto flex h-10 w-10 items-center justify-center";
+
+    const mainNavItems = [
+        { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
+        { to: "/organizations", label: "Organizations", icon: Building2, end: location.pathname === "/organizations" },
+        ...(organizationId
+            ? [{ to: `/organizations/${organizationId}/billing`, label: "Billing", icon: ReceiptText, end: false }]
+            : []),
+    ] as const;
 
     const renderNavItem = (item: (typeof mainNavItems)[number], badge?: number) => {
         const Icon = item.icon;

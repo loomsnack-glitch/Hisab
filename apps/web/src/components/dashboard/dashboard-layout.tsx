@@ -138,7 +138,13 @@ const DashboardLayout = () => {
                                         organizations.map((org) => (
                                             <DropdownMenuItem
                                                 key={org.id}
-                                                onClick={() => navigate(`/organizations/${org.id}`)}
+                                                onClick={() =>
+                                                    navigate(
+                                                        location.pathname.includes("/billing")
+                                                            ? `/organizations/${org.id}/billing`
+                                                            : `/organizations/${org.id}`,
+                                                    )
+                                                }
                                                 className={cn(
                                                     "flex items-center justify-between rounded-lg px-2.5 py-2 text-sm cursor-pointer",
                                                     org.id === organizationId

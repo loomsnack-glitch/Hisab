@@ -110,7 +110,16 @@ const OrganizationDetailPage = () => {
                         </div>
 
                         <div className="flex shrink-0 justify-end">
-                            <EditOrganizationDialog organization={organization} />
+                            <div className="flex flex-wrap justify-end gap-3">
+                                <Button
+                                    variant="outline"
+                                    className="rounded-full"
+                                    render={<Link to={`/organizations/${organization.id}/billing`} />}
+                                >
+                                    Open billing workspace
+                                </Button>
+                                <EditOrganizationDialog organization={organization} />
+                            </div>
                         </div>
                     </div>
                 </CardContent>

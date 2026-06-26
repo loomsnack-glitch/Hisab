@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { deviceMiddleware } from './middlewares/device.middleware';
 import authRoutes from './modules/access-control/auth/auth.routes';
 import commonRoutes from './modules/common/common.routes';
+import billingRoutes from './modules/tenant/billing/billing.routes';
 import catalogRoutes from './modules/tenant/catalog/catalog.routes';
 import organizationRoutes from './modules/tenant/organization/organization.routes';
 
@@ -36,5 +37,6 @@ app.route('/auth', authRoutes);
 app.route('/common', commonRoutes);
 app.route('/organizations', organizationRoutes);
 app.route('/organizations', catalogRoutes);
+app.route('/organizations', billingRoutes);
 
 export default app

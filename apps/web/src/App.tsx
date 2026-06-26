@@ -5,6 +5,7 @@ import { userAuthenticate } from "@repo/services";
 import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
+import BillingPage from "@/pages/billing-page";
 import DashboardPage from "@/pages/dashboard-page";
 import LoginPage from "@/pages/login-page";
 import OrganizationDetailPage from "@/pages/organization-detail-page";
@@ -74,6 +75,7 @@ const App = () => {
                     <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/organizations" element={<OrganizationsPage />} />
                     <Route path="/organizations/:organizationId" element={<OrganizationDetailPage />} />
+                    <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
