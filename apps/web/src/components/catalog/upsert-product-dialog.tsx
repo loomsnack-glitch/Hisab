@@ -23,7 +23,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
+import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Plus, UploadCloud, Pencil, ImageOff, Package2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,7 +53,10 @@ const PREDEFINED_ICONS = [
     "🛍️", "📦", "🏷️", "🎟️", "💳", "📱", "💻", "🎮", "🔌", "🔋", "💡", "🔑"
 ];
 
-const statusOptions = ProductStatusSchema.options;
+const statusSelectOptions = ProductStatusSchema.options.map((status) => ({
+    label: status.charAt(0).toUpperCase() + status.slice(1),
+    value: status,
+}));
 
 const getFileExtension = (fileName: string) => {
     const parts = fileName.split(".");
@@ -110,6 +113,11 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
             setRemoveCurrentImage(false);
         }
     }, [categories, form, open, product]);
+
+    const categoryOptions = useMemo(
+        () => categories.map((category) => ({ label: category.name, value: category.id })),
+        [categories],
+    );
 
     const selectedFilePreview = useMemo(() => {
         if (!selectedFile) {
@@ -220,18 +228,15 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                             <Field data-invalid={fieldState.invalid}>
                                 <FieldLabel required>Category</FieldLabel>
                                 <FieldContent>
-                                    <Select value={field.value} onValueChange={field.onChange}>
-                                        <SelectTrigger className="h-11 w-full rounded-xl px-3">
-                                            <SelectValue placeholder="Select a category" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {categories.map((category) => (
-                                                <SelectItem key={category.id} value={category.id}>
-                                                    {category.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <ReactSelect
+                                        options={categoryOptions}
+                                        value={categoryOptions.find((option) => option.value === field.value) ?? null}
+                                        onChange={(option) => field.onChange(option?.value ?? "")}
+                                        placeholder="Select a category"
+                                        classNames={{
+                                            control: () => "!min-h-11 rounded-xl",
+                                        }}
+                                    />
                                     <FieldError errors={[fieldState.error]} />
                                 </FieldContent>
                             </Field>
@@ -279,31 +284,33 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                         </Field>
                     </div>
 
-                    {/* Row 3: Status */}
-                    <Controller
-                        control={form.control}
-                        name="status"
-                        render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                                <FieldLabel required>Status</FieldLabel>
-                                <FieldContent>
-                                    <Select value={field.value ?? "active"} onValueChange={field.onChange}>
-                                        <SelectTrigger className="h-11 w-full rounded-xl px-3">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {statusOptions.map((status) => (
-                                                <SelectItem key={status} value={status}>
-                                                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <FieldError errors={[fieldState.error]} />
-                                </FieldContent>
-                            </Field>
-                        )}
-                    />
+                    {/* Status — edit only; new items are always active */}
+                    {isEditMode && (
+                        <Controller
+                            control={form.control}
+                            name="status"
+                            render={({ field, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                    <FieldLabel required>Status</FieldLabel>
+                                    <FieldContent>
+                                        <ReactSelect
+                                            options={statusSelectOptions}
+                                            value={
+                                                statusSelectOptions.find(
+                                                    (option) => option.value === (field.value ?? "active"),
+                                                ) ?? null
+                                            }
+                                            onChange={(option) => field.onChange(option?.value ?? "active")}
+                                            classNames={{
+                                                control: () => "!min-h-11 rounded-xl",
+                                            }}
+                                        />
+                                        <FieldError errors={[fieldState.error]} />
+                                    </FieldContent>
+                                </Field>
+                            )}
+                        />
+                    )}
 
                     {/* Row 4: Visual representation selector (emoji grid or custom upload) */}
                     <div className="space-y-3.5">

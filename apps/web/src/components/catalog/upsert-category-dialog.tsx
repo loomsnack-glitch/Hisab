@@ -22,7 +22,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
+import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Pencil, Plus, Tags } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,7 +39,10 @@ const defaultValues: CreateCategoryJSON = {
     status: "active",
 };
 
-const statusOptions = CategoryStatusSchema.options;
+const statusSelectOptions = CategoryStatusSchema.options.map((status) => ({
+    label: status.charAt(0).toUpperCase() + status.slice(1),
+    value: status,
+}));
 
 const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCategoryDialogProps) => {
     const [open, setOpen] = useState(false);
@@ -122,30 +125,32 @@ const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCateg
                         </FieldContent>
                     </Field>
 
-                    <Controller
-                        control={form.control}
-                        name="status"
-                        render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                                <FieldLabel required>Status</FieldLabel>
-                                <FieldContent>
-                                    <Select value={field.value ?? "active"} onValueChange={field.onChange}>
-                                        <SelectTrigger className="h-11 w-full rounded-xl px-3">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {statusOptions.map((status) => (
-                                                <SelectItem key={status} value={status}>
-                                                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <FieldError errors={[fieldState.error]} />
-                                </FieldContent>
-                            </Field>
-                        )}
-                    />
+                    {isEditMode && (
+                        <Controller
+                            control={form.control}
+                            name="status"
+                            render={({ field, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                    <FieldLabel required>Status</FieldLabel>
+                                    <FieldContent>
+                                        <ReactSelect
+                                            options={statusSelectOptions}
+                                            value={
+                                                statusSelectOptions.find(
+                                                    (option) => option.value === (field.value ?? "active"),
+                                                ) ?? null
+                                            }
+                                            onChange={(option) => field.onChange(option?.value ?? "active")}
+                                            classNames={{
+                                                control: () => "!min-h-11 rounded-xl",
+                                            }}
+                                        />
+                                        <FieldError errors={[fieldState.error]} />
+                                    </FieldContent>
+                                </Field>
+                            )}
+                        />
+                    )}
 
                     <DialogFooter>
                         <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>

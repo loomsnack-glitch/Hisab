@@ -6,6 +6,42 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 import { cn } from "@repo/ui/lib/utils"
 import { Button } from "@repo/ui/components/button"
 
+const getNestedLayerStyle = (
+  baseZIndex: number
+): React.CSSProperties => ({
+  zIndex: `calc(${baseZIndex} + (var(--nested-dialogs, 0) * 10))`,
+})
+
+const getNestedBackdropStyle = (
+  style:
+    | React.CSSProperties
+    | ((state: any) => React.CSSProperties | undefined)
+    | undefined,
+  baseZIndex: number
+): ((state: any) => React.CSSProperties | undefined) => {
+  const zIndex = `calc(${baseZIndex} + (var(--nested-dialogs, 0) * 10))`
+
+  return (state) => ({
+    ...(typeof style === "function" ? style(state) : style),
+    zIndex,
+  })
+}
+
+const getNestedPopupStyle = (
+  style:
+    | React.CSSProperties
+    | ((state: any) => React.CSSProperties | undefined)
+    | undefined,
+  baseZIndex: number
+): ((state: any) => React.CSSProperties | undefined) => {
+  const zIndex = `calc(${baseZIndex} + (var(--nested-dialogs, 0) * 10))`
+
+  return (state) => ({
+    ...(typeof style === "function" ? style(state) : style),
+    zIndex,
+  })
+}
+
 function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
 }
@@ -24,15 +60,17 @@ function AlertDialogPortal({ ...props }: AlertDialogPrimitive.Portal.Props) {
 
 function AlertDialogOverlay({
   className,
+  style,
   ...props
 }: AlertDialogPrimitive.Backdrop.Props) {
   return (
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-overlay"
       className={cn(
-        "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50",
+        "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate",
         className
       )}
+      style={getNestedBackdropStyle(style, 50)}
       {...props}
     />
   )
@@ -41,6 +79,7 @@ function AlertDialogOverlay({
 function AlertDialogContent({
   className,
   size = "default",
+  style,
   ...props
 }: AlertDialogPrimitive.Popup.Props & {
   size?: "default" | "sm"
@@ -48,15 +87,25 @@ function AlertDialogContent({
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
-      <AlertDialogPrimitive.Popup
-        data-slot="alert-dialog-content"
-        data-size={size}
-        className={cn(
-          "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-foreground/10 gap-4 rounded-xl p-4 ring-1 duration-100 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 outline-none",
-          className
-        )}
-        {...props}
-      />
+      <div
+        className="group/alert-dialog-layer fixed inset-0"
+        style={getNestedLayerStyle(60)}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 hidden bg-black/40 supports-backdrop-filter:backdrop-blur-sm dark:bg-black/55 dark:supports-backdrop-filter:backdrop-blur-md group-has-[[data-nested][data-open]]/alert-dialog-layer:block"
+        />
+        <AlertDialogPrimitive.Popup
+          data-slot="alert-dialog-content"
+          data-size={size}
+          className={cn(
+            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-foreground/10 gap-4 rounded-xl p-4 ring-1 duration-100 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm group/alert-dialog-content fixed top-1/2 left-1/2 grid w-full -translate-x-1/2 -translate-y-1/2 outline-none transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50",
+            className
+          )}
+          style={getNestedPopupStyle(style, 60)}
+          {...props}
+        />
+      </div>
     </AlertDialogPortal>
   )
 }
@@ -82,7 +131,7 @@ function AlertDialogFooter({
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 border-t bg-muted/50 pt-4 sm:flex-row sm:justify-end group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2",
+        "bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 flex flex-col-reverse gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end",
         className
       )}
       {...props}

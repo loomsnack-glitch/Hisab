@@ -7,6 +7,42 @@ import { cn } from "@repo/ui/lib/utils"
 import { Button } from "@repo/ui/components/button"
 import { XIcon } from "lucide-react"
 
+const getNestedLayerStyle = (
+  baseZIndex: number
+): React.CSSProperties => ({
+  zIndex: `calc(${baseZIndex} + (var(--nested-dialogs, 0) * 10))`,
+})
+
+const getNestedBackdropStyle = (
+  style:
+    | React.CSSProperties
+    | ((state: any) => React.CSSProperties | undefined)
+    | undefined,
+  baseZIndex: number
+): ((state: any) => React.CSSProperties | undefined) => {
+  const zIndex = `calc(${baseZIndex} + (var(--nested-dialogs, 0) * 10))`
+
+  return (state) => ({
+    ...(typeof style === "function" ? style(state) : style),
+    zIndex,
+  })
+}
+
+const getNestedPopupStyle = (
+  style:
+    | React.CSSProperties
+    | ((state: any) => React.CSSProperties | undefined)
+    | undefined,
+  baseZIndex: number
+): ((state: any) => React.CSSProperties | undefined) => {
+  const zIndex = `calc(${baseZIndex} + (var(--nested-dialogs, 0) * 10))`
+
+  return (state) => ({
+    ...(typeof style === "function" ? style(state) : style),
+    zIndex,
+  })
+}
+
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
@@ -25,12 +61,17 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
 
 function DialogOverlay({
   className,
+  style,
   ...props
 }: DialogPrimitive.Backdrop.Props) {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
-      className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50", className)}
+      className={cn(
+        "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate",
+        className
+      )}
+      style={getNestedBackdropStyle(style, 50)}
       {...props}
     />
   )
@@ -40,6 +81,7 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  style,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
@@ -47,32 +89,46 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay />
-      <DialogPrimitive.Popup
-        data-slot="dialog-content"
-        className={cn(
-          "bg-background data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 sm:max-w-sm fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none",
-          className
-        )}
-        {...props}
+      {/* Scrollable overlay wrapper centers short dialogs and scrolls tall ones. */}
+      <div
+        className="group/dialog-layer fixed inset-0 overflow-y-auto"
+        style={getNestedLayerStyle(60)}
       >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            render={
-              <Button
-                variant="ghost"
-                className="absolute top-2 right-2"
-                size="icon-sm"
-              />
-            }
+        {/* Nested dialogs skip the backdrop (z-index sits below the parent popup), so this scrim
+            covers the parent dialog with the same blur/dim effect as the root backdrop. */}
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 hidden bg-black/10 supports-backdrop-filter:backdrop-blur-xs dark:bg-black/20 dark:supports-backdrop-filter:backdrop-blur group-has-[[data-nested][data-open]]/dialog-layer:block"
+        />
+        <div className="flex min-h-full items-center justify-center p-4">
+          <DialogPrimitive.Popup
+            data-slot="dialog-content"
+            className={cn(
+              "bg-background data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 text-sm ring-1 sm:max-w-sm w-full outline-none relative transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50",
+              className
+            )}
+            style={getNestedPopupStyle(style, 60)}
+            {...props}
           >
-            <XIcon
-            />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        )}
-      </DialogPrimitive.Popup>
+            {children}
+            {showCloseButton && (
+              <DialogPrimitive.Close
+                data-slot="dialog-close"
+                render={
+                  <Button
+                    variant="ghost"
+                    className="absolute top-2 right-2"
+                    size="icon-sm"
+                  />
+                }
+              >
+                <XIcon />
+                <span className="sr-only">Close</span>
+              </DialogPrimitive.Close>
+            )}
+          </DialogPrimitive.Popup>
+        </div>
+      </div>
     </DialogPortal>
   )
 }
@@ -99,7 +155,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 pt-2 sm:flex-row-reverse sm:justify-end",
+        "bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
         className
       )}
       {...props}
