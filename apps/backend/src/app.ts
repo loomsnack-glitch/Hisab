@@ -3,7 +3,9 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { deviceMiddleware } from './middlewares/device.middleware';
 import authRoutes from './modules/access-control/auth/auth.routes';
+import deviceAuthRoutes from './modules/access-control/device-auth/device-auth.routes';
 import commonRoutes from './modules/common/common.routes';
+import posRoutes from './modules/pos/pos.routes';
 import billingRoutes from './modules/tenant/billing/billing.routes';
 import catalogRoutes from './modules/tenant/catalog/catalog.routes';
 import organizationRoutes from './modules/tenant/organization/organization.routes';
@@ -34,7 +36,9 @@ app.get('/', (c) => {
 });
 
 app.route('/auth', authRoutes);
+app.route('/device-auth', deviceAuthRoutes);
 app.route('/common', commonRoutes);
+app.route('/pos', posRoutes);
 app.route('/organizations', organizationRoutes);
 app.route('/organizations', catalogRoutes);
 app.route('/organizations', billingRoutes);

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { StoreWithDevicesDTO } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -198,6 +199,15 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                                     </td>
                                                     <td className="px-4 py-3.5">
                                                         <div className="flex items-center gap-2">
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="rounded-full"
+                                                                render={<Link to={`/pos/login?deviceId=${device.id}`} />}
+                                                            >
+                                                                POS
+                                                            </Button>
                                                             <code className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-xs text-muted-foreground">
                                                                 ••••••••
                                                             </code>

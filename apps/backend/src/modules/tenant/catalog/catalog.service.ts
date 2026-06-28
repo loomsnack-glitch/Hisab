@@ -4,6 +4,7 @@ import {
     type CategoryResponse,
     type CreateCategorySVC,
     type CreateProductSVC,
+    type DeviceSessionDTO,
     type ProductDTO,
     type ProductResponse,
     type ProductResponseDTO,
@@ -318,6 +319,30 @@ export const getProducts = async (
     }
 
     const products = await catalogRepository.getProductsByOrganizationId(organizationId);
+    return {
+        status: "success",
+        data: { products: await resolveProducts(products) },
+        message: "Products fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getCategoriesForDevice = async (
+    session: DeviceSessionDTO,
+): Promise<ServiceResponse<CategoriesListResponse | null>> => {
+    const categories = await catalogRepository.getCategoriesByOrganizationId(session.organization.id);
+    return {
+        status: "success",
+        data: { categories },
+        message: "Categories fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getProductsForDevice = async (
+    session: DeviceSessionDTO,
+): Promise<ServiceResponse<ProductsListResponse | null>> => {
+    const products = await catalogRepository.getProductsByOrganizationId(session.organization.id);
     return {
         status: "success",
         data: { products: await resolveProducts(products) },

@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, MonitorSmartphone } from "lucide-react";
 import { register as registerUser } from "@repo/services";
 import { RegisterFormSchema, SALUTATION_OPTIONS, formatIndianPhoneDisplay, type RegisterFormJSON } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
@@ -94,6 +94,21 @@ const RegisterPage = () => {
             title="Create your Ganatri account"
             subtitle="Register with your phone number, verify the OTP on WhatsApp, and you will be logged in immediately."
         >
+            <div className="mb-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p className="text-sm font-semibold text-foreground">Looking for cashier/device access?</p>
+                        <p className="text-xs text-muted-foreground">
+                            POS devices should use the separate device login flow, not admin account registration.
+                        </p>
+                    </div>
+                    <Button variant="outline" className="rounded-xl" render={<Link to="/pos/login" />}>
+                        <MonitorSmartphone className="mr-2 size-4" />
+                        Device POS login
+                    </Button>
+                </div>
+            </div>
+
             <Card className="border-border/70 shadow-sm transition-shadow duration-300 hover:shadow-md">
                 <CardContent className="p-6 sm:p-8">
                     <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
@@ -233,6 +248,12 @@ const RegisterPage = () => {
                             Already have an account?{" "}
                             <Link to="/login" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
                                 Login here
+                            </Link>
+                        </p>
+                        <p className="text-center text-sm text-muted-foreground">
+                            Need the device route instead?{" "}
+                            <Link to="/pos/login" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
+                                Open POS login
                             </Link>
                         </p>
                     </form>

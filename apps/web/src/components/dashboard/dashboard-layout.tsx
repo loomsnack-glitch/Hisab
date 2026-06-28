@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Outlet, useLocation, useParams, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations, userLogout } from "@repo/services";
 import { cn } from "@repo/ui/lib/utils";
@@ -17,7 +17,7 @@ import {
 import { Avatar, AvatarFallback } from "@repo/ui/components/avatar";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { ChevronDown, Check, Plus, User, LogOut, Phone } from "lucide-react";
+import { ChevronDown, Check, Plus, User, LogOut, Phone, MonitorSmartphone } from "lucide-react";
 import { toast } from "sonner";
 
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
@@ -178,6 +178,14 @@ const DashboardLayout = () => {
 
                         {/* Right side: Theme Toggle & User Profile Popover */}
                         <div className="flex items-center gap-3">
+                            <Button
+                                variant="outline"
+                                className="hidden rounded-xl border-amber-500/25 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200 sm:flex"
+                                render={<Link to="/pos/login" />}
+                            >
+                                <MonitorSmartphone className="mr-2 size-4" />
+                                Login as device
+                            </Button>
                             <ThemeToggle />
                             {authUser && (
                                 <Popover>
@@ -211,6 +219,13 @@ const DashboardLayout = () => {
 
                                         <div className="h-px bg-border/60 -mx-3 my-0.5" />
 
+                                        <Link
+                                            to="/pos/login"
+                                            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-colors text-left"
+                                        >
+                                            <MonitorSmartphone className="size-4" />
+                                            Login as device
+                                        </Link>
                                         <button className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-colors text-left">
                                             <User className="size-4" />
                                             My Profile

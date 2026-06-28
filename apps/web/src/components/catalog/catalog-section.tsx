@@ -16,7 +16,8 @@ import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageCategoriesDialog from "@/components/catalog/manage-categories-dialog";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
 
 type CatalogSectionProps = {
@@ -288,14 +289,14 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                     {categoryMap.get(product.categoryId)?.name ?? "Unknown"}
                                 </span>
 
-                                {/* Price and Discount */}
+                                {/* Price */}
                                 <div className="mt-auto">
-                                    <p className="text-lg font-bold text-foreground">{formatCurrency(product.price)}</p>
-                                    {Number(product.discount) > 0 && (
-                                        <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                            -{formatCurrency(product.discount)} off
-                                        </p>
-                                    )}
+                                    <ProductPriceDisplay
+                                        price={product.price}
+                                        discount={product.discount}
+                                        size="lg"
+                                        singleTone="foreground"
+                                    />
                                 </div>
 
                                 {/* Hover action overlay (edit & delete buttons) */}

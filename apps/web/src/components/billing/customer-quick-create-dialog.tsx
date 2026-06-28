@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, type SubmitHandler } from "react-hook-form";
-import { createCustomer } from "@repo/services";
+import { createCustomer, createPosCustomer } from "@repo/services";
 import { CreateCustomerSchema, type CreateCustomerJSON, type CustomerDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -18,17 +18,20 @@ import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components
 import { Input } from "@repo/ui/components/input";
 import { toast } from "sonner";
 
+import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys } from "@/lib/query-keys";
 
 type CustomerQuickCreateDialogProps = {
     organizationId: string;
+    mode?: BillingWorkspaceMode;
     suggestedName?: string;
-    trigger?: React.ReactNode;
+    trigger?: React.ReactElement;
     onCreated?: (customer: CustomerDTO) => void;
 };
 
 const CustomerQuickCreateDialog = ({
     organizationId,
+    mode = "admin",
     suggestedName,
     trigger,
     onCreated,
@@ -56,7 +59,8 @@ const CustomerQuickCreateDialog = ({
     }, [form, open, suggestedName]);
 
     const createCustomerMutation = useMutation({
-        mutationFn: (payload: CreateCustomerJSON) => createCustomer(organizationId, payload),
+        mutationFn: (payload: CreateCustomerJSON) =>
+            mode === "device" ? createPosCustomer(payload) : createCustomer(organizationId, payload),
         onSuccess: (response) => {
             if (response.status !== "success" || !response.data?.customer) {
                 toast.error(response.message || "Failed to create customer");

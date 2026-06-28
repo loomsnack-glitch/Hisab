@@ -8,6 +8,7 @@ import type {
     CustomerLedgerEntryDTOSchema,
     CustomerListQuerySchema,
     PaymentDTOSchema,
+    SaleDeviceAuditDTOSchema,
     SaleDetailDTOSchema,
     SaleItemDTOSchema,
     SaleSummaryDTOSchema,
@@ -21,6 +22,7 @@ export type CustomerDTO = z.infer<typeof CustomerDTOSchema>;
 export type SaleItemDTO = z.infer<typeof SaleItemDTOSchema>;
 export type PaymentDTO = z.infer<typeof PaymentDTOSchema>;
 export type CustomerLedgerEntryDTO = z.infer<typeof CustomerLedgerEntryDTOSchema>;
+export type SaleDeviceAuditDTO = z.infer<typeof SaleDeviceAuditDTOSchema>;
 export type SaleSummaryDTO = z.infer<typeof SaleSummaryDTOSchema>;
 export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema>;
 
@@ -65,8 +67,18 @@ export type VoidSaleSVC = VoidSaleJSON;
 
 export type CreateSaleREPO = Pick<
     SaleSummaryDTO,
-    "id" | "organizationId" | "storeId" | "status" | "paymentStatus" | "subtotal" | "discountTotal" | "grandTotal" | "userId"
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "status"
+    | "paymentStatus"
+    | "subtotal"
+    | "discountTotal"
+    | "grandTotal"
 > & {
+    userId?: string | null;
+    createdByDeviceId?: string | null;
+    updatedByDeviceId?: string | null;
     customerId?: string | null;
     notes?: string | null;
     committedAt?: string | Date | null;
@@ -79,6 +91,7 @@ export type UpdateSaleREPO = Pick<
     SaleSummaryDTO,
     "id" | "organizationId" | "storeId" | "status" | "paymentStatus" | "subtotal" | "discountTotal" | "grandTotal"
 > & {
+    updatedByDeviceId?: string | null;
     customerId?: string | null;
     notes?: string | null;
     committedAt?: string | Date | null;
@@ -94,8 +107,9 @@ export type CreateSaleItemREPO = Pick<
 
 export type CreatePaymentREPO = Pick<
     PaymentDTO,
-    "id" | "organizationId" | "storeId" | "saleId" | "collectedBy" | "amount" | "method"
+    "id" | "organizationId" | "storeId" | "saleId" | "amount" | "method"
 > & {
+    collectedBy?: string | null;
     referenceNumber?: string | null;
     notes?: string | null;
     collectedAt?: string | Date;

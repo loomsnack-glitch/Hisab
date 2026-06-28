@@ -45,6 +45,10 @@ export const SaleStatusSchema = z.enum(["draft", "completed", "voided"]);
 export const PaymentStatusSchema = z.enum(["pending", "partial", "paid"]);
 export const PaymentMethodSchema = z.enum(["cash", "upi", "card", "bank_transfer", "other"]);
 export const CustomerLedgerEntryTypeSchema = z.enum(["sale", "payment", "void", "adjustment"]);
+export const SaleDeviceAuditDTOSchema = z.object({
+    id: z.uuid("Invalid device id"),
+    name: nameSchema,
+});
 
 export const CustomerDTOSchema = z.object({
     id: z.uuid("Invalid customer id"),
@@ -88,7 +92,7 @@ export const PaymentDTOSchema = z.object({
     organizationId: z.uuid("Invalid organization id"),
     storeId: z.uuid("Invalid store id"),
     saleId: z.uuid("Invalid sale id"),
-    collectedBy: z.uuid("Invalid collector id"),
+    collectedBy: z.uuid("Invalid collector id").nullable().optional(),
     amount: positiveMoneySchema,
     method: PaymentMethodSchema,
     referenceNumber: z.string().nullable().optional(),
@@ -117,7 +121,9 @@ export const SaleSummaryDTOSchema = z.object({
     storeId: z.uuid("Invalid store id"),
     saleNumber: z.number().int().nullable().optional(),
     customerId: z.uuid("Invalid customer id").nullable().optional(),
-    userId: z.uuid("Invalid user id"),
+    userId: z.uuid("Invalid user id").nullable().optional(),
+    createdByDeviceId: z.uuid("Invalid creator device id").nullable().optional(),
+    updatedByDeviceId: z.uuid("Invalid updater device id").nullable().optional(),
     status: SaleStatusSchema,
     paymentStatus: PaymentStatusSchema,
     subtotal: moneySchema,
@@ -135,6 +141,8 @@ export const SaleSummaryDTOSchema = z.object({
     itemsSummary: z.string().nullable().optional(),
     paymentMethods: z.string().nullable().optional(),
     customer: CustomerSummaryDTOSchema.nullable(),
+    createdByDevice: SaleDeviceAuditDTOSchema.nullable().optional(),
+    updatedByDevice: SaleDeviceAuditDTOSchema.nullable().optional(),
 });
 
 export const SaleDetailDTOSchema = SaleSummaryDTOSchema.extend({

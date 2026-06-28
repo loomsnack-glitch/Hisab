@@ -24,6 +24,8 @@ type SaleSummaryRow = Record<string, unknown> & {
     customer_phone?: string | null;
     customer_balance?: number | string | null;
     customer_is_active?: boolean | null;
+    created_by_device_name?: string | null;
+    updated_by_device_name?: string | null;
 };
 
 const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
@@ -33,6 +35,10 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
     const customerPhone = summary.customerPhone as string | null | undefined;
     const customerBalance = summary.customerBalance as number | null | undefined;
     const customerIsActive = summary.customerIsActive as boolean | null | undefined;
+    const createdByDeviceId = summary.createdByDeviceId as string | null | undefined;
+    const createdByDeviceName = summary.createdByDeviceName as string | null | undefined;
+    const updatedByDeviceId = summary.updatedByDeviceId as string | null | undefined;
+    const updatedByDeviceName = summary.updatedByDeviceName as string | null | undefined;
 
     const customer = customerId
         ? {
@@ -43,11 +49,25 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
             isActive: Boolean(customerIsActive ?? true),
         }
         : null;
+    const createdByDevice = createdByDeviceId
+        ? {
+            id: createdByDeviceId,
+            name: createdByDeviceName ?? "",
+        }
+        : null;
+    const updatedByDevice = updatedByDeviceId
+        ? {
+            id: updatedByDeviceId,
+            name: updatedByDeviceName ?? "",
+        }
+        : null;
 
     delete summary.customerName;
     delete summary.customerPhone;
     delete summary.customerBalance;
     delete summary.customerIsActive;
+    delete summary.createdByDeviceName;
+    delete summary.updatedByDeviceName;
 
     return {
         ...(summary as Omit<SaleSummaryDTO, "customer">),
@@ -60,6 +80,8 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
         itemsSummary: (summary.itemsSummary as string | undefined | null) ?? null,
         paymentMethods: (summary.paymentMethods as string | undefined | null) ?? null,
         customer,
+        createdByDevice,
+        updatedByDevice,
     };
 };
 
@@ -195,6 +217,7 @@ export const updateSale = async (
         SET customer_id = ${saleData.customerId ?? null},
             status = ${saleData.status},
             payment_status = ${saleData.paymentStatus},
+            updated_by_device_id = ${saleData.updatedByDeviceId ?? null},
             subtotal = ${saleData.subtotal},
             discount_total = ${saleData.discountTotal},
             grand_total = ${saleData.grandTotal},
@@ -236,10 +259,20 @@ export const getSalesByStore = async (
             c.name AS customer_name,
             c.phone AS customer_phone,
             c.balance AS customer_balance,
-            c.is_active AS customer_is_active
+            c.is_active AS customer_is_active,
+            created_device.name AS created_by_device_name,
+            updated_device.name AS updated_by_device_name
         FROM sales s
         LEFT JOIN customers c
             ON c.id = s.customer_id
+        LEFT JOIN store_devices created_device
+            ON created_device.id = s.created_by_device_id
+           AND created_device.organization_id = s.organization_id
+           AND created_device.store_id = s.store_id
+        LEFT JOIN store_devices updated_device
+            ON updated_device.id = s.updated_by_device_id
+           AND updated_device.organization_id = s.organization_id
+           AND updated_device.store_id = s.store_id
         LEFT JOIN (
             SELECT 
                 sale_id, 
@@ -294,10 +327,20 @@ export const getSaleById = async (
             c.name AS customer_name,
             c.phone AS customer_phone,
             c.balance AS customer_balance,
-            c.is_active AS customer_is_active
+            c.is_active AS customer_is_active,
+            created_device.name AS created_by_device_name,
+            updated_device.name AS updated_by_device_name
         FROM sales s
         LEFT JOIN customers c
             ON c.id = s.customer_id
+        LEFT JOIN store_devices created_device
+            ON created_device.id = s.created_by_device_id
+           AND created_device.organization_id = s.organization_id
+           AND created_device.store_id = s.store_id
+        LEFT JOIN store_devices updated_device
+            ON updated_device.id = s.updated_by_device_id
+           AND updated_device.organization_id = s.organization_id
+           AND updated_device.store_id = s.store_id
         LEFT JOIN (
             SELECT 
                 sale_id, 

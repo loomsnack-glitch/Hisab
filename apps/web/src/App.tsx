@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { userAuthenticate } from "@repo/services";
 import SplashLoader from "@repo/ui/components/loaders/splash-loader";
@@ -10,6 +10,8 @@ import DashboardPage from "@/pages/dashboard-page";
 import LoginPage from "@/pages/login-page";
 import OrganizationDetailPage from "@/pages/organization-detail-page";
 import OrganizationsPage from "@/pages/organizations-page";
+import PosLoginPage from "@/pages/pos-login-page";
+import PosPage from "@/pages/pos-page";
 import RegisterPage from "@/pages/register-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -17,18 +19,25 @@ import { useAuthActions, useAuthUser } from "@/store/auth.store";
 const SPLASH_DURATION_MS = 2200;
 
 const App = () => {
+    const location = useLocation();
     const authUser = useAuthUser();
     const { clearUser, setUser } = useAuthActions();
     const [showSplash, setShowSplash] = useState(false);
     const hadAuthUserRef = useRef(false);
+    const isPosRoute = location.pathname.startsWith("/pos");
 
     const authQuery = useQuery({
         queryKey: authKeys.me,
         queryFn: userAuthenticate,
+        enabled: !isPosRoute,
         retry: false,
     });
 
     useEffect(() => {
+        if (isPosRoute) {
+            return;
+        }
+
         if (authQuery.data?.status === "success" && authQuery.data.data?.user) {
             setUser(authQuery.data.data.user);
             return;
@@ -40,6 +49,10 @@ const App = () => {
     }, [authQuery.data, authQuery.isError, clearUser, setUser]);
 
     useEffect(() => {
+        if (isPosRoute) {
+            return;
+        }
+
         if (!authUser) {
             hadAuthUserRef.current = false;
             setShowSplash(false);
@@ -50,13 +63,13 @@ const App = () => {
             hadAuthUserRef.current = true;
             setShowSplash(true);
         }
-    }, [authUser]);
+    }, [authUser, isPosRoute]);
 
     const authenticatedUser =
         authUser ??
         (authQuery.data?.status === "success" ? authQuery.data.data?.user ?? null : null);
 
-    if (authQuery.isPending) {
+    if (!isPosRoute && authQuery.isPending) {
         return <div className="min-h-screen bg-background" aria-busy="true" aria-label="Loading" />;
     }
 
@@ -69,6 +82,8 @@ const App = () => {
                     path="/register"
                     element={authenticatedUser ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
                 />
+                <Route path="/pos/login" element={<PosLoginPage />} />
+                <Route path="/pos" element={<PosPage />} />
                 <Route
                     element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                 >

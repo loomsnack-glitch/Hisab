@@ -1,16 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import {
-    CommitSaleSchema,
     CreateCustomerSchema,
-    CreateDraftSaleSchema,
-    CreatePaymentSchema,
     CustomerListQuerySchema,
     STATUS_CODES,
     SalesListQuerySchema,
     UpdateCustomerSchema,
-    UpdateDraftSaleSchema,
-    VoidSaleSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
@@ -164,28 +159,6 @@ router.get(
     },
 );
 
-router.post(
-    "/:organizationId/stores/:storeId/sales",
-    validateSchema("json", CreateDraftSaleSchema),
-    async (c) => {
-        try {
-            const organizationId = c.req.param("organizationId");
-            const storeId = c.req.param("storeId");
-            const invalidParams = validateOrgAndStoreParams(organizationId, storeId);
-            if (invalidParams) {
-                return c.json(invalidParams, invalidParams.code);
-            }
-
-            const authUser = c.get("authUser");
-            const body = c.req.valid("json");
-            const serviceResponse = await billingService.createDraftSale(authUser.id, organizationId, storeId, body);
-            return handleServiceResponse(c, serviceResponse);
-        } catch (error) {
-            return handleError(FILE_NAME, "createDraftSale", c, error);
-        }
-    },
-);
-
 router.get("/:organizationId/stores/:storeId/sales/:saleId", async (c) => {
     try {
         const organizationId = c.req.param("organizationId");
@@ -204,101 +177,5 @@ router.get("/:organizationId/stores/:storeId/sales/:saleId", async (c) => {
         return handleError(FILE_NAME, "getSaleDetails", c, error);
     }
 });
-
-router.patch(
-    "/:organizationId/stores/:storeId/sales/:saleId",
-    validateSchema("json", UpdateDraftSaleSchema),
-    async (c) => {
-        try {
-            const organizationId = c.req.param("organizationId");
-            const storeId = c.req.param("storeId");
-            const saleId = c.req.param("saleId");
-            const invalidParams = validateOrgAndStoreParams(organizationId, storeId)
-                ?? validateUuidParam(saleId, "Invalid sale id");
-            if (invalidParams) {
-                return c.json(invalidParams, invalidParams.code);
-            }
-
-            const authUser = c.get("authUser");
-            const body = c.req.valid("json");
-            const serviceResponse = await billingService.updateDraftSale(authUser.id, organizationId, storeId, saleId, body);
-            return handleServiceResponse(c, serviceResponse);
-        } catch (error) {
-            return handleError(FILE_NAME, "updateDraftSale", c, error);
-        }
-    },
-);
-
-router.post(
-    "/:organizationId/stores/:storeId/sales/:saleId/commit",
-    validateSchema("json", CommitSaleSchema),
-    async (c) => {
-        try {
-            const organizationId = c.req.param("organizationId");
-            const storeId = c.req.param("storeId");
-            const saleId = c.req.param("saleId");
-            const invalidParams = validateOrgAndStoreParams(organizationId, storeId)
-                ?? validateUuidParam(saleId, "Invalid sale id");
-            if (invalidParams) {
-                return c.json(invalidParams, invalidParams.code);
-            }
-
-            const authUser = c.get("authUser");
-            const body = c.req.valid("json");
-            const serviceResponse = await billingService.commitSale(authUser.id, organizationId, storeId, saleId, body);
-            return handleServiceResponse(c, serviceResponse);
-        } catch (error) {
-            return handleError(FILE_NAME, "commitSale", c, error);
-        }
-    },
-);
-
-router.post(
-    "/:organizationId/stores/:storeId/sales/:saleId/payments",
-    validateSchema("json", CreatePaymentSchema),
-    async (c) => {
-        try {
-            const organizationId = c.req.param("organizationId");
-            const storeId = c.req.param("storeId");
-            const saleId = c.req.param("saleId");
-            const invalidParams = validateOrgAndStoreParams(organizationId, storeId)
-                ?? validateUuidParam(saleId, "Invalid sale id");
-            if (invalidParams) {
-                return c.json(invalidParams, invalidParams.code);
-            }
-
-            const authUser = c.get("authUser");
-            const body = c.req.valid("json");
-            const serviceResponse = await billingService.collectPayment(authUser.id, organizationId, storeId, saleId, body);
-            return handleServiceResponse(c, serviceResponse);
-        } catch (error) {
-            return handleError(FILE_NAME, "collectPayment", c, error);
-        }
-    },
-);
-
-router.post(
-    "/:organizationId/stores/:storeId/sales/:saleId/void",
-    validateSchema("json", VoidSaleSchema),
-    async (c) => {
-        try {
-            const organizationId = c.req.param("organizationId");
-            const storeId = c.req.param("storeId");
-            const saleId = c.req.param("saleId");
-            const invalidParams = validateOrgAndStoreParams(organizationId, storeId)
-                ?? validateUuidParam(saleId, "Invalid sale id");
-            if (invalidParams) {
-                return c.json(invalidParams, invalidParams.code);
-            }
-
-            const authUser = c.get("authUser");
-            const body = c.req.valid("json");
-            const serviceResponse = await billingService.voidSale(authUser.id, organizationId, storeId, saleId, body);
-            return handleServiceResponse(c, serviceResponse);
-        } catch (error) {
-            return handleError(FILE_NAME, "voidSale", c, error);
-        }
-    },
-);
 
 export default router;

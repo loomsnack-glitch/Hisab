@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { collectPayment, getSale, voidSale } from "@repo/services";
+import { collectPayment, collectPosPayment, getPosSale, getSale, voidPosSale, voidSale } from "@repo/services";
 import type { CreatePaymentJSON, PaymentMethod, VoidSaleJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -33,12 +33,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
 type SaleDetailDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    mode?: BillingWorkspaceMode;
     organizationId: string;
     storeId: string;
     saleId: string | null;
@@ -67,11 +69,13 @@ const paymentStatusStyles: Record<string, string> = {
 const SaleDetailDialog = ({
     open,
     onOpenChange,
+    mode = "admin",
     organizationId,
     storeId,
     saleId,
 }: SaleDetailDialogProps) => {
     const queryClient = useQueryClient();
+    const canMutate = mode === "device";
     const [paymentDraft, setPaymentDraft] = useState<CreatePaymentJSON>({
         amount: 0,
         method: "cash",
@@ -83,7 +87,7 @@ const SaleDetailDialog = ({
 
     const saleQuery = useQuery({
         queryKey: saleId ? billingKeys.sale(organizationId, storeId, saleId) : ["billing", "sale", "idle"],
-        queryFn: () => getSale(organizationId, storeId, saleId as string),
+        queryFn: () => mode === "device" ? getPosSale(saleId as string) : getSale(organizationId, storeId, saleId as string),
         enabled: open && Boolean(saleId),
     });
 
@@ -107,7 +111,10 @@ const SaleDetailDialog = ({
     };
 
     const collectPaymentMutation = useMutation({
-        mutationFn: () => collectPayment(organizationId, storeId, saleId as string, paymentDraft),
+        mutationFn: () =>
+            mode === "device"
+                ? collectPosPayment(saleId as string, paymentDraft)
+                : collectPayment(organizationId, storeId, saleId as string, paymentDraft),
         onSuccess: (response) => {
             if (response.status !== "success") {
                 setFormError(response.message || "Failed to collect payment");
@@ -124,7 +131,10 @@ const SaleDetailDialog = ({
     });
 
     const voidSaleMutation = useMutation({
-        mutationFn: () => voidSale(organizationId, storeId, saleId as string, voidDraft),
+        mutationFn: () =>
+            mode === "device"
+                ? voidPosSale(saleId as string, voidDraft)
+                : voidSale(organizationId, storeId, saleId as string, voidDraft),
         onSuccess: (response) => {
             if (response.status !== "success") {
                 setFormError(response.message || "Failed to void sale");
@@ -441,7 +451,7 @@ const SaleDetailDialog = ({
                                     </div>
                                 ) : null}
 
-                                {sale.status === "completed" && Number(sale.dueTotal) > 0 ? (
+                                {canMutate && sale.status === "completed" && Number(sale.dueTotal) > 0 ? (
                                     <Card className="rounded-[28px] border-border/60 bg-card/70 no-print">
                                         <CardContent className="space-y-4 p-5">
                                             <div>
@@ -552,7 +562,7 @@ const SaleDetailDialog = ({
                                     </Card>
                                 ) : null}
 
-                                {sale.status === "completed" && Number(sale.paidTotal) === 0 ? (
+                                {canMutate && sale.status === "completed" && Number(sale.paidTotal) === 0 ? (
                                     <Card className="rounded-[28px] border-destructive/20 bg-destructive/5 no-print">
                                         <CardContent className="space-y-4 p-5">
                                             <div>

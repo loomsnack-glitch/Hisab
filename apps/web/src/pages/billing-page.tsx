@@ -3,38 +3,42 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     commitSale,
+    commitPosSale,
     createDraftSale,
+    createPosDraftSale,
     getCategories,
     getCustomers,
     getOrganizationDetails,
+    getPosCategories,
+    getPosCustomers,
+    getPosProducts,
+    getPosSale,
+    getPosSales,
     getProducts,
     getSale,
     getSales,
+    updatePosDraftSale,
     updateDraftSale,
 } from "@repo/services";
 import type {
     CommitSaleJSON,
     CreateDraftSaleJSON,
     CreatePaymentJSON,
+    DeviceSessionDTO,
     PaymentMethod,
     ProductResponseDTO,
-    SaleSummaryDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
-import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
-import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
     ArrowUpDown,
     Banknote,
     Calendar,
-    CircleDollarSign,
     CreditCard,
     Filter,
     Grid,
@@ -50,14 +54,15 @@ import {
     Store,
     Trash2,
     User,
-    WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
+import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
 
 type ComposerItem = {
     productId: string;
@@ -75,36 +80,6 @@ type PaymentSplit = {
     referenceNumber: string;
     notes: string;
 };
-
-const paymentMethods: Array<{ value: PaymentMethod; label: string }> = [
-    { value: "cash", label: "Cash" },
-    { value: "upi", label: "UPI" },
-    { value: "card", label: "Card" },
-    { value: "bank_transfer", label: "Bank transfer" },
-    { value: "other", label: "Other" },
-];
-
-const historyTabs = [
-    { value: "all", label: "All bills" },
-    { value: "draft", label: "Drafts" },
-    { value: "open", label: "Open dues" },
-    { value: "paid", label: "Paid" },
-    { value: "voided", label: "Voided" },
-] as const;
-
-const saleStatusStyles: Record<string, string> = {
-    draft: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    completed: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    voided: "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-};
-
-const paymentStatusStyles: Record<string, string> = {
-    pending: "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-    partial: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-    paid: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-};
-
-const toMoney = (value: number | string | null | undefined) => Math.round(Number(value ?? 0) * 100) / 100;
 
 const createPaymentSplit = (amount = ""): PaymentSplit => ({
     id: crypto.randomUUID(),
@@ -155,19 +130,21 @@ const getProductEmoji = (categoryName: string) => {
     return "🛒";
 };
 
-const formatDate = () => {
-    return new Date().toLocaleDateString("en-IN", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-    });
+type BillingPageProps = {
+    mode?: BillingWorkspaceMode;
+    session?: DeviceSessionDTO | null;
 };
 
-const BillingPage = () => {
+const BillingPage = ({
+    mode = "admin",
+    session = null,
+}: BillingPageProps) => {
     const queryClient = useQueryClient();
-    const { organizationId = "" } = useParams();
+    const { organizationId: organizationIdParam = "" } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
+    const isDeviceMode = mode === "device";
+    const canMutate = isDeviceMode;
+    const organizationId = isDeviceMode ? session?.organization.id ?? "" : organizationIdParam;
 
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
@@ -182,8 +159,10 @@ const BillingPage = () => {
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | "due">("cash");
     const [discountInput, setDiscountInput] = useState("");
-    const [historyFilter, setHistoryFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
-    const [leftPanelTab, setLeftPanelTab] = useState<"products" | "bills">("products");
+    const [historyFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
+    const [leftPanelTab, setLeftPanelTab] = useState<"products" | "bills">(
+        isDeviceMode ? "products" : "bills",
+    );
 
     const [sortBy, setSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
     const [viewLayout, setViewLayout] = useState<"large" | "small" | "list">("large");
@@ -194,40 +173,42 @@ const BillingPage = () => {
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
     const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
 
-    const selectedStoreId = searchParams.get("storeId") || "";
+    const selectedStoreId = isDeviceMode ? session?.store.id ?? "" : searchParams.get("storeId") || "";
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
         queryFn: () => getOrganizationDetails(organizationId),
-        enabled: Boolean(organizationId),
+        enabled: !isDeviceMode && Boolean(organizationId),
     });
 
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
-        queryFn: () => getCategories(organizationId),
+        queryFn: () => isDeviceMode ? getPosCategories() : getCategories(organizationId),
         enabled: Boolean(organizationId),
     });
 
     const productsQuery = useQuery({
         queryKey: catalogKeys.products(organizationId),
-        queryFn: () => getProducts(organizationId),
+        queryFn: () => isDeviceMode ? getPosProducts() : getProducts(organizationId),
         enabled: Boolean(organizationId),
     });
 
     const customersQuery = useQuery({
         queryKey: billingKeys.customers(organizationId),
-        queryFn: () => getCustomers(organizationId, { limit: 200 }),
+        queryFn: () => isDeviceMode ? getPosCustomers({ limit: 200 }) : getCustomers(organizationId, { limit: 200 }),
         enabled: Boolean(organizationId),
     });
 
     const salesQuery = useQuery({
         queryKey: billingKeys.sales(organizationId, selectedStoreId),
-        queryFn: () => getSales(organizationId, selectedStoreId, { limit: 40 }),
+        queryFn: () => isDeviceMode ? getPosSales({ limit: 40 }) : getSales(organizationId, selectedStoreId, { limit: 40 }),
         enabled: Boolean(organizationId && selectedStoreId),
     });
 
     const organization =
-        organizationQuery.data?.status === "success" ? organizationQuery.data.data?.organization ?? null : null;
+        isDeviceMode
+            ? null
+            : organizationQuery.data?.status === "success" ? organizationQuery.data.data?.organization ?? null : null;
     const categories =
         categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? [] : [];
     const products =
@@ -237,7 +218,16 @@ const BillingPage = () => {
     const sales =
         salesQuery.data?.status === "success" ? salesQuery.data.data?.sales ?? [] : [];
 
+    const organizationStores = isDeviceMode && session ? [session.store] : organization?.stores ?? [];
+    const selectedStore = isDeviceMode
+        ? session?.store ?? null
+        : organizationStores.find((store) => store.id === selectedStoreId) ?? null;
+
     useEffect(() => {
+        if (isDeviceMode) {
+            return;
+        }
+
         if (!organization?.stores?.length) {
             return;
         }
@@ -255,9 +245,8 @@ const BillingPage = () => {
         startTransition(() => {
             setSearchParams({ storeId: nextStoreId });
         });
-    }, [organization, selectedStoreId, setSearchParams]);
+    }, [isDeviceMode, organization, selectedStoreId, setSearchParams]);
 
-    const selectedStore = organization?.stores.find((store) => store.id === selectedStoreId) ?? null;
     const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) ?? null;
 
     const activeProducts = products.filter((product) => product.status === "active");
@@ -451,7 +440,7 @@ const BillingPage = () => {
     const saveDraftMutation = useMutation({
         mutationFn: async () => {
             if (!selectedStoreId) {
-                throw new Error("Select a store first");
+                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
             }
 
             if (items.length === 0) {
@@ -460,8 +449,12 @@ const BillingPage = () => {
 
             const payload = buildDraftPayload();
             const response = activeDraftId
-                ? await updateDraftSale(organizationId, selectedStoreId, activeDraftId, payload as UpdateDraftSaleJSON)
-                : await createDraftSale(organizationId, selectedStoreId, payload);
+                ? isDeviceMode
+                    ? await updatePosDraftSale(activeDraftId, payload as UpdateDraftSaleJSON)
+                    : await updateDraftSale(organizationId, selectedStoreId, activeDraftId, payload as UpdateDraftSaleJSON)
+                : isDeviceMode
+                    ? await createPosDraftSale(payload)
+                    : await createDraftSale(organizationId, selectedStoreId, payload);
 
             if (response.status !== "success" || !response.data?.sale) {
                 throw new Error(response.message || "Failed to save draft");
@@ -482,7 +475,7 @@ const BillingPage = () => {
     const completeSaleMutation = useMutation({
         mutationFn: async () => {
             if (!selectedStoreId) {
-                throw new Error("Select a store first");
+                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
             }
 
             if (items.length === 0) {
@@ -499,19 +492,25 @@ const BillingPage = () => {
 
             const draftPayload = buildDraftPayload();
             const draftResponse = activeDraftId
-                ? await updateDraftSale(organizationId, selectedStoreId, activeDraftId, draftPayload as UpdateDraftSaleJSON)
-                : await createDraftSale(organizationId, selectedStoreId, draftPayload);
+                ? isDeviceMode
+                    ? await updatePosDraftSale(activeDraftId, draftPayload as UpdateDraftSaleJSON)
+                    : await updateDraftSale(organizationId, selectedStoreId, activeDraftId, draftPayload as UpdateDraftSaleJSON)
+                : isDeviceMode
+                    ? await createPosDraftSale(draftPayload)
+                    : await createDraftSale(organizationId, selectedStoreId, draftPayload);
 
             if (draftResponse.status !== "success" || !draftResponse.data?.sale) {
                 throw new Error(draftResponse.message || "Failed to prepare bill");
             }
 
-            const commitResponse = await commitSale(
-                organizationId,
-                selectedStoreId,
-                draftResponse.data.sale.id,
-                buildCommitPayload(),
-            );
+            const commitResponse = isDeviceMode
+                ? await commitPosSale(draftResponse.data.sale.id, buildCommitPayload())
+                : await commitSale(
+                    organizationId,
+                    selectedStoreId,
+                    draftResponse.data.sale.id,
+                    buildCommitPayload(),
+                );
 
             if (commitResponse.status !== "success" || !commitResponse.data?.sale) {
                 throw new Error(commitResponse.message || "Failed to complete bill");
@@ -532,10 +531,12 @@ const BillingPage = () => {
     const resumeDraftMutation = useMutation({
         mutationFn: async (saleId: string) => {
             if (!selectedStoreId) {
-                throw new Error("Select a store first");
+                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
             }
 
-            const response = await getSale(organizationId, selectedStoreId, saleId);
+            const response = isDeviceMode
+                ? await getPosSale(saleId)
+                : await getSale(organizationId, selectedStoreId, saleId);
             if (response.status !== "success" || !response.data?.sale) {
                 throw new Error(response.message || "Failed to load draft");
             }
@@ -568,7 +569,11 @@ const BillingPage = () => {
         },
     });
 
-    const setStore = (storeId: string) => {
+    const setStore = (storeId: string | null) => {
+        if (isDeviceMode || !storeId) {
+            return;
+        }
+
         startTransition(() => {
             setSearchParams({ storeId });
         });
@@ -591,7 +596,7 @@ const BillingPage = () => {
         }
     };
 
-    if (organizationQuery.isPending) {
+    if (!isDeviceMode && organizationQuery.isPending) {
         return (
             <div className="flex min-h-[50vh] items-center justify-center">
                 <Spinner className="size-6 text-primary" />
@@ -599,7 +604,7 @@ const BillingPage = () => {
         );
     }
 
-    if (organizationQuery.isError || organizationQuery.data?.status === "error" || !organization) {
+    if (!isDeviceMode && (organizationQuery.isError || organizationQuery.data?.status === "error" || !organization)) {
         return (
             <div className="rounded-2xl border border-border/60 bg-card/80 p-8 shadow-xl shadow-black/5">
                 <p className="font-display text-2xl font-semibold text-foreground">Billing workspace unavailable</p>
@@ -615,13 +620,13 @@ const BillingPage = () => {
         );
     }
 
-    if (organization.stores.length === 0) {
+    if (!selectedStore && organizationStores.length === 0) {
         return (
             <div className="space-y-6">
                 <Button
                     variant="ghost"
                     className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                    render={<Link to={`/organizations/${organization.id}`} />}
+                    render={<Link to={`/organizations/${organizationId}`} />}
                 >
                     <ArrowLeft className="mr-2 size-4" />
                     Back to organization
@@ -634,7 +639,7 @@ const BillingPage = () => {
                     <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
                         Billing is store-scoped. Once a store exists, this screen becomes the POS billing surface.
                     </p>
-                    <Button className="mt-4 rounded-full" render={<Link to={`/organizations/${organization.id}`} />}>
+                    <Button className="mt-4 rounded-full" render={<Link to={`/organizations/${organizationId}`} />}>
                         Go to store setup
                     </Button>
                 </div>
@@ -642,75 +647,99 @@ const BillingPage = () => {
         );
     }
 
+    const panelMaxHeight = isDeviceMode
+        ? "calc(100vh - 3.5rem)"
+        : "calc(100vh - 3.5rem - 57px)";
+
     return (
         <div className="billing-pos-layout flex flex-col gap-0" style={{ minHeight: "calc(100vh - 3.5rem)" }}>
-            {/* ─── Compact Header Bar ─── */}
-            <header className="flex items-center justify-between border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm">
-                <div className="flex items-center gap-4">
-                    <h1 className="font-display text-xl font-bold tracking-tight text-foreground">POS Billing</h1>
-                    <span className="text-sm text-muted-foreground">{formatDate()}</span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Store className="size-4" />
-                        <span className="hidden sm:inline">Counter:</span>
+            {!isDeviceMode ? (
+                <header className="flex items-center justify-between border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm">
+                    <div className="flex items-center gap-4">
+                        <div>
+                            <h1 className="font-display text-xl font-bold tracking-tight text-foreground">
+                                Billing history
+                            </h1>
+                            <p className="text-xs text-muted-foreground">Admin read-only mode</p>
+                        </div>
+                        <span className="text-sm text-muted-foreground">{formatLongDate()}</span>
                     </div>
-                    <Select value={selectedStoreId} onValueChange={setStore}>
-                        <SelectTrigger className="h-9 min-w-[160px] rounded-xl bg-background/80 px-3 text-sm">
-                            <SelectValue placeholder="Choose store" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {organization.stores.map((store) => (
-                                <SelectItem key={store.id} value={store.id}>
-                                    {store.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-            </header>
+
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Store className="size-4" />
+                            <span className="hidden sm:inline">Store:</span>
+                        </div>
+                        <Select value={selectedStoreId} onValueChange={setStore}>
+                            <SelectTrigger className="h-9 min-w-[160px] rounded-xl bg-background/80 px-3 text-sm">
+                                <SelectValue placeholder="Choose store" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {organizationStores.map((store) => (
+                                    <SelectItem key={store.id} value={store.id}>
+                                        {store.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </header>
+            ) : null}
 
             {/* ─── Main Two-Panel Layout ─── */}
             <div className="flex flex-1 flex-col xl:flex-row">
                 {/* ─── LEFT PANEL: Product Grid ─── */}
-                <div className="flex-1 overflow-y-auto p-5" style={{ maxHeight: "calc(100vh - 3.5rem - 57px)" }}>
+                <div className="flex-1 overflow-y-auto p-5" style={{ maxHeight: panelMaxHeight }}>
                     {/* Tab Switcher */}
-                    <div className="mb-5 flex gap-2 border-b border-border/40 pb-3">
-                        <button
-                            type="button"
-                            onClick={() => setLeftPanelTab("products")}
-                            className={cn(
-                                "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
-                                leftPanelTab === "products"
-                                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                            )}
-                        >
-                            <LayoutGrid className="size-4" />
-                            Products Shelf
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setLeftPanelTab("bills")}
-                            className={cn(
-                                "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
-                                leftPanelTab === "bills"
-                                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                            )}
-                        >
-                            <ReceiptText className="size-4" />
-                            Recent Bills & Drafts
-                            {sales.length > 0 && (
-                                <span className="flex h-5 items-center justify-center rounded-full bg-background/25 px-1.5 text-[10px] font-bold text-foreground">
-                                    {sales.length}
-                                </span>
-                            )}
-                        </button>
-                    </div>
+                    {canMutate ? (
+                        <div className="mb-5 flex gap-2 border-b border-border/40 pb-3">
+                            <button
+                                type="button"
+                                onClick={() => setLeftPanelTab("products")}
+                                className={cn(
+                                    "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
+                                    leftPanelTab === "products"
+                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                            >
+                                <LayoutGrid className="size-4" />
+                                Products Shelf
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setLeftPanelTab("bills")}
+                                className={cn(
+                                    "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
+                                    leftPanelTab === "bills"
+                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                            >
+                                <ReceiptText className="size-4" />
+                                Recent Bills & Drafts
+                                {sales.length > 0 && (
+                                    <span className="flex h-5 items-center justify-center rounded-full bg-background/25 px-1.5 text-[10px] font-bold text-foreground">
+                                        {sales.length}
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="mb-5 flex items-center justify-between border-b border-border/40 pb-3">
+                            <div>
+                                <p className="text-sm font-semibold text-foreground">Store billing history</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Inspect drafts, completed bills, and settlements without mutating them.
+                                </p>
+                            </div>
+                            <span className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
+                                Read only
+                            </span>
+                        </div>
+                    )}
 
-                    {leftPanelTab === "products" ? (
+                    {canMutate && leftPanelTab === "products" ? (
                         <>
                             {/* Search Bar */}
                             <div className="relative mb-4">
@@ -809,9 +838,12 @@ const BillingPage = () => {
                                                     {product.name}
                                                 </p>
                                                 <p className="mt-0.5 text-xs text-muted-foreground">{catName}</p>
-                                                <p className="mt-2 text-base font-bold text-primary">
-                                                    {formatCurrency(product.price)}
-                                                </p>
+                                                <ProductPriceDisplay
+                                                    className="mt-2"
+                                                    price={product.price}
+                                                    discount={product.discount}
+                                                    size="md"
+                                                />
                                             </button>
                                         );
                                     })}
@@ -1062,7 +1094,7 @@ const BillingPage = () => {
                                                                     {sale.grandTotal > 0 ? `+${Math.round(sale.grandTotal / 10)} pts` : ""}
                                                                 </div>
                                                                 <div>
-                                                                    {sale.status === "draft" ? (
+                                                                    {canMutate && sale.status === "draft" ? (
                                                                         <Button
                                                                             size="sm"
                                                                             className="rounded-xl text-xs h-8 px-4 bg-primary text-primary-foreground hover:bg-primary/90"
@@ -1123,7 +1155,7 @@ const BillingPage = () => {
                                                             </div>
 
                                                             <div className="mt-3.5">
-                                                                {sale.status === "draft" ? (
+                                                                {canMutate && sale.status === "draft" ? (
                                                                     <Button
                                                                         size="sm"
                                                                         className="w-full rounded-lg text-[11px] h-7 bg-primary text-primary-foreground hover:bg-primary/90"
@@ -1196,7 +1228,7 @@ const BillingPage = () => {
                                                             </div>
 
                                                             <div className="w-24 text-right">
-                                                                {sale.status === "draft" ? (
+                                                                {canMutate && sale.status === "draft" ? (
                                                                     <Button
                                                                         size="sm"
                                                                         className="rounded-lg text-[11px] h-7 px-2.5 bg-primary text-primary-foreground hover:bg-primary/90"
@@ -1232,9 +1264,10 @@ const BillingPage = () => {
                 </div>
 
                 {/* ─── RIGHT PANEL: Current Order ─── */}
+                {canMutate ? (
                 <aside
                     className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm xl:w-[380px] xl:border-t-0 xl:border-l"
-                    style={{ maxHeight: "calc(100vh - 3.5rem - 57px)" }}
+                    style={{ maxHeight: panelMaxHeight }}
                 >
                     {/* Order Header */}
                     <div className="border-b border-border/40 px-5 py-4">
@@ -1309,6 +1342,7 @@ const BillingPage = () => {
                                 <div className="mt-2">
                                     <CustomerQuickCreateDialog
                                         organizationId={organizationId}
+                                        mode={mode}
                                         suggestedName={customerSearch}
                                         onCreated={(customer) => {
                                             setSelectedCustomerId(customer.id);
@@ -1390,9 +1424,13 @@ const BillingPage = () => {
                                                     <p className="truncate text-sm font-semibold text-foreground">
                                                         {item.name}
                                                     </p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {formatCurrency(item.unitPrice)}
-                                                    </p>
+                                                    <ProductPriceDisplay
+                                                        price={item.unitPrice}
+                                                        discount={item.unitDiscount}
+                                                        size="sm"
+                                                        align="left"
+                                                        singleTone="foreground"
+                                                    />
                                                 </div>
 
                                                 {/* Quantity Controls */}
@@ -1566,11 +1604,70 @@ const BillingPage = () => {
                         </div>
                     </div>
                 </aside>
+                ) : (
+                    <aside
+                        className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm xl:w-[380px] xl:border-t-0 xl:border-l"
+                        style={{ maxHeight: panelMaxHeight }}
+                    >
+                        <div className="space-y-5 border-b border-border/40 px-5 py-5">
+                            <span className="w-fit rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-700 dark:text-sky-300">
+                                Admin read-only
+                            </span>
+                            <div>
+                                <h2 className="text-lg font-bold text-foreground">Inspect store billing safely</h2>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    This workspace is now inspection-only for admin users. Open the POS login to create
+                                    drafts, complete bills, or collect money.
+                                </p>
+                            </div>
+                            <Button className="w-full rounded-xl" render={<Link to="/pos/login" />}>
+                                Open POS login
+                            </Button>
+                        </div>
+
+                        <div className="grid gap-3 px-5 py-5">
+                            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                    Store
+                                </p>
+                                <p className="mt-2 text-lg font-semibold text-foreground">
+                                    {selectedStore?.name ?? "Select a store"}
+                                </p>
+                            </div>
+                            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                    Bills in view
+                                </p>
+                                <p className="mt-2 text-3xl font-semibold text-foreground">{filteredSales.length}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Drafts, paid bills, open dues, and voided bills for this store.
+                                </p>
+                            </div>
+                            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                    Drafts
+                                </p>
+                                <p className="mt-2 text-2xl font-semibold text-foreground">
+                                    {sales.filter((sale) => sale.status === "draft").length}
+                                </p>
+                            </div>
+                            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                    Open dues
+                                </p>
+                                <p className="mt-2 text-2xl font-semibold text-foreground">
+                                    {sales.filter((sale) => sale.status === "completed" && sale.paymentStatus !== "paid").length}
+                                </p>
+                            </div>
+                        </div>
+                    </aside>
+                )}
             </div>
 
             <SaleDetailDialog
                 open={saleDialogOpen}
                 onOpenChange={setSaleDialogOpen}
+                mode={mode}
                 organizationId={organizationId}
                 storeId={selectedStoreId}
                 saleId={selectedSaleId}

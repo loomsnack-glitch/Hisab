@@ -1,3 +1,12 @@
+export const formatLongDate = (value: Date = new Date()) => {
+    return value.toLocaleDateString("en-IN", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+    });
+};
+
 export const formatDateTime = (value: string | Date | null | undefined) => {
     if (!value) return "Never";
 

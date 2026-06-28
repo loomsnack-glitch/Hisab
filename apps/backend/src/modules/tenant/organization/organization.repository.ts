@@ -38,6 +38,16 @@ export const getOrganizationsByUserId = async (userId: string): Promise<Organiza
     return results.map((result: Record<string, unknown>) => mapRow<OrganizationDTO>(result));
 };
 
+export const getOrganizationById = async (organizationId: string): Promise<OrganizationDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM organizations
+        WHERE id = ${organizationId}
+    `;
+
+    return result ? snakeToCamel(result) : null;
+};
+
 export const getOrganizationByIdForUser = async (
     organizationId: string,
     userId: string,

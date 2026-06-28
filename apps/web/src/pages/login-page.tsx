@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
-import { ChevronLeft, KeyRound, MessageSquareText } from "lucide-react";
+import { ChevronLeft, KeyRound, MessageSquareText, MonitorSmartphone } from "lucide-react";
 import whatsAppIcon from "@repo/assets/services/whatsapp.webp";
 import { userLogin } from "@repo/services";
 import { LoginFormSchema, formatIndianPhoneDisplay, type LoginFormJSON } from "@repo/types";
@@ -99,6 +99,21 @@ const LoginPage = () => {
             title="Welcome back"
             subtitle="Login with your password or request an OTP on WhatsApp when you need a quick sign-in."
         >
+            <div className="mb-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p className="text-sm font-semibold text-foreground">Need to open the cashier POS instead?</p>
+                        <p className="text-xs text-muted-foreground">
+                            Store devices use a separate login flow with device id and device secret.
+                        </p>
+                    </div>
+                    <Button variant="outline" className="rounded-xl" render={<Link to="/pos/login" />}>
+                        <MonitorSmartphone className="mr-2 size-4" />
+                        Device POS login
+                    </Button>
+                </div>
+            </div>
+
             <Card className="border-border/70 shadow-sm transition-shadow duration-300 hover:shadow-md">
                 <CardContent className="space-y-6 p-6 sm:p-8">
                     <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary p-1.5">
@@ -219,6 +234,12 @@ const LoginPage = () => {
                             Need a new account?{" "}
                             <Link to="/register" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
                                 Register here
+                            </Link>
+                        </p>
+                        <p className="text-center text-sm text-muted-foreground">
+                            Need the device route instead?{" "}
+                            <Link to="/pos/login" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
+                                Open POS login
                             </Link>
                         </p>
                     </form>

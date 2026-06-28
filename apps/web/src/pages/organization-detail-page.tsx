@@ -72,11 +72,6 @@ const OrganizationDetailPage = () => {
     }
 
     const storeCount = organization.stores.length;
-    const deviceCount = organization.stores.reduce((total, store) => total + store.devices.length, 0);
-    const activeDeviceCount = organization.stores.reduce(
-        (total, store) => total + store.devices.filter((device) => device.status === "active").length,
-        0,
-    );
     const productCount = products.length;
 
     return (
@@ -116,7 +111,13 @@ const OrganizationDetailPage = () => {
                                     className="rounded-full"
                                     render={<Link to={`/organizations/${organization.id}/billing`} />}
                                 >
-                                    Open billing workspace
+                                    Open billing history
+                                </Button>
+                                <Button
+                                    className="rounded-full"
+                                    render={<Link to="/pos/login" />}
+                                >
+                                    Open POS login
                                 </Button>
                                 <EditOrganizationDialog organization={organization} />
                             </div>
