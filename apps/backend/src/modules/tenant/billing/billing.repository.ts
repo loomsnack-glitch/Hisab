@@ -120,8 +120,8 @@ export const getCustomersByOrganizationId = async (
     organizationId: string,
     query: SalesListQuery | { search?: string; limit?: number },
 ): Promise<CustomerDTO[]> => {
-    const search = query.search?.trim() || null;
-    const searchPattern = search ? `%${search}%` : null;
+    const search = query.search?.trim() ?? "";
+    const searchPattern = search ? `%${search}%` : "";
     const limit = query.limit ?? 50;
 
     const results = await pg`
@@ -129,7 +129,7 @@ export const getCustomersByOrganizationId = async (
         FROM customers
         WHERE organization_id = ${organizationId}
           AND (
-              ${search} IS NULL
+              ${search} = ''
               OR name ILIKE ${searchPattern}
               OR COALESCE(phone, '') ILIKE ${searchPattern}
           )
