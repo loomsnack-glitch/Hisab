@@ -44,6 +44,57 @@ const moneyFrom = (value: number | string | null | undefined) => roundMoney(Numb
 const sumMoney = (values: Array<number | string | null | undefined>) =>
     roundMoney(values.reduce((total: number, value) => total + Number(value ?? 0), 0));
 
+const getLineDiscountTotal = (items: Array<{ discountAmount: number | string | null | undefined }>) =>
+    sumMoney(items.map((item) => item.discountAmount));
+
+const deriveOrderDiscountAmount = (
+    discountTotal: number | string | null | undefined,
+    lineDiscountTotal: number | string | null | undefined,
+) => roundMoney(Math.max(moneyFrom(discountTotal) - moneyFrom(lineDiscountTotal), 0));
+
+type SalePricingTotals = {
+    subtotal: number;
+    lineDiscountTotal: number;
+    orderDiscountAmount: number;
+    discountTotal: number;
+    grandTotal: number;
+};
+
+const buildSalePricingTotals = (
+    subtotal: number | string | null | undefined,
+    lineDiscountTotal: number | string | null | undefined,
+    orderDiscountAmount: number | string | null | undefined,
+): { error?: ServiceResponse<null>; totals?: SalePricingTotals } => {
+    const normalizedSubtotal = moneyFrom(subtotal);
+    const normalizedLineDiscountTotal = moneyFrom(lineDiscountTotal);
+    const normalizedOrderDiscountAmount = moneyFrom(orderDiscountAmount);
+    const maxOrderDiscountAmount = roundMoney(normalizedSubtotal - normalizedLineDiscountTotal);
+
+    if (normalizedOrderDiscountAmount > maxOrderDiscountAmount) {
+        return {
+            error: {
+                status: "error",
+                message: "Order discount cannot exceed the remaining sale subtotal after line discounts",
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            },
+        };
+    }
+
+    const discountTotal = roundMoney(normalizedLineDiscountTotal + normalizedOrderDiscountAmount);
+    const grandTotal = roundMoney(normalizedSubtotal - discountTotal);
+
+    return {
+        totals: {
+            subtotal: normalizedSubtotal,
+            lineDiscountTotal: normalizedLineDiscountTotal,
+            orderDiscountAmount: normalizedOrderDiscountAmount,
+            discountTotal,
+            grandTotal,
+        },
+    };
+};
+
 const getOrganizationForUser = async (organizationId: string, userId: string) => {
     return organizationRepository.getOrganizationByIdForUser(organizationId, userId);
 };
@@ -130,11 +181,13 @@ const buildSaleDetails = async (
         billingRepository.getSaleItemsBySaleId(saleId, tx),
         billingRepository.getPaymentsBySaleId(saleId, tx),
     ]);
+    const lineDiscountTotal = getLineDiscountTotal(items);
 
     return {
         ...sale,
         items,
         payments,
+        orderDiscountAmount: deriveOrderDiscountAmount(sale.discountTotal, lineDiscountTotal),
     };
 };
 
@@ -143,16 +196,13 @@ const prepareSaleItems = async (
     storeId: string,
     saleId: string,
     items: SaleItemInput[],
+    orderDiscountAmount: number | string | null | undefined,
 ): Promise<
     | { error: ServiceResponse<null>; items?: undefined; totals?: undefined }
     | {
         error?: undefined;
         items: CreateSaleItemREPO[];
-        totals: {
-            subtotal: number;
-            discountTotal: number;
-            grandTotal: number;
-        };
+        totals: SalePricingTotals;
     }
 > => {
     const seenProductIds = new Set<string>();
@@ -215,13 +265,26 @@ const prepareSaleItems = async (
         });
     }
 
+    const pricingTotals = buildSalePricingTotals(
+        sumMoney(preparedItems.map((item) => item.lineSubtotal)),
+        getLineDiscountTotal(preparedItems),
+        orderDiscountAmount,
+    );
+
+    if (pricingTotals.error || !pricingTotals.totals) {
+        return {
+            error: pricingTotals.error ?? {
+                status: "error",
+                message: "Failed to calculate sale totals",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            },
+        };
+    }
+
     return {
         items: preparedItems,
-        totals: {
-            subtotal: sumMoney(preparedItems.map((item) => item.lineSubtotal)),
-            discountTotal: sumMoney(preparedItems.map((item) => item.discountAmount)),
-            grandTotal: sumMoney(preparedItems.map((item) => item.lineTotal)),
-        },
+        totals: pricingTotals.totals,
     };
 };
 
@@ -410,7 +473,13 @@ const createDraftSaleInStore = async (
     }
 
     const saleId = crypto.randomUUID();
-    const prepared = await prepareSaleItems(organizationId, storeId, saleId, saleData.items ?? []);
+    const prepared = await prepareSaleItems(
+        organizationId,
+        storeId,
+        saleId,
+        saleData.items ?? [],
+        saleData.orderDiscountAmount,
+    );
     if (prepared.error) {
         return prepared.error;
     }
@@ -503,29 +572,47 @@ const updateDraftSaleInStore = async (
     const nextNotes = saleData.notes === undefined
         ? existingSale.notes ?? null
         : normalizeOptionalText(saleData.notes);
+    const nextOrderDiscountAmount = saleData.orderDiscountAmount === undefined
+        ? moneyFrom(existingSale.orderDiscountAmount)
+        : moneyFrom(saleData.orderDiscountAmount);
 
     const preparedItems = saleData.items === undefined
-        ? {
-            items: existingSale.items.map((item) => ({
-                id: item.id,
-                organizationId: item.organizationId,
-                storeId: item.storeId,
-                saleId: item.saleId,
-                productId: item.productId,
-                quantity: Number(item.quantity),
-                productNameSnapshot: item.productNameSnapshot,
-                unitPriceSnapshot: Number(item.unitPriceSnapshot),
-                discountAmount: Number(item.discountAmount),
-                lineSubtotal: Number(item.lineSubtotal),
-                lineTotal: Number(item.lineTotal),
-            })),
-            totals: {
-                subtotal: moneyFrom(existingSale.subtotal),
-                discountTotal: moneyFrom(existingSale.discountTotal),
-                grandTotal: moneyFrom(existingSale.grandTotal),
-            },
-        }
-        : await prepareSaleItems(organizationId, storeId, saleId, saleData.items);
+        ? (() => {
+            const pricingTotals = buildSalePricingTotals(
+                existingSale.subtotal,
+                getLineDiscountTotal(existingSale.items),
+                nextOrderDiscountAmount,
+            );
+
+            if (pricingTotals.error || !pricingTotals.totals) {
+                return {
+                    error: pricingTotals.error ?? {
+                        status: "error" as const,
+                        message: "Failed to calculate sale totals",
+                        data: null,
+                        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+                    },
+                };
+            }
+
+            return {
+                items: existingSale.items.map((item) => ({
+                    id: item.id,
+                    organizationId: item.organizationId,
+                    storeId: item.storeId,
+                    saleId: item.saleId,
+                    productId: item.productId,
+                    quantity: Number(item.quantity),
+                    productNameSnapshot: item.productNameSnapshot,
+                    unitPriceSnapshot: Number(item.unitPriceSnapshot),
+                    discountAmount: Number(item.discountAmount),
+                    lineSubtotal: Number(item.lineSubtotal),
+                    lineTotal: Number(item.lineTotal),
+                })),
+                totals: pricingTotals.totals,
+            };
+        })()
+        : await prepareSaleItems(organizationId, storeId, saleId, saleData.items, nextOrderDiscountAmount);
 
     if ("error" in preparedItems && preparedItems.error) {
         return preparedItems.error;
@@ -629,7 +716,25 @@ const commitSaleInStore = async (
 
     const payments = commitData.payments ?? [];
     const totalPayment = sumMoney(payments.map((payment) => payment.amount));
-    const grandTotal = moneyFrom(existingSale.grandTotal);
+    const nextOrderDiscountAmount = commitData.orderDiscountAmount === undefined
+        ? moneyFrom(existingSale.orderDiscountAmount)
+        : moneyFrom(commitData.orderDiscountAmount);
+    const pricingTotals = buildSalePricingTotals(
+        existingSale.subtotal,
+        getLineDiscountTotal(existingSale.items),
+        nextOrderDiscountAmount,
+    );
+
+    if (pricingTotals.error || !pricingTotals.totals) {
+        return pricingTotals.error ?? {
+            status: "error",
+            message: "Failed to calculate sale totals",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    const grandTotal = pricingTotals.totals.grandTotal;
 
     if (totalPayment > grandTotal) {
         return {
@@ -672,8 +777,8 @@ const commitSaleInStore = async (
                 status: "completed",
                 paymentStatus,
                 updatedByDeviceId: actor.deviceId ?? null,
-                subtotal: moneyFrom(existingSale.subtotal),
-                discountTotal: moneyFrom(existingSale.discountTotal),
+                subtotal: pricingTotals.totals.subtotal,
+                discountTotal: pricingTotals.totals.discountTotal,
                 grandTotal,
                 notes: nextNotes,
                 committedAt,

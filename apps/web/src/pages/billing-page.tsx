@@ -23,7 +23,6 @@ import {
 import type {
     CommitSaleJSON,
     CreateDraftSaleJSON,
-    CreatePaymentJSON,
     DeviceSessionDTO,
     PaymentMethod,
     ProductResponseDTO,
@@ -73,21 +72,7 @@ type ComposerItem = {
     quantity: number;
 };
 
-type PaymentSplit = {
-    id: string;
-    method: PaymentMethod;
-    amount: string;
-    referenceNumber: string;
-    notes: string;
-};
-
-const createPaymentSplit = (amount = ""): PaymentSplit => ({
-    id: crypto.randomUUID(),
-    method: "cash",
-    amount,
-    referenceNumber: "",
-    notes: "",
-});
+type SettlementMode = "full" | "partial" | "due";
 
 /* ---------- emoji map for product categories ---------- */
 const categoryEmojis: Record<string, string> = {
@@ -151,13 +136,14 @@ const BillingPage = ({
     const [customerSearch, setCustomerSearch] = useState("");
     const [notes, setNotes] = useState("");
     const [items, setItems] = useState<ComposerItem[]>([]);
-    const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
     const [productSearch, setProductSearch] = useState("");
     const [salesSearch, setSalesSearch] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("all");
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | "due">("cash");
+    const [settlementMode, setSettlementMode] = useState<SettlementMode>("full");
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("cash");
+    const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
     const [discountInput, setDiscountInput] = useState("");
     const [historyFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
     const [leftPanelTab, setLeftPanelTab] = useState<"products" | "bills" | "customers">(
@@ -340,12 +326,21 @@ const BillingPage = ({
         });
 
     const subtotal = items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
-    const discountTotal = items.reduce((total, item) => total + item.unitDiscount * item.quantity, 0);
-    const extraDiscount = Number(discountInput || 0);
-    const grandTotal = Math.max(subtotal - discountTotal - extraDiscount, 0);
-    const collectedTotal = paymentSplits.reduce((total, split) => total + Number(split.amount || 0), 0);
+    const lineDiscountTotal = items.reduce((total, item) => total + item.unitDiscount * item.quantity, 0);
+    const orderDiscountAmount = Math.max(Number(discountInput || 0), 0);
+    const totalDiscount = lineDiscountTotal + orderDiscountAmount;
+    const grandTotal = Math.max(subtotal - totalDiscount, 0);
+    const rawPartialPaymentAmount = Math.max(Number(partialPaymentAmount || 0), 0);
+    const collectedTotal = settlementMode === "due"
+        ? 0
+        : settlementMode === "full"
+            ? grandTotal
+            : rawPartialPaymentAmount;
     const dueTotal = Math.max(grandTotal - collectedTotal, 0);
-    const isOverpaid = collectedTotal > grandTotal;
+    const isOverpaid = settlementMode === "partial" && rawPartialPaymentAmount > grandTotal;
+    const isPartialAmountMissing = settlementMode === "partial" && rawPartialPaymentAmount <= 0;
+    const matchesFullPayment = settlementMode === "partial" && grandTotal > 0 && rawPartialPaymentAmount === grandTotal;
+    const hasInvalidPartialPayment = isOverpaid || isPartialAmountMissing || matchesFullPayment;
 
     const invalidateBillingQueries = () => {
         queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
@@ -357,9 +352,10 @@ const BillingPage = ({
         setCustomerSearch("");
         setNotes("");
         setItems([]);
-        setPaymentSplits([]);
-        setDiscountInput("");
+        setSettlementMode("full");
         setSelectedPaymentMethod("cash");
+        setPartialPaymentAmount("");
+        setDiscountInput("");
     };
 
     const addProductToBill = (product: ProductResponseDTO) => {
@@ -403,18 +399,6 @@ const BillingPage = ({
         );
     };
 
-    const setFullPaymentPreset = (method: PaymentMethod | "due") => {
-        setSelectedPaymentMethod(method);
-    };
-
-    useEffect(() => {
-        if (grandTotal > 0 && selectedPaymentMethod !== "due") {
-            setPaymentSplits([createPaymentSplit(String(grandTotal))].map((split) => ({ ...split, method: selectedPaymentMethod })));
-        } else {
-            setPaymentSplits([]);
-        }
-    }, [grandTotal, selectedPaymentMethod]);
-
     const ensureCustomerForDue = () => {
         if (dueTotal <= 0 || selectedCustomerId) {
             return true;
@@ -426,6 +410,7 @@ const BillingPage = ({
 
     const buildDraftPayload = (): CreateDraftSaleJSON => ({
         customerId: selectedCustomerId || null,
+        orderDiscountAmount,
         notes: notes.trim() || null,
         items: items.map((item) => ({
             productId: item.productId,
@@ -437,15 +422,17 @@ const BillingPage = ({
 
     const buildCommitPayload = (): CommitSaleJSON => ({
         customerId: selectedCustomerId || null,
+        orderDiscountAmount,
         notes: notes.trim() || null,
-        payments: paymentSplits
-            .filter((split) => Number(split.amount || 0) > 0)
-            .map((split) => ({
-                amount: Number(split.amount),
-                method: split.method,
-                referenceNumber: split.referenceNumber.trim() || null,
-                notes: split.notes.trim() || null,
-            })) as CreatePaymentJSON[],
+        payments:
+            settlementMode === "due"
+                ? []
+                : [{
+                    amount: settlementMode === "full" ? grandTotal : rawPartialPaymentAmount,
+                    method: selectedPaymentMethod,
+                    referenceNumber: null,
+                    notes: null,
+                }],
     });
 
     const saveDraftMutation = useMutation({
@@ -495,6 +482,14 @@ const BillingPage = ({
 
             if (isOverpaid) {
                 throw new Error("Collected amount cannot exceed the bill total");
+            }
+
+            if (settlementMode === "partial" && isPartialAmountMissing) {
+                throw new Error("Enter the amount the customer is paying now");
+            }
+
+            if (matchesFullPayment) {
+                throw new Error("Use 'Pay full now' when the customer is paying the full bill amount");
             }
 
             if (!ensureCustomerForDue()) {
@@ -570,7 +565,10 @@ const BillingPage = ({
                     quantity: Number(item.quantity),
                 })),
             );
-            setPaymentSplits([]);
+            setSettlementMode("full");
+            setSelectedPaymentMethod("cash");
+            setPartialPaymentAmount("");
+            setDiscountInput(sale.orderDiscountAmount > 0 ? String(sale.orderDiscountAmount) : "");
             setLeftPanelTab("products");
             window.scrollTo({ top: 0, behavior: "smooth" });
             toast.success("Draft loaded into the composer");
@@ -1117,11 +1115,51 @@ const BillingPage = ({
                                 <>
                                     {/* Render payment badges helper function */}
                                     {(() => {
-                                        const renderPaymentMethodBadges = (sale: any) => {
+                                        const renderPaymentStatusBadge = (sale: any) => {
                                             if (sale.status === "draft") {
                                                 return (
                                                     <span className="rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-500 border border-amber-500/20">
                                                         Draft
+                                                    </span>
+                                                );
+                                            }
+
+                                            if (sale.status === "voided") {
+                                                return (
+                                                    <span className="rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                                                        Voided
+                                                    </span>
+                                                );
+                                            }
+
+                                            if (sale.paymentStatus === "paid") {
+                                                return (
+                                                    <span className="rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                                        Paid
+                                                    </span>
+                                                );
+                                            }
+
+                                            if (sale.paymentStatus === "partial") {
+                                                return (
+                                                    <span className="rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-orange-500/10 text-orange-500 border border-orange-500/20">
+                                                        Partial
+                                                    </span>
+                                                );
+                                            }
+
+                                            return (
+                                                <span className="rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                                                    Due
+                                                </span>
+                                            );
+                                        };
+
+                                        const renderPaymentMethodBadges = (sale: any) => {
+                                            if (sale.status === "draft" || sale.status === "voided") {
+                                                return (
+                                                    <span className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                                                        No payment
                                                     </span>
                                                 );
                                             }
@@ -1171,7 +1209,10 @@ const BillingPage = ({
                                                                     <p className="font-bold text-amber-500 dark:text-amber-400 text-sm">
                                                                         {sale.saleNumber ? `#${sale.saleNumber}` : "Draft Bill"}
                                                                     </p>
-                                                                    {renderPaymentMethodBadges(sale)}
+                                                                    <div className="flex flex-col items-end gap-1">
+                                                                        {renderPaymentStatusBadge(sale)}
+                                                                        {renderPaymentMethodBadges(sale)}
+                                                                    </div>
                                                                 </div>
                                                                 
                                                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1187,9 +1228,23 @@ const BillingPage = ({
                                                                     <span className="text-xs text-muted-foreground truncate max-w-[160px]">
                                                                         {sale.customer?.name || "Walk-in"} • {sale.itemCount} item{sale.itemCount !== 1 ? "s" : ""}
                                                                     </span>
-                                                                    <span className="text-lg font-bold text-foreground">
-                                                                        {formatCurrency(sale.grandTotal)}
-                                                                    </span>
+                                                                    <div className="text-right">
+                                                                        <span className="text-lg font-bold text-foreground">
+                                                                            {formatCurrency(sale.grandTotal)}
+                                                                        </span>
+                                                                        {sale.status !== "draft" && sale.status !== "voided" && (
+                                                                            <p className={cn(
+                                                                                "mt-1 text-[10px] font-semibold",
+                                                                                Number(sale.dueTotal) > 0
+                                                                                    ? "text-amber-600 dark:text-amber-400"
+                                                                                    : "text-emerald-600 dark:text-emerald-400",
+                                                                            )}>
+                                                                                {Number(sale.dueTotal) > 0
+                                                                                    ? `Due ${formatCurrency(sale.dueTotal)}`
+                                                                                    : "Paid in full"}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
@@ -1241,7 +1296,10 @@ const BillingPage = ({
                                                                     <p className="font-bold text-amber-500 dark:text-amber-400 text-xs">
                                                                         {sale.saleNumber ? `#${sale.saleNumber}` : "Draft"}
                                                                     </p>
-                                                                    {renderPaymentMethodBadges(sale)}
+                                                                    <div className="flex flex-col items-end gap-1">
+                                                                        {renderPaymentStatusBadge(sale)}
+                                                                        {renderPaymentMethodBadges(sale)}
+                                                                    </div>
                                                                 </div>
                                                                 
                                                                 <div className="text-[10px] text-muted-foreground truncate">
@@ -1252,9 +1310,23 @@ const BillingPage = ({
                                                                     <span className="text-[11px] text-muted-foreground truncate max-w-[90px]">
                                                                         {sale.customer?.name || "Walk-in"}
                                                                     </span>
-                                                                    <span className="text-sm font-bold text-foreground">
-                                                                        {formatCurrency(sale.grandTotal)}
-                                                                    </span>
+                                                                    <div className="text-right">
+                                                                        <span className="text-sm font-bold text-foreground">
+                                                                            {formatCurrency(sale.grandTotal)}
+                                                                        </span>
+                                                                        {sale.status !== "draft" && sale.status !== "voided" && (
+                                                                            <p className={cn(
+                                                                                "mt-0.5 text-[9px] font-semibold",
+                                                                                Number(sale.dueTotal) > 0
+                                                                                    ? "text-amber-600 dark:text-amber-400"
+                                                                                    : "text-emerald-600 dark:text-emerald-400",
+                                                                            )}>
+                                                                                {Number(sale.dueTotal) > 0
+                                                                                    ? `Due ${formatCurrency(sale.dueTotal)}`
+                                                                                    : "Paid"}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
@@ -1319,16 +1391,32 @@ const BillingPage = ({
 
                                                         <div className="flex items-center gap-4 shrink-0">
                                                             <div className="hidden sm:block">
-                                                                {renderPaymentMethodBadges(sale)}
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    {renderPaymentStatusBadge(sale)}
+                                                                    {renderPaymentMethodBadges(sale)}
+                                                                </div>
                                                             </div>
 
                                                             <div className="w-20 text-right">
                                                                 <p className="text-sm font-bold text-foreground">
                                                                     {formatCurrency(sale.grandTotal)}
                                                                 </p>
-                                                                <p className="text-[9px] font-bold text-emerald-500 dark:text-emerald-400 mt-0.5">
-                                                                    {sale.grandTotal > 0 ? `+${Math.round(sale.grandTotal / 10)} pts` : ""}
-                                                                </p>
+                                                                {sale.status !== "draft" && sale.status !== "voided" ? (
+                                                                    <p className={cn(
+                                                                        "mt-0.5 text-[9px] font-bold",
+                                                                        Number(sale.dueTotal) > 0
+                                                                            ? "text-amber-600 dark:text-amber-400"
+                                                                            : "text-emerald-500 dark:text-emerald-400",
+                                                                    )}>
+                                                                        {Number(sale.dueTotal) > 0
+                                                                            ? `Due ${formatCurrency(sale.dueTotal)}`
+                                                                            : "Paid in full"}
+                                                                    </p>
+                                                                ) : (
+                                                                    <p className="text-[9px] font-bold text-emerald-500 dark:text-emerald-400 mt-0.5">
+                                                                        {sale.grandTotal > 0 ? `+${Math.round(sale.grandTotal / 10)} pts` : ""}
+                                                                    </p>
+                                                                )}
                                                             </div>
 
                                                             <div className="w-24 text-right">
@@ -1582,7 +1670,17 @@ const BillingPage = ({
                     {/* ─── Bottom Checkout Area (always visible) ─── */}
                     <div className="border-t border-border/40 bg-card px-5 py-4">
                         {/* Discount Input */}
-                        <div className="mb-3">
+                        <div className="mb-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                    Pricing
+                                </span>
+                                {orderDiscountAmount > 0 ? (
+                                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                        Order discount applied
+                                    </span>
+                                ) : null}
+                            </div>
                             <Input
                                 type="number"
                                 min="0"
@@ -1600,10 +1698,28 @@ const BillingPage = ({
                                 <span>Subtotal</span>
                                 <span>{formatCurrency(subtotal)}</span>
                             </div>
-                            {discountTotal + extraDiscount > 0 && (
+                            {lineDiscountTotal > 0 && (
                                 <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                                    <span>Discount</span>
-                                    <span>-{formatCurrency(discountTotal + extraDiscount)}</span>
+                                    <span>Item discounts</span>
+                                    <span>-{formatCurrency(lineDiscountTotal)}</span>
+                                </div>
+                            )}
+                            {orderDiscountAmount > 0 && (
+                                <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                    <span>Order discount</span>
+                                    <span>-{formatCurrency(orderDiscountAmount)}</span>
+                                </div>
+                            )}
+                            {collectedTotal > 0 && (
+                                <div className="flex justify-between text-sky-600 dark:text-sky-400">
+                                    <span>Collected now</span>
+                                    <span>{formatCurrency(collectedTotal)}</span>
+                                </div>
+                            )}
+                            {dueTotal > 0 && items.length > 0 && (
+                                <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                                    <span>Due after bill</span>
+                                    <span>{formatCurrency(dueTotal)}</span>
                                 </div>
                             )}
                             <div className="flex justify-between pt-1.5 text-lg font-bold text-foreground">
@@ -1612,61 +1728,115 @@ const BillingPage = ({
                             </div>
                         </div>
 
-                        {/* Payment Method Pills */}
-                        <div className="mb-3 grid grid-cols-4 gap-1.5">
-                            <button
-                                type="button"
-                                onClick={() => setFullPaymentPreset("cash")}
-                                className={cn(
-                                    "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                    selectedPaymentMethod === "cash"
-                                        ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
-                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
-                                )}
-                            >
-                                <Banknote className="size-3.5" />
-                                Cash
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setFullPaymentPreset("upi")}
-                                className={cn(
-                                    "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                    selectedPaymentMethod === "upi"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                                )}
-                            >
-                                <Smartphone className="size-3.5" />
-                                UPI
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setFullPaymentPreset("card")}
-                                className={cn(
-                                    "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                    selectedPaymentMethod === "card"
-                                        ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
-                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
-                                )}
-                            >
-                                <CreditCard className="size-3.5" />
-                                Card
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setFullPaymentPreset("due")}
-                                className={cn(
-                                    "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                    selectedPaymentMethod === "due"
-                                        ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
-                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
-                                )}
-                            >
-                                <Receipt className="size-3.5" />
-                                Due
-                            </button>
+                        <div className="mb-3">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                Settlement
+                            </p>
+                            <div className="grid grid-cols-3 gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setSettlementMode("full")}
+                                    className={cn(
+                                        "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                        settlementMode === "full"
+                                            ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
+                                            : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
+                                    )}
+                                >
+                                    <ReceiptText className="size-3.5" />
+                                    Pay full
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSettlementMode("partial")}
+                                    className={cn(
+                                        "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                        settlementMode === "partial"
+                                            ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
+                                            : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
+                                    )}
+                                >
+                                    <CreditCard className="size-3.5" />
+                                    Pay partial
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSettlementMode("due")}
+                                    className={cn(
+                                        "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                        settlementMode === "due"
+                                            ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
+                                            : "border border-border/60 bg-background/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
+                                    )}
+                                >
+                                    <Receipt className="size-3.5" />
+                                    Mark due
+                                </button>
+                            </div>
                         </div>
+
+                        {settlementMode !== "due" && (
+                            <div className="mb-3">
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                    Payment Method
+                                </p>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedPaymentMethod("cash")}
+                                        className={cn(
+                                            "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                            selectedPaymentMethod === "cash"
+                                                ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
+                                                : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
+                                        )}
+                                    >
+                                        <Banknote className="size-3.5" />
+                                        Cash
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedPaymentMethod("upi")}
+                                        className={cn(
+                                            "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                            selectedPaymentMethod === "upi"
+                                                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                                : "border border-border/60 bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                                        )}
+                                    >
+                                        <Smartphone className="size-3.5" />
+                                        UPI
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedPaymentMethod("card")}
+                                        className={cn(
+                                            "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                            selectedPaymentMethod === "card"
+                                                ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
+                                                : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
+                                        )}
+                                    >
+                                        <CreditCard className="size-3.5" />
+                                        Card
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {settlementMode === "partial" && (
+                            <div className="mb-3">
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    className="h-10 rounded-xl bg-background/60 text-sm"
+                                    placeholder="Collected Amount INR"
+                                    value={partialPaymentAmount}
+                                    onChange={(e) => setPartialPaymentAmount(e.target.value)}
+                                />
+                            </div>
+                        )}
 
                         {/* Warnings */}
                         {isOverpaid && (
@@ -1675,9 +1845,21 @@ const BillingPage = ({
                             </div>
                         )}
 
+                        {settlementMode === "partial" && isPartialAmountMissing && !isOverpaid && (
+                            <div className="mb-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
+                                Enter the amount the customer is paying now.
+                            </div>
+                        )}
+
+                        {settlementMode === "partial" && matchesFullPayment && !isOverpaid && (
+                            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                                Use &quot;Pay full&quot; when the customer is settling the entire bill amount.
+                            </div>
+                        )}
+
                         {!selectedCustomerId && dueTotal > 0 && items.length > 0 && (
                             <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                                Attach a customer for partial/pending bills.
+                                Attach a customer for partial or due bills.
                             </div>
                         )}
 
@@ -1698,7 +1880,12 @@ const BillingPage = ({
                             <Button
                                 type="button"
                                 className="h-11 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/20 hover:bg-primary/90 text-sm"
-                                disabled={completeSaleMutation.isPending || saveDraftMutation.isPending || items.length === 0 || isOverpaid}
+                                disabled={
+                                    completeSaleMutation.isPending
+                                    || saveDraftMutation.isPending
+                                    || items.length === 0
+                                    || hasInvalidPartialPayment
+                                }
                                 onClick={() => completeSaleMutation.mutate()}
                             >
                                 {completeSaleMutation.isPending

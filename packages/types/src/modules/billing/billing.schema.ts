@@ -148,6 +148,7 @@ export const SaleSummaryDTOSchema = z.object({
 export const SaleDetailDTOSchema = SaleSummaryDTOSchema.extend({
     items: z.array(SaleItemDTOSchema),
     payments: z.array(PaymentDTOSchema),
+    orderDiscountAmount: moneySchema,
 });
 
 export const CreateCustomerSchema = z.object({
@@ -181,6 +182,7 @@ export const SaleItemInputSchema = z.object({
 
 export const CreateDraftSaleSchema = z.object({
     customerId: z.union([z.literal(""), z.uuid("Invalid customer id")]).nullable().optional(),
+    orderDiscountAmount: moneySchema.optional(),
     notes: optionalNotesSchema,
     items: z.array(SaleItemInputSchema).optional().default([]),
 });
@@ -188,11 +190,16 @@ export const CreateDraftSaleSchema = z.object({
 export const UpdateDraftSaleSchema = z
     .object({
         customerId: z.union([z.literal(""), z.uuid("Invalid customer id")]).nullable().optional(),
+        orderDiscountAmount: moneySchema.optional(),
         notes: optionalNotesSchema,
         items: z.array(SaleItemInputSchema).optional(),
     })
     .refine(
-        (value) => value.customerId !== undefined || value.notes !== undefined || value.items !== undefined,
+        value =>
+            value.customerId !== undefined
+            || value.orderDiscountAmount !== undefined
+            || value.notes !== undefined
+            || value.items !== undefined,
         { message: "At least one field is required" },
     );
 
@@ -208,6 +215,7 @@ export const CreatePaymentSchema = z.object({
 
 export const CommitSaleSchema = z.object({
     customerId: z.union([z.literal(""), z.uuid("Invalid customer id")]).nullable().optional(),
+    orderDiscountAmount: moneySchema.optional(),
     notes: optionalNotesSchema,
     payments: z.array(CreatePaymentSchema).optional().default([]),
 });

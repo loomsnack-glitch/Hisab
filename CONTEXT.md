@@ -48,6 +48,10 @@ _Avoid_: Live product lookup, dynamic line item
 A reduction applied to a Sale or Sale Item before the final amount is collected. Billing v1 supports simple discounts and does not model tax.
 _Avoid_: Offer engine, tax rule
 
+**Order-Level Discount**:
+A Discount applied to the whole Sale after line-item pricing is computed. It reduces the Sale's grand total and is not itself a Payment.
+_Avoid_: Advance payment, settlement adjustment
+
 **Catalog-backed Sale Item**:
 A Sale Item must reference a Product and also store billing snapshots such as product name and price. Billing v1 does not support manual line items without a Product.
 _Avoid_: Ad hoc line item, free-text product row
@@ -59,6 +63,10 @@ _Avoid_: Editable paid draft, provisional settlement
 **Collected Payment**:
 A Payment records money that was actually received against a committed Sale. Unpaid balance is represented by the remaining amount on the Sale, not by a synthetic credit Payment.
 _Avoid_: Credit placeholder payment, due row
+
+**Partial Payment**:
+Money collected that is less than a committed Sale's grand total. A Partial Payment leaves a due balance on the Sale and makes it a Receivable Sale.
+_Avoid_: Discounted bill, soft close
 
 **Voidable Sale**:
 A committed Sale may be voided only if no Payments have been collected against it. Billing v1 does not support voiding paid Sales because refunds are out of scope.

@@ -92,6 +92,12 @@ const SaleDetailDialog = ({
     });
 
     const sale = saleQuery.data?.status === "success" ? saleQuery.data.data?.sale ?? null : null;
+    const itemDiscountTotal = sale
+        ? sale.items.reduce((total, item) => total + Number(item.discountAmount ?? 0), 0)
+        : 0;
+    const discountedItemsSubtotal = sale
+        ? Math.max(Number(sale.subtotal ?? 0) - itemDiscountTotal, 0)
+        : 0;
 
     useEffect(() => {
         if (sale) {
@@ -184,9 +190,14 @@ const SaleDetailDialog = ({
         });
 
         text += `${separator}\n`;
-        text += `Subtotal:`.padEnd(30) + String(sale.subtotal).padStart(12) + "\n";
-        text += `Discount:`.padEnd(30) + String(sale.discountTotal).padStart(12) + "\n";
-        text += `Grand Total:`.padEnd(30) + String(sale.grandTotal).padStart(12) + "\n";
+        text += `Items Subtotal:`.padEnd(30) + String(discountedItemsSubtotal).padStart(12) + "\n";
+        if (itemDiscountTotal > 0) {
+            text += `Item Discount Included:`.padEnd(30) + String(itemDiscountTotal).padStart(12) + "\n";
+        }
+        if (Number(sale.orderDiscountAmount) > 0) {
+            text += `Order Discount:`.padEnd(30) + String(sale.orderDiscountAmount).padStart(12) + "\n";
+        }
+        text += `Settlement Total:`.padEnd(30) + String(sale.grandTotal).padStart(12) + "\n";
         text += `Collected:`.padEnd(30) + String(sale.paidTotal).padStart(12) + "\n";
         text += `Due:`.padEnd(30) + String(sale.dueTotal).padStart(12) + "\n";
         text += `${doubleSeparator}\n`;
@@ -420,13 +431,21 @@ const SaleDetailDialog = ({
                                         </div>
                                         <div className="space-y-3.5 text-xs">
                                             <div className="flex items-center justify-between gap-4 text-white/70 w-full">
-                                                <span className="font-medium">Subtotal</span>
-                                                <span className="font-semibold text-white/90">{formatCurrency(sale.subtotal)}</span>
+                                                <span className="font-medium">Items subtotal</span>
+                                                <span className="font-semibold text-white/90">{formatCurrency(discountedItemsSubtotal)}</span>
                                             </div>
-                                            <div className="flex items-center justify-between gap-4 text-white/70 w-full">
-                                                <span className="font-medium">Discount</span>
-                                                <span className="font-semibold text-white/90">{formatCurrency(sale.discountTotal)}</span>
-                                            </div>
+                                            {itemDiscountTotal > 0 && (
+                                                <div className="flex items-center justify-between gap-4 text-white/60 w-full">
+                                                    <span className="font-medium">Item discount included</span>
+                                                    <span className="font-semibold text-white/80">{formatCurrency(itemDiscountTotal)}</span>
+                                                </div>
+                                            )}
+                                            {Number(sale.orderDiscountAmount) > 0 && (
+                                                <div className="flex items-center justify-between gap-4 text-white/70 w-full">
+                                                    <span className="font-medium">Order discount</span>
+                                                    <span className="font-semibold text-white/90">-{formatCurrency(sale.orderDiscountAmount)}</span>
+                                                </div>
+                                            )}
                                             <div className="flex items-center justify-between gap-4 text-white/70 w-full">
                                                 <span className="font-medium">Collected</span>
                                                 <span className="font-semibold text-emerald-400">{formatCurrency(sale.paidTotal)}</span>
