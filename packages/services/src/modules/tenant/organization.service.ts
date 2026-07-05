@@ -3,6 +3,8 @@ import type {
     CreateStoreDeviceJSON,
     CreateStoreJSON,
     UpdateOrganizationJSON,
+    UpdateStoreDeviceJSON,
+    UpdateStoreJSON,
     OrganizationDetailsResponse,
     OrganizationResponse,
     OrganizationsListResponse,
@@ -81,6 +83,19 @@ export const createStore = async (
     }
 };
 
+export const updateStore = async (
+    organizationId: string,
+    storeId: string,
+    data: UpdateStoreJSON,
+): Promise<ServiceResponse<StoreResponse | null>> => {
+    try {
+        const response = await api.patch(`/organizations/${organizationId}/stores/${storeId}`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const getStoreDevices = async (
     organizationId: string,
     storeId: string,
@@ -100,6 +115,23 @@ export const createStoreDevice = async (
 ): Promise<ServiceResponse<StoreDeviceResponse | null>> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/devices`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateStoreDevice = async (
+    organizationId: string,
+    storeId: string,
+    deviceId: string,
+    data: UpdateStoreDeviceJSON,
+): Promise<ServiceResponse<StoreDeviceResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/stores/${storeId}/devices/${deviceId}`,
+            data,
+        );
         return response.data;
     } catch (error) {
         return handleApiError(error);

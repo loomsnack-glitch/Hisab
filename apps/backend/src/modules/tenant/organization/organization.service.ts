@@ -4,6 +4,8 @@ import {
     type CreateStoreDeviceSVC,
     type CreateStoreSVC,
     type UpdateOrganizationSVC,
+    type UpdateStoreDeviceSVC,
+    type UpdateStoreSVC,
     type OrganizationDetailsResponse,
     type OrganizationResponse,
     type OrganizationsListResponse,
@@ -251,6 +253,74 @@ export const createStore = async (
     };
 };
 
+export const updateStore = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    storeData: UpdateStoreSVC,
+): Promise<ServiceResponse<StoreResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const store = await getStoreForOrganization(organizationId, storeId);
+    if (!store) {
+        return {
+            status: "error",
+            message: "Store not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const nextName = storeData.name.trim();
+
+    if (nextName.toLowerCase() !== store.name.toLowerCase()) {
+        const alreadyExists = await organizationRepository.storeNameExistsInOrganization(
+            organizationId,
+            nextName,
+            storeId,
+        );
+        if (alreadyExists) {
+            return {
+                status: "error",
+                message: "Store with the same name already exists in this organization",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
+    const updatedStore = await organizationRepository.updateStore({
+        id: storeId,
+        name: nextName,
+        address: normalizeOptionalText(storeData.address),
+        updatedBy: userId,
+    });
+
+    if (!updatedStore) {
+        return {
+            status: "error",
+            message: "Failed to update store",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    return {
+        status: "success",
+        data: { store: updatedStore },
+        message: "Store updated successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
 export const getStoreDevices = async (
     userId: string,
     organizationId: string,
@@ -347,6 +417,88 @@ export const createStoreDevice = async (
         },
         message: "Device created successfully",
         code: STATUS_CODES.CREATED,
+    };
+};
+
+export const updateStoreDevice = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    deviceId: string,
+    deviceData: UpdateStoreDeviceSVC,
+): Promise<ServiceResponse<StoreDeviceResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const store = await getStoreForOrganization(organizationId, storeId);
+    if (!store) {
+        return {
+            status: "error",
+            message: "Store not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const device = await getStoreDeviceForOrganization(organizationId, storeId, deviceId);
+    if (!device) {
+        return {
+            status: "error",
+            message: "Device not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const nextName = deviceData.name.trim();
+
+    if (nextName.toLowerCase() !== device.name.toLowerCase()) {
+        const alreadyExists = await organizationRepository.deviceNameExistsInStore(storeId, nextName, deviceId);
+        if (alreadyExists) {
+            return {
+                status: "error",
+                message: "Device with the same name already exists in this store",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
+    const trimmedSecret = deviceData.deviceSecret?.trim();
+    const updatePayload: Parameters<typeof organizationRepository.updateStoreDevice>[0] = {
+        id: deviceId,
+        name: nextName,
+        status: deviceData.status,
+        updatedBy: userId,
+    };
+
+    if (trimmedSecret) {
+        updatePayload.deviceSecretEncrypted = await encryptDeviceSecret(trimmedSecret);
+    }
+
+    const updatedDevice = await organizationRepository.updateStoreDevice(updatePayload);
+
+    if (!updatedDevice) {
+        return {
+            status: "error",
+            message: "Failed to update device",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    return {
+        status: "success",
+        data: { device: updatedDevice },
+        message: "Device updated successfully",
+        code: STATUS_CODES.SUCCESS,
     };
 };
 

@@ -6,6 +6,8 @@ import {
     CreateStoreSchema,
     STATUS_CODES,
     UpdateOrganizationSchema,
+    UpdateStoreDeviceSchema,
+    UpdateStoreSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
@@ -120,6 +122,38 @@ router.post("/:organizationId/stores", validateSchema("json", CreateStoreSchema)
     }
 });
 
+router.patch(
+    "/:organizationId/stores/:storeId",
+    validateSchema("json", UpdateStoreSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) {
+                return c.json(invalidStoreId, invalidStoreId.code);
+            }
+
+            const authUser = c.get("authUser");
+            const body = c.req.valid("json");
+            const serviceResponse = await organizationService.updateStore(
+                authUser.id,
+                organizationId,
+                storeId,
+                body,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateStore", c, error);
+        }
+    },
+);
+
 router.get("/:organizationId/stores/:storeId/devices", async (c) => {
     try {
         const organizationId = c.req.param("organizationId");
@@ -203,6 +237,45 @@ router.post(
             return handleServiceResponse(c, serviceResponse);
         } catch (error) {
             return handleError(FILE_NAME, "createStoreDevice", c, error);
+        }
+    },
+);
+
+router.patch(
+    "/:organizationId/stores/:storeId/devices/:deviceId",
+    validateSchema("json", UpdateStoreDeviceSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const deviceId = c.req.param("deviceId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) {
+                return c.json(invalidStoreId, invalidStoreId.code);
+            }
+
+            const invalidDeviceId = validateUuidParam(deviceId, "Invalid device id");
+            if (invalidDeviceId) {
+                return c.json(invalidDeviceId, invalidDeviceId.code);
+            }
+
+            const authUser = c.get("authUser");
+            const body = c.req.valid("json");
+            const serviceResponse = await organizationService.updateStoreDevice(
+                authUser.id,
+                organizationId,
+                storeId,
+                deviceId,
+                body,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateStoreDevice", c, error);
         }
     },
 );

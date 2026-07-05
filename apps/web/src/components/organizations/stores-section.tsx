@@ -6,11 +6,13 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
-import { MonitorSmartphone, PlusCircle, Store, Search } from "lucide-react";
+import { MonitorSmartphone, Pencil, PlusCircle, Store, Search } from "lucide-react";
 
 import CreateDeviceDialog from "@/components/organizations/create-device-dialog";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
 import DeviceStatusBadge from "@/components/organizations/device-status-badge";
+import EditDeviceDialog from "@/components/organizations/edit-device-dialog";
+import EditStoreDialog from "@/components/organizations/edit-store-dialog";
 import RevealDeviceSecretButton from "@/components/organizations/reveal-device-secret-button";
 import { formatDateTime } from "@/lib/format";
 
@@ -128,17 +130,29 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                     </div>
                                 </div>
 
-                                <CreateDeviceDialog
-                                    organizationId={organizationId}
-                                    storeId={store.id}
-                                    storeName={store.name}
-                                    trigger={
-                                        <Button variant="outline" className="rounded-full">
-                                            <PlusCircle className="mr-2 size-4" />
-                                            Add device
-                                        </Button>
-                                    }
-                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <EditStoreDialog
+                                        organizationId={organizationId}
+                                        store={store}
+                                        trigger={
+                                            <Button variant="outline" className="rounded-full">
+                                                <Pencil className="mr-2 size-4" />
+                                                Edit store
+                                            </Button>
+                                        }
+                                    />
+                                    <CreateDeviceDialog
+                                        organizationId={organizationId}
+                                        storeId={store.id}
+                                        storeName={store.name}
+                                        trigger={
+                                            <Button variant="outline" className="rounded-full">
+                                                <PlusCircle className="mr-2 size-4" />
+                                                Add device
+                                            </Button>
+                                        }
+                                    />
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent className="pt-6">
@@ -172,6 +186,7 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                                 <th className="px-4 py-3 font-medium">Last seen</th>
                                                 <th className="px-4 py-3 font-medium">Created</th>
                                                 <th className="px-4 py-3 font-medium">Secret</th>
+                                                <th className="px-4 py-3 font-medium">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-border/40">
@@ -218,6 +233,19 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                                                 deviceName={device.name}
                                                             />
                                                         </div>
+                                                    </td>
+                                                    <td className="px-4 py-3.5">
+                                                        <EditDeviceDialog
+                                                            organizationId={organizationId}
+                                                            storeId={store.id}
+                                                            device={device}
+                                                            trigger={
+                                                                <Button variant="outline" size="sm" className="rounded-full">
+                                                                    <Pencil className="mr-2 size-4" />
+                                                                    Edit
+                                                                </Button>
+                                                            }
+                                                        />
                                                     </td>
                                                 </tr>
                                             ))}

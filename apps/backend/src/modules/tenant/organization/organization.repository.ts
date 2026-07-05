@@ -9,6 +9,8 @@ import type {
     StoreDeviceDTO,
     StoreDTO,
     UpdateOrganizationREPO,
+    UpdateStoreDeviceREPO,
+    UpdateStoreREPO,
 } from "@repo/types";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
@@ -134,16 +136,43 @@ export const getStoreById = async (organizationId: string, storeId: string): Pro
     return result ? snakeToCamel(result) : null;
 };
 
-export const storeNameExistsInOrganization = async (organizationId: string, name: string): Promise<boolean> => {
+export const storeNameExistsInOrganization = async (
+    organizationId: string,
+    name: string,
+    excludeId?: string,
+): Promise<boolean> => {
+    const results = excludeId
+        ? await pg`
+            SELECT 1
+            FROM stores
+            WHERE organization_id = ${organizationId}
+              AND LOWER(name) = LOWER(${name})
+              AND id <> ${excludeId}
+            LIMIT 1
+        `
+        : await pg`
+            SELECT 1
+            FROM stores
+            WHERE organization_id = ${organizationId}
+              AND LOWER(name) = LOWER(${name})
+            LIMIT 1
+        `;
+
+    return Boolean(results[0]);
+};
+
+export const updateStore = async (storeData: UpdateStoreREPO): Promise<StoreDTO | null> => {
     const [result] = await pg`
-        SELECT 1
-        FROM stores
-        WHERE organization_id = ${organizationId}
-          AND LOWER(name) = LOWER(${name})
-        LIMIT 1
+        UPDATE stores
+        SET name = ${storeData.name},
+            address = ${storeData.address},
+            updated_by = ${storeData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${storeData.id}
+        RETURNING *
     `;
 
-    return Boolean(result);
+    return result ? snakeToCamel(result) : null;
 };
 
 export const createStoreDevice = async (
@@ -185,16 +214,54 @@ export const getStoreDevicesByStoreId = async (
     return results.map((result: Record<string, unknown>) => mapRow<StoreDeviceDTO>(result));
 };
 
-export const deviceNameExistsInStore = async (storeId: string, name: string): Promise<boolean> => {
+export const deviceNameExistsInStore = async (storeId: string, name: string, excludeId?: string): Promise<boolean> => {
+    const results = excludeId
+        ? await pg`
+            SELECT 1
+            FROM store_devices
+            WHERE store_id = ${storeId}
+              AND LOWER(name) = LOWER(${name})
+              AND id <> ${excludeId}
+            LIMIT 1
+        `
+        : await pg`
+            SELECT 1
+            FROM store_devices
+            WHERE store_id = ${storeId}
+              AND LOWER(name) = LOWER(${name})
+            LIMIT 1
+        `;
+
+    return Boolean(results[0]);
+};
+
+export const updateStoreDevice = async (deviceData: UpdateStoreDeviceREPO): Promise<StoreDeviceDTO | null> => {
+    if (deviceData.deviceSecretEncrypted) {
+        const [result] = await pg`
+            UPDATE store_devices
+            SET name = ${deviceData.name},
+                status = ${deviceData.status},
+                device_secret_encrypted = ${deviceData.deviceSecretEncrypted},
+                updated_by = ${deviceData.updatedBy},
+                updated_at = NOW()
+            WHERE id = ${deviceData.id}
+            RETURNING *
+        `;
+
+        return result ? snakeToCamel(result) : null;
+    }
+
     const [result] = await pg`
-        SELECT 1
-        FROM store_devices
-        WHERE store_id = ${storeId}
-          AND LOWER(name) = LOWER(${name})
-        LIMIT 1
+        UPDATE store_devices
+        SET name = ${deviceData.name},
+            status = ${deviceData.status},
+            updated_by = ${deviceData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${deviceData.id}
+        RETURNING *
     `;
 
-    return Boolean(result);
+    return result ? snakeToCamel(result) : null;
 };
 
 export const getStoreDeviceById = async (

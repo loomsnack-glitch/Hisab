@@ -68,7 +68,18 @@ export const CreateStoreSchema = z.object({
     address: optionalAddressSchema,
 });
 
+export const UpdateStoreSchema = z.object({
+    name: nameSchema,
+    address: optionalAddressSchema,
+});
+
 export const CreateStoreDeviceSchema = z.object({
     name: nameSchema,
     deviceSecret: deviceSecretSchema,
+});
+
+export const UpdateStoreDeviceSchema = z.object({
+    name: nameSchema,
+    status: StoreDeviceStatusSchema,
+    deviceSecret: z.union([z.literal(""), deviceSecretSchema]).optional(),
 });
