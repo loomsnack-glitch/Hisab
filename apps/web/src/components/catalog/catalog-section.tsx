@@ -47,6 +47,9 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
         [categories],
     );
 
+    const defaultCategoryIdForNewProduct =
+        selectedCategoryFilter !== "all" ? selectedCategoryFilter : undefined;
+
     const productsByCategoryId = useMemo(() => {
         const grouped = new Map<string, typeof products>();
         for (const product of products) {
@@ -160,6 +163,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                         <UpsertProductDialog
                             organizationId={organizationId}
                             categories={categories}
+                            defaultCategoryId={defaultCategoryIdForNewProduct}
                             trigger={
                                 <Button
                                     className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-5"
@@ -243,7 +247,11 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 </EmptyHeader>
                                 {!(searchQuery || selectedCategoryFilter !== "all") && (
                                     <EmptyContent>
-                                        <UpsertProductDialog organizationId={organizationId} categories={categories} />
+                                        <UpsertProductDialog
+                                            organizationId={organizationId}
+                                            categories={categories}
+                                            defaultCategoryId={defaultCategoryIdForNewProduct}
+                                        />
                                     </EmptyContent>
                                 )}
                             </Empty>

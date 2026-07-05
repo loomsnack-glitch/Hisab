@@ -148,6 +148,10 @@ _Avoid_: Per-open device re-login, one-page POS session
 In billing v1, a Device-Authenticated Billing Session uses the Organization's shared product catalog, categories, and customers while creating bills only within its own Store.
 _Avoid_: Store-private v1 catalog, device-private customer list
 
+**Add-On**:
+An organization-scoped catalog item that may be attached to specific Products and selected under a parent Sale Item during billing. An Add-On is not sold by itself in the POS flow; it uses catalog-defined pricing that is snapshotted onto the bill when selected.
+_Avoid_: Suggested product, independent sale item, upsell hint
+
 **Concurrent Admin and POS Sessions**:
 The same browser may hold an admin user session and an isolated device POS session at the same time, provided each continues to use its own auth channel and permissions.
 _Avoid_: Forced shared logout, single-session admin/POS browser

@@ -34,6 +34,7 @@ type UpsertProductDialogProps = {
     organizationId: string;
     categories: CategoryDTO[];
     product?: ProductResponseDTO;
+    defaultCategoryId?: string;
     trigger?: React.ReactElement;
 };
 
@@ -102,7 +103,13 @@ const createProductImagePath = (organizationId: string, file: File) => {
     return `organizations/${organizationId}/products/${crypto.randomUUID()}.${extension}`;
 };
 
-const UpsertProductDialog = ({ organizationId, categories, product, trigger }: UpsertProductDialogProps) => {
+const UpsertProductDialog = ({
+    organizationId,
+    categories,
+    product,
+    defaultCategoryId,
+    trigger,
+}: UpsertProductDialogProps) => {
     const [open, setOpen] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [removeCurrentImage, setRemoveCurrentImage] = useState(false);
@@ -117,6 +124,14 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
         defaultValues,
     });
 
+    const resolveDefaultCategoryId = () => {
+        if (defaultCategoryId && categories.some((category) => category.id === defaultCategoryId)) {
+            return defaultCategoryId;
+        }
+
+        return categories[0]?.id ?? "";
+    };
+
     useEffect(() => {
         if (open) {
             if (product) {
@@ -126,6 +141,10 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
             } else {
                 setImageType("icon");
                 setSelectedIcon("🍔");
+                form.reset({
+                    ...defaultValues,
+                    categoryId: resolveDefaultCategoryId(),
+                });
             }
         } else {
             form.reset(
@@ -140,13 +159,13 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                     }
                     : {
                         ...defaultValues,
-                        categoryId: categories[0]?.id ?? "",
+                        categoryId: resolveDefaultCategoryId(),
                     },
             );
             setSelectedFile(null);
             setRemoveCurrentImage(false);
         }
-    }, [categories, form, open, product]);
+    }, [categories, defaultCategoryId, form, open, product]);
 
     const categoryOptions = useMemo(
         () => categories.map((category) => ({ label: category.name, value: category.id })),
