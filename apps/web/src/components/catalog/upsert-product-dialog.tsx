@@ -204,7 +204,7 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                     )
                 }
             />
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+            <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
                         <Package2 className="size-5" />
