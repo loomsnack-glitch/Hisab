@@ -149,8 +149,56 @@ In billing v1, a Device-Authenticated Billing Session uses the Organization's sh
 _Avoid_: Store-private v1 catalog, device-private customer list
 
 **Add-On**:
-An organization-scoped catalog item that may be attached to specific Products and selected under a parent Sale Item during billing. An Add-On is not sold by itself in the POS flow; it uses catalog-defined pricing that is snapshotted onto the bill when selected.
+An organization-scoped catalog item that may be attached to many different Products and selected under a parent Sale Item during billing. An Add-On is not sold by itself in the POS flow; it uses catalog-defined pricing and discount that are snapshotted onto the bill when selected, attached Add-Ons are optional unless the model later grows explicit requirement rules, and the Add-On itself has its own active/inactive lifecycle.
 _Avoid_: Suggested product, independent sale item, upsell hint
+
+**Add-On Discount**:
+A Discount defined on the Add-On itself and applied to the Add-On portion of billing separately from any Discount on the parent Product. Parent Product pricing rules do not implicitly change Add-On pricing rules.
+_Avoid_: Inherited product discount, bundled hidden markdown, parent-only discount logic
+
+**Retired Add-On**:
+An Add-On that is no longer offered for future billing but remains in the system for historical bill snapshots, product attachment integrity, and reporting. In the initial model, retiring an Add-On happens through its active/inactive status rather than destructive deletion once it has dependencies or billing history.
+_Avoid_: Hard-deleted historical add-on, erased modifier, dangling attachment
+
+**Organization Add-On Catalog**:
+The flat organization-level list of Add-Ons available to be attached directly to Products. In v1, Add-Ons do not have their own category tree because Products already provide the main POS browse structure.
+_Avoid_: Add-on category hierarchy, per-product private add-on list, nested modifier catalog
+
+**Add-On Selection Cap**:
+The maximum whole-number quantity of a specific Add-On that may be chosen for one eligible Product when that Add-On is attached to the Product. In the initial model, this per-product attachment rule defaults to `1` unless the organization configures a higher cap, and the cap may differ across Products for the same Add-On.
+_Avoid_: Max cap, unlimited checkbox count, global add-on stock
+
+**Product Add-On Attachment**:
+The rule that links one Product to one Add-On and makes that Add-On selectable for that Product in the POS flow. In v1, the attachment owns eligibility plus the per-product Add-On Selection Cap, while Add-On price and discount stay owned by the Add-On itself.
+_Avoid_: Per-product add-on price override, duplicated add-on catalog row, free-floating cap rule
+
+**Configured Sale Item**:
+A Sale Item is defined by its parent Product plus its selected Add-On quantities. Two selections of the same Product with different Add-On combinations are different Configured Sale Items and therefore appear as separate lines in a Draft Sale, the selected Add-On quantities are defined per one parent product unit, and one Configured Sale Item may include multiple different Add-Ons at the same time.
+_Avoid_: Plain product row, merged product regardless of add-ons, mutable cart option set
+
+**Sale Item Configuration Merge**:
+When the same Product is added again with the exact same Add-On selection, Billing increases the existing Configured Sale Item quantity instead of creating a duplicate line. Different Add-On selections stay on separate lines even when the parent Product is the same, and a customize action with no selected Add-Ons merges into the plain Product line.
+_Avoid_: Always duplicate line, merge by product only, ignore add-on signature
+
+**Configured Sale Item Signature**:
+The identity rule for a Configured Sale Item is the parent Product plus its selected Add-On quantities, not the parent Product id alone. This signature replaces the simpler billing v1 assumption that a Draft Sale can contain only one line per Product.
+_Avoid_: Product-only uniqueness, duplicate-product rejection, parent-only line identity
+
+**Frozen Add-On Selection**:
+Once a Configured Sale Item has been added to a Draft Sale, its Add-On selection does not change in place. The operator may increase or decrease the line quantity, or remove the line entirely and add a new configuration, but does not edit the selected Add-Ons on that existing line. Later catalog changes to Add-On price, discount, status, or selection cap do not rewrite that already-added Draft Sale line.
+_Avoid_: In-cart add-on editing, mutable option set, live line reconfiguration
+
+**Parent-Scoped Add-On Sale Record**:
+Selected Add-Ons belong under the parent Product Sale Item they were chosen for so reporting can attribute add-on sales back to that parent Product. Add-On sales are analyzed in the context of the parent Product, not as free-floating sales, and they remain visible as nested child lines in bill details and receipt output.
+_Avoid_: Standalone add-on sale, detached extra row, parentless modifier sale
+
+**Single-Level Add-On Tree**:
+Add-Ons may be selected only under a parent Product Sale Item. In v1, an Add-On cannot itself have child Add-Ons, so billing configuration stops at one parent-product level plus one add-on level.
+_Avoid_: Recursive modifiers, nested extras, add-ons on add-ons
+
+**Customize-Only Add-On Selection**:
+In the POS workflow, tapping a Product normally adds the plain base Configured Sale Item with no Add-Ons, even when that Product has attached Add-Ons available. Selecting Add-Ons happens only through an explicit customize action for that Product.
+_Avoid_: Forced customization on every tap, implicit add-on picker, normal-tap configured item
 
 **Concurrent Admin and POS Sessions**:
 The same browser may hold an admin user session and an isolated device POS session at the same time, provided each continues to use its own auth channel and permissions.

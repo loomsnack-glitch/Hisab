@@ -16,6 +16,7 @@ import { Eye, EyeOff, KeyRound, RotateCcw, ShieldCheck, TriangleAlert } from "lu
 type DeviceSecretDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    deviceId: string;
     deviceName: string;
     deviceSecret?: string;
     isLoading?: boolean;
@@ -26,6 +27,7 @@ type DeviceSecretDialogProps = {
 const DeviceSecretDialog = ({
     open,
     onOpenChange,
+    deviceId,
     deviceName,
     deviceSecret,
     isLoading = false,
@@ -85,6 +87,22 @@ const DeviceSecretDialog = ({
                                 screen.
                             </AlertDescription>
                         </Alert>
+
+                        <div className="rounded-3xl border border-border/70 bg-muted/40 p-4 shadow-sm">
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                                Device ID
+                            </p>
+                            <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/80 p-3">
+                                <code className="flex-1 break-all font-mono text-sm text-foreground">{deviceId}</code>
+                                <CopyToClipboard
+                                    getValue={() => deviceId}
+                                    tooltip="Copy device ID"
+                                    variant="outline"
+                                    size="icon-sm"
+                                    className="rounded-full"
+                                />
+                            </div>
+                        </div>
 
                         <div className="rounded-3xl border border-border/70 bg-muted/40 p-4 shadow-sm">
                             <div className="mb-3 flex items-center justify-between gap-3">

@@ -1,0 +1,3 @@
+# Parent-scoped add-ons are modeled as reusable catalog items and child billing records
+
+Hisab will model Add-Ons as organization-scoped catalog items with their own price, discount, status, and flat catalog lifecycle, then attach them to eligible Products through a per-product attachment rule that owns only eligibility plus `Add-On Selection Cap`. In billing, a Sale Item is identified by a configuration signature of parent Product plus selected Add-On quantities, selected Add-Ons are stored and shown under that parent Product with their own snapshots, and matching configurations merge by quantity while different configurations stay on separate lines because this best matches the POS workflow and preserves parent-scoped reporting.

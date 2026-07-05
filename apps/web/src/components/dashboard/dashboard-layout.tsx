@@ -181,7 +181,7 @@ const DashboardLayout = () => {
                             <Button
                                 variant="outline"
                                 className="hidden rounded-xl border-amber-500/25 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200 sm:flex"
-                                render={<Link to="/pos/login" />}
+                                render={<Link to="/pos/login" target="_blank" />}
                             >
                                 <MonitorSmartphone className="mr-2 size-4" />
                                 Login as device

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { StoreWithDevicesDTO } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
+import CopyToClipboard from "@repo/ui/components/copy-to-clipboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
@@ -198,9 +199,18 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                                     <td className="px-4 py-3.5">
                                                         <div>
                                                             <p className="font-medium text-foreground">{device.name}</p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                ID: {device.id.slice(0, 8)}
-                                                            </p>
+                                                            <div className="mt-1 flex items-center gap-1">
+                                                                <code className="break-all font-mono text-xs text-muted-foreground">
+                                                                    {device.id}
+                                                                </code>
+                                                                <CopyToClipboard
+                                                                    getValue={() => device.id}
+                                                                    tooltip="Copy device ID"
+                                                                    variant="ghost"
+                                                                    size="icon-sm"
+                                                                    className="shrink-0 rounded-full"
+                                                                />
+                                                            </div>
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-3.5">

@@ -57,6 +57,7 @@ const RevealDeviceSecretButton = ({
             <DeviceSecretDialog
                 open={open}
                 onOpenChange={setOpen}
+                deviceId={deviceId}
                 deviceName={deviceName}
                 deviceSecret={deviceSecret}
                 isLoading={secretMutation.isPending}
