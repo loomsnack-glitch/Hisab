@@ -14,10 +14,11 @@ const BASE_PATH = process.env.BASE_PATH
 const app = BASE_PATH ? new Hono().basePath(BASE_PATH) : new Hono();
 
 const allowedOrigins = process.env.NODE_ENV === "production"
-    ? ["https://ganatri.loomsanck.in"]
+    ? ["https://ganatri.loomsnack.com"]
     : [
         "http://localhost:5173",
         "http://localhost:5174",
+        "https://ganatri.loomsnack.com",
         "https://ganatri.loomsanck.in",
     ];
 

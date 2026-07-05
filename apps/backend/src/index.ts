@@ -2,11 +2,12 @@ import app from "./app";
 import { redis } from "./config/redis";
 import { handleShutdown } from "./helpers/server.helper";
 
-const port = 8000;
+const port = Number(process.env.PORT) || 8000;
+const hostname = process.env.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0";
 
 Bun.serve({
-  hostname: "0.0.0.0",
-  port: port,
+  hostname,
+  port,
   fetch: app.fetch,
 });
 
