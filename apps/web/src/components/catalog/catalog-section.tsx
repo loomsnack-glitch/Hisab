@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCategories, getProducts } from "@repo/services";
-import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
@@ -251,79 +250,94 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                         </CardContent>
                     </Card>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                        {filteredProducts.map((product) => (
-                            <Card
-                                key={product.id}
-                                className="group relative overflow-hidden rounded-[24px] border border-border/65 bg-card/80 p-6 shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary/30 hover:bg-card flex flex-col items-center text-center"
-                            >
-                                {/* Inactive status badge indicator */}
-                                {product.status === "inactive" && (
-                                    <div className="absolute top-3.5 right-3.5">
-                                        <ProductStatusBadge status={product.status} />
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))]">
+                        {filteredProducts.map((product) => {
+                            const categoryName = categoryMap.get(product.categoryId)?.name ?? "Unknown";
+
+                            return (
+                                <Card
+                                    key={product.id}
+                                    className="group rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-sm transition-all duration-200 hover:border-primary/25 hover:bg-card hover:shadow-md"
+                                >
+                                    <div className="flex items-center gap-3.5">
+                                        <div className="relative flex h-[4.25rem] w-[4.25rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-[1.02] dark:ring-white/5">
+                                            {product.imagePath?.startsWith("icon:") ? (
+                                                <span className="text-4xl select-none select-none-emoji">
+                                                    {product.imagePath.replace("icon:", "")}
+                                                </span>
+                                            ) : product.imageSignedUrl ? (
+                                                <img
+                                                    src={product.imageSignedUrl}
+                                                    alt={product.name}
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <Package2 className="size-8 text-muted-foreground/55" />
+                                            )}
+                                        </div>
+
+                                        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                            <div className="min-w-0 space-y-1">
+                                                <h4 className="truncate font-display text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+                                                    {product.name}
+                                                </h4>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-xs font-medium capitalize text-muted-foreground">
+                                                        {categoryName}
+                                                    </span>
+                                                    {product.status === "inactive" && (
+                                                        <ProductStatusBadge status={product.status} />
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex shrink-0 items-center gap-2.5">
+                                                <ProductPriceDisplay
+                                                    price={product.price}
+                                                    discount={product.discount}
+                                                    size="sm"
+                                                    align="right"
+                                                    singleTone="foreground"
+                                                    className="min-w-[4.5rem]"
+                                                />
+
+                                                <div className="flex items-center gap-0.5 border-l border-border/50 pl-2.5">
+                                                    <UpsertProductDialog
+                                                        organizationId={organizationId}
+                                                        categories={categories}
+                                                        product={product}
+                                                        trigger={
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                aria-label={`Edit ${product.name}`}
+                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
+                                                            >
+                                                                <Pencil className="size-3.5" />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                    <DeleteProductButton
+                                                        organizationId={organizationId}
+                                                        product={product}
+                                                        trigger={
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                aria-label={`Delete ${product.name}`}
+                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer touch-manipulation"
+                                                            >
+                                                                <Trash2 className="size-3.5" />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
-
-                                {/* Product Image or Predefined Icon container */}
-                                <div className="relative mb-5 flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
-                                    {product.imagePath?.startsWith("icon:") ? (
-                                        <span className="text-5xl select-none select-none-emoji">{product.imagePath.replace("icon:", "")}</span>
-                                    ) : product.imageSignedUrl ? (
-                                        <img
-                                            src={product.imageSignedUrl}
-                                            alt={product.name}
-                                            className="h-full w-full rounded-full object-cover border border-border/40"
-                                        />
-                                    ) : (
-                                        <Package2 className="size-10 text-muted-foreground/60" />
-                                    )}
-                                </div>
-
-                                {/* Product Name */}
-                                <h4 className="font-display font-semibold text-foreground text-base tracking-tight mb-0.5 w-full truncate px-1">
-                                    {product.name}
-                                </h4>
-
-                                {/* Category Name */}
-                                <span className="text-xs font-medium text-muted-foreground/80 mb-3 block">
-                                    {categoryMap.get(product.categoryId)?.name ?? "Unknown"}
-                                </span>
-
-                                {/* Price */}
-                                <div className="mt-auto">
-                                    <ProductPriceDisplay
-                                        price={product.price}
-                                        discount={product.discount}
-                                        size="lg"
-                                        singleTone="foreground"
-                                    />
-                                </div>
-
-                                {/* Hover action overlay (edit & delete buttons) */}
-                                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-background/95 backdrop-blur-sm border border-border/80 shadow-lg px-3 py-1.5 rounded-full opacity-0 translate-y-2 scale-95 transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100">
-                                    <UpsertProductDialog
-                                        organizationId={organizationId}
-                                        categories={categories}
-                                        product={product}
-                                        trigger={
-                                            <Button variant="outline" size="sm" className="h-7 px-3 text-xs rounded-full border-border/60 hover:bg-muted/50 cursor-pointer">
-                                                <Pencil className="mr-1.5 size-3" />
-                                                Edit
-                                            </Button>
-                                        }
-                                    />
-                                    <DeleteProductButton
-                                        organizationId={organizationId}
-                                        product={product}
-                                        trigger={
-                                            <Button variant="destructive" size="icon" className="h-7 w-7 rounded-full shrink-0 flex items-center justify-center p-0 cursor-pointer">
-                                                <Trash2 className="size-3.5" />
-                                            </Button>
-                                        }
-                                    />
-                                </div>
-                            </Card>
-                        ))}
+                                </Card>
+                            );
+                        })}
                     </div>
                 )}
             </div>

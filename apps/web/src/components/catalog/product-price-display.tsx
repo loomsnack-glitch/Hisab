@@ -6,7 +6,7 @@ type ProductPriceDisplayProps = {
     price: number | string;
     discount?: number | string | null;
     size?: "sm" | "md" | "lg";
-    align?: "left" | "center";
+    align?: "left" | "center" | "right";
     /** Color for the price when there is no discount */
     singleTone?: "foreground" | "primary";
     className?: string;
@@ -53,6 +53,8 @@ const ProductPriceDisplay = ({
     const hasDiscount = discountAmount > 0;
     const finalPrice = getDiscountedPrice(originalPrice, discountAmount);
     const styles = sizeStyles[size];
+    const alignClass =
+        align === "center" ? "text-center items-center" : align === "right" ? "text-right items-end" : "text-left items-start";
 
     if (!hasDiscount) {
         return (
@@ -61,7 +63,7 @@ const ProductPriceDisplay = ({
                     styles.single,
                     "tabular-nums tracking-tight",
                     singleTone === "primary" ? "text-primary" : "text-foreground",
-                    align === "center" && "text-center",
+                    alignClass,
                     className,
                 )}
             >
@@ -74,7 +76,7 @@ const ProductPriceDisplay = ({
         <div
             className={cn(
                 "flex flex-col gap-0.5",
-                align === "center" ? "items-center" : "items-start",
+                alignClass,
                 className,
             )}
         >
