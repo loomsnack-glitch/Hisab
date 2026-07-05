@@ -82,7 +82,7 @@ const CustomerQuickCreateDialog = ({
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
             {trigger ? <DialogTrigger render={trigger} /> : null}
             <DialogContent className="max-w-md rounded-[28px] border-border/70 bg-background/95 p-6 shadow-2xl backdrop-blur-xl">
                 <DialogHeader className="space-y-2">

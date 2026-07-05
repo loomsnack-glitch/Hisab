@@ -66,7 +66,7 @@ const CreateDeviceDialog = ({ organizationId, storeId, storeName, trigger }: Cre
 
     return (
         <>
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
                 <DialogTrigger
                     render={
                         trigger ?? (

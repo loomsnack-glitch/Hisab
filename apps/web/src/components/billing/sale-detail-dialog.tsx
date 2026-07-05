@@ -216,7 +216,7 @@ const SaleDetailDialog = ({
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
             <DialogContent className="max-h-[92vh] w-[95vw] sm:w-[90vw] md:w-[85vw] max-w-4xl sm:max-w-4xl md:max-w-4xl lg:max-w-4xl overflow-y-auto overflow-x-hidden rounded-[32px] border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">
                 <style>{`
                     @media print {

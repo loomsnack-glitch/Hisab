@@ -11,6 +11,7 @@ import {
     type ProductResponseDTO,
     type ProductStatus,
 } from "@repo/types";
+import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
@@ -36,11 +37,44 @@ type UpsertProductDialogProps = {
     trigger?: React.ReactElement;
 };
 
-const defaultValues: CreateProductJSON = {
+const decimalAmountPattern = /^\d+(\.\d*)?$/;
+
+const sanitizeDecimalInput = (value: string) => {
+    const digitsAndDot = value.replace(/[^\d.]/g, "");
+    const dotIndex = digitsAndDot.indexOf(".");
+
+    if (dotIndex === -1) {
+        return digitsAndDot;
+    }
+
+    return digitsAndDot.slice(0, dotIndex + 1) + digitsAndDot.slice(dotIndex + 1).replace(/\./g, "");
+};
+
+const UpsertProductFormSchema = CreateProductSchema.extend({
+    price: z
+        .string()
+        .refine((value) => value.length > 0, "Price is required")
+        .refine((value) => decimalAmountPattern.test(value), "Enter a valid price")
+        .transform((value) => Number(value))
+        .pipe(z.number().min(0, "Price must be 0 or more")),
+    discount: z
+        .string()
+        .refine(
+            (value) => value === "" || decimalAmountPattern.test(value),
+            "Enter a valid discount",
+        )
+        .transform((value) => (value === "" ? 0 : Number(value)))
+        .pipe(z.number().min(0, "Discount must be 0 or more"))
+        .optional(),
+});
+
+type UpsertProductFormInput = z.input<typeof UpsertProductFormSchema>;
+
+const defaultValues: UpsertProductFormInput = {
     categoryId: "",
     name: "",
-    price: 0,
-    discount: 0,
+    price: "",
+    discount: "",
     imagePath: "",
     status: "active",
 };
@@ -78,8 +112,8 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
     const queryClient = useQueryClient();
     const isEditMode = Boolean(product);
 
-    const form = useForm<CreateProductJSON>({
-        resolver: zodResolver(CreateProductSchema),
+    const form = useForm<UpsertProductFormInput, unknown, CreateProductJSON>({
+        resolver: zodResolver(UpsertProductFormSchema),
         defaultValues,
     });
 
@@ -99,8 +133,8 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                     ? {
                         categoryId: product.categoryId,
                         name: product.name,
-                        price: Number(product.price),
-                        discount: Number(product.discount),
+                        price: String(product.price),
+                        discount: product.discount ? String(product.discount) : "",
                         imagePath: product.imagePath ?? "",
                         status: product.status,
                     }
@@ -246,42 +280,56 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Product name</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="e.g. Cheese Burger" {...form.register("name")} />
+                            <Input className="h-11 rounded-xl" placeholder="" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
 
                     {/* Row 2: Price + Discount side by side */}
                     <div className="grid gap-4 sm:grid-cols-2">
-                        <Field data-invalid={!!form.formState.errors.price}>
-                            <FieldLabel required>Price (₹)</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    className="h-11 rounded-xl"
-                                    placeholder="e.g. 50.00"
-                                    {...form.register("price", { valueAsNumber: true })}
-                                />
-                                <FieldError errors={[form.formState.errors.price]} />
-                            </FieldContent>
-                        </Field>
+                        <Controller
+                            control={form.control}
+                            name="price"
+                            render={({ field, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                    <FieldLabel required>Price (₹)</FieldLabel>
+                                    <FieldContent>
+                                        <Input
+                                            type="text"
+                                            inputMode="decimal"
+                                            className="h-11 rounded-xl"
+                                            placeholder=""
+                                            value={field.value}
+                                            onChange={(event) => field.onChange(sanitizeDecimalInput(event.target.value))}
+                                            onBlur={field.onBlur}
+                                        />
+                                        <FieldError errors={[fieldState.error]} />
+                                    </FieldContent>
+                                </Field>
+                            )}
+                        />
 
-                        <Field data-invalid={!!form.formState.errors.discount}>
-                            <FieldLabel>Discount (₹) <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    className="h-11 rounded-xl"
-                                    placeholder="e.g. 10.00"
-                                    {...form.register("discount", { valueAsNumber: true })}
-                                />
-                                <FieldError errors={[form.formState.errors.discount]} />
-                            </FieldContent>
-                        </Field>
+                        <Controller
+                            control={form.control}
+                            name="discount"
+                            render={({ field, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                    <FieldLabel>Discount (₹) <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
+                                    <FieldContent>
+                                        <Input
+                                            type="text"
+                                            inputMode="decimal"
+                                            className="h-11 rounded-xl"
+                                            placeholder=""
+                                            value={field.value ?? ""}
+                                            onChange={(event) => field.onChange(sanitizeDecimalInput(event.target.value))}
+                                            onBlur={field.onBlur}
+                                        />
+                                        <FieldError errors={[fieldState.error]} />
+                                    </FieldContent>
+                                </Field>
+                            )}
+                        />
                     </div>
 
                     {/* Status — edit only; new items are always active */}

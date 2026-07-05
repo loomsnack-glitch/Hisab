@@ -90,7 +90,7 @@ const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCateg
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
             <DialogTrigger
                 render={
                     trigger ?? (
