@@ -193,7 +193,7 @@ const UpsertProductDialog = ({ organizationId, categories, product, trigger }: U
     const imagePreview = removeCurrentImage ? null : selectedFilePreview ?? product?.imageSignedUrl ?? null;
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
             <DialogTrigger
                 render={
                     trigger ?? (
