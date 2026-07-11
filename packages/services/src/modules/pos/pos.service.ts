@@ -1,4 +1,5 @@
 import type {
+    AddOnsListResponse,
     CategoriesListResponse,
     CommitSaleJSON,
     CreateCustomerJSON,
@@ -7,6 +8,7 @@ import type {
     CustomerResponse,
     CustomersListResponse,
     PaymentResponse,
+    ProductAddOnAttachmentsListResponse,
     ProductsListResponse,
     SaleResponse,
     SalesListQuery,
@@ -29,6 +31,26 @@ export const getPosCategories = async (): Promise<ServiceResponse<CategoriesList
 export const getPosProducts = async (): Promise<ServiceResponse<ProductsListResponse | null>> => {
     try {
         const response = await api.get("/pos/products");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPosAddOns = async (): Promise<ServiceResponse<AddOnsListResponse | null>> => {
+    try {
+        const response = await api.get("/pos/add-ons");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPosProductAddOnAttachments = async (): Promise<
+    ServiceResponse<ProductAddOnAttachmentsListResponse | null>
+> => {
+    try {
+        const response = await api.get("/pos/product-add-on-attachments");
         return response.data;
     } catch (error) {
         return handleApiError(error);

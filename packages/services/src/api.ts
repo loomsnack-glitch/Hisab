@@ -2,8 +2,8 @@ import axios, { AxiosError } from "axios";
 import { getAuthToken } from "./auth-token";
 import { getDeviceId } from "./device-id";
 
-// const FALLBACK_BASE_API_URL = "http://localhost:8000/api";
-const FALLBACK_BASE_API_URL = "https://ganatri.loomsnack.com/api";
+const FALLBACK_BASE_API_URL = "http://localhost:8000/api";
+// const FALLBACK_BASE_API_URL = "https://ganatri.loomsnack.com/api";
 
 const sanitizeBaseUrl = (value?: string | null): string | undefined => {
     if (!value) return undefined;

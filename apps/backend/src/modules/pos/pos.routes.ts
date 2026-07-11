@@ -58,6 +58,26 @@ router.get("/products", async (c) => {
     }
 });
 
+router.get("/add-ons", async (c) => {
+    try {
+        const authDevice = c.get("authDevice");
+        const serviceResponse = await catalogService.getAddOnsForDevice(authDevice);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getAddOnsForDevice", c, error);
+    }
+});
+
+router.get("/product-add-on-attachments", async (c) => {
+    try {
+        const authDevice = c.get("authDevice");
+        const serviceResponse = await catalogService.getSelectableProductAddOnAttachmentsForDevice(authDevice);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getSelectableProductAddOnAttachmentsForDevice", c, error);
+    }
+});
+
 router.get("/customers", validateSchema("query", CustomerListQuerySchema), async (c) => {
     try {
         const authDevice = c.get("authDevice");

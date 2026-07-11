@@ -1,19 +1,31 @@
 import type z from "zod";
 import type {
+    AddOnDTOSchema,
     CategoryDTOSchema,
+    CreateAddOnSchema,
     CreateCategorySchema,
+    CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
+    ProductAddOnAttachmentDTOSchema,
+    ProductAddOnAttachmentResponseDTOSchema,
     ProductDTOSchema,
     ProductResponseDTOSchema,
+    UpdateAddOnSchema,
     UpdateCategorySchema,
+    UpdateProductAddOnAttachmentSchema,
     UpdateProductSchema,
 } from "./catalog.schema";
 
 export type CategoryDTO = z.infer<typeof CategoryDTOSchema>;
 export type ProductDTO = z.infer<typeof ProductDTOSchema>;
 export type ProductResponseDTO = z.infer<typeof ProductResponseDTOSchema>;
+export type AddOnDTO = z.infer<typeof AddOnDTOSchema>;
+export type ProductAddOnAttachmentDTO = z.infer<typeof ProductAddOnAttachmentDTOSchema>;
+export type ProductAddOnAttachmentResponseDTO = z.infer<typeof ProductAddOnAttachmentResponseDTOSchema>;
 export type CategoryStatus = CategoryDTO["status"];
 export type ProductStatus = ProductDTO["status"];
+export type AddOnStatus = AddOnDTO["status"];
+export type ProductAddOnAttachmentStatus = ProductAddOnAttachmentDTO["status"];
 
 export type CreateCategoryJSON = z.infer<typeof CreateCategorySchema>;
 export type CreateCategorySVC = CreateCategoryJSON;
@@ -47,6 +59,38 @@ export type UpdateProductREPO = Pick<
     imagePath?: string | null;
 };
 
+export type CreateAddOnJSON = z.infer<typeof CreateAddOnSchema>;
+export type CreateAddOnSVC = CreateAddOnJSON;
+export type CreateAddOnREPO = Pick<
+    AddOnDTO,
+    "id" | "organizationId" | "name" | "price" | "discount" | "status" | "createdBy"
+> & {
+    updatedBy?: string | null;
+};
+
+export type UpdateAddOnJSON = z.infer<typeof UpdateAddOnSchema>;
+export type UpdateAddOnSVC = UpdateAddOnJSON;
+export type UpdateAddOnREPO = Pick<
+    AddOnDTO,
+    "id" | "organizationId" | "name" | "price" | "discount" | "status" | "updatedBy"
+>;
+
+export type CreateProductAddOnAttachmentJSON = z.infer<typeof CreateProductAddOnAttachmentSchema>;
+export type CreateProductAddOnAttachmentSVC = CreateProductAddOnAttachmentJSON;
+export type CreateProductAddOnAttachmentREPO = Pick<
+    ProductAddOnAttachmentDTO,
+    "id" | "organizationId" | "productId" | "addOnId" | "selectionCap" | "status" | "createdBy"
+> & {
+    updatedBy?: string | null;
+};
+
+export type UpdateProductAddOnAttachmentJSON = z.infer<typeof UpdateProductAddOnAttachmentSchema>;
+export type UpdateProductAddOnAttachmentSVC = UpdateProductAddOnAttachmentJSON;
+export type UpdateProductAddOnAttachmentREPO = Pick<
+    ProductAddOnAttachmentDTO,
+    "id" | "organizationId" | "productId" | "selectionCap" | "status" | "updatedBy"
+>;
+
 export type CategoriesListResponse = {
     categories: CategoryDTO[];
 };
@@ -61,4 +105,20 @@ export type ProductsListResponse = {
 
 export type ProductResponse = {
     product: ProductResponseDTO;
+};
+
+export type AddOnsListResponse = {
+    addOns: AddOnDTO[];
+};
+
+export type AddOnResponse = {
+    addOn: AddOnDTO;
+};
+
+export type ProductAddOnAttachmentsListResponse = {
+    attachments: ProductAddOnAttachmentResponseDTO[];
+};
+
+export type ProductAddOnAttachmentResponse = {
+    attachment: ProductAddOnAttachmentResponseDTO;
 };

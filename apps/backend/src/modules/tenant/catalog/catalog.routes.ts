@@ -1,10 +1,14 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+    CreateAddOnSchema,
     CreateCategorySchema,
+    CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
     STATUS_CODES,
+    UpdateAddOnSchema,
     UpdateCategorySchema,
+    UpdateProductAddOnAttachmentSchema,
     UpdateProductSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
@@ -252,6 +256,236 @@ router.delete("/:organizationId/products/:productId", async (c) => {
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "deleteProduct", c, error);
+    }
+});
+
+router.get("/:organizationId/add-ons", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await catalogService.getAddOns(authUser.id, organizationId);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getAddOns", c, error);
+    }
+});
+
+router.post("/:organizationId/add-ons", validateSchema("json", CreateAddOnSchema), async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const body = c.req.valid("json");
+        const serviceResponse = await catalogService.createAddOn(authUser.id, organizationId, body);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "createAddOn", c, error);
+    }
+});
+
+router.get("/:organizationId/add-ons/:addOnId", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const addOnId = c.req.param("addOnId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidAddOnId = validateUuidParam(addOnId, "Invalid add-on id");
+        if (invalidAddOnId) {
+            return c.json(invalidAddOnId, invalidAddOnId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await catalogService.getAddOnDetails(authUser.id, organizationId, addOnId);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getAddOnDetails", c, error);
+    }
+});
+
+router.patch("/:organizationId/add-ons/:addOnId", validateSchema("json", UpdateAddOnSchema), async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const addOnId = c.req.param("addOnId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidAddOnId = validateUuidParam(addOnId, "Invalid add-on id");
+        if (invalidAddOnId) {
+            return c.json(invalidAddOnId, invalidAddOnId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const body = c.req.valid("json");
+        const serviceResponse = await catalogService.updateAddOn(authUser.id, organizationId, addOnId, body);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "updateAddOn", c, error);
+    }
+});
+
+router.delete("/:organizationId/add-ons/:addOnId", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const addOnId = c.req.param("addOnId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidAddOnId = validateUuidParam(addOnId, "Invalid add-on id");
+        if (invalidAddOnId) {
+            return c.json(invalidAddOnId, invalidAddOnId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await catalogService.deleteAddOn(authUser.id, organizationId, addOnId);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "deleteAddOn", c, error);
+    }
+});
+
+router.get("/:organizationId/products/:productId/add-on-attachments", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const productId = c.req.param("productId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidProductId = validateUuidParam(productId, "Invalid product id");
+        if (invalidProductId) {
+            return c.json(invalidProductId, invalidProductId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await catalogService.getProductAddOnAttachments(
+            authUser.id,
+            organizationId,
+            productId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getProductAddOnAttachments", c, error);
+    }
+});
+
+router.post(
+    "/:organizationId/products/:productId/add-on-attachments",
+    validateSchema("json", CreateProductAddOnAttachmentSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const productId = c.req.param("productId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const invalidProductId = validateUuidParam(productId, "Invalid product id");
+            if (invalidProductId) {
+                return c.json(invalidProductId, invalidProductId.code);
+            }
+
+            const authUser = c.get("authUser");
+            const body = c.req.valid("json");
+            const serviceResponse = await catalogService.createProductAddOnAttachment(
+                authUser.id,
+                organizationId,
+                productId,
+                body,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "createProductAddOnAttachment", c, error);
+        }
+    },
+);
+
+router.patch(
+    "/:organizationId/products/:productId/add-on-attachments/:attachmentId",
+    validateSchema("json", UpdateProductAddOnAttachmentSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const productId = c.req.param("productId");
+            const attachmentId = c.req.param("attachmentId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const invalidProductId = validateUuidParam(productId, "Invalid product id");
+            if (invalidProductId) {
+                return c.json(invalidProductId, invalidProductId.code);
+            }
+
+            const invalidAttachmentId = validateUuidParam(attachmentId, "Invalid attachment id");
+            if (invalidAttachmentId) {
+                return c.json(invalidAttachmentId, invalidAttachmentId.code);
+            }
+
+            const authUser = c.get("authUser");
+            const body = c.req.valid("json");
+            const serviceResponse = await catalogService.updateProductAddOnAttachment(
+                authUser.id,
+                organizationId,
+                productId,
+                attachmentId,
+                body,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateProductAddOnAttachment", c, error);
+        }
+    },
+);
+
+router.delete("/:organizationId/products/:productId/add-on-attachments/:attachmentId", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const productId = c.req.param("productId");
+        const attachmentId = c.req.param("attachmentId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidProductId = validateUuidParam(productId, "Invalid product id");
+        if (invalidProductId) {
+            return c.json(invalidProductId, invalidProductId.code);
+        }
+
+        const invalidAttachmentId = validateUuidParam(attachmentId, "Invalid attachment id");
+        if (invalidAttachmentId) {
+            return c.json(invalidAttachmentId, invalidAttachmentId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await catalogService.deleteProductAddOnAttachment(
+            authUser.id,
+            organizationId,
+            productId,
+            attachmentId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "deleteProductAddOnAttachment", c, error);
     }
 });
 

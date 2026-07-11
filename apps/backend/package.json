@@ -7,6 +7,7 @@
     "dev": "cd ../../ && bun --env-file apps/backend/.env --watch apps/backend/src/index.ts",
     "start": "bun dist/index.js",
     "build": "bun build src/index.ts --outdir dist --minify --production --target bun",
+    "test": "bun test src",
     "add-initial-data": "bun run src/scripts/add-initial-data.ts",
     "grant-all-permissions-in-admin-roles": "bun run src/scripts/admin-permissions.ts"
   },

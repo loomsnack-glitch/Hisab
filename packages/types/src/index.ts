@@ -3,6 +3,7 @@ export * from "./backend/status-code";
 export * from "./backend/service-response";
 export * from "./common";
 export * from "./modules/common";
+// Catalog includes Add-On and Product Add-On Attachment contracts
 export * from "./modules/catalog";
 export * from "./modules/billing";
 export * from "./modules/auth";

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
-import { Layers3, Package2, Pencil, PlusCircle, RefreshCw, Trash2, Search } from "lucide-react";
+import { Layers3, Link2, Package2, Pencil, PlusCircle, Puzzle, RefreshCw, Trash2, Search } from "lucide-react";
 
 import DeleteCategoryButton from "@/components/catalog/delete-category-button";
 import DeleteProductButton from "@/components/catalog/delete-product-button";
@@ -14,7 +14,9 @@ import CategoryStatusBadge from "@/components/catalog/category-status-badge";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
+import ManageAddOnsDialog from "@/components/catalog/manage-add-ons-dialog";
 import ManageCategoriesDialog from "@/components/catalog/manage-categories-dialog";
+import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import { formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
@@ -156,6 +158,19 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 >
                                     <Layers3 className="mr-2 size-4" />
                                     Manage categories
+                                </Button>
+                            }
+                        />
+
+                        <ManageAddOnsDialog
+                            organizationId={organizationId}
+                            trigger={
+                                <Button
+                                    variant="outline"
+                                    className="rounded-full border-border/60 text-muted-foreground hover:text-foreground h-11 px-4 cursor-pointer"
+                                >
+                                    <Puzzle className="mr-2 size-4" />
+                                    Manage add-ons
                                 </Button>
                             }
                         />
@@ -310,6 +325,20 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                                 />
 
                                                 <div className="flex items-center gap-0.5 border-l border-border/50 pl-2.5">
+                                                    <ManageProductAddOnsDialog
+                                                        organizationId={organizationId}
+                                                        product={product}
+                                                        trigger={
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                aria-label={`Manage add-ons for ${product.name}`}
+                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
+                                                            >
+                                                                <Link2 className="size-3.5" />
+                                                            </Button>
+                                                        }
+                                                    />
                                                     <UpsertProductDialog
                                                         organizationId={organizationId}
                                                         categories={categories}

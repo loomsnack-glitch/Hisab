@@ -25,6 +25,13 @@ const optionalImagePathSchema = z
 
 export const CategoryStatusSchema = z.enum(["active", "inactive"]);
 export const ProductStatusSchema = z.enum(["active", "inactive"]);
+export const AddOnStatusSchema = z.enum(["active", "inactive"]);
+export const ProductAddOnAttachmentStatusSchema = z.enum(["active", "inactive"]);
+
+const selectionCapSchema = z
+    .number({ error: "Selection cap is required" })
+    .int("Selection cap must be a whole number")
+    .min(1, "Selection cap must be at least 1");
 
 export const CategoryDTOSchema = z.object({
     id: z.uuid("Invalid category id"),
@@ -54,6 +61,36 @@ export const ProductDTOSchema = z.object({
 
 export const ProductResponseDTOSchema = ProductDTOSchema.extend({
     imageSignedUrl: z.string().nullable(),
+});
+
+export const AddOnDTOSchema = z.object({
+    id: z.uuid("Invalid add-on id"),
+    organizationId: z.uuid("Invalid organization id"),
+    name: nameSchema,
+    price: priceSchema,
+    discount: discountSchema,
+    status: AddOnStatusSchema,
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const ProductAddOnAttachmentDTOSchema = z.object({
+    id: z.uuid("Invalid attachment id"),
+    organizationId: z.uuid("Invalid organization id"),
+    productId: z.uuid("Invalid product id"),
+    addOnId: z.uuid("Invalid add-on id"),
+    selectionCap: selectionCapSchema,
+    status: ProductAddOnAttachmentStatusSchema,
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const ProductAddOnAttachmentResponseDTOSchema = ProductAddOnAttachmentDTOSchema.extend({
+    addOn: AddOnDTOSchema,
 });
 
 export const CreateCategorySchema = z.object({
@@ -96,6 +133,49 @@ export const UpdateProductSchema = z
             || value.discount !== undefined
             || value.imagePath !== undefined
             || value.status !== undefined,
+        {
+            message: "At least one field is required",
+        },
+    );
+
+export const CreateAddOnSchema = z.object({
+    name: nameSchema,
+    price: priceSchema,
+    discount: discountSchema.optional(),
+    status: AddOnStatusSchema.optional(),
+});
+
+export const UpdateAddOnSchema = z
+    .object({
+        name: nameSchema.optional(),
+        price: priceSchema.optional(),
+        discount: discountSchema.optional(),
+        status: AddOnStatusSchema.optional(),
+    })
+    .refine(
+        (value) =>
+            value.name !== undefined
+            || value.price !== undefined
+            || value.discount !== undefined
+            || value.status !== undefined,
+        {
+            message: "At least one field is required",
+        },
+    );
+
+export const CreateProductAddOnAttachmentSchema = z.object({
+    addOnId: z.uuid("Invalid add-on id"),
+    selectionCap: selectionCapSchema.optional(),
+    status: ProductAddOnAttachmentStatusSchema.optional(),
+});
+
+export const UpdateProductAddOnAttachmentSchema = z
+    .object({
+        selectionCap: selectionCapSchema.optional(),
+        status: ProductAddOnAttachmentStatusSchema.optional(),
+    })
+    .refine(
+        (value) => value.selectionCap !== undefined || value.status !== undefined,
         {
             message: "At least one field is required",
         },
