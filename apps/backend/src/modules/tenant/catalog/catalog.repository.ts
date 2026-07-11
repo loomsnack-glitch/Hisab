@@ -374,6 +374,20 @@ export const countAttachmentsByAddOnId = async (organizationId: string, addOnId:
     return Number(result?.total ?? 0);
 };
 
+export const countSaleItemAddOnsByAddOnId = async (
+    organizationId: string,
+    addOnId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM sale_item_add_ons
+        WHERE organization_id = ${organizationId}
+          AND add_on_id = ${addOnId}
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
 export const deleteAddOn = async (organizationId: string, addOnId: string): Promise<AddOnDTO | null> => {
     const [result] = await pg`
         DELETE FROM add_ons

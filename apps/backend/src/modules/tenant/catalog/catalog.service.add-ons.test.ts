@@ -111,6 +111,9 @@ const updateProductAddOnAttachmentRepo = mock(async (data: {
 const getSelectableProductAddOnAttachmentsByOrganizationId = mock(async () => [attachmentResponse]);
 const getActiveAddOnsByOrganizationId = mock(async () => [addOn]);
 const getActiveProductsByOrganizationId = mock(async () => [product]);
+const countAttachmentsByAddOnId = mock(async () => 0);
+const countSaleItemAddOnsByAddOnId = mock(async () => 0);
+const deleteAddOnRepo = mock(async () => addOn);
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
@@ -136,8 +139,9 @@ mock.module("./catalog.repository", () => ({
     getActiveProductsByOrganizationId,
     getAddOnsByOrganizationId: mock(async () => [addOn]),
     getProductAddOnAttachmentsByProductId: mock(async () => [attachmentResponse]),
-    countAttachmentsByAddOnId: mock(async () => 0),
-    deleteAddOn: mock(async () => addOn),
+    countAttachmentsByAddOnId,
+    countSaleItemAddOnsByAddOnId,
+    deleteAddOn: deleteAddOnRepo,
     deleteProductAddOnAttachment: mock(async () => attachmentResponse),
 }));
 
@@ -158,6 +162,9 @@ describe("Add-On catalog service", () => {
         getSelectableProductAddOnAttachmentsByOrganizationId.mockClear();
         getActiveAddOnsByOrganizationId.mockClear();
         getActiveProductsByOrganizationId.mockClear();
+        countAttachmentsByAddOnId.mockClear();
+        countSaleItemAddOnsByAddOnId.mockClear();
+        deleteAddOnRepo.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
         addOnNameExistsInOrganization.mockResolvedValue(false);
@@ -168,6 +175,9 @@ describe("Add-On catalog service", () => {
         getSelectableProductAddOnAttachmentsByOrganizationId.mockResolvedValue([attachmentResponse]);
         getActiveAddOnsByOrganizationId.mockResolvedValue([addOn]);
         getActiveProductsByOrganizationId.mockResolvedValue([product]);
+        countAttachmentsByAddOnId.mockResolvedValue(0);
+        countSaleItemAddOnsByAddOnId.mockResolvedValue(0);
+        deleteAddOnRepo.mockResolvedValue(addOn);
         createAddOnRepo.mockImplementation(async (data) => data);
         updateAddOnRepo.mockImplementation(async (data) => data);
     });
@@ -201,6 +211,17 @@ describe("Add-On catalog service", () => {
         expect(response.status).toBe("success");
         expect(response.data?.addOn.price).toBe(25);
         expect(response.data?.addOn.status).toBe("inactive");
+    });
+
+    test("rejects deletion of an add-on with sales history", async () => {
+        countSaleItemAddOnsByAddOnId.mockResolvedValue(1);
+
+        const response = await catalogService.deleteAddOn(userId, organizationId, addOnId);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("sales history");
+        expect(deleteAddOnRepo).not.toHaveBeenCalled();
     });
 
     test("defaults attachment selection cap to 1", async () => {

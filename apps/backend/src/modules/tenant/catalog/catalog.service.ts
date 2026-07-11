@@ -883,6 +883,19 @@ export const deleteAddOn = async (
         };
     }
 
+    const saleItemAddOnCount = await catalogRepository.countSaleItemAddOnsByAddOnId(
+        organizationId,
+        addOnId,
+    );
+    if (saleItemAddOnCount > 0) {
+        return {
+            status: "error",
+            message: "Add-on cannot be deleted because it has sales history. Set it to inactive instead.",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
     const addOn = await catalogRepository.deleteAddOn(organizationId, addOnId);
     if (!addOn) {
         return {

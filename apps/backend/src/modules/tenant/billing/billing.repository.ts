@@ -585,9 +585,9 @@ export const getParentScopedAddOnSalesRollups = async (
     const results = await pg`
         SELECT
             si.product_id,
-            COALESCE(MAX(p.name), MAX(si.product_name_snapshot)) AS product_name_snapshot,
+            MAX(si.product_name_snapshot) AS product_name_snapshot,
             sia.add_on_id,
-            COALESCE(MAX(ao.name), MAX(sia.add_on_name_snapshot)) AS add_on_name_snapshot,
+            MAX(sia.add_on_name_snapshot) AS add_on_name_snapshot,
             SUM(sia.total_quantity)::int AS total_quantity,
             COALESCE(SUM(sia.line_subtotal), 0) AS line_subtotal,
             COALESCE(SUM(sia.discount_amount), 0) AS discount_amount,
@@ -602,19 +602,13 @@ export const getParentScopedAddOnSalesRollups = async (
             ON s.id = sia.sale_id
            AND s.organization_id = sia.organization_id
            AND s.store_id = sia.store_id
-        LEFT JOIN products p
-            ON p.id = si.product_id
-           AND p.organization_id = si.organization_id
-        LEFT JOIN add_ons ao
-            ON ao.id = sia.add_on_id
-           AND ao.organization_id = sia.organization_id
         WHERE sia.organization_id = ${organizationId}
           AND sia.store_id = ${storeId}
           AND s.status = 'completed'
         GROUP BY si.product_id, sia.add_on_id
         ORDER BY
-            COALESCE(MAX(p.name), MAX(si.product_name_snapshot)) ASC,
-            COALESCE(MAX(ao.name), MAX(sia.add_on_name_snapshot)) ASC
+            MAX(si.product_name_snapshot) ASC,
+            MAX(sia.add_on_name_snapshot) ASC
     `;
 
     return results.map((result: Record<string, unknown>) => mapRow<ParentScopedAddOnSalesRollupDTO>(result));
@@ -627,7 +621,7 @@ export const getAddOnScopedSalesRollups = async (
     const results = await pg`
         SELECT
             sia.add_on_id,
-            COALESCE(MAX(ao.name), MAX(sia.add_on_name_snapshot)) AS add_on_name_snapshot,
+            MAX(sia.add_on_name_snapshot) AS add_on_name_snapshot,
             SUM(sia.total_quantity)::int AS total_quantity,
             COALESCE(SUM(sia.line_subtotal), 0) AS line_subtotal,
             COALESCE(SUM(sia.discount_amount), 0) AS discount_amount,
@@ -643,14 +637,11 @@ export const getAddOnScopedSalesRollups = async (
             ON s.id = sia.sale_id
            AND s.organization_id = sia.organization_id
            AND s.store_id = sia.store_id
-        LEFT JOIN add_ons ao
-            ON ao.id = sia.add_on_id
-           AND ao.organization_id = sia.organization_id
         WHERE sia.organization_id = ${organizationId}
           AND sia.store_id = ${storeId}
           AND s.status = 'completed'
         GROUP BY sia.add_on_id
-        ORDER BY COALESCE(MAX(ao.name), MAX(sia.add_on_name_snapshot)) ASC
+        ORDER BY MAX(sia.add_on_name_snapshot) ASC
     `;
 
     return results.map((result: Record<string, unknown>) => mapRow<AddOnScopedSalesRollupDTO>(result));
