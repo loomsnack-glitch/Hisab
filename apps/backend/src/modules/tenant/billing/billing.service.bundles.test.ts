@@ -440,6 +440,139 @@ describe("Bundle product billing with trusted snapshots", () => {
         expect(response.data?.sale.grandTotal).toBe(270);
     });
 
+    test("merges repeated bundle additions into one indivisible draft line", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                { productId: bundleProductId, quantity: 1, addOns: [] },
+                { productId: bundleProductId, quantity: 2, addOns: [] },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItems[0]?.quantity).toBe(3);
+        expect(createdSaleItemAddOns).toHaveLength(0);
+        expect(createdSaleItemBundleComponents).toHaveLength(2);
+        expect(createdSaleItemBundleComponents.map((component) => component.totalQuantity)).toEqual([3, 3]);
+        expect(createdSaleItemBundleComponentAddOns).toHaveLength(1);
+        expect(createdSaleItemBundleComponentAddOns[0]?.totalQuantity).toBe(3);
+        expect(response.data?.sale.items).toHaveLength(1);
+        expect(response.data?.sale.items[0]?.bundleComponents).toHaveLength(2);
+    });
+
+    test("changes only the bundle parent quantity and rescales its complete frozen component tree", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
+        });
+
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id;
+        expect(saleId).toBeTruthy();
+
+        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId!, {
+            items: [{ productId: bundleProductId, quantity: 3, addOns: [] }],
+        });
+
+        expect(updated.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItems[0]?.quantity).toBe(3);
+        expect(createdSaleItemAddOns).toHaveLength(0);
+        expect(createdSaleItemBundleComponents).toHaveLength(2);
+        expect(createdSaleItemBundleComponents.map((component) => component.totalQuantity)).toEqual([3, 3]);
+        expect(createdSaleItemBundleComponentAddOns).toHaveLength(1);
+        expect(createdSaleItemBundleComponentAddOns[0]?.totalQuantity).toBe(3);
+        expect(updated.data?.sale.items[0]?.bundleComponents).toHaveLength(2);
+    });
+
+    test("keeps frozen bundle snapshots through catalog edits and commits them safely", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
+        });
+
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id!;
+        const originalGrandTotal = Number(created.data?.sale.grandTotal);
+
+        getProductByIdSpy.mockClear();
+        getBundleComponentsSpy.mockClear();
+        getBundleComponentAddOnsSpy.mockClear();
+        getAddOnByIdSpy.mockClear();
+        getSelectableAttachmentSpy.mockClear();
+        getProductByIdSpy.mockImplementation(async (_organizationId: string, productId: string) => {
+            if (productId === bundleProductId) {
+                return {
+                    ...bundleProduct,
+                    name: "Retired Burger Combo",
+                    price: 999,
+                    status: "inactive" as const,
+                } as never;
+            }
+            return {
+                ...resolveProductById(productId)!,
+                name: "Changed component",
+                price: 777,
+                status: "inactive" as const,
+            } as never;
+        });
+        getBundleComponentsSpy.mockResolvedValue([]);
+        getBundleComponentAddOnsSpy.mockResolvedValue([]);
+        getAddOnByIdSpy.mockResolvedValue({ ...cheeseAddOn, name: "Retired Cheese", price: 555 } as never);
+        getSelectableAttachmentSpy.mockResolvedValue(null);
+
+        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId, {
+            items: [{ productId: bundleProductId, quantity: 2, addOns: [] }],
+        });
+
+        expect(updated.status).toBe("success");
+        expect(getProductByIdSpy).not.toHaveBeenCalled();
+        expect(getBundleComponentsSpy).not.toHaveBeenCalled();
+        expect(getBundleComponentAddOnsSpy).not.toHaveBeenCalled();
+        expect(getAddOnByIdSpy).not.toHaveBeenCalled();
+        expect(getSelectableAttachmentSpy).not.toHaveBeenCalled();
+        expect(updated.data?.sale.items[0]).toMatchObject({
+            productNameSnapshot: "Burger Combo",
+            unitPriceSnapshot: 99,
+            quantity: 2,
+        });
+        expect(updated.data?.sale.items[0]?.bundleComponents).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    productNameSnapshot: "Burger",
+                    unitPriceSnapshot: 80,
+                    totalQuantity: 2,
+                    addOns: [
+                        expect.objectContaining({
+                            addOnNameSnapshot: "Extra Cheese",
+                            unitPriceSnapshot: 20,
+                            totalQuantity: 2,
+                        }),
+                    ],
+                }),
+                expect.objectContaining({
+                    productNameSnapshot: "Cold Coffee",
+                    unitPriceSnapshot: 40,
+                    totalQuantity: 2,
+                }),
+            ]),
+        );
+
+        const committed = await billingService.commitSale(userId, organizationId, storeId, saleId, {
+            payments: [{ amount: originalGrandTotal * 2, method: "cash" }],
+        });
+
+        expect(committed.status).toBe("success");
+        expect(committed.data?.sale.status).toBe("completed");
+        expect(committed.data?.sale.items[0]).toMatchObject({
+            productNameSnapshot: "Burger Combo",
+            unitPriceSnapshot: 99,
+            quantity: 2,
+        });
+        expect(committed.data?.sale.items[0]?.bundleComponents[0]?.productNameSnapshot).toBe("Burger");
+        expect(committed.data?.sale.items[0]?.bundleComponents[0]?.addOns[0]?.addOnNameSnapshot).toBe(
+            "Extra Cheese",
+        );
+    });
+
     test("rejects add-on selections on bundle products", async () => {
         const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
