@@ -148,6 +148,102 @@ describe("Configured sale billing contracts", () => {
         if (result.success) {
             expect(result.data.items[0]?.addOns).toHaveLength(1);
             expect(result.data.items[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+            expect(result.data.items[0]?.bundleComponents).toEqual([]);
+        }
+    });
+
+    test("sale detail nests bundle components under the priced bundle parent line", () => {
+        const now = new Date("2026-07-12T12:00:00.000Z");
+        const result = SaleDetailDTOSchema.safeParse({
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            saleNumber: null,
+            customerId: null,
+            userId: null,
+            createdByDeviceId: null,
+            updatedByDeviceId: null,
+            status: "draft",
+            paymentStatus: "pending",
+            subtotal: 99,
+            discountTotal: 0,
+            grandTotal: 99,
+            paidTotal: 0,
+            dueTotal: 99,
+            notes: null,
+            committedAt: null,
+            voidedAt: null,
+            voidReason: null,
+            createdAt: now,
+            updatedAt: now,
+            itemCount: 1,
+            itemsSummary: "Burger Combo",
+            paymentMethods: null,
+            customer: null,
+            orderDiscountAmount: 0,
+            payments: [],
+            items: [
+                {
+                    id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                    organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    saleId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    productId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+                    quantity: 1,
+                    configurationSignature: "",
+                    productNameSnapshot: "Burger Combo",
+                    unitPriceSnapshot: 99,
+                    discountAmount: 0,
+                    lineSubtotal: 99,
+                    lineTotal: 99,
+                    createdAt: now,
+                    updatedAt: now,
+                    addOns: [],
+                    bundleComponents: [
+                        {
+                            id: "11111111-1111-4111-8111-111111111111",
+                            organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                            storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                            saleId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                            saleItemId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                            componentProductId: "22222222-2222-4222-8222-222222222222",
+                            quantityPerBundle: 1,
+                            totalQuantity: 1,
+                            productNameSnapshot: "Burger",
+                            unitPriceSnapshot: 80,
+                            unitDiscountSnapshot: 0,
+                            createdAt: now,
+                            updatedAt: now,
+                            addOns: [
+                                {
+                                    id: "33333333-3333-4333-8333-333333333333",
+                                    organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                                    storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                                    saleId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                                    saleItemId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                                    saleItemBundleComponentId: "11111111-1111-4111-8111-111111111111",
+                                    addOnId: "44444444-4444-4444-8444-444444444444",
+                                    quantityPerComponent: 1,
+                                    totalQuantity: 1,
+                                    addOnNameSnapshot: "Extra Cheese",
+                                    unitPriceSnapshot: 20,
+                                    unitDiscountSnapshot: 0,
+                                    createdAt: now,
+                                    updatedAt: now,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.items[0]?.bundleComponents).toHaveLength(1);
+            expect(result.data.items[0]?.bundleComponents[0]?.productNameSnapshot).toBe("Burger");
+            expect(result.data.items[0]?.bundleComponents[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+            expect(result.data.subtotal).toBe(99);
         }
     });
 

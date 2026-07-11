@@ -18,9 +18,13 @@ import {
     countActiveBundlesByComponentProductId,
     countActiveBundlesByProductAddOnPair,
     countActiveBundlesByProductAddOnPairAboveQuantity,
+    countBundleProductComponentsByComponentProductId,
+    countSaleItemBundleComponentsByComponentProductId,
+    countSaleItemsByProductId,
     createBundleProductComponentAddOnRepo,
     createBundleProductComponentRepo,
     createProductRepo,
+    deleteProductRepo,
     deleteProductAddOnAttachmentRepo,
     deleteBundleProductComponentsByBundleProductId,
     existingBundle,
@@ -63,6 +67,10 @@ describe("Bundle Product catalog service", () => {
         countActiveBundlesByComponentAddOnId.mockClear();
         countActiveBundlesByProductAddOnPair.mockClear();
         countActiveBundlesByProductAddOnPairAboveQuantity.mockClear();
+        countBundleProductComponentsByComponentProductId.mockClear();
+        countSaleItemsByProductId.mockClear();
+        countSaleItemBundleComponentsByComponentProductId.mockClear();
+        deleteProductRepo.mockClear();
         updateAddOnRepo.mockClear();
         getProductAddOnAttachmentById.mockClear();
         updateProductAddOnAttachmentRepo.mockClear();
@@ -122,6 +130,10 @@ describe("Bundle Product catalog service", () => {
         countActiveBundlesByComponentAddOnId.mockResolvedValue(0);
         countActiveBundlesByProductAddOnPair.mockResolvedValue(0);
         countActiveBundlesByProductAddOnPairAboveQuantity.mockResolvedValue(0);
+        countBundleProductComponentsByComponentProductId.mockResolvedValue(0);
+        countSaleItemsByProductId.mockResolvedValue(0);
+        countSaleItemBundleComponentsByComponentProductId.mockResolvedValue(0);
+        deleteProductRepo.mockResolvedValue(burger);
         getAddOnById.mockResolvedValue(cheeseAddOn);
         updateAddOnRepo.mockImplementation(async (data) => data);
         getProductAddOnAttachmentById.mockResolvedValue(cheeseAttachment);
@@ -450,12 +462,10 @@ describe("Bundle Product catalog service", () => {
 
     test("allows attachment deactivation after dependent active bundles are gone", async () => {
         countActiveBundlesByProductAddOnPair.mockResolvedValue(0);
-        getProductAddOnAttachmentById
-            .mockResolvedValueOnce(cheeseAttachment)
-            .mockResolvedValueOnce({
-                ...cheeseAttachment,
-                status: "inactive" as const,
-            });
+        getProductAddOnAttachmentById.mockResolvedValueOnce(cheeseAttachment).mockResolvedValueOnce({
+            ...cheeseAttachment,
+            status: "inactive" as const,
+        });
 
         const response = await catalogService.updateProductAddOnAttachment(
             userId,
@@ -468,6 +478,93 @@ describe("Bundle Product catalog service", () => {
         expect(response.status).toBe("success");
         expect(response.data?.attachment.status).toBe("inactive");
         expect(updateProductAddOnAttachmentRepo).toHaveBeenCalled();
+    });
+
+    test("revalidates stored components before reactivating a bundle", async () => {
+        getProductById.mockImplementation(async (_organizationId: string, productId: string) => {
+            if (productId === burgerId) return { ...burger, status: "inactive" as const };
+            if (productId === bundleId) {
+                return {
+                    ...existingBundle,
+                    id: bundleId,
+                    name: "Burger Combo",
+                    status: "inactive" as const,
+                };
+            }
+            return null;
+        });
+
+        const response = await catalogService.updateBundleProduct(userId, organizationId, bundleId, {
+            status: "active",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toContain("active products");
+        expect(updateProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("revalidates stored add-on quantities before reactivating a bundle", async () => {
+        getProductById.mockImplementation(async (_organizationId: string, productId: string) => {
+            if (productId === burgerId) return burger;
+            if (productId === bundleId) {
+                return {
+                    ...existingBundle,
+                    id: bundleId,
+                    name: "Burger Combo",
+                    status: "inactive" as const,
+                };
+            }
+            return null;
+        });
+        getBundleProductComponentAddOnsByComponentIds.mockResolvedValue([
+            {
+                id: cheeseAttachmentId,
+                organizationId,
+                bundleProductComponentId: componentId,
+                addOnId: cheeseAddOnId,
+                quantity: 2,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+            },
+        ]);
+        getSelectableProductAddOnAttachmentByProductAndAddOn.mockResolvedValue({
+            ...cheeseAttachment,
+            selectionCap: 1,
+        });
+
+        const response = await catalogService.updateBundleProduct(userId, organizationId, bundleId, {
+            status: "active",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toContain("selection cap");
+        expect(updateProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not delete a product referenced by a bundle", async () => {
+        countBundleProductComponentsByComponentProductId.mockResolvedValue(1);
+
+        const response = await catalogService.deleteProduct(userId, organizationId, burgerId);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("used by a bundle");
+        expect(deleteProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not delete a product with bundle sales history", async () => {
+        countSaleItemBundleComponentsByComponentProductId.mockResolvedValue(1);
+
+        const response = await catalogService.deleteProduct(userId, organizationId, burgerId);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("sales history");
+        expect(deleteProductRepo).not.toHaveBeenCalled();
     });
 
     test("blocks attachment selection cap reduction below quantities used by active bundles", async () => {
@@ -489,12 +586,10 @@ describe("Bundle Product catalog service", () => {
 
     test("allows attachment selection cap reduction when no active bundle exceeds the next cap", async () => {
         countActiveBundlesByProductAddOnPairAboveQuantity.mockResolvedValue(0);
-        getProductAddOnAttachmentById
-            .mockResolvedValueOnce(cheeseAttachment)
-            .mockResolvedValueOnce({
-                ...cheeseAttachment,
-                selectionCap: 1,
-            });
+        getProductAddOnAttachmentById.mockResolvedValueOnce(cheeseAttachment).mockResolvedValueOnce({
+            ...cheeseAttachment,
+            selectionCap: 1,
+        });
 
         const response = await catalogService.updateProductAddOnAttachment(
             userId,

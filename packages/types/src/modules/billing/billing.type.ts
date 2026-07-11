@@ -15,6 +15,8 @@ import type {
     SaleDetailDTOSchema,
     SaleItemAddOnDTOSchema,
     SaleItemAddOnInputSchema,
+    SaleItemBundleComponentAddOnDTOSchema,
+    SaleItemBundleComponentDTOSchema,
     SaleItemDTOSchema,
     SaleItemInputSchema,
     SaleSummaryDTOSchema,
@@ -26,6 +28,8 @@ import type {
 
 export type CustomerDTO = z.infer<typeof CustomerDTOSchema>;
 export type SaleItemAddOnDTO = z.infer<typeof SaleItemAddOnDTOSchema>;
+export type SaleItemBundleComponentAddOnDTO = z.infer<typeof SaleItemBundleComponentAddOnDTOSchema>;
+export type SaleItemBundleComponentDTO = z.infer<typeof SaleItemBundleComponentDTOSchema>;
 export type SaleItemDTO = z.infer<typeof SaleItemDTOSchema>;
 export type PaymentDTO = z.infer<typeof PaymentDTOSchema>;
 export type CustomerLedgerEntryDTO = z.infer<typeof CustomerLedgerEntryDTOSchema>;
@@ -143,6 +147,37 @@ export type CreateSaleItemAddOnREPO = Pick<
     | "discountAmount"
     | "lineSubtotal"
     | "lineTotal"
+>;
+
+export type CreateSaleItemBundleComponentREPO = Pick<
+    SaleItemBundleComponentDTO,
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "saleId"
+    | "saleItemId"
+    | "componentProductId"
+    | "quantityPerBundle"
+    | "totalQuantity"
+    | "productNameSnapshot"
+    | "unitPriceSnapshot"
+    | "unitDiscountSnapshot"
+>;
+
+export type CreateSaleItemBundleComponentAddOnREPO = Pick<
+    SaleItemBundleComponentAddOnDTO,
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "saleId"
+    | "saleItemId"
+    | "saleItemBundleComponentId"
+    | "addOnId"
+    | "quantityPerComponent"
+    | "totalQuantity"
+    | "addOnNameSnapshot"
+    | "unitPriceSnapshot"
+    | "unitDiscountSnapshot"
 >;
 
 export type CreatePaymentREPO = Pick<

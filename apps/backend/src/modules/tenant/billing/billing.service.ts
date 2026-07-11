@@ -9,6 +9,8 @@ import {
     type CreateDraftSaleSVC,
     type CreatePaymentSVC,
     type CreateSaleItemAddOnREPO,
+    type CreateSaleItemBundleComponentAddOnREPO,
+    type CreateSaleItemBundleComponentREPO,
     type CreateSaleItemREPO,
     type CustomerDTO,
     type CustomerLedgerResponse,
@@ -75,9 +77,7 @@ const deriveOrderDiscountAmount = (
 
 const isWholeCount = (value: number) => Number.isInteger(value) && value > 0;
 
-const buildConfigurationSignature = (
-    addOns: Array<{ addOnId: string; quantity: number }>,
-) => {
+const buildConfigurationSignature = (addOns: Array<{ addOnId: string; quantity: number }>) => {
     if (addOns.length === 0) {
         return "";
     }
@@ -92,12 +92,14 @@ const normalizeSelectedAddOns = (
     addOns: SaleItemInput["addOns"] | undefined,
 ):
     | { error: ServiceResponse<null>; addOns?: undefined }
-    | { error?: undefined; addOns: Array<{ addOnId: string; quantity: number }> } => {
-    const selectedAddOns = (addOns ?? [])
-        .map((addOn) => ({
-            addOnId: addOn.addOnId,
-            quantity: Number(addOn.quantity),
-        }));
+    | {
+          error?: undefined;
+          addOns: Array<{ addOnId: string; quantity: number }>;
+      } => {
+    const selectedAddOns = (addOns ?? []).map((addOn) => ({
+        addOnId: addOn.addOnId,
+        quantity: Number(addOn.quantity),
+    }));
 
     const seenAddOnIds = new Set<string>();
     for (const addOn of selectedAddOns) {
@@ -133,9 +135,7 @@ const normalizeSelectedAddOns = (
 
 const mergeSaleItemInputsByConfiguration = (
     items: SaleItemInput[],
-):
-    | { error: ServiceResponse<null>; items?: undefined }
-    | { error?: undefined; items: SaleItemInput[] } => {
+): { error: ServiceResponse<null>; items?: undefined } | { error?: undefined; items: SaleItemInput[] } => {
     const mergedByKey = new Map<string, SaleItemInput>();
 
     for (const item of items) {
@@ -186,9 +186,15 @@ type SalePricingTotals = {
     grandTotal: number;
 };
 
+type PreparedBundleComponent = {
+    component: CreateSaleItemBundleComponentREPO;
+    addOns: CreateSaleItemBundleComponentAddOnREPO[];
+};
+
 type PreparedSaleLine = {
     item: CreateSaleItemREPO;
     addOns: CreateSaleItemAddOnREPO[];
+    bundleComponents: PreparedBundleComponent[];
 };
 
 const buildSalePricingTotals = (
@@ -335,9 +341,7 @@ const rescaleFrozenConfiguredLine = (
     const saleItemId = crypto.randomUUID();
     const unitPrice = moneyFrom(frozen.unitPriceSnapshot);
     const previousQuantity = Number(frozen.quantity);
-    const unitDiscount = previousQuantity > 0
-        ? roundMoney(moneyFrom(frozen.discountAmount) / previousQuantity)
-        : 0;
+    const unitDiscount = previousQuantity > 0 ? roundMoney(moneyFrom(frozen.discountAmount) / previousQuantity) : 0;
     const lineSubtotal = roundMoney(parentQuantity * unitPrice);
     const discountAmount = roundMoney(unitDiscount * parentQuantity);
 
@@ -381,6 +385,235 @@ const rescaleFrozenConfiguredLine = (
                 lineTotal: roundMoney(addOnLineSubtotal - addOnDiscountAmount),
             };
         }),
+        bundleComponents: (frozen.bundleComponents ?? []).map((component) => {
+            const componentId = crypto.randomUUID();
+            const quantityPerBundle = Number(component.quantityPerBundle);
+            const totalQuantity = quantityPerBundle * parentQuantity;
+
+            return {
+                component: {
+                    id: componentId,
+                    organizationId,
+                    storeId,
+                    saleId,
+                    saleItemId,
+                    componentProductId: component.componentProductId,
+                    quantityPerBundle,
+                    totalQuantity,
+                    productNameSnapshot: component.productNameSnapshot,
+                    unitPriceSnapshot: moneyFrom(component.unitPriceSnapshot),
+                    unitDiscountSnapshot: moneyFrom(component.unitDiscountSnapshot),
+                },
+                addOns: (component.addOns ?? []).map((addOn) => {
+                    const quantityPerComponent = Number(addOn.quantityPerComponent);
+                    return {
+                        id: crypto.randomUUID(),
+                        organizationId,
+                        storeId,
+                        saleId,
+                        saleItemId,
+                        saleItemBundleComponentId: componentId,
+                        addOnId: addOn.addOnId,
+                        quantityPerComponent,
+                        totalQuantity: quantityPerComponent * totalQuantity,
+                        addOnNameSnapshot: addOn.addOnNameSnapshot,
+                        unitPriceSnapshot: moneyFrom(addOn.unitPriceSnapshot),
+                        unitDiscountSnapshot: moneyFrom(addOn.unitDiscountSnapshot),
+                    };
+                }),
+            };
+        }),
+    };
+};
+
+const prepareBundleSaleLine = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+    saleItemId: string,
+    product: {
+        id: string;
+        name: string;
+        price: number | string;
+        discount: number | string;
+    },
+    parentQuantity: number,
+): Promise<{ error: ServiceResponse<null>; line?: undefined } | { error?: undefined; line: PreparedSaleLine }> => {
+    const components = await catalogRepository.getBundleProductComponentsByBundleProductId(organizationId, product.id);
+
+    if (components.length === 0) {
+        return {
+            error: {
+                status: "error",
+                message: `Bundle product "${product.name}" has no components and cannot be sold`,
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            },
+        };
+    }
+
+    const componentAddOns = await catalogRepository.getBundleProductComponentAddOnsByComponentIds(
+        organizationId,
+        components.map((component) => component.id),
+    );
+    const addOnsByComponentId = new Map<string, typeof componentAddOns>();
+    for (const addOn of componentAddOns) {
+        const existing = addOnsByComponentId.get(addOn.bundleProductComponentId) ?? [];
+        existing.push(addOn);
+        addOnsByComponentId.set(addOn.bundleProductComponentId, existing);
+    }
+
+    const preparedBundleComponents: PreparedBundleComponent[] = [];
+
+    for (const component of components) {
+        const componentProduct = await catalogRepository.getProductById(organizationId, component.componentProductId);
+        if (!componentProduct) {
+            return {
+                error: {
+                    status: "error",
+                    message: `Bundle component product not found for bundle "${product.name}"`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        if (componentProduct.status !== "active") {
+            return {
+                error: {
+                    status: "error",
+                    message: `Bundle component product is inactive for bundle "${product.name}"`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        const componentId = crypto.randomUUID();
+        const quantityPerBundle = Number(component.quantity);
+        const totalQuantity = quantityPerBundle * parentQuantity;
+        const preparedAddOns: CreateSaleItemBundleComponentAddOnREPO[] = [];
+
+        for (const componentAddOn of addOnsByComponentId.get(component.id) ?? []) {
+            const addOn = await catalogRepository.getAddOnById(organizationId, componentAddOn.addOnId);
+            if (!addOn) {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Bundle component add-on not found for bundle "${product.name}"`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            if (addOn.status !== "active") {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Bundle component add-on is inactive for bundle "${product.name}"`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            const quantityPerComponent = Number(componentAddOn.quantity);
+            const attachment = await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+                organizationId,
+                component.componentProductId,
+                componentAddOn.addOnId,
+            );
+            if (!attachment) {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Bundle component add-on is not selectable for bundle "${product.name}"`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            if (quantityPerComponent > attachment.selectionCap) {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Bundle component add-on quantity exceeds the selection cap for bundle "${product.name}"`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            preparedAddOns.push({
+                id: crypto.randomUUID(),
+                organizationId,
+                storeId,
+                saleId,
+                saleItemId,
+                saleItemBundleComponentId: componentId,
+                addOnId: addOn.id,
+                quantityPerComponent,
+                totalQuantity: quantityPerComponent * totalQuantity,
+                addOnNameSnapshot: addOn.name,
+                unitPriceSnapshot: moneyFrom(addOn.price),
+                unitDiscountSnapshot: moneyFrom(addOn.discount),
+            });
+        }
+
+        preparedBundleComponents.push({
+            component: {
+                id: componentId,
+                organizationId,
+                storeId,
+                saleId,
+                saleItemId,
+                componentProductId: componentProduct.id,
+                quantityPerBundle,
+                totalQuantity,
+                productNameSnapshot: componentProduct.name,
+                unitPriceSnapshot: moneyFrom(componentProduct.price),
+                unitDiscountSnapshot: moneyFrom(componentProduct.discount),
+            },
+            addOns: preparedAddOns,
+        });
+    }
+
+    const unitPrice = moneyFrom(product.price);
+    const lineSubtotal = roundMoney(parentQuantity * unitPrice);
+    const discountAmount = roundMoney(moneyFrom(product.discount) * parentQuantity);
+
+    if (discountAmount > lineSubtotal) {
+        return {
+            error: {
+                status: "error",
+                message: `Discount for product "${product.name}" cannot exceed the line subtotal`,
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            },
+        };
+    }
+
+    return {
+        line: {
+            item: {
+                id: saleItemId,
+                organizationId,
+                storeId,
+                saleId,
+                productId: product.id,
+                quantity: parentQuantity,
+                configurationSignature: "",
+                productNameSnapshot: product.name,
+                unitPriceSnapshot: unitPrice,
+                discountAmount,
+                lineSubtotal,
+                lineTotal: roundMoney(lineSubtotal - discountAmount),
+            },
+            addOns: [],
+            bundleComponents: preparedBundleComponents,
+        },
     };
 };
 
@@ -394,10 +627,10 @@ const prepareSaleItems = async (
 ): Promise<
     | { error: ServiceResponse<null>; lines?: undefined; totals?: undefined }
     | {
-        error?: undefined;
-        lines: PreparedSaleLine[];
-        totals: SalePricingTotals;
-    }
+          error?: undefined;
+          lines: PreparedSaleLine[];
+          totals: SalePricingTotals;
+      }
 > => {
     const mergedItems = mergeSaleItemInputsByConfiguration(items);
     if (mergedItems.error) {
@@ -418,20 +651,10 @@ const prepareSaleItems = async (
         const selectedAddOns = item.addOns ?? [];
         const configurationSignature = buildConfigurationSignature(selectedAddOns);
         const parentQuantity = Number(item.quantity);
-        const frozen = frozenByConfiguration.get(
-            configurationKeyFor(item.productId, configurationSignature),
-        );
+        const frozen = frozenByConfiguration.get(configurationKeyFor(item.productId, configurationSignature));
 
         if (frozen) {
-            preparedLines.push(
-                rescaleFrozenConfiguredLine(
-                    frozen,
-                    parentQuantity,
-                    organizationId,
-                    storeId,
-                    saleId,
-                ),
-            );
+            preparedLines.push(rescaleFrozenConfiguredLine(frozen, parentQuantity, organizationId, storeId, saleId));
             continue;
         }
 
@@ -458,8 +681,37 @@ const prepareSaleItems = async (
             };
         }
 
-        const preparedAddOns: CreateSaleItemAddOnREPO[] = [];
         const saleItemId = crypto.randomUUID();
+
+        if (product.productType === "bundle") {
+            if (selectedAddOns.length > 0) {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Bundle product "${product.name}" cannot accept add-on selections`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            const preparedBundle = await prepareBundleSaleLine(
+                organizationId,
+                storeId,
+                saleId,
+                saleItemId,
+                product,
+                parentQuantity,
+            );
+            if (preparedBundle.error) {
+                return { error: preparedBundle.error };
+            }
+
+            preparedLines.push(preparedBundle.line);
+            continue;
+        }
+
+        const preparedAddOns: CreateSaleItemAddOnREPO[] = [];
 
         for (const selectedAddOn of selectedAddOns) {
             const attachment = await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
@@ -557,6 +809,7 @@ const prepareSaleItems = async (
                 lineTotal: roundMoney(lineSubtotal - discountAmount),
             },
             addOns: preparedAddOns,
+            bundleComponents: [],
         });
     }
 
@@ -825,6 +1078,23 @@ const createDraftSaleInStore = async (
                     throw new Error("Failed to create sale item add-on");
                 }
             }
+
+            for (const bundleComponent of line.bundleComponents) {
+                const createdComponent = await billingRepository.createSaleItemBundleComponent(
+                    bundleComponent.component,
+                    tx,
+                );
+                if (!createdComponent) {
+                    throw new Error("Failed to create sale item bundle component");
+                }
+
+                for (const addOn of bundleComponent.addOns) {
+                    const createdAddOn = await billingRepository.createSaleItemBundleComponentAddOn(addOn, tx);
+                    if (!createdAddOn) {
+                        throw new Error("Failed to create sale item bundle component add-on");
+                    }
+                }
+            }
         }
     });
 
@@ -872,85 +1142,118 @@ const updateDraftSaleInStore = async (
         };
     }
 
-    const customerId = saleData.customerId === undefined
-        ? existingSale.customerId ?? null
-        : normalizeOptionalUuid(saleData.customerId);
+    const customerId =
+        saleData.customerId === undefined
+            ? (existingSale.customerId ?? null)
+            : normalizeOptionalUuid(saleData.customerId);
 
     const customerResult = await validateCustomerAssignment(organizationId, customerId);
     if ("status" in customerResult) {
         return customerResult;
     }
 
-    const nextNotes = saleData.notes === undefined
-        ? existingSale.notes ?? null
-        : normalizeOptionalText(saleData.notes);
-    const nextOrderDiscountAmount = saleData.orderDiscountAmount === undefined
-        ? moneyFrom(existingSale.orderDiscountAmount)
-        : moneyFrom(saleData.orderDiscountAmount);
+    const nextNotes =
+        saleData.notes === undefined ? (existingSale.notes ?? null) : normalizeOptionalText(saleData.notes);
+    const nextOrderDiscountAmount =
+        saleData.orderDiscountAmount === undefined
+            ? moneyFrom(existingSale.orderDiscountAmount)
+            : moneyFrom(saleData.orderDiscountAmount);
 
-    const preparedItems = saleData.items === undefined
-        ? (() => {
-            const pricingTotals = buildSalePricingTotals(
-                existingSale.subtotal,
-                getParentAndAddOnLineDiscountTotal(existingSale.items),
-                nextOrderDiscountAmount,
-            );
+    const preparedItems =
+        saleData.items === undefined
+            ? (() => {
+                  const pricingTotals = buildSalePricingTotals(
+                      existingSale.subtotal,
+                      getParentAndAddOnLineDiscountTotal(existingSale.items),
+                      nextOrderDiscountAmount,
+                  );
 
-            if (pricingTotals.error || !pricingTotals.totals) {
-                return {
-                    error: pricingTotals.error ?? {
-                        status: "error" as const,
-                        message: "Failed to calculate sale totals",
-                        data: null,
-                        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-                    },
-                };
-            }
+                  if (pricingTotals.error || !pricingTotals.totals) {
+                      return {
+                          error: pricingTotals.error ?? {
+                              status: "error" as const,
+                              message: "Failed to calculate sale totals",
+                              data: null,
+                              code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+                          },
+                      };
+                  }
 
-            return {
-                lines: existingSale.items.map((item): PreparedSaleLine => ({
-                    item: {
-                        id: item.id,
-                        organizationId: item.organizationId,
-                        storeId: item.storeId,
-                        saleId: item.saleId,
-                        productId: item.productId,
-                        quantity: Number(item.quantity),
-                        configurationSignature: item.configurationSignature ?? "",
-                        productNameSnapshot: item.productNameSnapshot,
-                        unitPriceSnapshot: Number(item.unitPriceSnapshot),
-                        discountAmount: Number(item.discountAmount),
-                        lineSubtotal: Number(item.lineSubtotal),
-                        lineTotal: Number(item.lineTotal),
-                    },
-                    addOns: (item.addOns ?? []).map((addOn) => ({
-                        id: addOn.id,
-                        organizationId: addOn.organizationId,
-                        storeId: addOn.storeId,
-                        saleId: addOn.saleId,
-                        saleItemId: addOn.saleItemId,
-                        addOnId: addOn.addOnId,
-                        quantityPerParent: Number(addOn.quantityPerParent),
-                        totalQuantity: Number(addOn.totalQuantity),
-                        addOnNameSnapshot: addOn.addOnNameSnapshot,
-                        unitPriceSnapshot: Number(addOn.unitPriceSnapshot),
-                        unitDiscountSnapshot: Number(addOn.unitDiscountSnapshot),
-                        discountAmount: Number(addOn.discountAmount),
-                        lineSubtotal: Number(addOn.lineSubtotal),
-                        lineTotal: Number(addOn.lineTotal),
-                    })),
-                })),
-                totals: pricingTotals.totals,
-            };
-        })()
-        : await prepareSaleItems(
-            organizationId,
-            storeId,
-            saleId,
-            saleData.items,
-            nextOrderDiscountAmount,
-            existingSale.items,
-        );
+                  return {
+                      lines: existingSale.items.map(
+                          (item): PreparedSaleLine => ({
+                              item: {
+                                  id: item.id,
+                                  organizationId: item.organizationId,
+                                  storeId: item.storeId,
+                                  saleId: item.saleId,
+                                  productId: item.productId,
+                                  quantity: Number(item.quantity),
+                                  configurationSignature: item.configurationSignature ?? "",
+                                  productNameSnapshot: item.productNameSnapshot,
+                                  unitPriceSnapshot: Number(item.unitPriceSnapshot),
+                                  discountAmount: Number(item.discountAmount),
+                                  lineSubtotal: Number(item.lineSubtotal),
+                                  lineTotal: Number(item.lineTotal),
+                              },
+                              addOns: (item.addOns ?? []).map((addOn) => ({
+                                  id: addOn.id,
+                                  organizationId: addOn.organizationId,
+                                  storeId: addOn.storeId,
+                                  saleId: addOn.saleId,
+                                  saleItemId: addOn.saleItemId,
+                                  addOnId: addOn.addOnId,
+                                  quantityPerParent: Number(addOn.quantityPerParent),
+                                  totalQuantity: Number(addOn.totalQuantity),
+                                  addOnNameSnapshot: addOn.addOnNameSnapshot,
+                                  unitPriceSnapshot: Number(addOn.unitPriceSnapshot),
+                                  unitDiscountSnapshot: Number(addOn.unitDiscountSnapshot),
+                                  discountAmount: Number(addOn.discountAmount),
+                                  lineSubtotal: Number(addOn.lineSubtotal),
+                                  lineTotal: Number(addOn.lineTotal),
+                              })),
+                              bundleComponents: (item.bundleComponents ?? []).map((component) => ({
+                                  component: {
+                                      id: component.id,
+                                      organizationId: component.organizationId,
+                                      storeId: component.storeId,
+                                      saleId: component.saleId,
+                                      saleItemId: component.saleItemId,
+                                      componentProductId: component.componentProductId,
+                                      quantityPerBundle: Number(component.quantityPerBundle),
+                                      totalQuantity: Number(component.totalQuantity),
+                                      productNameSnapshot: component.productNameSnapshot,
+                                      unitPriceSnapshot: Number(component.unitPriceSnapshot),
+                                      unitDiscountSnapshot: Number(component.unitDiscountSnapshot),
+                                  },
+                                  addOns: (component.addOns ?? []).map((addOn) => ({
+                                      id: addOn.id,
+                                      organizationId: addOn.organizationId,
+                                      storeId: addOn.storeId,
+                                      saleId: addOn.saleId,
+                                      saleItemId: addOn.saleItemId,
+                                      saleItemBundleComponentId: addOn.saleItemBundleComponentId,
+                                      addOnId: addOn.addOnId,
+                                      quantityPerComponent: Number(addOn.quantityPerComponent),
+                                      totalQuantity: Number(addOn.totalQuantity),
+                                      addOnNameSnapshot: addOn.addOnNameSnapshot,
+                                      unitPriceSnapshot: Number(addOn.unitPriceSnapshot),
+                                      unitDiscountSnapshot: Number(addOn.unitDiscountSnapshot),
+                                  })),
+                              })),
+                          }),
+                      ),
+                      totals: pricingTotals.totals,
+                  };
+              })()
+            : await prepareSaleItems(
+                  organizationId,
+                  storeId,
+                  saleId,
+                  saleData.items,
+                  nextOrderDiscountAmount,
+                  existingSale.items,
+              );
 
     if ("error" in preparedItems && preparedItems.error) {
         return preparedItems.error;
@@ -991,6 +1294,23 @@ const updateDraftSaleInStore = async (
                     const createdAddOn = await billingRepository.createSaleItemAddOn(addOn, tx);
                     if (!createdAddOn) {
                         throw new Error("Failed to recreate sale item add-on");
+                    }
+                }
+
+                for (const bundleComponent of line.bundleComponents) {
+                    const createdComponent = await billingRepository.createSaleItemBundleComponent(
+                        bundleComponent.component,
+                        tx,
+                    );
+                    if (!createdComponent) {
+                        throw new Error("Failed to recreate sale item bundle component");
+                    }
+
+                    for (const addOn of bundleComponent.addOns) {
+                        const createdAddOn = await billingRepository.createSaleItemBundleComponentAddOn(addOn, tx);
+                        if (!createdAddOn) {
+                            throw new Error("Failed to recreate sale item bundle component add-on");
+                        }
                     }
                 }
             }
@@ -1050,9 +1370,10 @@ const commitSaleInStore = async (
         };
     }
 
-    const customerId = commitData.customerId === undefined
-        ? existingSale.customerId ?? null
-        : normalizeOptionalUuid(commitData.customerId);
+    const customerId =
+        commitData.customerId === undefined
+            ? (existingSale.customerId ?? null)
+            : normalizeOptionalUuid(commitData.customerId);
 
     const customerResult = await validateCustomerAssignment(organizationId, customerId);
     if ("status" in customerResult) {
@@ -1061,9 +1382,10 @@ const commitSaleInStore = async (
 
     const payments = commitData.payments ?? [];
     const totalPayment = sumMoney(payments.map((payment) => payment.amount));
-    const nextOrderDiscountAmount = commitData.orderDiscountAmount === undefined
-        ? moneyFrom(existingSale.orderDiscountAmount)
-        : moneyFrom(commitData.orderDiscountAmount);
+    const nextOrderDiscountAmount =
+        commitData.orderDiscountAmount === undefined
+            ? moneyFrom(existingSale.orderDiscountAmount)
+            : moneyFrom(commitData.orderDiscountAmount);
     const pricingTotals = buildSalePricingTotals(
         existingSale.subtotal,
         getParentAndAddOnLineDiscountTotal(existingSale.items),
@@ -1071,12 +1393,14 @@ const commitSaleInStore = async (
     );
 
     if (pricingTotals.error || !pricingTotals.totals) {
-        return pricingTotals.error ?? {
-            status: "error",
-            message: "Failed to calculate sale totals",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-        };
+        return (
+            pricingTotals.error ?? {
+                status: "error",
+                message: "Failed to calculate sale totals",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            }
+        );
     }
 
     const committedTotals = pricingTotals.totals;
@@ -1100,16 +1424,11 @@ const commitSaleInStore = async (
         };
     }
 
-    const paymentStatus = totalPayment === 0
-        ? "pending"
-        : totalPayment === grandTotal
-            ? "paid"
-            : "partial";
+    const paymentStatus = totalPayment === 0 ? "pending" : totalPayment === grandTotal ? "paid" : "partial";
 
     const committedAt = new Date();
-    const nextNotes = commitData.notes === undefined
-        ? existingSale.notes ?? null
-        : normalizeOptionalText(commitData.notes);
+    const nextNotes =
+        commitData.notes === undefined ? (existingSale.notes ?? null) : normalizeOptionalText(commitData.notes);
 
     await pg.begin(async (tx) => {
         const saleNumber = await billingRepository.incrementStoreSaleCounter(organizationId, storeId, tx);
@@ -1527,9 +1846,8 @@ export const updateCustomer = async (
         };
     }
 
-    const phone = customerData.phone === undefined
-        ? existingCustomer.phone ?? null
-        : normalizeOptionalText(customerData.phone);
+    const phone =
+        customerData.phone === undefined ? (existingCustomer.phone ?? null) : normalizeOptionalText(customerData.phone);
 
     if (phone) {
         const alreadyExists = await billingRepository.customerPhoneExistsInOrganization(
@@ -1774,12 +2092,7 @@ export const createDraftSaleForDevice = async (
     session: DeviceSessionDTO,
     saleData: CreateDraftSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    return createDraftSaleInStore(
-        { deviceId: session.device.id },
-        session.organization.id,
-        session.store.id,
-        saleData,
-    );
+    return createDraftSaleInStore({ deviceId: session.device.id }, session.organization.id, session.store.id, saleData);
 };
 
 export const updateDraftSaleForDevice = async (

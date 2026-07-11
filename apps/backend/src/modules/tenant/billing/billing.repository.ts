@@ -7,6 +7,8 @@ import type {
     CreateCustomerREPO,
     CreatePaymentREPO,
     CreateSaleItemAddOnREPO,
+    CreateSaleItemBundleComponentAddOnREPO,
+    CreateSaleItemBundleComponentREPO,
     CreateSaleItemREPO,
     CreateSaleREPO,
     CustomerDTO,
@@ -14,6 +16,8 @@ import type {
     ParentScopedAddOnSalesRollupDTO,
     PaymentDTO,
     SaleItemAddOnDTO,
+    SaleItemBundleComponentAddOnDTO,
+    SaleItemBundleComponentDTO,
     SaleItemDTO,
     SaleSummaryDTO,
     SalesListQuery,
@@ -383,8 +387,9 @@ export const createSaleItem = async (
 
     return result
         ? {
-            ...mapRow<Omit<SaleItemDTO, "addOns">>(result),
+            ...mapRow<Omit<SaleItemDTO, "addOns" | "bundleComponents">>(result),
             addOns: [],
+            bundleComponents: [],
         }
         : null;
 };
@@ -400,6 +405,32 @@ export const createSaleItemAddOn = async (
     `;
 
     return result ? mapRow<SaleItemAddOnDTO>(result) : null;
+};
+
+export const createSaleItemBundleComponent = async (
+    componentData: CreateSaleItemBundleComponentREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<Omit<SaleItemBundleComponentDTO, "addOns"> | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO sale_item_bundle_components ${camelToSnakeSql(componentData)}
+        RETURNING *
+    `;
+
+    return result ? mapRow<Omit<SaleItemBundleComponentDTO, "addOns">>(result) : null;
+};
+
+export const createSaleItemBundleComponentAddOn = async (
+    addOnData: CreateSaleItemBundleComponentAddOnREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<SaleItemBundleComponentAddOnDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO sale_item_bundle_component_add_ons ${camelToSnakeSql(addOnData)}
+        RETURNING *
+    `;
+
+    return result ? mapRow<SaleItemBundleComponentAddOnDTO>(result) : null;
 };
 
 export const deleteSaleItemsBySaleId = async (
@@ -432,12 +463,60 @@ export const getSaleItemAddOnsBySaleId = async (
     return results.map((result: Record<string, unknown>) => mapRow<SaleItemAddOnDTO>(result));
 };
 
+export const getSaleItemBundleComponentAddOnsBySaleId = async (
+    saleId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<SaleItemBundleComponentAddOnDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM sale_item_bundle_component_add_ons
+        WHERE sale_id = ${saleId}
+        ORDER BY created_at ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) =>
+        mapRow<SaleItemBundleComponentAddOnDTO>(result),
+    );
+};
+
+export const getSaleItemBundleComponentsBySaleId = async (
+    saleId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<SaleItemBundleComponentDTO[]> => {
+    const db = tx || pg;
+    const [componentResults, addOnResults] = await Promise.all([
+        db`
+            SELECT *
+            FROM sale_item_bundle_components
+            WHERE sale_id = ${saleId}
+            ORDER BY created_at ASC
+        `,
+        getSaleItemBundleComponentAddOnsBySaleId(saleId, tx),
+    ]);
+
+    const addOnsByComponentId = new Map<string, SaleItemBundleComponentAddOnDTO[]>();
+    for (const addOn of addOnResults) {
+        const existing = addOnsByComponentId.get(addOn.saleItemBundleComponentId) ?? [];
+        existing.push(addOn);
+        addOnsByComponentId.set(addOn.saleItemBundleComponentId, existing);
+    }
+
+    return componentResults.map((result: Record<string, unknown>) => {
+        const component = mapRow<Omit<SaleItemBundleComponentDTO, "addOns">>(result);
+        return {
+            ...component,
+            addOns: addOnsByComponentId.get(component.id) ?? [],
+        };
+    });
+};
+
 export const getSaleItemsBySaleId = async (
     saleId: string,
     tx?: Bun.TransactionSQL,
 ): Promise<SaleItemDTO[]> => {
     const db = tx || pg;
-    const [itemResults, addOnResults] = await Promise.all([
+    const [itemResults, addOnResults, bundleComponentResults] = await Promise.all([
         db`
             SELECT *
             FROM sale_items
@@ -445,6 +524,7 @@ export const getSaleItemsBySaleId = async (
             ORDER BY created_at ASC
         `,
         getSaleItemAddOnsBySaleId(saleId, tx),
+        getSaleItemBundleComponentsBySaleId(saleId, tx),
     ]);
 
     const addOnsBySaleItemId = new Map<string, SaleItemAddOnDTO[]>();
@@ -454,12 +534,20 @@ export const getSaleItemsBySaleId = async (
         addOnsBySaleItemId.set(addOn.saleItemId, existing);
     }
 
+    const bundleComponentsBySaleItemId = new Map<string, SaleItemBundleComponentDTO[]>();
+    for (const component of bundleComponentResults) {
+        const existing = bundleComponentsBySaleItemId.get(component.saleItemId) ?? [];
+        existing.push(component);
+        bundleComponentsBySaleItemId.set(component.saleItemId, existing);
+    }
+
     return itemResults.map((result: Record<string, unknown>) => {
-        const item = mapRow<Omit<SaleItemDTO, "addOns">>(result);
+        const item = mapRow<Omit<SaleItemDTO, "addOns" | "bundleComponents">>(result);
         return {
             ...item,
             configurationSignature: String(item.configurationSignature ?? ""),
             addOns: addOnsBySaleItemId.get(item.id) ?? [],
+            bundleComponents: bundleComponentsBySaleItemId.get(item.id) ?? [],
         };
     });
 };

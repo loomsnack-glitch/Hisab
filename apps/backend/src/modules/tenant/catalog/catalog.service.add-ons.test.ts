@@ -8,8 +8,10 @@ import {
     catalogService,
     countActiveBundlesByComponentAddOnId,
     countActiveBundlesByProductAddOnPair,
+    countBundleProductComponentAddOnsByAddOnId,
     countAttachmentsByAddOnId,
     countSaleItemAddOnsByAddOnId,
+    countSaleItemBundleComponentAddOnsByAddOnId,
     createAddOnRepo,
     createProductAddOnAttachmentRepo,
     deleteAddOnRepo,
@@ -47,6 +49,8 @@ describe("Add-On catalog service", () => {
         getActiveProductsByOrganizationId.mockClear();
         countAttachmentsByAddOnId.mockClear();
         countSaleItemAddOnsByAddOnId.mockClear();
+        countBundleProductComponentAddOnsByAddOnId.mockClear();
+        countSaleItemBundleComponentAddOnsByAddOnId.mockClear();
         countActiveBundlesByComponentAddOnId.mockClear();
         countActiveBundlesByProductAddOnPair.mockClear();
         deleteAddOnRepo.mockClear();
@@ -62,6 +66,8 @@ describe("Add-On catalog service", () => {
         getActiveProductsByOrganizationId.mockResolvedValue([product]);
         countAttachmentsByAddOnId.mockResolvedValue(0);
         countSaleItemAddOnsByAddOnId.mockResolvedValue(0);
+        countBundleProductComponentAddOnsByAddOnId.mockResolvedValue(0);
+        countSaleItemBundleComponentAddOnsByAddOnId.mockResolvedValue(0);
         countActiveBundlesByComponentAddOnId.mockResolvedValue(0);
         countActiveBundlesByProductAddOnPair.mockResolvedValue(0);
         deleteAddOnRepo.mockResolvedValue(addOn);
@@ -120,13 +126,32 @@ describe("Add-On catalog service", () => {
         expect(deleteAddOnRepo).not.toHaveBeenCalled();
     });
 
+    test("rejects deletion of an add-on used by a bundle", async () => {
+        countBundleProductComponentAddOnsByAddOnId.mockResolvedValue(1);
+
+        const response = await catalogService.deleteAddOn(userId, organizationId, addOnId);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("used by a bundle");
+        expect(deleteAddOnRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects deletion of an add-on with bundle sales history", async () => {
+        countSaleItemBundleComponentAddOnsByAddOnId.mockResolvedValue(1);
+
+        const response = await catalogService.deleteAddOn(userId, organizationId, addOnId);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("sales history");
+        expect(deleteAddOnRepo).not.toHaveBeenCalled();
+    });
+
     test("defaults attachment selection cap to 1", async () => {
-        const response = await catalogService.createProductAddOnAttachment(
-            userId,
-            organizationId,
-            productId,
-            { addOnId },
-        );
+        const response = await catalogService.createProductAddOnAttachment(userId, organizationId, productId, {
+            addOnId,
+        });
 
         expect(response.status).toBe("success");
         expect(createProductAddOnAttachmentRepo.mock.calls[0]?.[0]?.selectionCap).toBe(1);
@@ -136,12 +161,10 @@ describe("Add-On catalog service", () => {
     test("rejects duplicate product/add-on attachments", async () => {
         productAddOnAttachmentExists.mockResolvedValue(true);
 
-        const response = await catalogService.createProductAddOnAttachment(
-            userId,
-            organizationId,
-            productId,
-            { addOnId, selectionCap: 2 },
-        );
+        const response = await catalogService.createProductAddOnAttachment(userId, organizationId, productId, {
+            addOnId,
+            selectionCap: 2,
+        });
 
         expect(response.status).toBe("error");
         expect(response.code).toBe(409);
@@ -150,12 +173,10 @@ describe("Add-On catalog service", () => {
     });
 
     test("deactivates an attachment without changing the add-on", async () => {
-        getProductAddOnAttachmentById
-            .mockResolvedValueOnce(attachmentResponse)
-            .mockResolvedValueOnce({
-                ...attachmentResponse,
-                status: "inactive" as const,
-            });
+        getProductAddOnAttachmentById.mockResolvedValueOnce(attachmentResponse).mockResolvedValueOnce({
+            ...attachmentResponse,
+            status: "inactive" as const,
+        });
 
         const response = await catalogService.updateProductAddOnAttachment(
             userId,

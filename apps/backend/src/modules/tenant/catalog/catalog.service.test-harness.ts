@@ -160,42 +160,47 @@ export const productNameExistsInCategory = mock(async () => false);
 export const getProductById = mock(async () => product);
 export const createProductRepo = mock(async (data: typeof product) => data);
 export const updateProductRepo = mock(async (data: typeof product) => data);
-export const createBundleProductComponentRepo = mock(async (data: {
-    id: string;
-    organizationId: string;
-    bundleProductId: string;
-    componentProductId: string;
-    quantity: number;
-    createdBy: string;
-}) => ({
-    id: data.id,
-    organizationId: data.organizationId,
-    bundleProductId: data.bundleProductId,
-    componentProductId: data.componentProductId,
-    quantity: data.quantity,
-    createdBy: data.createdBy,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-}));
-export const createBundleProductComponentAddOnRepo = mock(async (data: {
-    id: string;
-    organizationId: string;
-    bundleProductComponentId: string;
-    addOnId: string;
-    quantity: number;
-    createdBy: string;
-}) => ({
-    id: data.id,
-    organizationId: data.organizationId,
-    bundleProductComponentId: data.bundleProductComponentId,
-    addOnId: data.addOnId,
-    quantity: data.quantity,
-    createdBy: data.createdBy,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-}));
+export const deleteProductRepo = mock(async () => product);
+export const createBundleProductComponentRepo = mock(
+    async (data: {
+        id: string;
+        organizationId: string;
+        bundleProductId: string;
+        componentProductId: string;
+        quantity: number;
+        createdBy: string;
+    }) => ({
+        id: data.id,
+        organizationId: data.organizationId,
+        bundleProductId: data.bundleProductId,
+        componentProductId: data.componentProductId,
+        quantity: data.quantity,
+        createdBy: data.createdBy,
+        updatedBy: null,
+        createdAt: now,
+        updatedAt: now,
+    }),
+);
+export const createBundleProductComponentAddOnRepo = mock(
+    async (data: {
+        id: string;
+        organizationId: string;
+        bundleProductComponentId: string;
+        addOnId: string;
+        quantity: number;
+        createdBy: string;
+    }) => ({
+        id: data.id,
+        organizationId: data.organizationId,
+        bundleProductComponentId: data.bundleProductComponentId,
+        addOnId: data.addOnId,
+        quantity: data.quantity,
+        createdBy: data.createdBy,
+        updatedBy: null,
+        createdAt: now,
+        updatedAt: now,
+    }),
+);
 export const getBundleProductComponentsByBundleProductId = mock(async () => []);
 export const getBundleProductComponentAddOnsByComponentIds = mock(async () => []);
 export const deleteBundleProductComponentsByBundleProductId = mock(async () => undefined);
@@ -209,40 +214,40 @@ export const createAddOnRepo = mock(async (data: typeof addOn) => data);
 export const getAddOnById = mock(async () => addOn);
 export const updateAddOnRepo = mock(async (data: typeof addOn) => data);
 export const productAddOnAttachmentExists = mock(async () => false);
-export const createProductAddOnAttachmentRepo = mock(async (data: {
-    id: string;
-    organizationId: string;
-    productId: string;
-    addOnId: string;
-    selectionCap: number;
-    status: "active" | "inactive";
-    createdBy: string;
-}) => ({
-    id: data.id,
-    organizationId: data.organizationId,
-    productId: data.productId,
-    addOnId: data.addOnId,
-    selectionCap: data.selectionCap,
-    status: data.status,
-    createdBy: data.createdBy,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-}));
+export const createProductAddOnAttachmentRepo = mock(
+    async (data: {
+        id: string;
+        organizationId: string;
+        productId: string;
+        addOnId: string;
+        selectionCap: number;
+        status: "active" | "inactive";
+        createdBy: string;
+    }) => ({
+        id: data.id,
+        organizationId: data.organizationId,
+        productId: data.productId,
+        addOnId: data.addOnId,
+        selectionCap: data.selectionCap,
+        status: data.status,
+        createdBy: data.createdBy,
+        updatedBy: null,
+        createdAt: now,
+        updatedAt: now,
+    }),
+);
 export const getProductAddOnAttachmentById = mock(async () => attachmentResponse);
-export const updateProductAddOnAttachmentRepo = mock(async (data: {
-    id: string;
-    selectionCap: number;
-    status: "active" | "inactive";
-}) => ({
-    ...attachmentResponse,
-    selectionCap: data.selectionCap,
-    status: data.status,
-    createdBy: userId,
-    updatedBy: userId,
-    createdAt: now,
-    updatedAt: now,
-}));
+export const updateProductAddOnAttachmentRepo = mock(
+    async (data: { id: string; selectionCap: number; status: "active" | "inactive" }) => ({
+        ...attachmentResponse,
+        selectionCap: data.selectionCap,
+        status: data.status,
+        createdBy: userId,
+        updatedBy: userId,
+        createdAt: now,
+        updatedAt: now,
+    }),
+);
 export const getSelectableProductAddOnAttachmentsByOrganizationId = mock(async () => [attachmentResponse]);
 export const getActiveAddOnsByOrganizationId = mock(async () => [addOn]);
 export const getActiveProductsByOrganizationId = mock(async () => [product]);
@@ -250,6 +255,11 @@ export const getAddOnsByOrganizationId = mock(async () => [addOn]);
 export const getProductAddOnAttachmentsByProductId = mock(async () => [attachmentResponse]);
 export const countAttachmentsByAddOnId = mock(async () => 0);
 export const countSaleItemAddOnsByAddOnId = mock(async () => 0);
+export const countBundleProductComponentsByComponentProductId = mock(async () => 0);
+export const countSaleItemsByProductId = mock(async () => 0);
+export const countSaleItemBundleComponentsByComponentProductId = mock(async () => 0);
+export const countBundleProductComponentAddOnsByAddOnId = mock(async () => 0);
+export const countSaleItemBundleComponentAddOnsByAddOnId = mock(async () => 0);
 export const deleteAddOnRepo = mock(async () => addOn);
 export const deleteProductAddOnAttachmentRepo = mock(async () => attachmentResponse);
 export const begin = mock(async (callback: (tx: unknown) => Promise<void>) => callback({}));
@@ -273,6 +283,7 @@ mock.module("./catalog.repository", () => ({
     getProductById,
     createProduct: createProductRepo,
     updateProduct: updateProductRepo,
+    deleteProduct: deleteProductRepo,
     createBundleProductComponent: createBundleProductComponentRepo,
     createBundleProductComponentAddOn: createBundleProductComponentAddOnRepo,
     getBundleProductComponentsByBundleProductId,
@@ -298,6 +309,11 @@ mock.module("./catalog.repository", () => ({
     getProductAddOnAttachmentsByProductId,
     countAttachmentsByAddOnId,
     countSaleItemAddOnsByAddOnId,
+    countBundleProductComponentsByComponentProductId,
+    countSaleItemsByProductId,
+    countSaleItemBundleComponentsByComponentProductId,
+    countBundleProductComponentAddOnsByAddOnId,
+    countSaleItemBundleComponentAddOnsByAddOnId,
     deleteAddOn: deleteAddOnRepo,
     deleteProductAddOnAttachment: deleteProductAddOnAttachmentRepo,
 }));

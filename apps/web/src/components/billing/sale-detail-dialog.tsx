@@ -201,6 +201,16 @@ const SaleDetailDialog = ({
                 const addOnTotal = String(addOn.lineTotal).padStart(8);
                 text += `${addOnName}${addOnQty}${addOnPrice}${addOnTotal}\n`;
             });
+            (item.bundleComponents ?? []).forEach((component) => {
+                const componentName = `* ${component.productNameSnapshot}`.padEnd(20).substring(0, 20);
+                const componentQty = String(Number(component.totalQuantity)).padStart(5);
+                text += `${componentName}${componentQty}${" ".repeat(16)}\n`;
+                (component.addOns ?? []).forEach((addOn) => {
+                    const addOnName = `  + ${addOn.addOnNameSnapshot}`.padEnd(20).substring(0, 20);
+                    const addOnQty = String(Number(addOn.totalQuantity)).padStart(5);
+                    text += `${addOnName}${addOnQty}${" ".repeat(16)}\n`;
+                });
+            });
         });
 
         text += `${separator}\n`;
@@ -360,6 +370,7 @@ const SaleDetailDialog = ({
                                         <div className="mt-4 space-y-2">
                                             {sale.items.map((item) => {
                                                 const addOns = item.addOns ?? [];
+                                                const bundleComponents = item.bundleComponents ?? [];
                                                 const configuredLineTotal = Number(item.lineTotal)
                                                     + addOns.reduce((total, addOn) => total + Number(addOn.lineTotal), 0);
 
@@ -413,6 +424,39 @@ const SaleDetailDialog = ({
                                                                         <p className="text-sm font-semibold text-foreground/90">
                                                                             {formatCurrency(addOn.lineTotal)}
                                                                         </p>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : null}
+
+                                                        {bundleComponents.length > 0 ? (
+                                                            <div className="mt-3 space-y-2 border-l border-border/60 ml-3.5 pl-4">
+                                                                {bundleComponents.map((component) => (
+                                                                    <div key={component.id} className="space-y-1.5">
+                                                                        <div className="flex items-center justify-between gap-3">
+                                                                            <div>
+                                                                                <p className="text-sm text-foreground/85">
+                                                                                    {component.productNameSnapshot}
+                                                                                </p>
+                                                                                <p className="text-xs text-muted-foreground mt-0.5">
+                                                                                    Qty {Number(component.totalQuantity)}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        {(component.addOns ?? []).length > 0 ? (
+                                                                            <div className="space-y-1 border-l border-border/50 ml-2 pl-3">
+                                                                                {(component.addOns ?? []).map((addOn) => (
+                                                                                    <p
+                                                                                        key={addOn.id}
+                                                                                        className="text-xs text-muted-foreground"
+                                                                                    >
+                                                                                        + {addOn.addOnNameSnapshot}
+                                                                                        {" "}
+                                                                                        × {Number(addOn.totalQuantity)}
+                                                                                    </p>
+                                                                                ))}
+                                                                            </div>
+                                                                        ) : null}
                                                                     </div>
                                                                 ))}
                                                             </div>

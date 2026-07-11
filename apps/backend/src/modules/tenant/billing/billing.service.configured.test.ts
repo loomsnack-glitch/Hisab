@@ -111,7 +111,7 @@ const createSale = mock(async (data: Record<string, unknown>) => {
 });
 
 const createSaleItem = mock(async (data: Record<string, unknown>) => {
-    const item = { ...data, addOns: [], createdAt: now, updatedAt: now };
+    const item = { ...data, addOns: [], bundleComponents: [], createdAt: now, updatedAt: now };
     createdSaleItems.push(item);
     return item;
 });
@@ -141,6 +141,7 @@ const getSaleItemsBySaleId = mock(async (saleId: string) => {
         .map((item) => ({
             ...item,
             addOns: createdSaleItemAddOns.filter((addOnRow) => addOnRow.saleItemId === item.id),
+            bundleComponents: [],
         }));
 });
 
@@ -201,6 +202,8 @@ mock.module("./billing.repository", () => ({
     createSale,
     createSaleItem,
     createSaleItemAddOn,
+    createSaleItemBundleComponent: mock(async () => null),
+    createSaleItemBundleComponentAddOn: mock(async () => null),
     getSaleById,
     getSaleItemsBySaleId,
     getPaymentsBySaleId,

@@ -59,9 +59,7 @@ import {
 import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
-import CustomizeProductDialog, {
-    type CustomizeAddOnSelection,
-} from "@/components/billing/customize-product-dialog";
+import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
@@ -70,6 +68,20 @@ import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
 
 type ComposerAddOn = CustomizeAddOnSelection;
+
+type ComposerBundleComponentAddOn = {
+    addOnId: string;
+    name: string;
+    quantity: number;
+};
+
+type ComposerBundleComponent = {
+    id: string;
+    componentProductId: string;
+    name: string;
+    quantityPerBundle: number;
+    addOns: ComposerBundleComponentAddOn[];
+};
 
 type ComposerItem = {
     key: string;
@@ -80,6 +92,7 @@ type ComposerItem = {
     unitDiscount: number;
     quantity: number;
     addOns: ComposerAddOn[];
+    bundleComponents: ComposerBundleComponent[];
 };
 
 const buildComposerConfigurationSignature = (addOns: ComposerAddOn[]) => {
@@ -94,13 +107,15 @@ const buildComposerConfigurationSignature = (addOns: ComposerAddOn[]) => {
         .join("|");
 };
 
-const isSameComposerConfiguration = (left: ComposerItem, right: {
-    productId: string;
-    addOns: ComposerAddOn[];
-}) =>
-    left.productId === right.productId
-    && buildComposerConfigurationSignature(left.addOns)
-        === buildComposerConfigurationSignature(right.addOns);
+const isSameComposerConfiguration = (
+    left: ComposerItem,
+    right: {
+        productId: string;
+        addOns: ComposerAddOn[];
+    },
+) =>
+    left.productId === right.productId &&
+    buildComposerConfigurationSignature(left.addOns) === buildComposerConfigurationSignature(right.addOns);
 
 type SettlementMode = "full" | "partial" | "due";
 
@@ -150,16 +165,13 @@ type BillingPageProps = {
     session?: DeviceSessionDTO | null;
 };
 
-const BillingPage = ({
-    mode = "admin",
-    session = null,
-}: BillingPageProps) => {
+const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const queryClient = useQueryClient();
     const { organizationId: organizationIdParam = "" } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const isDeviceMode = mode === "device";
     const canMutate = isDeviceMode;
-    const organizationId = isDeviceMode ? session?.organization.id ?? "" : organizationIdParam;
+    const organizationId = isDeviceMode ? (session?.organization.id ?? "") : organizationIdParam;
 
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
@@ -192,7 +204,7 @@ const BillingPage = ({
     const deferredCustomerDirectorySearch = useDeferredValue(customerDirectorySearch.trim().toLowerCase());
     const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
 
-    const selectedStoreId = isDeviceMode ? session?.store.id ?? "" : searchParams.get("storeId") || "";
+    const selectedStoreId = isDeviceMode ? (session?.store.id ?? "") : searchParams.get("storeId") || "";
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -202,13 +214,13 @@ const BillingPage = ({
 
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
-        queryFn: () => isDeviceMode ? getPosCategories() : getCategories(organizationId),
+        queryFn: () => (isDeviceMode ? getPosCategories() : getCategories(organizationId)),
         enabled: Boolean(organizationId),
     });
 
     const productsQuery = useQuery({
         queryKey: catalogKeys.products(organizationId),
-        queryFn: () => isDeviceMode ? getPosProducts() : getProducts(organizationId),
+        queryFn: () => (isDeviceMode ? getPosProducts() : getProducts(organizationId)),
         enabled: Boolean(organizationId),
     });
 
@@ -220,32 +232,30 @@ const BillingPage = ({
 
     const customersQuery = useQuery({
         queryKey: billingKeys.customers(organizationId),
-        queryFn: () => isDeviceMode ? getPosCustomers({ limit: 100 }) : getCustomers(organizationId, { limit: 100 }),
+        queryFn: () => (isDeviceMode ? getPosCustomers({ limit: 100 }) : getCustomers(organizationId, { limit: 100 })),
         enabled: Boolean(organizationId),
     });
 
     const salesQuery = useQuery({
         queryKey: billingKeys.sales(organizationId, selectedStoreId),
-        queryFn: () => isDeviceMode ? getPosSales({ limit: 40 }) : getSales(organizationId, selectedStoreId, { limit: 40 }),
+        queryFn: () =>
+            isDeviceMode ? getPosSales({ limit: 40 }) : getSales(organizationId, selectedStoreId, { limit: 40 }),
         enabled: Boolean(organizationId && selectedStoreId),
     });
 
-    const organization =
-        isDeviceMode
-            ? null
-            : organizationQuery.data?.status === "success" ? organizationQuery.data.data?.organization ?? null : null;
-    const categories =
-        categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? [] : [];
-    const products =
-        productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? [] : [];
+    const organization = isDeviceMode
+        ? null
+        : organizationQuery.data?.status === "success"
+          ? (organizationQuery.data.data?.organization ?? null)
+          : null;
+    const categories = categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : [];
+    const products = productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : [];
     const selectableAttachments =
         selectableAttachmentsQuery.data?.status === "success"
-            ? selectableAttachmentsQuery.data.data?.attachments ?? []
+            ? (selectableAttachmentsQuery.data.data?.attachments ?? [])
             : [];
-    const customers =
-        customersQuery.data?.status === "success" ? customersQuery.data.data?.customers ?? [] : [];
-    const sales =
-        salesQuery.data?.status === "success" ? salesQuery.data.data?.sales ?? [] : [];
+    const customers = customersQuery.data?.status === "success" ? (customersQuery.data.data?.customers ?? []) : [];
+    const sales = salesQuery.data?.status === "success" ? (salesQuery.data.data?.sales ?? []) : [];
 
     const attachmentsByProductId = useMemo(() => {
         const grouped = new Map<string, typeof selectableAttachments>();
@@ -258,14 +268,12 @@ const BillingPage = ({
     }, [selectableAttachments]);
 
     const customizeProduct = products.find((product) => product.id === customizeProductId) ?? null;
-    const customizeAttachments = customizeProduct
-        ? attachmentsByProductId.get(customizeProduct.id) ?? []
-        : [];
+    const customizeAttachments = customizeProduct ? (attachmentsByProductId.get(customizeProduct.id) ?? []) : [];
 
-    const organizationStores = isDeviceMode && session ? [session.store] : organization?.stores ?? [];
+    const organizationStores = isDeviceMode && session ? [session.store] : (organization?.stores ?? []);
     const selectedStore = isDeviceMode
-        ? session?.store ?? null
-        : organizationStores.find((store) => store.id === selectedStoreId) ?? null;
+        ? (session?.store ?? null)
+        : (organizationStores.find((store) => store.id === selectedStoreId) ?? null);
 
     useEffect(() => {
         if (isDeviceMode) {
@@ -296,27 +304,32 @@ const BillingPage = ({
     const activeProducts = products.filter((product) => product.status === "active");
     const filteredProducts = activeProducts.filter((product) => {
         const matchesCategory = categoryFilter === "all" || product.categoryId === categoryFilter;
-        const matchesSearch = !deferredProductSearch
-            || product.name.toLowerCase().includes(deferredProductSearch);
+        const matchesSearch = !deferredProductSearch || product.name.toLowerCase().includes(deferredProductSearch);
         return matchesCategory && matchesSearch;
     });
 
-    const filteredCustomers = customers.filter((customer) => {
-        if (!deferredCustomerSearch) {
-            return true;
-        }
+    const filteredCustomers = customers
+        .filter((customer) => {
+            if (!deferredCustomerSearch) {
+                return true;
+            }
 
-        return customer.name.toLowerCase().includes(deferredCustomerSearch)
-            || (customer.phone ?? "").toLowerCase().includes(deferredCustomerSearch);
-    }).slice(0, 6);
+            return (
+                customer.name.toLowerCase().includes(deferredCustomerSearch) ||
+                (customer.phone ?? "").toLowerCase().includes(deferredCustomerSearch)
+            );
+        })
+        .slice(0, 6);
 
     const directoryCustomers = customers.filter((customer) => {
         if (!deferredCustomerDirectorySearch) {
             return true;
         }
 
-        return customer.name.toLowerCase().includes(deferredCustomerDirectorySearch)
-            || (customer.phone ?? "").toLowerCase().includes(deferredCustomerDirectorySearch);
+        return (
+            customer.name.toLowerCase().includes(deferredCustomerDirectorySearch) ||
+            (customer.phone ?? "").toLowerCase().includes(deferredCustomerDirectorySearch)
+        );
     });
 
     const filteredSales = sales
@@ -338,9 +351,10 @@ const BillingPage = ({
 
             const customerName = sale.customer?.name?.toLowerCase() ?? "";
             const saleNumberText = sale.saleNumber ? String(sale.saleNumber) : "";
-            const matchesSearch = !deferredSalesSearch
-                || customerName.includes(deferredSalesSearch)
-                || saleNumberText.includes(deferredSalesSearch);
+            const matchesSearch =
+                !deferredSalesSearch ||
+                customerName.includes(deferredSalesSearch) ||
+                saleNumberText.includes(deferredSalesSearch);
 
             const matchesPaymentMethod = (() => {
                 if (paymentMethodFilter === "all") return true;
@@ -401,11 +415,8 @@ const BillingPage = ({
     const totalDiscount = lineDiscountTotal + orderDiscountAmount;
     const grandTotal = Math.max(subtotal - totalDiscount, 0);
     const rawPartialPaymentAmount = Math.max(Number(partialPaymentAmount || 0), 0);
-    const collectedTotal = settlementMode === "due"
-        ? 0
-        : settlementMode === "full"
-            ? grandTotal
-            : rawPartialPaymentAmount;
+    const collectedTotal =
+        settlementMode === "due" ? 0 : settlementMode === "full" ? grandTotal : rawPartialPaymentAmount;
     const dueTotal = Math.max(grandTotal - collectedTotal, 0);
     const isOverpaid = settlementMode === "partial" && rawPartialPaymentAmount > grandTotal;
     const isPartialAmountMissing = settlementMode === "partial" && rawPartialPaymentAmount <= 0;
@@ -413,7 +424,9 @@ const BillingPage = ({
     const hasInvalidPartialPayment = isOverpaid || isPartialAmountMissing || matchesFullPayment;
 
     const invalidateBillingQueries = () => {
-        queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
+        queryClient.invalidateQueries({
+            queryKey: billingKeys.organization(organizationId),
+        });
     };
 
     const resetComposer = () => {
@@ -430,14 +443,15 @@ const BillingPage = ({
 
     const addProductToBill = (product: ProductResponseDTO) => {
         setItems((current) => {
-            const existingPlainItem = current.find(
-                (item) => isSameComposerConfiguration(item, { productId: product.id, addOns: [] }),
+            const existingPlainItem = current.find((item) =>
+                isSameComposerConfiguration(item, {
+                    productId: product.id,
+                    addOns: [],
+                }),
             );
             if (existingPlainItem) {
                 return current.map((item) =>
-                    item.key === existingPlainItem.key
-                        ? { ...item, quantity: item.quantity + 1 }
-                        : item,
+                    item.key === existingPlainItem.key ? { ...item, quantity: item.quantity + 1 } : item,
                 );
             }
 
@@ -452,15 +466,13 @@ const BillingPage = ({
                     unitDiscount: Number(product.discount ?? 0),
                     quantity: 1,
                     addOns: [],
+                    bundleComponents: [],
                 },
             ];
         });
     };
 
-    const addConfiguredProductToBill = (
-        product: ProductResponseDTO,
-        addOns: CustomizeAddOnSelection[],
-    ) => {
+    const addConfiguredProductToBill = (product: ProductResponseDTO, addOns: CustomizeAddOnSelection[]) => {
         if (addOns.length === 0) {
             addProductToBill(product);
             return;
@@ -473,9 +485,7 @@ const BillingPage = ({
 
             if (existingConfiguredItem) {
                 return current.map((item) =>
-                    item.key === existingConfiguredItem.key
-                        ? { ...item, quantity: item.quantity + 1 }
-                        : item,
+                    item.key === existingConfiguredItem.key ? { ...item, quantity: item.quantity + 1 } : item,
                 );
             }
 
@@ -490,6 +500,7 @@ const BillingPage = ({
                     unitDiscount: Number(product.discount ?? 0),
                     quantity: 1,
                     addOns,
+                    bundleComponents: [],
                 },
             ];
         });
@@ -541,12 +552,14 @@ const BillingPage = ({
         payments:
             settlementMode === "due"
                 ? []
-                : [{
-                    amount: settlementMode === "full" ? grandTotal : rawPartialPaymentAmount,
-                    method: selectedPaymentMethod,
-                    referenceNumber: null,
-                    notes: null,
-                }],
+                : [
+                      {
+                          amount: settlementMode === "full" ? grandTotal : rawPartialPaymentAmount,
+                          method: selectedPaymentMethod,
+                          referenceNumber: null,
+                          notes: null,
+                      },
+                  ],
     });
 
     const saveDraftMutation = useMutation({
@@ -563,10 +576,15 @@ const BillingPage = ({
             const response = activeDraftId
                 ? isDeviceMode
                     ? await updatePosDraftSale(activeDraftId, payload as UpdateDraftSaleJSON)
-                    : await updateDraftSale(organizationId, selectedStoreId, activeDraftId, payload as UpdateDraftSaleJSON)
+                    : await updateDraftSale(
+                          organizationId,
+                          selectedStoreId,
+                          activeDraftId,
+                          payload as UpdateDraftSaleJSON,
+                      )
                 : isDeviceMode
-                    ? await createPosDraftSale(payload)
-                    : await createDraftSale(organizationId, selectedStoreId, payload);
+                  ? await createPosDraftSale(payload)
+                  : await createDraftSale(organizationId, selectedStoreId, payload);
 
             if (response.status !== "success" || !response.data?.sale) {
                 throw new Error(response.message || "Failed to save draft");
@@ -576,6 +594,35 @@ const BillingPage = ({
         },
         onSuccess: (sale) => {
             setActiveDraftId(sale.id);
+            setItems(
+                sale.items.map((item) => ({
+                    key: item.id,
+                    productId: item.productId,
+                    name: item.productNameSnapshot,
+                    categoryId: products.find((product) => product.id === item.productId)?.categoryId ?? "",
+                    unitPrice: Number(item.unitPriceSnapshot),
+                    unitDiscount: Number(item.quantity) > 0 ? Number(item.discountAmount) / Number(item.quantity) : 0,
+                    quantity: Number(item.quantity),
+                    addOns: (item.addOns ?? []).map((addOn) => ({
+                        addOnId: addOn.addOnId,
+                        name: addOn.addOnNameSnapshot,
+                        unitPrice: Number(addOn.unitPriceSnapshot),
+                        unitDiscount: Number(addOn.unitDiscountSnapshot),
+                        quantity: Number(addOn.quantityPerParent),
+                    })),
+                    bundleComponents: (item.bundleComponents ?? []).map((component) => ({
+                        id: component.id,
+                        componentProductId: component.componentProductId,
+                        name: component.productNameSnapshot,
+                        quantityPerBundle: Number(component.quantityPerBundle),
+                        addOns: (component.addOns ?? []).map((addOn) => ({
+                            addOnId: addOn.addOnId,
+                            name: addOn.addOnNameSnapshot,
+                            quantity: Number(addOn.quantityPerComponent),
+                        })),
+                    })),
+                })),
+            );
             invalidateBillingQueries();
             toast.success(sale.status === "draft" ? "Draft saved" : "Bill updated");
         },
@@ -614,10 +661,15 @@ const BillingPage = ({
             const draftResponse = activeDraftId
                 ? isDeviceMode
                     ? await updatePosDraftSale(activeDraftId, draftPayload as UpdateDraftSaleJSON)
-                    : await updateDraftSale(organizationId, selectedStoreId, activeDraftId, draftPayload as UpdateDraftSaleJSON)
+                    : await updateDraftSale(
+                          organizationId,
+                          selectedStoreId,
+                          activeDraftId,
+                          draftPayload as UpdateDraftSaleJSON,
+                      )
                 : isDeviceMode
-                    ? await createPosDraftSale(draftPayload)
-                    : await createDraftSale(organizationId, selectedStoreId, draftPayload);
+                  ? await createPosDraftSale(draftPayload)
+                  : await createDraftSale(organizationId, selectedStoreId, draftPayload);
 
             if (draftResponse.status !== "success" || !draftResponse.data?.sale) {
                 throw new Error(draftResponse.message || "Failed to prepare bill");
@@ -625,12 +677,7 @@ const BillingPage = ({
 
             const commitResponse = isDeviceMode
                 ? await commitPosSale(draftResponse.data.sale.id, buildCommitPayload())
-                : await commitSale(
-                    organizationId,
-                    selectedStoreId,
-                    draftResponse.data.sale.id,
-                    buildCommitPayload(),
-                );
+                : await commitSale(organizationId, selectedStoreId, draftResponse.data.sale.id, buildCommitPayload());
 
             if (commitResponse.status !== "success" || !commitResponse.data?.sale) {
                 throw new Error(commitResponse.message || "Failed to complete bill");
@@ -667,7 +714,7 @@ const BillingPage = ({
             setActiveDraftId(sale.id);
             setSelectedCustomerId(sale.customerId ?? "");
             const cust = customers.find((c) => c.id === sale.customerId);
-            setCustomerSearch(cust ? (cust.phone || cust.name) : "");
+            setCustomerSearch(cust ? cust.phone || cust.name : "");
             setNotes(sale.notes ?? "");
             setItems(
                 sale.items.map((item) => ({
@@ -684,6 +731,17 @@ const BillingPage = ({
                         unitPrice: Number(addOn.unitPriceSnapshot),
                         unitDiscount: Number(addOn.unitDiscountSnapshot),
                         quantity: Number(addOn.quantityPerParent),
+                    })),
+                    bundleComponents: (item.bundleComponents ?? []).map((component) => ({
+                        id: component.id,
+                        componentProductId: component.componentProductId,
+                        name: component.productNameSnapshot,
+                        quantityPerBundle: Number(component.quantityPerBundle),
+                        addOns: (component.addOns ?? []).map((addOn) => ({
+                            addOnId: addOn.addOnId,
+                            name: addOn.addOnNameSnapshot,
+                            quantity: Number(addOn.quantityPerComponent),
+                        })),
                     })),
                 })),
             );
@@ -740,9 +798,9 @@ const BillingPage = ({
             <div className="rounded-2xl border border-border/60 bg-card/80 p-8 shadow-xl shadow-black/5">
                 <p className="font-display text-2xl font-semibold text-foreground">Billing workspace unavailable</p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                    {organizationQuery.data?.message
-                        || (organizationQuery.error as { message?: string })?.message
-                        || "This organization could not be loaded."}
+                    {organizationQuery.data?.message ||
+                        (organizationQuery.error as { message?: string })?.message ||
+                        "This organization could not be loaded."}
                 </p>
                 <Button variant="outline" className="mt-4 rounded-full" render={<Link to="/organizations" />}>
                     Back to organizations
@@ -770,7 +828,10 @@ const BillingPage = ({
                     <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
                         Billing is store-scoped. Once a store exists, this screen becomes the POS billing surface.
                     </p>
-                    <Button className="mt-4 rounded-full" render={<Link to={`/organizations/${organizationId}/stores`} />}>
+                    <Button
+                        className="mt-4 rounded-full"
+                        render={<Link to={`/organizations/${organizationId}/stores`} />}
+                    >
                         Go to store setup
                     </Button>
                 </div>
@@ -778,9 +839,7 @@ const BillingPage = ({
         );
     }
 
-    const panelMaxHeight = isDeviceMode
-        ? "calc(100vh - 3.5rem)"
-        : "calc(100vh - 3.5rem - 57px)";
+    const panelMaxHeight = isDeviceMode ? "calc(100vh - 3.5rem)" : "calc(100vh - 3.5rem - 57px)";
 
     return (
         <div className="billing-pos-layout flex flex-col gap-0" style={{ minHeight: "calc(100vh - 3.5rem)" }}>
@@ -952,7 +1011,8 @@ const BillingPage = ({
                             ) : (
                                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                                     {filteredProducts.map((product) => {
-                                        const catName = categories.find((c) => c.id === product.categoryId)?.name || "Item";
+                                        const catName =
+                                            categories.find((c) => c.id === product.categoryId)?.name || "Item";
                                         const emoji = getProductEmoji(catName);
                                         const cartQuantity = items
                                             .filter((item) => item.productId === product.id)
@@ -961,7 +1021,8 @@ const BillingPage = ({
                                         const productAttachments = attachmentsByProductId.get(product.id) ?? [];
                                         const canCustomize = canMutate && productAttachments.length > 0;
 
-                                        const canSellProduct = product.productType === "single";
+                                        const canSellProduct =
+                                            product.productType === "single" || product.productType === "bundle";
 
                                         return (
                                             <div
@@ -996,7 +1057,9 @@ const BillingPage = ({
                                                 >
                                                     <div className="relative mb-2.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
                                                         {product.imagePath?.startsWith("icon:") ? (
-                                                            <span className="text-3xl select-none select-none-emoji">{product.imagePath.replace("icon:", "")}</span>
+                                                            <span className="text-3xl select-none select-none-emoji">
+                                                                {product.imagePath.replace("icon:", "")}
+                                                            </span>
                                                         ) : product.imageSignedUrl ? (
                                                             <img
                                                                 src={product.imageSignedUrl}
@@ -1004,7 +1067,9 @@ const BillingPage = ({
                                                                 className="h-full w-full rounded-full object-cover border border-border/40"
                                                             />
                                                         ) : (
-                                                            <span className="text-3xl select-none select-none-emoji">{emoji}</span>
+                                                            <span className="text-3xl select-none select-none-emoji">
+                                                                {emoji}
+                                                            </span>
                                                         )}
                                                     </div>
                                                     <p className="mt-2.5 text-sm font-semibold leading-tight text-foreground">
@@ -1147,7 +1212,7 @@ const BillingPage = ({
                                                     "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
                                                     sortBy === opt.value
                                                         ? "bg-foreground text-background shadow-md shadow-foreground/5"
-                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                                                 )}
                                             >
                                                 {opt.label}
@@ -1173,7 +1238,7 @@ const BillingPage = ({
                                                             "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer",
                                                             viewLayout === layout.value
                                                                 ? "bg-primary text-primary-foreground shadow-sm"
-                                                                : "text-muted-foreground hover:text-foreground"
+                                                                : "text-muted-foreground hover:text-foreground",
                                                         )}
                                                     >
                                                         <IconComponent className="size-3.5" />
@@ -1209,7 +1274,7 @@ const BillingPage = ({
                                                     "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
                                                     paymentMethodFilter === opt.value
                                                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                                                 )}
                                             >
                                                 {opt.label}
@@ -1239,7 +1304,7 @@ const BillingPage = ({
                                                     "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
                                                     dateFilter === opt.value
                                                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                                                 )}
                                             >
                                                 {opt.label}
@@ -1266,9 +1331,7 @@ const BillingPage = ({
                                 <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
                                     <ReceiptText className="size-8 text-muted-foreground/50" />
                                     <p className="mt-3 font-medium text-foreground">No bills found</p>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        No bills in this view yet.
-                                    </p>
+                                    <p className="mt-1 text-sm text-muted-foreground">No bills in this view yet.</p>
                                 </div>
                             ) : (
                                 <>
@@ -1326,23 +1389,32 @@ const BillingPage = ({
                                             const badges: React.ReactNode[] = [];
                                             if (methods.includes("cash")) {
                                                 badges.push(
-                                                    <span key="cash" className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                                    <span
+                                                        key="cash"
+                                                        className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                                    >
                                                         Cash
-                                                    </span>
+                                                    </span>,
                                                 );
                                             }
                                             if (methods.includes("upi")) {
                                                 badges.push(
-                                                    <span key="upi" className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                                                    <span
+                                                        key="upi"
+                                                        className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                                                    >
                                                         UPI
-                                                    </span>
+                                                    </span>,
                                                 );
                                             }
                                             if (methods.includes("card")) {
                                                 badges.push(
-                                                    <span key="card" className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                                                    <span
+                                                        key="card"
+                                                        className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-500 border border-purple-500/20"
+                                                    >
                                                         Card
-                                                    </span>
+                                                    </span>,
                                                 );
                                             }
                                             if (badges.length === 0) {
@@ -1366,14 +1438,16 @@ const BillingPage = ({
                                                             <div>
                                                                 <div className="flex items-center justify-between gap-2 mb-2.5">
                                                                     <p className="font-bold text-amber-500 dark:text-amber-400 text-sm">
-                                                                        {sale.saleNumber ? `#${sale.saleNumber}` : "Draft Bill"}
+                                                                        {sale.saleNumber
+                                                                            ? `#${sale.saleNumber}`
+                                                                            : "Draft Bill"}
                                                                     </p>
                                                                     <div className="flex flex-col items-end gap-1">
                                                                         {renderPaymentStatusBadge(sale)}
                                                                         {renderPaymentMethodBadges(sale)}
                                                                     </div>
                                                                 </div>
-                                                                
+
                                                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                                                     <Calendar className="size-3.5 text-muted-foreground/70" />
                                                                     <span>{formatDateTime(sale.createdAt)}</span>
@@ -1385,31 +1459,38 @@ const BillingPage = ({
 
                                                                 <div className="flex items-center justify-between mt-4 pt-3.5 border-t border-border/40">
                                                                     <span className="text-xs text-muted-foreground truncate max-w-[160px]">
-                                                                        {sale.customer?.name || "Walk-in"} • {sale.itemCount} item{sale.itemCount !== 1 ? "s" : ""}
+                                                                        {sale.customer?.name || "Walk-in"} •{" "}
+                                                                        {sale.itemCount} item
+                                                                        {sale.itemCount !== 1 ? "s" : ""}
                                                                     </span>
                                                                     <div className="text-right">
                                                                         <span className="text-lg font-bold text-foreground">
                                                                             {formatCurrency(sale.grandTotal)}
                                                                         </span>
-                                                                        {sale.status !== "draft" && sale.status !== "voided" && (
-                                                                            <p className={cn(
-                                                                                "mt-1 text-[10px] font-semibold",
-                                                                                Number(sale.dueTotal) > 0
-                                                                                    ? "text-amber-600 dark:text-amber-400"
-                                                                                    : "text-emerald-600 dark:text-emerald-400",
-                                                                            )}>
-                                                                                {Number(sale.dueTotal) > 0
-                                                                                    ? `Due ${formatCurrency(sale.dueTotal)}`
-                                                                                    : "Paid in full"}
-                                                                            </p>
-                                                                        )}
+                                                                        {sale.status !== "draft" &&
+                                                                            sale.status !== "voided" && (
+                                                                                <p
+                                                                                    className={cn(
+                                                                                        "mt-1 text-[10px] font-semibold",
+                                                                                        Number(sale.dueTotal) > 0
+                                                                                            ? "text-amber-600 dark:text-amber-400"
+                                                                                            : "text-emerald-600 dark:text-emerald-400",
+                                                                                    )}
+                                                                                >
+                                                                                    {Number(sale.dueTotal) > 0
+                                                                                        ? `Due ${formatCurrency(sale.dueTotal)}`
+                                                                                        : "Paid in full"}
+                                                                                </p>
+                                                                            )}
                                                                     </div>
                                                                 </div>
                                                             </div>
 
                                                             <div className="flex items-center justify-between mt-5 pt-3 border-t border-border/40">
                                                                 <div className="text-[11px] font-bold text-emerald-500 dark:text-emerald-400">
-                                                                    {sale.grandTotal > 0 ? `+${Math.round(sale.grandTotal / 10)} pts` : ""}
+                                                                    {sale.grandTotal > 0
+                                                                        ? `+${Math.round(sale.grandTotal / 10)} pts`
+                                                                        : ""}
                                                                 </div>
                                                                 <div>
                                                                     {canMutate && sale.status === "draft" ? (
@@ -1417,9 +1498,13 @@ const BillingPage = ({
                                                                             size="sm"
                                                                             className="rounded-xl text-xs h-8 px-4 bg-primary text-primary-foreground hover:bg-primary/90"
                                                                             disabled={resumeDraftMutation.isPending}
-                                                                            onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                                                            onClick={() =>
+                                                                                resumeDraftMutation.mutate(sale.id)
+                                                                            }
                                                                         >
-                                                                            {resumeDraftMutation.isPending ? "Loading..." : "Resume draft"}
+                                                                            {resumeDraftMutation.isPending
+                                                                                ? "Loading..."
+                                                                                : "Resume draft"}
                                                                         </Button>
                                                                     ) : (
                                                                         <Button
@@ -1453,14 +1538,16 @@ const BillingPage = ({
                                                             <div className="space-y-2">
                                                                 <div className="flex items-center justify-between gap-1">
                                                                     <p className="font-bold text-amber-500 dark:text-amber-400 text-xs">
-                                                                        {sale.saleNumber ? `#${sale.saleNumber}` : "Draft"}
+                                                                        {sale.saleNumber
+                                                                            ? `#${sale.saleNumber}`
+                                                                            : "Draft"}
                                                                     </p>
                                                                     <div className="flex flex-col items-end gap-1">
                                                                         {renderPaymentStatusBadge(sale)}
                                                                         {renderPaymentMethodBadges(sale)}
                                                                     </div>
                                                                 </div>
-                                                                
+
                                                                 <div className="text-[10px] text-muted-foreground truncate">
                                                                     {formatDateTime(sale.createdAt)}
                                                                 </div>
@@ -1473,18 +1560,21 @@ const BillingPage = ({
                                                                         <span className="text-sm font-bold text-foreground">
                                                                             {formatCurrency(sale.grandTotal)}
                                                                         </span>
-                                                                        {sale.status !== "draft" && sale.status !== "voided" && (
-                                                                            <p className={cn(
-                                                                                "mt-0.5 text-[9px] font-semibold",
-                                                                                Number(sale.dueTotal) > 0
-                                                                                    ? "text-amber-600 dark:text-amber-400"
-                                                                                    : "text-emerald-600 dark:text-emerald-400",
-                                                                            )}>
-                                                                                {Number(sale.dueTotal) > 0
-                                                                                    ? `Due ${formatCurrency(sale.dueTotal)}`
-                                                                                    : "Paid"}
-                                                                            </p>
-                                                                        )}
+                                                                        {sale.status !== "draft" &&
+                                                                            sale.status !== "voided" && (
+                                                                                <p
+                                                                                    className={cn(
+                                                                                        "mt-0.5 text-[9px] font-semibold",
+                                                                                        Number(sale.dueTotal) > 0
+                                                                                            ? "text-amber-600 dark:text-amber-400"
+                                                                                            : "text-emerald-600 dark:text-emerald-400",
+                                                                                    )}
+                                                                                >
+                                                                                    {Number(sale.dueTotal) > 0
+                                                                                        ? `Due ${formatCurrency(sale.dueTotal)}`
+                                                                                        : "Paid"}
+                                                                                </p>
+                                                                            )}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -1495,7 +1585,9 @@ const BillingPage = ({
                                                                         size="sm"
                                                                         className="w-full rounded-lg text-[11px] h-7 bg-primary text-primary-foreground hover:bg-primary/90"
                                                                         disabled={resumeDraftMutation.isPending}
-                                                                        onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                                                        onClick={() =>
+                                                                            resumeDraftMutation.mutate(sale.id)
+                                                                        }
                                                                     >
                                                                         Resume
                                                                     </Button>
@@ -1533,14 +1625,16 @@ const BillingPage = ({
                                                                     {sale.saleNumber ? `#${sale.saleNumber}` : "Draft"}
                                                                 </p>
                                                             </div>
-                                                            
+
                                                             <div className="w-32 shrink-0 hidden md:block text-xs text-muted-foreground">
                                                                 {formatDateTime(sale.createdAt)}
                                                             </div>
 
                                                             <div className="min-w-0 flex-1 pr-4">
                                                                 <p className="text-xs font-semibold text-foreground/80 truncate">
-                                                                    {sale.customer?.name || "Walk-in"} • {sale.itemCount} item{sale.itemCount !== 1 ? "s" : ""}
+                                                                    {sale.customer?.name || "Walk-in"} •{" "}
+                                                                    {sale.itemCount} item
+                                                                    {sale.itemCount !== 1 ? "s" : ""}
                                                                 </p>
                                                                 <p className="text-[11px] text-muted-foreground truncate mt-0.5">
                                                                     {sale.itemsSummary || "No items"}
@@ -1561,19 +1655,23 @@ const BillingPage = ({
                                                                     {formatCurrency(sale.grandTotal)}
                                                                 </p>
                                                                 {sale.status !== "draft" && sale.status !== "voided" ? (
-                                                                    <p className={cn(
-                                                                        "mt-0.5 text-[9px] font-bold",
-                                                                        Number(sale.dueTotal) > 0
-                                                                            ? "text-amber-600 dark:text-amber-400"
-                                                                            : "text-emerald-500 dark:text-emerald-400",
-                                                                    )}>
+                                                                    <p
+                                                                        className={cn(
+                                                                            "mt-0.5 text-[9px] font-bold",
+                                                                            Number(sale.dueTotal) > 0
+                                                                                ? "text-amber-600 dark:text-amber-400"
+                                                                                : "text-emerald-500 dark:text-emerald-400",
+                                                                        )}
+                                                                    >
                                                                         {Number(sale.dueTotal) > 0
                                                                             ? `Due ${formatCurrency(sale.dueTotal)}`
                                                                             : "Paid in full"}
                                                                     </p>
                                                                 ) : (
                                                                     <p className="text-[9px] font-bold text-emerald-500 dark:text-emerald-400 mt-0.5">
-                                                                        {sale.grandTotal > 0 ? `+${Math.round(sale.grandTotal / 10)} pts` : ""}
+                                                                        {sale.grandTotal > 0
+                                                                            ? `+${Math.round(sale.grandTotal / 10)} pts`
+                                                                            : ""}
                                                                     </p>
                                                                 )}
                                                             </div>
@@ -1584,7 +1682,9 @@ const BillingPage = ({
                                                                         size="sm"
                                                                         className="rounded-lg text-[11px] h-7 px-2.5 bg-primary text-primary-foreground hover:bg-primary/90"
                                                                         disabled={resumeDraftMutation.isPending}
-                                                                        onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                                                        onClick={() =>
+                                                                            resumeDraftMutation.mutate(sale.id)
+                                                                        }
                                                                     >
                                                                         Resume
                                                                     </Button>
@@ -1616,474 +1716,516 @@ const BillingPage = ({
 
                 {/* ─── RIGHT PANEL: Current Order ─── */}
                 {canMutate ? (
-                <aside
-                    className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm xl:w-[380px] xl:border-t-0 xl:border-l"
-                    style={{ maxHeight: panelMaxHeight }}
-                >
-                    {/* Order Header */}
-                    <div className="border-b border-border/40 px-5 py-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-bold text-foreground">Current Order</h2>
-                                <p className="text-sm text-muted-foreground">
-                                    {items.length === 0
-                                        ? "0 items in cart"
-                                        : `${items.reduce((s, i) => s + i.quantity, 0)} item${items.reduce((s, i) => s + i.quantity, 0) !== 1 ? "s" : ""} in cart`}
-                                </p>
-                            </div>
-                            {items.length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={resetComposer}
-                                    className="text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
-                                >
-                                    Clear all
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Scrollable content area */}
-                    <div className="flex flex-1 flex-col overflow-y-auto">
-                        {/* Phone Number / Customer Search */}
-                        <div className="border-b border-border/40 px-5 py-3">
-                            <div className="flex items-center gap-2">
-                                <div className="relative flex-1">
-                                    <User className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        className="h-10 rounded-xl bg-background/70 pl-9 text-sm"
-                                        placeholder="Phone number"
-                                        value={customerSearch}
-                                        onChange={(event) => {
-                                            setCustomerSearch(event.target.value);
-                                            if (!event.target.value) setSelectedCustomerId("");
-                                        }}
-                                        onKeyDown={(e) => e.key === "Enter" && handleFindCustomer()}
-                                    />
+                    <aside
+                        className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm xl:w-[380px] xl:border-t-0 xl:border-l"
+                        style={{ maxHeight: panelMaxHeight }}
+                    >
+                        {/* Order Header */}
+                        <div className="border-b border-border/40 px-5 py-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-bold text-foreground">Current Order</h2>
+                                    <p className="text-sm text-muted-foreground">
+                                        {items.length === 0
+                                            ? "0 items in cart"
+                                            : `${items.reduce((s, i) => s + i.quantity, 0)} item${items.reduce((s, i) => s + i.quantity, 0) !== 1 ? "s" : ""} in cart`}
+                                    </p>
                                 </div>
-                                <Button
-                                    type="button"
-                                    className="h-10 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
-                                    onClick={handleFindCustomer}
-                                >
-                                    Find
-                                </Button>
-                            </div>
-
-                            {selectedCustomer && (
-                                <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs">
-                                    <span className="font-medium text-emerald-700 dark:text-emerald-300">
-                                        {selectedCustomer.name}
-                                    </span>
-                                    <span className="text-emerald-600/70 dark:text-emerald-300/70">
-                                        {selectedCustomer.phone || "No phone"}
-                                    </span>
+                                {items.length > 0 && (
                                     <button
                                         type="button"
-                                        className="ml-auto text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-200"
-                                        onClick={() => { setSelectedCustomerId(""); setCustomerSearch(""); }}
+                                        onClick={resetComposer}
+                                        className="text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
                                     >
-                                        ✕
+                                        Clear all
                                     </button>
-                                </div>
-                            )}
+                                )}
+                            </div>
+                        </div>
 
-                            {/* Customer quick-create (hidden trigger, accessible from phone search) */}
-                            {customerSearch && !selectedCustomer && filteredCustomers.length === 0 && (
-                                <div className="mt-2">
-                                    <CustomerQuickCreateDialog
-                                        organizationId={organizationId}
-                                        mode={mode}
-                                        suggestedName={customerSearch}
-                                        onCreated={(customer) => {
-                                            setSelectedCustomerId(customer.id);
-                                            setCustomerSearch(customer.phone || customer.name);
-                                        }}
-                                        trigger={
-                                            <button
-                                                type="button"
-                                                className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                                            >
-                                                <Plus className="size-3.5" />
-                                                <span>Create new customer "{customerSearch}"</span>
-                                            </button>
-                                        }
-                                    />
+                        {/* Scrollable content area */}
+                        <div className="flex flex-1 flex-col overflow-y-auto">
+                            {/* Phone Number / Customer Search */}
+                            <div className="border-b border-border/40 px-5 py-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                        <User className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                                        <Input
+                                            className="h-10 rounded-xl bg-background/70 pl-9 text-sm"
+                                            placeholder="Phone number"
+                                            value={customerSearch}
+                                            onChange={(event) => {
+                                                setCustomerSearch(event.target.value);
+                                                if (!event.target.value) setSelectedCustomerId("");
+                                            }}
+                                            onKeyDown={(e) => e.key === "Enter" && handleFindCustomer()}
+                                        />
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        className="h-10 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+                                        onClick={handleFindCustomer}
+                                    >
+                                        Find
+                                    </Button>
                                 </div>
-                            )}
 
-                            {/* Customer search dropdown results */}
-                            {customerSearch && !selectedCustomer && filteredCustomers.length > 0 && (
-                                <div className="mt-2 space-y-1">
-                                    {filteredCustomers.slice(0, 4).map((c) => (
+                                {selectedCustomer && (
+                                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs">
+                                        <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                                            {selectedCustomer.name}
+                                        </span>
+                                        <span className="text-emerald-600/70 dark:text-emerald-300/70">
+                                            {selectedCustomer.phone || "No phone"}
+                                        </span>
                                         <button
-                                            key={c.id}
                                             type="button"
-                                            className="flex w-full items-center gap-2 rounded-lg bg-background/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
+                                            className="ml-auto text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-200"
                                             onClick={() => {
-                                                setSelectedCustomerId(c.id);
-                                                setCustomerSearch(c.phone || c.name);
+                                                setSelectedCustomerId("");
+                                                setCustomerSearch("");
                                             }}
                                         >
-                                            <User className="size-3 shrink-0" />
-                                            <span className="font-medium">{c.name}</span>
-                                            <span className="ml-auto text-[10px] opacity-60">{c.phone || ""}</span>
+                                            ✕
                                         </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                                    </div>
+                                )}
 
-                        {/* Cart Items */}
-                        <div className="flex-1 px-5 py-3">
-                            {items.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-16 text-center">
-                                    <ShoppingCart className="size-10 text-muted-foreground/30" />
-                                    <p className="mt-3 text-sm font-medium text-muted-foreground">Cart is empty</p>
-                                    <p className="mt-1 text-xs text-muted-foreground/60">Click products to add</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {items.map((item) => {
-                                        const associatedProduct = products.find((p) => p.id === item.productId);
-                                        const catName = categories.find((c) => c.id === item.categoryId)?.name || "Item";
-                                        const emoji = getProductEmoji(catName);
-                                        const parentTotal = (item.unitPrice - item.unitDiscount) * item.quantity;
-                                        const addOnTotal = item.addOns.reduce(
-                                            (total, addOn) =>
-                                                total + (addOn.unitPrice - addOn.unitDiscount) * addOn.quantity * item.quantity,
-                                            0,
-                                        );
-                                        const lineTotal = parentTotal + addOnTotal;
+                                {/* Customer quick-create (hidden trigger, accessible from phone search) */}
+                                {customerSearch && !selectedCustomer && filteredCustomers.length === 0 && (
+                                    <div className="mt-2">
+                                        <CustomerQuickCreateDialog
+                                            organizationId={organizationId}
+                                            mode={mode}
+                                            suggestedName={customerSearch}
+                                            onCreated={(customer) => {
+                                                setSelectedCustomerId(customer.id);
+                                                setCustomerSearch(customer.phone || customer.name);
+                                            }}
+                                            trigger={
+                                                <button
+                                                    type="button"
+                                                    className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                                                >
+                                                    <Plus className="size-3.5" />
+                                                    <span>Create new customer "{customerSearch}"</span>
+                                                </button>
+                                            }
+                                        />
+                                    </div>
+                                )}
 
-                                        return (
-                                            <div
-                                                key={item.key}
-                                                className="rounded-xl border border-border/40 bg-background/60 px-3 py-2.5"
+                                {/* Customer search dropdown results */}
+                                {customerSearch && !selectedCustomer && filteredCustomers.length > 0 && (
+                                    <div className="mt-2 space-y-1">
+                                        {filteredCustomers.slice(0, 4).map((c) => (
+                                            <button
+                                                key={c.id}
+                                                type="button"
+                                                className="flex w-full items-center gap-2 rounded-lg bg-background/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
+                                                onClick={() => {
+                                                    setSelectedCustomerId(c.id);
+                                                    setCustomerSearch(c.phone || c.name);
+                                                }}
                                             >
-                                                <div className="flex items-center gap-3">
-                                                    {/* Image/Emoji */}
-                                                    <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner">
-                                                        {associatedProduct?.imagePath?.startsWith("icon:") ? (
-                                                            <span className="text-lg select-none select-none-emoji">{associatedProduct.imagePath.replace("icon:", "")}</span>
-                                                        ) : associatedProduct?.imageSignedUrl ? (
-                                                            <img
-                                                                src={associatedProduct.imageSignedUrl}
-                                                                alt={item.name}
-                                                                className="h-full w-full rounded-full object-cover border border-border/40"
+                                                <User className="size-3 shrink-0" />
+                                                <span className="font-medium">{c.name}</span>
+                                                <span className="ml-auto text-[10px] opacity-60">{c.phone || ""}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Cart Items */}
+                            <div className="flex-1 px-5 py-3">
+                                {items.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                                        <ShoppingCart className="size-10 text-muted-foreground/30" />
+                                        <p className="mt-3 text-sm font-medium text-muted-foreground">Cart is empty</p>
+                                        <p className="mt-1 text-xs text-muted-foreground/60">Click products to add</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {items.map((item) => {
+                                            const associatedProduct = products.find((p) => p.id === item.productId);
+                                            const catName =
+                                                categories.find((c) => c.id === item.categoryId)?.name || "Item";
+                                            const emoji = getProductEmoji(catName);
+                                            const parentTotal = (item.unitPrice - item.unitDiscount) * item.quantity;
+                                            const addOnTotal = item.addOns.reduce(
+                                                (total, addOn) =>
+                                                    total +
+                                                    (addOn.unitPrice - addOn.unitDiscount) *
+                                                        addOn.quantity *
+                                                        item.quantity,
+                                                0,
+                                            );
+                                            const lineTotal = parentTotal + addOnTotal;
+
+                                            return (
+                                                <div
+                                                    key={item.key}
+                                                    className="rounded-xl border border-border/40 bg-background/60 px-3 py-2.5"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        {/* Image/Emoji */}
+                                                        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner">
+                                                            {associatedProduct?.imagePath?.startsWith("icon:") ? (
+                                                                <span className="text-lg select-none select-none-emoji">
+                                                                    {associatedProduct.imagePath.replace("icon:", "")}
+                                                                </span>
+                                                            ) : associatedProduct?.imageSignedUrl ? (
+                                                                <img
+                                                                    src={associatedProduct.imageSignedUrl}
+                                                                    alt={item.name}
+                                                                    className="h-full w-full rounded-full object-cover border border-border/40"
+                                                                />
+                                                            ) : (
+                                                                <span className="text-lg select-none select-none-emoji">
+                                                                    {emoji}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Name & Price */}
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="truncate text-sm font-semibold text-foreground">
+                                                                {item.name}
+                                                            </p>
+                                                            <ProductPriceDisplay
+                                                                price={item.unitPrice}
+                                                                discount={item.unitDiscount}
+                                                                size="sm"
+                                                                align="left"
+                                                                singleTone="foreground"
                                                             />
-                                                        ) : (
-                                                            <span className="text-lg select-none select-none-emoji">{emoji}</span>
-                                                        )}
-                                                    </div>
+                                                        </div>
 
-                                                    {/* Name & Price */}
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="truncate text-sm font-semibold text-foreground">
-                                                            {item.name}
-                                                        </p>
-                                                        <ProductPriceDisplay
-                                                            price={item.unitPrice}
-                                                            discount={item.unitDiscount}
-                                                            size="sm"
-                                                            align="left"
-                                                            singleTone="foreground"
-                                                        />
-                                                    </div>
-
-                                                    {/* Quantity Controls */}
-                                                    <div className="flex items-center gap-1.5 shrink-0">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => updateItemQuantity(item.key, item.quantity - 1)}
-                                                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                                        >
-                                                            <Minus className="size-3" />
-                                                        </button>
-                                                        <span className="w-6 text-center text-sm font-bold text-foreground">
-                                                            {item.quantity}
-                                                        </span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => updateItemQuantity(item.key, item.quantity + 1)}
-                                                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                                                        >
-                                                            <Plus className="size-3" />
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Line Total */}
-                                                    <p className="w-16 text-right text-sm font-bold text-foreground shrink-0">
-                                                        {formatCurrency(lineTotal)}
-                                                    </p>
-
-                                                    {/* Delete */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => updateItemQuantity(item.key, 0)}
-                                                        className="text-muted-foreground/50 transition-colors hover:text-destructive shrink-0"
-                                                    >
-                                                        <Trash2 className="size-4" />
-                                                    </button>
-                                                </div>
-
-                                                {item.addOns.length > 0 ? (
-                                                    <div className="mt-2 space-y-1 border-l border-border/50 pl-4 ml-4">
-                                                        {item.addOns.map((addOn) => (
-                                                            <div
-                                                                key={`${item.key}-${addOn.addOnId}`}
-                                                                className="flex items-center justify-between gap-3 text-xs text-muted-foreground"
+                                                        {/* Quantity Controls */}
+                                                        <div className="flex items-center gap-1.5 shrink-0">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    updateItemQuantity(item.key, item.quantity - 1)
+                                                                }
+                                                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                                             >
-                                                                <span className="truncate">
-                                                                    + {addOn.name} × {addOn.quantity}
-                                                                </span>
-                                                                <span className="shrink-0 font-medium text-foreground/80">
-                                                                    {formatCurrency(
-                                                                        (addOn.unitPrice - addOn.unitDiscount)
-                                                                        * addOn.quantity
-                                                                        * item.quantity,
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                        ))}
+                                                                <Minus className="size-3" />
+                                                            </button>
+                                                            <span className="w-6 text-center text-sm font-bold text-foreground">
+                                                                {item.quantity}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    updateItemQuantity(item.key, item.quantity + 1)
+                                                                }
+                                                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                                                            >
+                                                                <Plus className="size-3" />
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Line Total */}
+                                                        <p className="w-16 text-right text-sm font-bold text-foreground shrink-0">
+                                                            {formatCurrency(lineTotal)}
+                                                        </p>
+
+                                                        {/* Delete */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateItemQuantity(item.key, 0)}
+                                                            className="text-muted-foreground/50 transition-colors hover:text-destructive shrink-0"
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                        </button>
                                                     </div>
-                                                ) : null}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
 
-                    {/* ─── Bottom Checkout Area (always visible) ─── */}
-                    <div className="border-t border-border/40 bg-card px-5 py-4">
-                        {/* Discount Input */}
-                        <div className="mb-3 space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                    Pricing
-                                </span>
-                                {orderDiscountAmount > 0 ? (
-                                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                                        Order discount applied
+                                                    {item.addOns.length > 0 ? (
+                                                        <div className="mt-2 space-y-1 border-l border-border/50 pl-4 ml-4">
+                                                            {item.addOns.map((addOn) => (
+                                                                <div
+                                                                    key={`${item.key}-${addOn.addOnId}`}
+                                                                    className="flex items-center justify-between gap-3 text-xs text-muted-foreground"
+                                                                >
+                                                                    <span className="truncate">
+                                                                        + {addOn.name} × {addOn.quantity}
+                                                                    </span>
+                                                                    <span className="shrink-0 font-medium text-foreground/80">
+                                                                        {formatCurrency(
+                                                                            (addOn.unitPrice - addOn.unitDiscount) *
+                                                                                addOn.quantity *
+                                                                                item.quantity,
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : null}
+
+                                                    {item.bundleComponents.length > 0 ? (
+                                                        <div className="mt-2 space-y-1 border-l border-border/50 pl-4 ml-4">
+                                                            {item.bundleComponents.map((component) => (
+                                                                <div
+                                                                    key={`${item.key}-${component.id}`}
+                                                                    className="space-y-0.5 text-xs text-muted-foreground"
+                                                                >
+                                                                    <span className="truncate block">
+                                                                        {component.name} × {component.quantityPerBundle}
+                                                                    </span>
+                                                                    {component.addOns.map((addOn) => (
+                                                                        <span
+                                                                            key={`${item.key}-${component.id}-${addOn.addOnId}`}
+                                                                            className="truncate block pl-3"
+                                                                        >
+                                                                            + {addOn.name} × {addOn.quantity}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ─── Bottom Checkout Area (always visible) ─── */}
+                        <div className="border-t border-border/40 bg-card px-5 py-4">
+                            {/* Discount Input */}
+                            <div className="mb-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                        Pricing
                                     </span>
-                                ) : null}
+                                    {orderDiscountAmount > 0 ? (
+                                        <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                            Order discount applied
+                                        </span>
+                                    ) : null}
+                                </div>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    className="h-10 rounded-xl bg-background/60 text-sm"
+                                    placeholder="Discount ₹"
+                                    value={discountInput}
+                                    onChange={(e) => setDiscountInput(e.target.value)}
+                                />
                             </div>
-                            <Input
-                                type="number"
-                                min="0"
-                                step="1"
-                                className="h-10 rounded-xl bg-background/60 text-sm"
-                                placeholder="Discount ₹"
-                                value={discountInput}
-                                onChange={(e) => setDiscountInput(e.target.value)}
-                            />
-                        </div>
 
-                        {/* Summary */}
-                        <div className="mb-3 space-y-1.5 text-sm">
-                            <div className="flex justify-between text-muted-foreground">
-                                <span>Subtotal</span>
-                                <span>{formatCurrency(subtotal)}</span>
+                            {/* Summary */}
+                            <div className="mb-3 space-y-1.5 text-sm">
+                                <div className="flex justify-between text-muted-foreground">
+                                    <span>Subtotal</span>
+                                    <span>{formatCurrency(subtotal)}</span>
+                                </div>
+                                {lineDiscountTotal > 0 && (
+                                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                        <span>Item discounts</span>
+                                        <span>-{formatCurrency(lineDiscountTotal)}</span>
+                                    </div>
+                                )}
+                                {orderDiscountAmount > 0 && (
+                                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                        <span>Order discount</span>
+                                        <span>-{formatCurrency(orderDiscountAmount)}</span>
+                                    </div>
+                                )}
+                                {collectedTotal > 0 && (
+                                    <div className="flex justify-between text-sky-600 dark:text-sky-400">
+                                        <span>Collected now</span>
+                                        <span>{formatCurrency(collectedTotal)}</span>
+                                    </div>
+                                )}
+                                {dueTotal > 0 && items.length > 0 && (
+                                    <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                                        <span>Due after bill</span>
+                                        <span>{formatCurrency(dueTotal)}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between pt-1.5 text-lg font-bold text-foreground">
+                                    <span>Total</span>
+                                    <span>{formatCurrency(grandTotal)}</span>
+                                </div>
                             </div>
-                            {lineDiscountTotal > 0 && (
-                                <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                                    <span>Item discounts</span>
-                                    <span>-{formatCurrency(lineDiscountTotal)}</span>
-                                </div>
-                            )}
-                            {orderDiscountAmount > 0 && (
-                                <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                                    <span>Order discount</span>
-                                    <span>-{formatCurrency(orderDiscountAmount)}</span>
-                                </div>
-                            )}
-                            {collectedTotal > 0 && (
-                                <div className="flex justify-between text-sky-600 dark:text-sky-400">
-                                    <span>Collected now</span>
-                                    <span>{formatCurrency(collectedTotal)}</span>
-                                </div>
-                            )}
-                            {dueTotal > 0 && items.length > 0 && (
-                                <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                                    <span>Due after bill</span>
-                                    <span>{formatCurrency(dueTotal)}</span>
-                                </div>
-                            )}
-                            <div className="flex justify-between pt-1.5 text-lg font-bold text-foreground">
-                                <span>Total</span>
-                                <span>{formatCurrency(grandTotal)}</span>
-                            </div>
-                        </div>
 
-                        <div className="mb-3">
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                Settlement
-                            </p>
-                            <div className="grid grid-cols-3 gap-1.5">
-                                <button
-                                    type="button"
-                                    onClick={() => setSettlementMode("full")}
-                                    className={cn(
-                                        "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                        settlementMode === "full"
-                                            ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
-                                            : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
-                                    )}
-                                >
-                                    <ReceiptText className="size-3.5" />
-                                    Pay full
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setSettlementMode("partial")}
-                                    className={cn(
-                                        "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                        settlementMode === "partial"
-                                            ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
-                                            : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
-                                    )}
-                                >
-                                    <CreditCard className="size-3.5" />
-                                    Pay partial
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setSettlementMode("due")}
-                                    className={cn(
-                                        "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                        settlementMode === "due"
-                                            ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
-                                            : "border border-border/60 bg-background/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
-                                    )}
-                                >
-                                    <Receipt className="size-3.5" />
-                                    Mark due
-                                </button>
-                            </div>
-                        </div>
-
-                        {settlementMode !== "due" && (
                             <div className="mb-3">
                                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                    Payment Method
+                                    Settlement
                                 </p>
                                 <div className="grid grid-cols-3 gap-1.5">
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedPaymentMethod("cash")}
+                                        onClick={() => setSettlementMode("full")}
                                         className={cn(
                                             "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                            selectedPaymentMethod === "cash"
+                                            settlementMode === "full"
                                                 ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
                                         )}
                                     >
-                                        <Banknote className="size-3.5" />
-                                        Cash
+                                        <ReceiptText className="size-3.5" />
+                                        Pay full
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedPaymentMethod("upi")}
+                                        onClick={() => setSettlementMode("partial")}
                                         className={cn(
                                             "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                            selectedPaymentMethod === "upi"
-                                                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                                : "border border-border/60 bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                                        )}
-                                    >
-                                        <Smartphone className="size-3.5" />
-                                        UPI
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedPaymentMethod("card")}
-                                        className={cn(
-                                            "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
-                                            selectedPaymentMethod === "card"
+                                            settlementMode === "partial"
                                                 ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
                                         )}
                                     >
                                         <CreditCard className="size-3.5" />
-                                        Card
+                                        Pay partial
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettlementMode("due")}
+                                        className={cn(
+                                            "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                            settlementMode === "due"
+                                                ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
+                                                : "border border-border/60 bg-background/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
+                                        )}
+                                    >
+                                        <Receipt className="size-3.5" />
+                                        Mark due
                                     </button>
                                 </div>
                             </div>
-                        )}
 
-                        {settlementMode === "partial" && (
-                            <div className="mb-3">
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    className="h-10 rounded-xl bg-background/60 text-sm"
-                                    placeholder="Collected Amount INR"
-                                    value={partialPaymentAmount}
-                                    onChange={(e) => setPartialPaymentAmount(e.target.value)}
-                                />
+                            {settlementMode !== "due" && (
+                                <div className="mb-3">
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                        Payment Method
+                                    </p>
+                                    <div className="grid grid-cols-3 gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPaymentMethod("cash")}
+                                            className={cn(
+                                                "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                                selectedPaymentMethod === "cash"
+                                                    ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
+                                                    : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
+                                            )}
+                                        >
+                                            <Banknote className="size-3.5" />
+                                            Cash
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPaymentMethod("upi")}
+                                            className={cn(
+                                                "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                                selectedPaymentMethod === "upi"
+                                                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                                    : "border border-border/60 bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                                            )}
+                                        >
+                                            <Smartphone className="size-3.5" />
+                                            UPI
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPaymentMethod("card")}
+                                            className={cn(
+                                                "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                                selectedPaymentMethod === "card"
+                                                    ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
+                                                    : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
+                                            )}
+                                        >
+                                            <CreditCard className="size-3.5" />
+                                            Card
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {settlementMode === "partial" && (
+                                <div className="mb-3">
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        className="h-10 rounded-xl bg-background/60 text-sm"
+                                        placeholder="Collected Amount INR"
+                                        value={partialPaymentAmount}
+                                        onChange={(e) => setPartialPaymentAmount(e.target.value)}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Warnings */}
+                            {isOverpaid && (
+                                <div className="mb-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                    Collected amount exceeds the bill total.
+                                </div>
+                            )}
+
+                            {settlementMode === "partial" && isPartialAmountMissing && !isOverpaid && (
+                                <div className="mb-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
+                                    Enter the amount the customer is paying now.
+                                </div>
+                            )}
+
+                            {settlementMode === "partial" && matchesFullPayment && !isOverpaid && (
+                                <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                                    Use &quot;Pay full&quot; when the customer is settling the entire bill amount.
+                                </div>
+                            )}
+
+                            {!selectedCustomerId && dueTotal > 0 && items.length > 0 && (
+                                <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                                    Attach a customer for partial or due bills.
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 rounded-xl text-sm font-semibold"
+                                    disabled={
+                                        saveDraftMutation.isPending ||
+                                        completeSaleMutation.isPending ||
+                                        items.length === 0
+                                    }
+                                    onClick={() => saveDraftMutation.mutate()}
+                                >
+                                    {saveDraftMutation.isPending
+                                        ? "Saving..."
+                                        : activeDraftId
+                                          ? "Update draft"
+                                          : "Save draft"}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    className="h-11 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/20 hover:bg-primary/90 text-sm"
+                                    disabled={
+                                        completeSaleMutation.isPending ||
+                                        saveDraftMutation.isPending ||
+                                        items.length === 0 ||
+                                        hasInvalidPartialPayment
+                                    }
+                                    onClick={() => completeSaleMutation.mutate()}
+                                >
+                                    {completeSaleMutation.isPending
+                                        ? "Completing..."
+                                        : `Place Order — ${formatCurrency(grandTotal)}`}
+                                </Button>
                             </div>
-                        )}
-
-                        {/* Warnings */}
-                        {isOverpaid && (
-                            <div className="mb-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                                Collected amount exceeds the bill total.
-                            </div>
-                        )}
-
-                        {settlementMode === "partial" && isPartialAmountMissing && !isOverpaid && (
-                            <div className="mb-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
-                                Enter the amount the customer is paying now.
-                            </div>
-                        )}
-
-                        {settlementMode === "partial" && matchesFullPayment && !isOverpaid && (
-                            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                                Use &quot;Pay full&quot; when the customer is settling the entire bill amount.
-                            </div>
-                        )}
-
-                        {!selectedCustomerId && dueTotal > 0 && items.length > 0 && (
-                            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                                Attach a customer for partial or due bills.
-                            </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-3 mt-4">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="h-11 rounded-xl text-sm font-semibold"
-                                disabled={saveDraftMutation.isPending || completeSaleMutation.isPending || items.length === 0}
-                                onClick={() => saveDraftMutation.mutate()}
-                            >
-                                {saveDraftMutation.isPending
-                                    ? "Saving..."
-                                    : activeDraftId
-                                        ? "Update draft"
-                                        : "Save draft"}
-                            </Button>
-                            <Button
-                                type="button"
-                                className="h-11 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/20 hover:bg-primary/90 text-sm"
-                                disabled={
-                                    completeSaleMutation.isPending
-                                    || saveDraftMutation.isPending
-                                    || items.length === 0
-                                    || hasInvalidPartialPayment
-                                }
-                                onClick={() => completeSaleMutation.mutate()}
-                            >
-                                {completeSaleMutation.isPending
-                                    ? "Completing..."
-                                    : `Place Order — ${formatCurrency(grandTotal)}`}
-                            </Button>
                         </div>
-                    </div>
-                </aside>
+                    </aside>
                 ) : (
                     <aside
                         className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm xl:w-[380px] xl:border-t-0 xl:border-l"
@@ -2112,8 +2254,8 @@ const BillingPage = ({
                                 </p>
                                 <p className="mt-2 text-lg font-semibold text-foreground">
                                     {leftPanelTab === "customers"
-                                        ? organization?.name ?? "Organization"
-                                        : selectedStore?.name ?? "Select a store"}
+                                        ? (organization?.name ?? "Organization")
+                                        : (selectedStore?.name ?? "Select a store")}
                                 </p>
                             </div>
                             {leftPanelTab === "customers" ? (
@@ -2122,9 +2264,12 @@ const BillingPage = ({
                                         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                                             Total customers
                                         </p>
-                                        <p className="mt-2 text-3xl font-semibold text-foreground">{customers.length}</p>
+                                        <p className="mt-2 text-3xl font-semibold text-foreground">
+                                            {customers.length}
+                                        </p>
                                         <p className="mt-1 text-xs text-muted-foreground">
-                                            Shared across {organizationStores.length} store{organizationStores.length !== 1 ? "s" : ""}.
+                                            Shared across {organizationStores.length} store
+                                            {organizationStores.length !== 1 ? "s" : ""}.
                                         </p>
                                     </div>
                                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
@@ -2146,31 +2291,38 @@ const BillingPage = ({
                                 </>
                             ) : (
                                 <>
-                            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                    Bills in view
-                                </p>
-                                <p className="mt-2 text-3xl font-semibold text-foreground">{filteredSales.length}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    Drafts, paid bills, open dues, and voided bills for this store.
-                                </p>
-                            </div>
-                            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                    Drafts
-                                </p>
-                                <p className="mt-2 text-2xl font-semibold text-foreground">
-                                    {sales.filter((sale) => sale.status === "draft").length}
-                                </p>
-                            </div>
-                            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                    Open dues
-                                </p>
-                                <p className="mt-2 text-2xl font-semibold text-foreground">
-                                    {sales.filter((sale) => sale.status === "completed" && sale.paymentStatus !== "paid").length}
-                                </p>
-                            </div>
+                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                            Bills in view
+                                        </p>
+                                        <p className="mt-2 text-3xl font-semibold text-foreground">
+                                            {filteredSales.length}
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            Drafts, paid bills, open dues, and voided bills for this store.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                            Drafts
+                                        </p>
+                                        <p className="mt-2 text-2xl font-semibold text-foreground">
+                                            {sales.filter((sale) => sale.status === "draft").length}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                            Open dues
+                                        </p>
+                                        <p className="mt-2 text-2xl font-semibold text-foreground">
+                                            {
+                                                sales.filter(
+                                                    (sale) =>
+                                                        sale.status === "completed" && sale.paymentStatus !== "paid",
+                                                ).length
+                                            }
+                                        </p>
+                                    </div>
                                 </>
                             )}
                         </div>

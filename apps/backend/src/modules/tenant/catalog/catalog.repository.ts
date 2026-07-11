@@ -210,10 +210,7 @@ export const getActiveProductsByOrganizationId = async (organizationId: string):
     return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
 };
 
-export const getProductsByCategoryId = async (
-    organizationId: string,
-    categoryId: string,
-): Promise<ProductDTO[]> => {
+export const getProductsByCategoryId = async (organizationId: string, categoryId: string): Promise<ProductDTO[]> => {
     const results = await pg`
         SELECT *
         FROM products
@@ -298,10 +295,7 @@ export const deleteProduct = async (organizationId: string, productId: string): 
     return result ? snakeToCamel(result) : null;
 };
 
-export const createAddOn = async (
-    addOnData: CreateAddOnREPO,
-    tx?: Bun.TransactionSQL,
-): Promise<AddOnDTO | null> => {
+export const createAddOn = async (addOnData: CreateAddOnREPO, tx?: Bun.TransactionSQL): Promise<AddOnDTO | null> => {
     const db = tx || pg;
     const [result] = await db`
         INSERT INTO add_ons ${camelToSnakeSql(addOnData)}
@@ -398,13 +392,77 @@ export const countAttachmentsByAddOnId = async (organizationId: string, addOnId:
     return Number(result?.total ?? 0);
 };
 
-export const countSaleItemAddOnsByAddOnId = async (
+export const countSaleItemAddOnsByAddOnId = async (organizationId: string, addOnId: string): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM sale_item_add_ons
+        WHERE organization_id = ${organizationId}
+          AND add_on_id = ${addOnId}
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
+export const countBundleProductComponentsByComponentProductId = async (
+    organizationId: string,
+    productId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM bundle_product_components
+        WHERE organization_id = ${organizationId}
+          AND component_product_id = ${productId}
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
+export const countSaleItemsByProductId = async (organizationId: string, productId: string): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM sale_items
+        WHERE organization_id = ${organizationId}
+          AND product_id = ${productId}
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
+export const countSaleItemBundleComponentsByComponentProductId = async (
+    organizationId: string,
+    productId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM sale_item_bundle_components
+        WHERE organization_id = ${organizationId}
+          AND component_product_id = ${productId}
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
+export const countBundleProductComponentAddOnsByAddOnId = async (
     organizationId: string,
     addOnId: string,
 ): Promise<number> => {
     const [result] = await pg`
         SELECT COUNT(*)::int AS total
-        FROM sale_item_add_ons
+        FROM bundle_product_component_add_ons
+        WHERE organization_id = ${organizationId}
+          AND add_on_id = ${addOnId}
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
+export const countSaleItemBundleComponentAddOnsByAddOnId = async (
+    organizationId: string,
+    addOnId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM sale_item_bundle_component_add_ons
         WHERE organization_id = ${organizationId}
           AND add_on_id = ${addOnId}
     `;

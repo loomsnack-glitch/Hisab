@@ -91,6 +91,40 @@ export const SaleItemAddOnDTOSchema = z.object({
     updatedAt: dtoDateSchema,
 });
 
+export const SaleItemBundleComponentAddOnDTOSchema = z.object({
+    id: z.uuid("Invalid sale item bundle component add-on id"),
+    organizationId: z.uuid("Invalid organization id"),
+    storeId: z.uuid("Invalid store id"),
+    saleId: z.uuid("Invalid sale id"),
+    saleItemId: z.uuid("Invalid sale item id"),
+    saleItemBundleComponentId: z.uuid("Invalid sale item bundle component id"),
+    addOnId: z.uuid("Invalid add-on id"),
+    quantityPerComponent: quantitySchema,
+    totalQuantity: quantitySchema,
+    addOnNameSnapshot: nameSchema,
+    unitPriceSnapshot: moneySchema,
+    unitDiscountSnapshot: moneySchema,
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const SaleItemBundleComponentDTOSchema = z.object({
+    id: z.uuid("Invalid sale item bundle component id"),
+    organizationId: z.uuid("Invalid organization id"),
+    storeId: z.uuid("Invalid store id"),
+    saleId: z.uuid("Invalid sale id"),
+    saleItemId: z.uuid("Invalid sale item id"),
+    componentProductId: z.uuid("Invalid component product id"),
+    quantityPerBundle: quantitySchema,
+    totalQuantity: quantitySchema,
+    productNameSnapshot: nameSchema,
+    unitPriceSnapshot: moneySchema,
+    unitDiscountSnapshot: moneySchema,
+    addOns: z.array(SaleItemBundleComponentAddOnDTOSchema).default([]),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
 export const SaleItemDTOSchema = z.object({
     id: z.uuid("Invalid sale item id"),
     organizationId: z.uuid("Invalid organization id"),
@@ -105,6 +139,7 @@ export const SaleItemDTOSchema = z.object({
     lineSubtotal: moneySchema,
     lineTotal: moneySchema,
     addOns: z.array(SaleItemAddOnDTOSchema).default([]),
+    bundleComponents: z.array(SaleItemBundleComponentDTOSchema).default([]),
     createdAt: dtoDateSchema,
     updatedAt: dtoDateSchema,
 });

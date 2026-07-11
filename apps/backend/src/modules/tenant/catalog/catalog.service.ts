@@ -30,11 +30,8 @@ import { deleteObject, generateSignedUrl } from "@/services/storage";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as catalogRepository from "./catalog.repository";
 
-const storageBucketName = (
-    process.env.STORAGE_PROVIDER === "s3"
-        ? process.env.AWS_BUCKET_NAME
-        : process.env.MINIO_BUCKET_NAME
-) || "";
+const storageBucketName =
+    (process.env.STORAGE_PROVIDER === "s3" ? process.env.AWS_BUCKET_NAME : process.env.MINIO_BUCKET_NAME) || "";
 
 const normalizeOptionalText = (value?: string | null) => {
     const trimmed = value?.trim();
@@ -531,9 +528,10 @@ export const updateProduct = async (
     const nextPrice = productData.price ?? existingProduct.price;
     const nextDiscount = productData.discount ?? existingProduct.discount;
     const nextStatus = productData.status ?? existingProduct.status;
-    const nextImagePath = productData.imagePath === undefined
-        ? existingProduct.imagePath ?? null
-        : normalizeOptionalText(productData.imagePath);
+    const nextImagePath =
+        productData.imagePath === undefined
+            ? (existingProduct.imagePath ?? null)
+            : normalizeOptionalText(productData.imagePath);
 
     const category = await getCategoryForOrganization(organizationId, nextCategoryId);
     if (!category) {
@@ -637,6 +635,29 @@ export const deleteProduct = async (
         };
     }
 
+    const [bundleComponentCount, saleItemCount, bundleSaleComponentCount] = await Promise.all([
+        catalogRepository.countBundleProductComponentsByComponentProductId(organizationId, productId),
+        catalogRepository.countSaleItemsByProductId(organizationId, productId),
+        catalogRepository.countSaleItemBundleComponentsByComponentProductId(organizationId, productId),
+    ]);
+    if (bundleComponentCount > 0) {
+        return {
+            status: "error",
+            message: "Product cannot be deleted while it is used by a bundle. Set it to inactive instead.",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    if (saleItemCount > 0 || bundleSaleComponentCount > 0) {
+        return {
+            status: "error",
+            message: "Product cannot be deleted because it has sales history. Set it to inactive instead.",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
     const product = await catalogRepository.deleteProduct(organizationId, productId);
     if (!product) {
         return {
@@ -735,9 +756,7 @@ const normalizeBundleComponentAddOns = (
     };
 };
 
-const mergeIdenticalBundleComponents = (
-    components: ValidatedBundleComponent[],
-): ValidatedBundleComponent[] => {
+const mergeIdenticalBundleComponents = (components: ValidatedBundleComponent[]): ValidatedBundleComponent[] => {
     const mergedBySignature = new Map<string, ValidatedBundleComponent>();
 
     for (const component of components) {
@@ -1107,9 +1126,10 @@ export const updateBundleProduct = async (
     const nextPrice = bundleData.price ?? existingProduct.price;
     const nextDiscount = bundleData.discount ?? existingProduct.discount;
     const nextStatus = bundleData.status ?? existingProduct.status;
-    const nextImagePath = bundleData.imagePath === undefined
-        ? existingProduct.imagePath ?? null
-        : normalizeOptionalText(bundleData.imagePath);
+    const nextImagePath =
+        bundleData.imagePath === undefined
+            ? (existingProduct.imagePath ?? null)
+            : normalizeOptionalText(bundleData.imagePath);
 
     const category = await getCategoryForOrganization(organizationId, nextCategoryId);
     if (!category) {
@@ -1140,6 +1160,7 @@ export const updateBundleProduct = async (
         }
     }
 
+    let components = await loadBundleComponentsWithAddOns(organizationId, productId);
     let nextComponents: ValidatedBundleComponent[] | null = null;
     if (bundleData.components !== undefined) {
         const validatedComponents = await validateBundleComponents(organizationId, bundleData.components);
@@ -1147,10 +1168,24 @@ export const updateBundleProduct = async (
             return validatedComponents;
         }
         nextComponents = validatedComponents.components;
+    } else if (existingProduct.status === "inactive" && nextStatus === "active") {
+        const validatedComponents = await validateBundleComponents(
+            organizationId,
+            components.map((component) => ({
+                productId: component.componentProductId,
+                quantity: component.quantity,
+                addOns: component.addOns.map((addOn) => ({
+                    addOnId: addOn.addOnId,
+                    quantity: addOn.quantity,
+                })),
+            })),
+        );
+        if (validatedComponents.status === "error") {
+            return validatedComponents;
+        }
     }
 
     let updatedProduct: ProductDTO | null = null;
-    let components = await loadBundleComponentsWithAddOns(organizationId, productId);
 
     try {
         await pg.begin(async (tx) => {
@@ -1174,18 +1209,8 @@ export const updateBundleProduct = async (
             }
 
             if (nextComponents) {
-                await catalogRepository.deleteBundleProductComponentsByBundleProductId(
-                    organizationId,
-                    productId,
-                    tx,
-                );
-                components = await persistBundleComponents(
-                    organizationId,
-                    productId,
-                    userId,
-                    nextComponents,
-                    tx,
-                );
+                await catalogRepository.deleteBundleProductComponentsByBundleProductId(organizationId, productId, tx);
+                components = await persistBundleComponents(organizationId, productId, userId, nextComponents, tx);
             }
         });
     } catch {
@@ -1385,11 +1410,7 @@ export const updateAddOn = async (
     const nextStatus = addOnData.status ?? existingAddOn.status;
 
     if (nextName.toLowerCase() !== existingAddOn.name.toLowerCase()) {
-        const alreadyExists = await catalogRepository.addOnNameExistsInOrganization(
-            organizationId,
-            nextName,
-            addOnId,
-        );
+        const alreadyExists = await catalogRepository.addOnNameExistsInOrganization(organizationId, nextName, addOnId);
         if (alreadyExists) {
             return {
                 status: "error",
@@ -1401,10 +1422,7 @@ export const updateAddOn = async (
     }
 
     if (existingAddOn.status === "active" && nextStatus === "inactive") {
-        const activeBundleCount = await catalogRepository.countActiveBundlesByComponentAddOnId(
-            organizationId,
-            addOnId,
-        );
+        const activeBundleCount = await catalogRepository.countActiveBundlesByComponentAddOnId(organizationId, addOnId);
         if (activeBundleCount > 0) {
             return {
                 status: "error",
@@ -1477,11 +1495,30 @@ export const deleteAddOn = async (
         };
     }
 
-    const saleItemAddOnCount = await catalogRepository.countSaleItemAddOnsByAddOnId(
-        organizationId,
-        addOnId,
-    );
+    const saleItemAddOnCount = await catalogRepository.countSaleItemAddOnsByAddOnId(organizationId, addOnId);
     if (saleItemAddOnCount > 0) {
+        return {
+            status: "error",
+            message: "Add-on cannot be deleted because it has sales history. Set it to inactive instead.",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    const [bundleComponentAddOnCount, bundleSaleComponentAddOnCount] = await Promise.all([
+        catalogRepository.countBundleProductComponentAddOnsByAddOnId(organizationId, addOnId),
+        catalogRepository.countSaleItemBundleComponentAddOnsByAddOnId(organizationId, addOnId),
+    ]);
+    if (bundleComponentAddOnCount > 0) {
+        return {
+            status: "error",
+            message: "Add-on cannot be deleted while it is used by a bundle. Set it to inactive instead.",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    if (bundleSaleComponentAddOnCount > 0) {
         return {
             status: "error",
             message: "Add-on cannot be deleted because it has sales history. Set it to inactive instead.",
@@ -1712,9 +1749,11 @@ export const updateProductAddOnAttachment = async (
         }
     }
 
-    if (existingAttachment.status === "active"
-        && nextStatus === "active"
-        && nextSelectionCap < existingAttachment.selectionCap) {
+    if (
+        existingAttachment.status === "active" &&
+        nextStatus === "active" &&
+        nextSelectionCap < existingAttachment.selectionCap
+    ) {
         const invalidatedBundleCount = await catalogRepository.countActiveBundlesByProductAddOnPairAboveQuantity(
             organizationId,
             productId,
@@ -1724,7 +1763,8 @@ export const updateProductAddOnAttachment = async (
         if (invalidatedBundleCount > 0) {
             return {
                 status: "error",
-                message: "Product add-on attachment selection cap cannot be reduced below quantities used by active bundles",
+                message:
+                    "Product add-on attachment selection cap cannot be reduced below quantities used by active bundles",
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };
@@ -1821,11 +1861,7 @@ export const deleteProductAddOnAttachment = async (
         };
     }
 
-    const deleted = await catalogRepository.deleteProductAddOnAttachment(
-        organizationId,
-        productId,
-        attachmentId,
-    );
+    const deleted = await catalogRepository.deleteProductAddOnAttachment(organizationId, productId, attachmentId);
     if (!deleted) {
         return {
             status: "error",
