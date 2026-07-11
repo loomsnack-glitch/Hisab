@@ -2,11 +2,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import {
     CreateAddOnSchema,
+    CreateBundleProductSchema,
     CreateCategorySchema,
     CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
     STATUS_CODES,
     UpdateAddOnSchema,
+    UpdateBundleProductSchema,
     UpdateCategorySchema,
     UpdateProductAddOnAttachmentSchema,
     UpdateProductSchema,
@@ -258,6 +260,81 @@ router.delete("/:organizationId/products/:productId", async (c) => {
         return handleError(FILE_NAME, "deleteProduct", c, error);
     }
 });
+
+router.post("/:organizationId/bundle-products", validateSchema("json", CreateBundleProductSchema), async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const body = c.req.valid("json");
+        const serviceResponse = await catalogService.createBundleProduct(authUser.id, organizationId, body);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "createBundleProduct", c, error);
+    }
+});
+
+router.get("/:organizationId/bundle-products/:productId", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const productId = c.req.param("productId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidProductId = validateUuidParam(productId, "Invalid product id");
+        if (invalidProductId) {
+            return c.json(invalidProductId, invalidProductId.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await catalogService.getBundleProductDetails(
+            authUser.id,
+            organizationId,
+            productId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getBundleProductDetails", c, error);
+    }
+});
+
+router.patch(
+    "/:organizationId/bundle-products/:productId",
+    validateSchema("json", UpdateBundleProductSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const productId = c.req.param("productId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const invalidProductId = validateUuidParam(productId, "Invalid product id");
+            if (invalidProductId) {
+                return c.json(invalidProductId, invalidProductId.code);
+            }
+
+            const authUser = c.get("authUser");
+            const body = c.req.valid("json");
+            const serviceResponse = await catalogService.updateBundleProduct(
+                authUser.id,
+                organizationId,
+                productId,
+                body,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateBundleProduct", c, error);
+        }
+    },
+);
 
 router.get("/:organizationId/add-ons", async (c) => {
     try {

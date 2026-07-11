@@ -22,6 +22,7 @@ const product = {
     price: 100,
     discount: 10,
     imagePath: null,
+    productType: "single" as const,
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,

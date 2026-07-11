@@ -25,6 +25,7 @@ const optionalImagePathSchema = z
 
 export const CategoryStatusSchema = z.enum(["active", "inactive"]);
 export const ProductStatusSchema = z.enum(["active", "inactive"]);
+export const ProductTypeSchema = z.enum(["single", "bundle"]);
 export const AddOnStatusSchema = z.enum(["active", "inactive"]);
 export const ProductAddOnAttachmentStatusSchema = z.enum(["active", "inactive"]);
 
@@ -32,6 +33,11 @@ const selectionCapSchema = z
     .number({ error: "Selection cap is required" })
     .int("Selection cap must be a whole number")
     .min(1, "Selection cap must be at least 1");
+
+const wholeCountQuantitySchema = z
+    .number({ error: "Quantity is required" })
+    .int("Quantity must be a whole number")
+    .min(1, "Quantity must be at least 1");
 
 export const CategoryDTOSchema = z.object({
     id: z.uuid("Invalid category id"),
@@ -52,6 +58,7 @@ export const ProductDTOSchema = z.object({
     price: priceSchema,
     discount: discountSchema,
     imagePath: z.string().nullable().optional(),
+    productType: ProductTypeSchema,
     status: ProductStatusSchema,
     createdBy: z.uuid("Invalid creator id"),
     updatedBy: z.uuid("Invalid updater id").nullable().optional(),
@@ -61,6 +68,23 @@ export const ProductDTOSchema = z.object({
 
 export const ProductResponseDTOSchema = ProductDTOSchema.extend({
     imageSignedUrl: z.string().nullable(),
+});
+
+export const BundleProductComponentDTOSchema = z.object({
+    id: z.uuid("Invalid bundle component id"),
+    organizationId: z.uuid("Invalid organization id"),
+    bundleProductId: z.uuid("Invalid bundle product id"),
+    componentProductId: z.uuid("Invalid component product id"),
+    quantity: wholeCountQuantitySchema,
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const BundleProductComponentInputSchema = z.object({
+    productId: z.uuid("Invalid product id"),
+    quantity: wholeCountQuantitySchema,
 });
 
 export const AddOnDTOSchema = z.object({
@@ -133,6 +157,45 @@ export const UpdateProductSchema = z
             || value.discount !== undefined
             || value.imagePath !== undefined
             || value.status !== undefined,
+        {
+            message: "At least one field is required",
+        },
+    );
+
+export const CreateBundleProductSchema = z.object({
+    categoryId: z.uuid("Invalid category id"),
+    name: nameSchema,
+    price: priceSchema,
+    discount: discountSchema.optional(),
+    imagePath: optionalImagePathSchema,
+    status: ProductStatusSchema.optional(),
+    components: z
+        .array(BundleProductComponentInputSchema)
+        .min(1, "A bundle must include at least one product component"),
+});
+
+export const UpdateBundleProductSchema = z
+    .object({
+        categoryId: z.uuid("Invalid category id").optional(),
+        name: nameSchema.optional(),
+        price: priceSchema.optional(),
+        discount: discountSchema.optional(),
+        imagePath: optionalImagePathSchema,
+        status: ProductStatusSchema.optional(),
+        components: z
+            .array(BundleProductComponentInputSchema)
+            .min(1, "A bundle must include at least one product component")
+            .optional(),
+    })
+    .refine(
+        (value) =>
+            value.categoryId !== undefined
+            || value.name !== undefined
+            || value.price !== undefined
+            || value.discount !== undefined
+            || value.imagePath !== undefined
+            || value.status !== undefined
+            || value.components !== undefined,
         {
             message: "At least one field is required",
         },

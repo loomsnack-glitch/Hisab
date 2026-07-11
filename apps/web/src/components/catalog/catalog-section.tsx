@@ -6,13 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
-import { Layers3, Link2, Package2, Pencil, PlusCircle, Puzzle, RefreshCw, Trash2, Search } from "lucide-react";
+import { Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, Puzzle, RefreshCw, Trash2, Search } from "lucide-react";
 
 import DeleteCategoryButton from "@/components/catalog/delete-category-button";
 import DeleteProductButton from "@/components/catalog/delete-product-button";
 import CategoryStatusBadge from "@/components/catalog/category-status-badge";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
+import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
+import UpsertBundleProductDialog from "@/components/catalog/upsert-bundle-product-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageAddOnsDialog from "@/components/catalog/manage-add-ons-dialog";
 import ManageCategoriesDialog from "@/components/catalog/manage-categories-dialog";
@@ -189,6 +191,23 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 </Button>
                             }
                         />
+
+                        <UpsertBundleProductDialog
+                            organizationId={organizationId}
+                            categories={categories}
+                            products={products}
+                            defaultCategoryId={defaultCategoryIdForNewProduct}
+                            trigger={
+                                <Button
+                                    variant="outline"
+                                    className="rounded-full border-border/60 h-11 px-5"
+                                    disabled={categories.length === 0}
+                                >
+                                    <Boxes className="mr-2 size-4" />
+                                    Add bundle
+                                </Button>
+                            }
+                        />
                     </div>
                 </div>
 
@@ -308,6 +327,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                                     <span className="text-xs font-medium capitalize text-muted-foreground">
                                                         {categoryName}
                                                     </span>
+                                                    <ProductTypeBadge productType={product.productType} />
                                                     {product.status === "inactive" && (
                                                         <ProductStatusBadge status={product.status} />
                                                     )}
@@ -325,35 +345,56 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                                 />
 
                                                 <div className="flex items-center gap-0.5 border-l border-border/50 pl-2.5">
-                                                    <ManageProductAddOnsDialog
-                                                        organizationId={organizationId}
-                                                        product={product}
-                                                        trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                aria-label={`Manage add-ons for ${product.name}`}
-                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
-                                                            >
-                                                                <Link2 className="size-3.5" />
-                                                            </Button>
-                                                        }
-                                                    />
-                                                    <UpsertProductDialog
-                                                        organizationId={organizationId}
-                                                        categories={categories}
-                                                        product={product}
-                                                        trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                aria-label={`Edit ${product.name}`}
-                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
-                                                            >
-                                                                <Pencil className="size-3.5" />
-                                                            </Button>
-                                                        }
-                                                    />
+                                                    {product.productType === "single" ? (
+                                                        <ManageProductAddOnsDialog
+                                                            organizationId={organizationId}
+                                                            product={product}
+                                                            trigger={
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    aria-label={`Manage add-ons for ${product.name}`}
+                                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
+                                                                >
+                                                                    <Link2 className="size-3.5" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                    ) : null}
+                                                    {product.productType === "bundle" ? (
+                                                        <UpsertBundleProductDialog
+                                                            organizationId={organizationId}
+                                                            categories={categories}
+                                                            products={products}
+                                                            product={product}
+                                                            trigger={
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    aria-label={`Edit ${product.name}`}
+                                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
+                                                                >
+                                                                    <Pencil className="size-3.5" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                    ) : (
+                                                        <UpsertProductDialog
+                                                            organizationId={organizationId}
+                                                            categories={categories}
+                                                            product={product}
+                                                            trigger={
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    aria-label={`Edit ${product.name}`}
+                                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
+                                                                >
+                                                                    <Pencil className="size-3.5" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                    )}
                                                     <DeleteProductButton
                                                         organizationId={organizationId}
                                                         product={product}

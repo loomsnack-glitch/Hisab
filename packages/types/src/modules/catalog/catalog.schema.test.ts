@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
     CreateAddOnSchema,
+    CreateBundleProductSchema,
     CreateProductAddOnAttachmentSchema,
     UpdateAddOnSchema,
+    UpdateBundleProductSchema,
     UpdateProductAddOnAttachmentSchema,
 } from "./catalog.schema";
 
@@ -63,5 +65,61 @@ describe("Add-On catalog contracts", () => {
         });
 
         expect(result.success).toBe(false);
+    });
+});
+
+describe("Bundle Product catalog contracts", () => {
+    test("create bundle accepts typed identity fields and product components", () => {
+        const result = CreateBundleProductSchema.safeParse({
+            categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            name: "Burger Combo",
+            price: 99,
+            discount: 0,
+            components: [
+                {
+                    productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    quantity: 1,
+                },
+            ],
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.components).toHaveLength(1);
+            expect(result.data.components[0]?.quantity).toBe(1);
+        }
+    });
+
+    test("rejects bundle create without product components", () => {
+        const result = CreateBundleProductSchema.safeParse({
+            categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            name: "Empty Bundle",
+            price: 99,
+            components: [],
+        });
+
+        expect(result.success).toBe(false);
+    });
+
+    test("rejects fractional component quantity", () => {
+        const result = CreateBundleProductSchema.safeParse({
+            categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            name: "Burger Combo",
+            price: 99,
+            components: [
+                {
+                    productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    quantity: 1.5,
+                },
+            ],
+        });
+
+        expect(result.success).toBe(false);
+    });
+
+    test("update bundle accepts status-based retirement", () => {
+        const result = UpdateBundleProductSchema.safeParse({ status: "inactive" });
+
+        expect(result.success).toBe(true);
     });
 });

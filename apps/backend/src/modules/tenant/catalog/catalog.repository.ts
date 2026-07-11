@@ -3,8 +3,10 @@ import { snakeToCamel } from "@/utils/case";
 import { camelToSnakeSql } from "@/utils/case-sql";
 import type {
     AddOnDTO,
+    BundleProductComponentDTO,
     CategoryDTO,
     CreateAddOnREPO,
+    CreateBundleProductComponentREPO,
     CreateCategoryREPO,
     CreateProductAddOnAttachmentREPO,
     CreateProductREPO,
@@ -18,6 +20,14 @@ import type {
 } from "@repo/types";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
+
+const mapBundleComponent = (row: Record<string, unknown>): BundleProductComponentDTO => {
+    const mapped = mapRow<BundleProductComponentDTO>(row);
+    return {
+        ...mapped,
+        quantity: Number(mapped.quantity),
+    };
+};
 
 const mapAttachmentWithAddOn = (row: Record<string, unknown>): ProductAddOnAttachmentResponseDTO => {
     const mapped = snakeToCamel(row) as ProductAddOnAttachmentDTO & {
@@ -244,8 +254,12 @@ export const productNameExistsInCategory = async (
     return Boolean(results[0]);
 };
 
-export const updateProduct = async (productData: UpdateProductREPO): Promise<ProductDTO | null> => {
-    const [result] = await pg`
+export const updateProduct = async (
+    productData: UpdateProductREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<ProductDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
         UPDATE products
         SET category_id = ${productData.categoryId},
             name = ${productData.name},
@@ -609,4 +623,47 @@ export const deleteProductAddOnAttachment = async (
     `;
 
     return result ? snakeToCamel(result) : null;
+};
+
+export const createBundleProductComponent = async (
+    componentData: CreateBundleProductComponentREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<BundleProductComponentDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO bundle_product_components ${camelToSnakeSql(componentData)}
+        RETURNING *
+    `;
+
+    return result ? mapBundleComponent(result) : null;
+};
+
+export const getBundleProductComponentsByBundleProductId = async (
+    organizationId: string,
+    bundleProductId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<BundleProductComponentDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM bundle_product_components
+        WHERE organization_id = ${organizationId}
+          AND bundle_product_id = ${bundleProductId}
+        ORDER BY created_at ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapBundleComponent(result));
+};
+
+export const deleteBundleProductComponentsByBundleProductId = async (
+    organizationId: string,
+    bundleProductId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<void> => {
+    const db = tx || pg;
+    await db`
+        DELETE FROM bundle_product_components
+        WHERE organization_id = ${organizationId}
+          AND bundle_product_id = ${bundleProductId}
+    `;
 };

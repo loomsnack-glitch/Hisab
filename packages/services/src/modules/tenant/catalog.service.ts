@@ -1,9 +1,11 @@
 import type {
     AddOnResponse,
     AddOnsListResponse,
+    BundleProductResponse,
     CategoriesListResponse,
     CategoryResponse,
     CreateAddOnJSON,
+    CreateBundleProductJSON,
     CreateCategoryJSON,
     CreateProductAddOnAttachmentJSON,
     CreateProductJSON,
@@ -13,6 +15,7 @@ import type {
     ProductsListResponse,
     ServiceResponse,
     UpdateAddOnJSON,
+    UpdateBundleProductJSON,
     UpdateCategoryJSON,
     UpdateProductAddOnAttachmentJSON,
     UpdateProductJSON,
@@ -145,6 +148,46 @@ export const deleteProduct = async (
 ): Promise<ServiceResponse<ProductResponse | null>> => {
     try {
         const response = await api.delete(`/organizations/${organizationId}/products/${productId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createBundleProduct = async (
+    organizationId: string,
+    data: CreateBundleProductJSON,
+): Promise<ServiceResponse<BundleProductResponse | null>> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/bundle-products`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getBundleProduct = async (
+    organizationId: string,
+    productId: string,
+): Promise<ServiceResponse<BundleProductResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/bundle-products/${productId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateBundleProduct = async (
+    organizationId: string,
+    productId: string,
+    data: UpdateBundleProductJSON,
+): Promise<ServiceResponse<BundleProductResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/bundle-products/${productId}`,
+            data,
+        );
         return response.data;
     } catch (error) {
         return handleApiError(error);

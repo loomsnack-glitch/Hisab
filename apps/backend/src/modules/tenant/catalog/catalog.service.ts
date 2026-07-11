@@ -2,9 +2,12 @@ import {
     STATUS_CODES,
     type AddOnResponse,
     type AddOnsListResponse,
+    type BundleProductResponse,
     type CategoriesListResponse,
     type CategoryResponse,
     type CreateAddOnSVC,
+    type CreateBundleProductComponentREPO,
+    type CreateBundleProductSVC,
     type CreateCategorySVC,
     type CreateProductAddOnAttachmentSVC,
     type CreateProductSVC,
@@ -18,10 +21,12 @@ import {
     type ProductsListResponse,
     type ServiceResponse,
     type UpdateAddOnSVC,
+    type UpdateBundleProductSVC,
     type UpdateCategorySVC,
     type UpdateProductAddOnAttachmentSVC,
     type UpdateProductSVC,
 } from "@repo/types";
+import { pg } from "@/config/db";
 import { deleteObject, generateSignedUrl } from "@/services/storage";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as catalogRepository from "./catalog.repository";
@@ -441,6 +446,7 @@ export const createProduct = async (
         price: productData.price,
         discount: productData.discount ?? 0,
         imagePath: normalizeOptionalText(productData.imagePath),
+        productType: "single",
         status: productData.status ?? "active",
         createdBy: userId,
     });
@@ -638,6 +644,381 @@ export const deleteProduct = async (
             },
         },
         message: "Product deleted successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+type BundleComponentInput = {
+    productId: string;
+    quantity: number;
+};
+
+const validateBundleComponents = async (
+    organizationId: string,
+    components: BundleComponentInput[],
+): Promise<ServiceResponse<null> | { status: "success"; components: BundleComponentInput[] }> => {
+    if (components.length === 0) {
+        return {
+            status: "error",
+            message: "A bundle must include at least one product component",
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+        };
+    }
+
+    for (const component of components) {
+        const product = await getProductForOrganization(organizationId, component.productId);
+        if (!product) {
+            return {
+                status: "error",
+                message: "Bundle component product not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        if (product.productType === "bundle") {
+            return {
+                status: "error",
+                message: "Bundles cannot contain other bundles",
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            };
+        }
+
+        if (product.status !== "active") {
+            return {
+                status: "error",
+                message: "Bundle components must be active products",
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            };
+        }
+    }
+
+    return { status: "success", components };
+};
+
+const toBundleComponentRepos = (
+    organizationId: string,
+    bundleProductId: string,
+    userId: string,
+    components: BundleComponentInput[],
+): CreateBundleProductComponentREPO[] => {
+    return components.map((component) => ({
+        id: crypto.randomUUID(),
+        organizationId,
+        bundleProductId,
+        componentProductId: component.productId,
+        quantity: component.quantity,
+        createdBy: userId,
+    }));
+};
+
+export const createBundleProduct = async (
+    userId: string,
+    organizationId: string,
+    bundleData: CreateBundleProductSVC,
+): Promise<ServiceResponse<BundleProductResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const category = await getCategoryForOrganization(organizationId, bundleData.categoryId);
+    if (!category) {
+        return {
+            status: "error",
+            message: "Category not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const alreadyExists = await catalogRepository.productNameExistsInCategory(
+        organizationId,
+        bundleData.categoryId,
+        bundleData.name,
+    );
+    if (alreadyExists) {
+        return {
+            status: "error",
+            message: "Product with the same name already exists in this category",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    const validatedComponents = await validateBundleComponents(organizationId, bundleData.components);
+    if (validatedComponents.status === "error") {
+        return validatedComponents;
+    }
+
+    const bundleProductId = crypto.randomUUID();
+    let createdProduct: ProductDTO | null = null;
+    let createdComponents: Awaited<ReturnType<typeof catalogRepository.getBundleProductComponentsByBundleProductId>> = [];
+
+    try {
+        await pg.begin(async (tx) => {
+            createdProduct = await catalogRepository.createProduct(
+                {
+                    id: bundleProductId,
+                    organizationId,
+                    categoryId: bundleData.categoryId,
+                    name: bundleData.name,
+                    price: bundleData.price,
+                    discount: bundleData.discount ?? 0,
+                    imagePath: normalizeOptionalText(bundleData.imagePath),
+                    productType: "bundle",
+                    status: bundleData.status ?? "active",
+                    createdBy: userId,
+                },
+                tx,
+            );
+
+            if (!createdProduct) {
+                throw new Error("Failed to create bundle product");
+            }
+
+            createdComponents = [];
+            for (const component of toBundleComponentRepos(
+                organizationId,
+                bundleProductId,
+                userId,
+                validatedComponents.components,
+            )) {
+                const row = await catalogRepository.createBundleProductComponent(component, tx);
+                if (!row) {
+                    throw new Error("Failed to create bundle product component");
+                }
+                createdComponents.push(row);
+            }
+        });
+    } catch {
+        return {
+            status: "error",
+            message: "Failed to create bundle product",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    if (!createdProduct) {
+        return {
+            status: "error",
+            message: "Failed to create bundle product",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    return {
+        status: "success",
+        data: {
+            product: await resolveProduct(createdProduct),
+            components: createdComponents,
+        },
+        message: "Bundle product created successfully",
+        code: STATUS_CODES.CREATED,
+    };
+};
+
+export const getBundleProductDetails = async (
+    userId: string,
+    organizationId: string,
+    productId: string,
+): Promise<ServiceResponse<BundleProductResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const product = await getProductForOrganization(organizationId, productId);
+    if (!product || product.productType !== "bundle") {
+        return {
+            status: "error",
+            message: "Bundle product not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const components = await catalogRepository.getBundleProductComponentsByBundleProductId(
+        organizationId,
+        productId,
+    );
+
+    return {
+        status: "success",
+        data: {
+            product: await resolveProduct(product),
+            components,
+        },
+        message: "Bundle product fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const updateBundleProduct = async (
+    userId: string,
+    organizationId: string,
+    productId: string,
+    bundleData: UpdateBundleProductSVC,
+): Promise<ServiceResponse<BundleProductResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const existingProduct = await getProductForOrganization(organizationId, productId);
+    if (!existingProduct || existingProduct.productType !== "bundle") {
+        return {
+            status: "error",
+            message: "Bundle product not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const nextCategoryId = bundleData.categoryId ?? existingProduct.categoryId;
+    const nextName = bundleData.name ?? existingProduct.name;
+    const nextPrice = bundleData.price ?? existingProduct.price;
+    const nextDiscount = bundleData.discount ?? existingProduct.discount;
+    const nextStatus = bundleData.status ?? existingProduct.status;
+    const nextImagePath = bundleData.imagePath === undefined
+        ? existingProduct.imagePath ?? null
+        : normalizeOptionalText(bundleData.imagePath);
+
+    const category = await getCategoryForOrganization(organizationId, nextCategoryId);
+    if (!category) {
+        return {
+            status: "error",
+            message: "Category not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const categoryChanged = nextCategoryId !== existingProduct.categoryId;
+    const nameChanged = nextName.toLowerCase() !== existingProduct.name.toLowerCase();
+    if (categoryChanged || nameChanged) {
+        const alreadyExists = await catalogRepository.productNameExistsInCategory(
+            organizationId,
+            nextCategoryId,
+            nextName,
+            productId,
+        );
+        if (alreadyExists) {
+            return {
+                status: "error",
+                message: "Product with the same name already exists in this category",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
+    let nextComponents: BundleComponentInput[] | null = null;
+    if (bundleData.components !== undefined) {
+        const validatedComponents = await validateBundleComponents(organizationId, bundleData.components);
+        if (validatedComponents.status === "error") {
+            return validatedComponents;
+        }
+        nextComponents = validatedComponents.components;
+    }
+
+    let updatedProduct: ProductDTO | null = null;
+    let components = await catalogRepository.getBundleProductComponentsByBundleProductId(
+        organizationId,
+        productId,
+    );
+
+    try {
+        await pg.begin(async (tx) => {
+            updatedProduct = await catalogRepository.updateProduct(
+                {
+                    id: productId,
+                    organizationId,
+                    categoryId: nextCategoryId,
+                    name: nextName,
+                    price: nextPrice,
+                    discount: nextDiscount,
+                    imagePath: nextImagePath,
+                    status: nextStatus,
+                    updatedBy: userId,
+                },
+                tx,
+            );
+
+            if (!updatedProduct) {
+                throw new Error("Failed to update bundle product");
+            }
+
+            if (nextComponents) {
+                await catalogRepository.deleteBundleProductComponentsByBundleProductId(
+                    organizationId,
+                    productId,
+                    tx,
+                );
+                components = [];
+                for (const component of toBundleComponentRepos(
+                    organizationId,
+                    productId,
+                    userId,
+                    nextComponents,
+                )) {
+                    const row = await catalogRepository.createBundleProductComponent(component, tx);
+                    if (!row) {
+                        throw new Error("Failed to update bundle product components");
+                    }
+                    components.push(row);
+                }
+            }
+        });
+    } catch {
+        return {
+            status: "error",
+            message: "Failed to update bundle product",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    if (!updatedProduct) {
+        return {
+            status: "error",
+            message: "Failed to update bundle product",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    if (existingProduct.imagePath && existingProduct.imagePath !== updatedProduct.imagePath) {
+        await deleteProductImageIfPossible(existingProduct.imagePath);
+    }
+
+    return {
+        status: "success",
+        data: {
+            product: await resolveProduct(updatedProduct),
+            components,
+        },
+        message: "Bundle product updated successfully",
         code: STATUS_CODES.SUCCESS,
     };
 };
@@ -985,6 +1366,15 @@ export const createProductAddOnAttachment = async (
             message: "Product not found",
             data: null,
             code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    if (product.productType === "bundle") {
+        return {
+            status: "error",
+            message: "Add-ons cannot be attached directly to bundle products",
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
         };
     }
 

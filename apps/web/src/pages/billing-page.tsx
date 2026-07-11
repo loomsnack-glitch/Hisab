@@ -64,6 +64,7 @@ import CustomizeProductDialog, {
 } from "@/components/billing/customize-product-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
@@ -960,6 +961,8 @@ const BillingPage = ({
                                         const productAttachments = attachmentsByProductId.get(product.id) ?? [];
                                         const canCustomize = canMutate && productAttachments.length > 0;
 
+                                        const canSellProduct = product.productType === "single";
+
                                         return (
                                             <div
                                                 key={product.id}
@@ -977,8 +980,19 @@ const BillingPage = ({
                                                 )}
                                                 <button
                                                     type="button"
-                                                    onClick={() => addProductToBill(product)}
-                                                    className="flex w-full flex-col items-center hover:-translate-y-0.5 transition-transform"
+                                                    onClick={() => {
+                                                        if (!canSellProduct) {
+                                                            return;
+                                                        }
+
+                                                        addProductToBill(product);
+                                                    }}
+                                                    disabled={!canSellProduct}
+                                                    className={`flex w-full flex-col items-center transition-transform ${
+                                                        canSellProduct
+                                                            ? "hover:-translate-y-0.5"
+                                                            : "cursor-not-allowed opacity-70"
+                                                    }`}
                                                 >
                                                     <div className="relative mb-2.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
                                                         {product.imagePath?.startsWith("icon:") ? (
@@ -996,7 +1010,10 @@ const BillingPage = ({
                                                     <p className="mt-2.5 text-sm font-semibold leading-tight text-foreground">
                                                         {product.name}
                                                     </p>
-                                                    <p className="mt-0.5 text-xs text-muted-foreground">{catName}</p>
+                                                    <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5">
+                                                        <p className="text-xs text-muted-foreground">{catName}</p>
+                                                        <ProductTypeBadge productType={product.productType} />
+                                                    </div>
                                                     <ProductPriceDisplay
                                                         className="mt-2"
                                                         price={product.price}
@@ -1004,7 +1021,7 @@ const BillingPage = ({
                                                         size="md"
                                                     />
                                                 </button>
-                                                {canCustomize ? (
+                                                {canCustomize && product.productType === "single" ? (
                                                     <button
                                                         type="button"
                                                         onClick={(event) => {
