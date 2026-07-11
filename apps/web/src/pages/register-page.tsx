@@ -75,6 +75,12 @@ const RegisterPage = () => {
         return () => window.clearTimeout(timer);
     }, [cooldown]);
 
+    useEffect(() => {
+        if (step === "user-info") {
+            form.setFocus("firstName");
+        }
+    }, [step, form.setFocus]);
+
     const onSubmit: SubmitHandler<RegisterFormJSON> = (values) => {
         registerMutation.mutate(values);
     };
@@ -195,6 +201,7 @@ const RegisterPage = () => {
                                         name="phone"
                                         render={({ field, fieldState }) => (
                                             <PhoneNumberField
+                                                ref={field.ref}
                                                 value={field.value}
                                                 onChange={field.onChange}
                                                 onBlur={field.onBlur}

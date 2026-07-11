@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -35,6 +35,14 @@ const PosLoginPage = () => {
             deviceSecret: "",
         },
     });
+
+    const isPending = deviceAuthQuery.isPending;
+
+    useEffect(() => {
+        if (!isPending) {
+            form.setFocus("deviceId");
+        }
+    }, [isPending, form.setFocus]);
 
     const loginMutation = useMutation({
         mutationFn: (payload: DeviceLoginJSON) => deviceLogin(payload),

@@ -71,6 +71,10 @@ const LoginPage = () => {
         return () => window.clearTimeout(timer);
     }, [cooldown]);
 
+    useEffect(() => {
+        form.setFocus("phone");
+    }, [form.setFocus]);
+
     const submitForm: SubmitHandler<LoginFormJSON> = (values) => {
         loginMutation.mutate(values);
     };
@@ -121,6 +125,7 @@ const LoginPage = () => {
                             onClick={() => {
                                 setMethod("password");
                                 form.reset({ phone: form.getValues("phone"), requestType: "user-info", password: "" });
+                                setTimeout(() => form.setFocus("phone"), 0);
                             }}
                         >
                             <KeyRound className="mr-1.5 size-3.5" />
@@ -135,6 +140,7 @@ const LoginPage = () => {
                             onClick={() => {
                                 setMethod("otp");
                                 form.reset({ phone: form.getValues("phone"), requestType: "otp-info" });
+                                setTimeout(() => form.setFocus("phone"), 0);
                             }}
                         >
                             <MessageSquareText className="mr-1.5 size-3.5" />
@@ -148,6 +154,7 @@ const LoginPage = () => {
                             name="phone"
                             render={({ field, fieldState }) => (
                                 <PhoneNumberField
+                                    ref={field.ref}
                                     value={field.value}
                                     onChange={field.onChange}
                                     onBlur={field.onBlur}
