@@ -756,7 +756,7 @@ const BillingPage = ({
                 <Button
                     variant="ghost"
                     className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                    render={<Link to={`/organizations/${organizationId}`} />}
+                    render={<Link to={`/organizations/${organizationId}/stores`} />}
                 >
                     <ArrowLeft className="mr-2 size-4" />
                     Back to organization
@@ -769,7 +769,7 @@ const BillingPage = ({
                     <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
                         Billing is store-scoped. Once a store exists, this screen becomes the POS billing surface.
                     </p>
-                    <Button className="mt-4 rounded-full" render={<Link to={`/organizations/${organizationId}`} />}>
+                    <Button className="mt-4 rounded-full" render={<Link to={`/organizations/${organizationId}/stores`} />}>
                         Go to store setup
                     </Button>
                 </div>

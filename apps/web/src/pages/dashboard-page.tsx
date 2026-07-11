@@ -171,7 +171,7 @@ const DashboardPage = () => {
                                 {organizations.slice(0, 4).map((organization, index) => (
                                     <Link
                                         key={organization.id}
-                                        to={`/organizations/${organization.id}`}
+                                        to={`/organizations/${organization.id}/stores`}
                                         className="group flex items-center gap-4 rounded-[24px] border border-border/60 bg-background/70 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                                     >
                                         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-emerald-500/15 text-primary">

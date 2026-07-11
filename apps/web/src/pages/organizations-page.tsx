@@ -108,7 +108,7 @@ const OrganizationsPage = () => {
                             {organizations.map((organization, index) => (
                                 <Link
                                     key={organization.id}
-                                    to={`/organizations/${organization.id}`}
+                                    to={`/organizations/${organization.id}/stores`}
                                     className="group rounded-2xl border border-border/60 bg-background/80 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
                                 >
                                     <div className="flex items-start gap-4">

@@ -148,7 +148,7 @@ const DashboardLayout = () => {
             if (targetId && organizations.some((org) => org.id === targetId)) {
                 sessionStorage.setItem("hisab_initial_org_redirected", "true");
                 setHasAttemptedRedirect(true);
-                navigate(`/organizations/${targetId}`, { replace: true });
+                navigate(`/organizations/${targetId}/stores`, { replace: true });
                 return;
             }
         }
@@ -255,7 +255,7 @@ const DashboardLayout = () => {
                                                         navigate(
                                                             location.pathname.includes("/billing")
                                                                 ? `/organizations/${org.id}/billing`
-                                                                : `/organizations/${org.id}`,
+                                                                : `/organizations/${org.id}/stores`,
                                                         )
                                                     }
                                                     className={cn(

@@ -13,6 +13,8 @@ import OrganizationsPage from "@/pages/organizations-page";
 import PosLoginPage from "@/pages/pos-login-page";
 import PosPage from "@/pages/pos-page";
 import RegisterPage from "@/pages/register-page";
+import StoresPage from "@/pages/stores-page";
+import ProductsPage from "@/pages/products-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 
@@ -89,7 +91,9 @@ const App = () => {
                 >
                     <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/organizations" element={<OrganizationsPage />} />
-                    <Route path="/organizations/:organizationId" element={<OrganizationDetailPage />} />
+                    <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
+                    <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
+                    <Route path="/organizations/:organizationId/products" element={<ProductsPage />} />
                     <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />

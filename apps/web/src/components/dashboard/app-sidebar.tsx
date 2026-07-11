@@ -10,6 +10,8 @@ import {
     LayoutDashboard,
     ReceiptText,
     Settings2,
+    Store,
+    Package2,
 } from "lucide-react";
 import logo from "@repo/assets/logo.png";
 import { getOrganizations } from "@repo/services";
@@ -76,65 +78,97 @@ const AppSidebar = ({
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";
     const collapsedNavRowClass = "relative mx-auto flex h-10 w-10 items-center justify-center";
 
-    const mainNavItems = [
-        { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
-        { to: "/organizations", label: "Organizations", icon: Building2, end: location.pathname === "/organizations" },
-        ...(organizationId
-            ? [{ to: `/organizations/${organizationId}/billing`, label: "Billing", icon: ReceiptText, end: false }]
-            : []),
-    ] as const;
+    const mainNavItems = useMemo(() => {
+        return [
+            { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
+            { to: "/organizations", label: "Organizations", icon: Building2, isActive: location.pathname === "/organizations" },
+            ...(organizationId
+                ? [
+                      {
+                          to: `/organizations/${organizationId}/stores`,
+                          label: "Stores",
+                          icon: Store,
+                          isActive: location.pathname === `/organizations/${organizationId}/stores`,
+                      },
+                      {
+                          to: `/organizations/${organizationId}/products`,
+                          label: "Product",
+                          icon: Package2,
+                          isActive: location.pathname === `/organizations/${organizationId}/products`,
+                      },
+                      {
+                          to: `/organizations/${organizationId}/billing`,
+                          label: "Billing",
+                          icon: ReceiptText,
+                          isActive: location.pathname === `/organizations/${organizationId}/billing`,
+                      },
+                  ]
+                : []),
+        ];
+    }, [location.pathname, organizationId]);
 
     const renderNavItem = (item: (typeof mainNavItems)[number], badge?: number) => {
         const Icon = item.icon;
         const collapsed = !isMobile && isCollapsed;
 
+        const checkActive = (routerActive: boolean) => {
+            if ("isActive" in item && typeof item.isActive === "boolean") {
+                return item.isActive;
+            }
+            return routerActive;
+        };
+
         const link = (
             <NavLink
                 to={item.to}
-                end={item.end}
+                end={"end" in item ? item.end : undefined}
                 onClick={onNavigate}
-                className={({ isActive }) =>
-                    cn(
+                className={({ isActive }) => {
+                    const active = checkActive(isActive);
+                    return cn(
                         "sidebar-nav-link group rounded-xl text-sm font-medium transition-all duration-200",
                         collapsed
                             ? collapsedNavRowClass
                             : badge !== undefined && badge > 0
                               ? expandedNavRowClass
                               : expandedNavRowClassNoTrail,
-                        isActive
+                        active
                             ? "bg-primary/10 text-primary"
                             : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                         collapsed && "sidebar-nav-link--collapsed",
-                    )
-                }
+                    );
+                }}
             >
-                {({ isActive }) => (
-                    <>
-                        {collapsed && isActive ? <span className="sidebar-active-rail" aria-hidden /> : null}
-                        <Icon
-                            className={cn(
-                                "size-[18px] transition-colors duration-200",
-                                isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-                            )}
-                            strokeWidth={isActive ? 2.25 : 2}
-                        />
-                        {!collapsed ? (
-                            <>
-                                <span className="sidebar-label truncate text-left">{item.label}</span>
-                                {badge !== undefined && badge > 0 ? (
-                                    <span className="flex h-5 min-w-5 items-center justify-center justify-self-end rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white">
-                                        {badge}
-                                    </span>
-                                ) : null}
-                            </>
-                        ) : null}
-                        {collapsed && badge !== undefined && badge > 0 ? (
-                            <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold text-white">
-                                {badge}
-                            </span>
-                        ) : null}
-                    </>
-                )}
+                {({ isActive }) => {
+                    const active = checkActive(isActive);
+                    return (
+                        <>
+                            {collapsed && active ? <span className="sidebar-active-rail" aria-hidden /> : null}
+                            <Icon
+                                className={cn(
+                                    "size-[18px] transition-colors duration-200",
+                                    active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                                )}
+                                strokeWidth={active ? 2.25 : 2}
+                            />
+                            {!collapsed ? (
+                                <>
+                                    <span className="sidebar-label truncate text-left">{item.label}</span>
+                                    {badge !== undefined && badge > 0 ? (
+                                        <span className="flex h-5 min-w-5 items-center justify-center justify-self-end rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white">
+                                            {badge}
+                                        </span>
+                                    ) : null}
+                                </>
+                            ) : null}
+                            {collapsed && badge !== undefined && badge > 0 ? (
+                                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold text-white">
+                                    {badge}
+                                </span>
+                            ) : null}
+                        </>
+                    );
+                }}
             </NavLink>
         );
 
