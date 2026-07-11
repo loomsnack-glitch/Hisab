@@ -99,28 +99,23 @@ const LoginPage = () => {
             title="Welcome back"
             subtitle="Login with your password or request an OTP on WhatsApp when you need a quick sign-in."
         >
-            <div className="mb-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <p className="text-sm font-semibold text-foreground">Need to open the cashier POS instead?</p>
-                        <p className="text-xs text-muted-foreground">
-                            Store devices use a separate login flow with device id and device secret.
-                        </p>
-                    </div>
-                    <Button variant="outline" className="rounded-xl" render={<Link to="/pos/login" />}>
-                        <MonitorSmartphone className="mr-2 size-4" />
-                        Device POS login
-                    </Button>
+            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 flex items-center justify-between gap-4 text-xs">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                    <MonitorSmartphone className="size-4 shrink-0 text-amber-500" />
+                    <span>Need to open the cashier POS instead?</span>
                 </div>
+                <Link to="/pos/login" className="font-semibold text-amber-600 dark:text-amber-400 hover:underline shrink-0">
+                    Device POS login &rarr;
+                </Link>
             </div>
 
-            <Card className="border-border/70 shadow-sm transition-shadow duration-300 hover:shadow-md">
-                <CardContent className="space-y-6 p-6 sm:p-8">
-                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary p-1.5">
+            <Card className="border-border/70 shadow-sm">
+                <CardContent className="space-y-4 p-5 sm:p-6">
+                    <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-secondary p-1">
                         <Button
                             type="button"
                             variant={method === "password" ? "default" : "ghost"}
-                            className={`h-11 rounded-xl transition-all duration-200 ${
+                            className={`h-9 rounded-lg text-xs transition-all duration-200 ${
                                 method === "password" ? "" : "text-secondary-foreground hover:bg-secondary/80"
                             }`}
                             onClick={() => {
@@ -128,13 +123,13 @@ const LoginPage = () => {
                                 form.reset({ phone: form.getValues("phone"), requestType: "user-info", password: "" });
                             }}
                         >
-                            <KeyRound className="mr-2 size-4 transition-transform duration-200 group-hover/button:-translate-y-0.5" />
+                            <KeyRound className="mr-1.5 size-3.5" />
                             Password
                         </Button>
                         <Button
                             type="button"
                             variant={method === "otp" ? "default" : "ghost"}
-                            className={`h-11 rounded-xl transition-all duration-200 ${
+                            className={`h-9 rounded-lg text-xs transition-all duration-200 ${
                                 method === "otp" ? "" : "text-secondary-foreground hover:bg-secondary/80"
                             }`}
                             onClick={() => {
@@ -142,12 +137,12 @@ const LoginPage = () => {
                                 form.reset({ phone: form.getValues("phone"), requestType: "otp-info" });
                             }}
                         >
-                            <MessageSquareText className="mr-2 size-4 transition-transform duration-200 group-hover/button:-translate-y-0.5" />
+                            <MessageSquareText className="mr-1.5 size-3.5" />
                             OTP
                         </Button>
                     </div>
 
-                    <form className="space-y-5" onSubmit={form.handleSubmit(submitForm)}>
+                    <form className="space-y-3.5" onSubmit={form.handleSubmit(submitForm)}>
                         <Controller
                             control={form.control}
                             name="phone"
@@ -164,17 +159,17 @@ const LoginPage = () => {
 
                         {method === "password" ? (
                             <>
-                                <Field data-invalid={!!form.formState.errors.password}>
-                                    <FieldLabel required>Password</FieldLabel>
+                                <Field data-invalid={!!form.formState.errors.password} className="space-y-1">
+                                    <FieldLabel required className="text-xs">Password</FieldLabel>
                                     <FieldContent>
-                                        <PasswordInput className="h-11 rounded-xl transition-colors duration-200" {...form.register("password")} />
-                                        <FieldError errors={[form.formState.errors.password]} />
+                                        <PasswordInput className="h-10 rounded-xl transition-colors duration-200 text-sm" {...form.register("password")} />
+                                        <FieldError errors={[form.formState.errors.password]} className="text-[10px]" />
                                     </FieldContent>
                                 </Field>
 
                                 <Button
                                     type="submit"
-                                    className="h-11 w-full rounded-xl transition-all duration-200"
+                                    className="h-10 w-full rounded-xl transition-all duration-200 text-sm"
                                     disabled={loginMutation.isPending}
                                 >
                                     {loginMutation.isPending ? "Logging in..." : "Login"}
@@ -182,21 +177,21 @@ const LoginPage = () => {
                             </>
                         ) : form.watch("requestType") === "otp-verification" ? (
                             <>
-                                <div className="flex items-center justify-between border-b border-dashed border-border pb-4">
-                                    <div className="flex items-center gap-3">
-                                        <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={backToOtpStart}>
-                                            <ChevronLeft className="size-4 transition-transform duration-200 group-hover/button:-translate-x-0.5" />
+                                <div className="flex items-center justify-between border-b border-dashed border-border pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <Button type="button" variant="ghost" size="icon" className="rounded-lg size-8" onClick={backToOtpStart}>
+                                            <ChevronLeft className="size-3.5" />
                                         </Button>
                                         <div>
-                                            <p className="text-sm font-medium text-foreground">{formatIndianPhoneDisplay(form.getValues("phone"))}</p>
-                                            <p className="text-xs text-muted-foreground">OTP verification</p>
+                                            <p className="text-xs font-semibold text-foreground">{formatIndianPhoneDisplay(form.getValues("phone"))}</p>
+                                            <p className="text-[10px] text-muted-foreground">OTP verification</p>
                                         </div>
                                     </div>
 
                                     {cooldown > 0 ? (
-                                        <p className="text-xs font-medium text-muted-foreground">Resend in {cooldown}s</p>
+                                        <p className="text-[10px] font-medium text-muted-foreground">Resend in {cooldown}s</p>
                                     ) : (
-                                        <Button type="button" variant="link" className="px-0" onClick={startOtpFlow}>
+                                        <Button type="button" variant="link" className="px-0 text-xs h-auto" onClick={startOtpFlow}>
                                             Resend OTP
                                         </Button>
                                     )}
@@ -206,7 +201,7 @@ const LoginPage = () => {
 
                                 <Button
                                     type="submit"
-                                    className="h-11 w-full rounded-xl transition-all duration-200"
+                                    className="h-10 w-full rounded-xl transition-all duration-200 text-sm"
                                     disabled={loginMutation.isPending || form.watch("otp")?.length !== 6}
                                 >
                                     Verify and login
@@ -215,7 +210,7 @@ const LoginPage = () => {
                         ) : (
                             <Button
                                 type="button"
-                                className="h-11 w-full rounded-xl transition-all duration-200"
+                                className="h-10 w-full rounded-xl transition-all duration-200 text-sm"
                                 disabled={loginMutation.isPending}
                                 onClick={startOtpFlow}
                             >
@@ -223,25 +218,26 @@ const LoginPage = () => {
                                     "Sending OTP..."
                                 ) : (
                                     <>
-                                        <img src={whatsAppIcon} alt="" className="mr-2 size-4" />
+                                        <img src={whatsAppIcon} alt="" className="mr-1.5 size-3.5" />
                                         Send OTP on WhatsApp
                                     </>
                                 )}
                             </Button>
                         )}
 
-                        <p className="text-center text-sm text-muted-foreground">
-                            Need a new account?{" "}
-                            <Link to="/register" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
-                                Register here
-                            </Link>
-                        </p>
-                        <p className="text-center text-sm text-muted-foreground">
-                            Need the device route instead?{" "}
-                            <Link to="/pos/login" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
-                                Open POS login
-                            </Link>
-                        </p>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2.5 border-t border-border/40">
+                            <p>
+                                Need a new account?{" "}
+                                <Link to="/register" className="font-semibold text-primary hover:underline">
+                                    Register
+                                </Link>
+                            </p>
+                            <p>
+                                <Link to="/pos/login" className="font-semibold text-primary hover:underline">
+                                    Open POS login
+                                </Link>
+                            </p>
+                        </div>
                     </form>
                 </CardContent>
             </Card>

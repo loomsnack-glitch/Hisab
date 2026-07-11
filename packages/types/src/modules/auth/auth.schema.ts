@@ -8,15 +8,39 @@ const passwordSchema = z
     .max(32, "Password must be at most 32 characters");
 
 const registerPasswordRefinement = (
-    data: { password: string; confirmPassword: string; requestType: string; otp?: string; resendOTP?: string },
+    data: { password?: string; confirmPassword?: string; requestType: string; otp?: string; resendOTP?: string },
     ctx: z.RefinementCtx,
 ) => {
-    if (data.password !== data.confirmPassword) {
-        ctx.addIssue({
-            code: "custom",
-            message: "Passwords do not match",
-            path: ["confirmPassword"],
-        });
+    if (data.requestType === "user-info") {
+        if (!data.password) {
+            ctx.addIssue({
+                code: "custom",
+                message: "Password is required",
+                path: ["password"],
+            });
+        } else if (data.password.length < 8 || data.password.length > 32) {
+            ctx.addIssue({
+                code: "custom",
+                message: "Password must be between 8 and 32 characters",
+                path: ["password"],
+            });
+        }
+
+        if (!data.confirmPassword) {
+            ctx.addIssue({
+                code: "custom",
+                message: "Confirm password is required",
+                path: ["confirmPassword"],
+            });
+        }
+
+        if (data.password && data.confirmPassword && data.password !== data.confirmPassword) {
+            ctx.addIssue({
+                code: "custom",
+                message: "Passwords do not match",
+                path: ["confirmPassword"],
+            });
+        }
     }
 
     if (data.requestType === "otp-verification" && !data.resendOTP) {

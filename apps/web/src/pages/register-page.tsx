@@ -94,50 +94,45 @@ const RegisterPage = () => {
             title="Create your Ganatri account"
             subtitle="Register with your phone number, verify the OTP on WhatsApp, and you will be logged in immediately."
         >
-            <div className="mb-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <p className="text-sm font-semibold text-foreground">Looking for cashier/device access?</p>
-                        <p className="text-xs text-muted-foreground">
-                            POS devices should use the separate device login flow, not admin account registration.
-                        </p>
-                    </div>
-                    <Button variant="outline" className="rounded-xl" render={<Link to="/pos/login" />}>
-                        <MonitorSmartphone className="mr-2 size-4" />
-                        Device POS login
-                    </Button>
+            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 flex items-center justify-between gap-4 text-xs">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                    <MonitorSmartphone className="size-4 shrink-0 text-amber-500" />
+                    <span>Looking for cashier/device access?</span>
                 </div>
+                <Link to="/pos/login" className="font-semibold text-amber-600 dark:text-amber-400 hover:underline shrink-0">
+                    Device POS login &rarr;
+                </Link>
             </div>
 
-            <Card className="border-border/70 shadow-sm transition-shadow duration-300 hover:shadow-md">
-                <CardContent className="p-6 sm:p-8">
-                    <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
+            <Card className="border-border/70 shadow-sm">
+                <CardContent className="p-4 sm:p-5">
+                    <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
                         {step === "otp-verification" ? (
                             <>
-                                <div className="flex items-center justify-between border-b border-dashed border-border pb-4">
-                                    <div className="flex items-center gap-3">
+                                <div className="flex items-center justify-between border-b border-dashed border-border pb-3">
+                                    <div className="flex items-center gap-2">
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="icon"
-                                            className="rounded-xl"
+                                            className="rounded-lg size-8"
                                             onClick={() => {
                                                 setStep("user-info");
                                                 form.setValue("requestType", "user-info");
                                             }}
                                         >
-                                            <ChevronLeft className="size-4 transition-transform duration-200 group-hover/button:-translate-x-0.5" />
+                                            <ChevronLeft className="size-3.5" />
                                         </Button>
                                         <div>
-                                            <p className="text-sm font-medium text-foreground">{formatIndianPhoneDisplay(form.getValues("phone"))}</p>
-                                            <p className="text-xs text-muted-foreground">Verification in progress</p>
+                                            <p className="text-xs font-semibold text-foreground">{formatIndianPhoneDisplay(form.getValues("phone"))}</p>
+                                            <p className="text-[10px] text-muted-foreground">Verification in progress</p>
                                         </div>
                                     </div>
 
                                     {cooldown > 0 ? (
-                                        <p className="text-xs font-medium text-muted-foreground">Resend in {cooldown}s</p>
+                                        <p className="text-[10px] font-medium text-muted-foreground">Resend in {cooldown}s</p>
                                     ) : (
-                                        <Button type="button" variant="link" className="px-0" onClick={resendOtp}>
+                                        <Button type="button" variant="link" className="px-0 text-xs h-auto" onClick={resendOtp}>
                                             Resend OTP
                                         </Button>
                                     )}
@@ -147,7 +142,7 @@ const RegisterPage = () => {
 
                                 <Button
                                     type="submit"
-                                    className="h-11 w-full rounded-xl transition-all duration-200"
+                                    className="h-10 w-full rounded-xl transition-all duration-200 text-sm"
                                     disabled={registerMutation.isPending || form.watch("otp")?.length !== 6}
                                 >
                                     Verify and continue
@@ -155,88 +150,90 @@ const RegisterPage = () => {
                             </>
                         ) : (
                             <>
-                                <FieldGroup className="grid gap-5 sm:grid-cols-3">
+                                <FieldGroup className="grid gap-3.5 sm:grid-cols-3">
                                     <Controller
                                         control={form.control}
                                         name="salutation"
                                         render={({ field, fieldState }) => (
-                                            <Field data-invalid={fieldState.invalid}>
-                                                <FieldLabel required>Salutation</FieldLabel>
+                                            <Field data-invalid={fieldState.invalid} className="space-y-1">
+                                                <FieldLabel required className="text-xs">Salutation</FieldLabel>
                                                 <FieldContent>
                                                     <ReactSelect
                                                         options={SALUTATION_OPTIONS}
                                                         value={SALUTATION_OPTIONS.find((option) => option.value === field.value) ?? null}
                                                         onChange={(option) => field.onChange(option?.value ?? "mr.")}
                                                         classNames={{
-                                                            control: () => "!min-h-11 rounded-xl",
+                                                            control: () => "!min-h-10 rounded-xl text-sm",
                                                         }}
                                                     />
-                                                    <FieldError errors={[fieldState.error]} />
+                                                    <FieldError errors={[fieldState.error]} className="text-[10px]" />
                                                 </FieldContent>
                                             </Field>
                                         )}
                                     />
 
-                                    <Field data-invalid={!!form.formState.errors.firstName} className="sm:col-span-1">
-                                        <FieldLabel required>First name</FieldLabel>
+                                    <Field data-invalid={!!form.formState.errors.firstName} className="sm:col-span-1 space-y-1">
+                                        <FieldLabel required className="text-xs">First name</FieldLabel>
                                         <FieldContent>
-                                            <Input className="h-11 rounded-xl transition-colors duration-200" {...form.register("firstName")} />
-                                            <FieldError errors={[form.formState.errors.firstName]} />
+                                            <Input className="h-10 rounded-xl transition-colors duration-200 text-sm" {...form.register("firstName")} />
+                                            <FieldError errors={[form.formState.errors.firstName]} className="text-[10px]" />
                                         </FieldContent>
                                     </Field>
 
-                                    <Field data-invalid={!!form.formState.errors.lastName} className="sm:col-span-1">
-                                        <FieldLabel required>Last name</FieldLabel>
+                                    <Field data-invalid={!!form.formState.errors.lastName} className="sm:col-span-1 space-y-1">
+                                        <FieldLabel required className="text-xs">Last name</FieldLabel>
                                         <FieldContent>
-                                            <Input className="h-11 rounded-xl transition-colors duration-200" {...form.register("lastName")} />
-                                            <FieldError errors={[form.formState.errors.lastName]} />
+                                            <Input className="h-10 rounded-xl transition-colors duration-200 text-sm" {...form.register("lastName")} />
+                                            <FieldError errors={[form.formState.errors.lastName]} className="text-[10px]" />
                                         </FieldContent>
                                     </Field>
                                 </FieldGroup>
 
-                                <Controller
-                                    control={form.control}
-                                    name="phone"
-                                    render={({ field, fieldState }) => (
-                                        <PhoneNumberField
-                                            value={field.value}
-                                            onChange={field.onChange}
-                                            onBlur={field.onBlur}
-                                            error={fieldState.error}
-                                            required
-                                        />
-                                    )}
-                                />
+                                <FieldGroup className="grid gap-3.5 sm:grid-cols-2">
+                                    <Controller
+                                        control={form.control}
+                                        name="phone"
+                                        render={({ field, fieldState }) => (
+                                            <PhoneNumberField
+                                                value={field.value}
+                                                onChange={field.onChange}
+                                                onBlur={field.onBlur}
+                                                error={fieldState.error}
+                                                required
+                                            />
+                                        )}
+                                    />
 
-                                <Field data-invalid={!!form.formState.errors.email}>
-                                    <FieldLabel>Email</FieldLabel>
-                                    <FieldContent>
-                                        <Input className="h-11 rounded-xl transition-colors duration-200" placeholder="Optional" {...form.register("email")} />
-                                        <FieldError errors={[form.formState.errors.email]} />
-                                    </FieldContent>
-                                </Field>
-
-                                <FieldGroup className="grid gap-5 sm:grid-cols-2">
-                                    <Field data-invalid={!!form.formState.errors.password}>
-                                        <FieldLabel required>Password</FieldLabel>
+                                    <Field data-invalid={!!form.formState.errors.email} className="space-y-1">
+                                        <FieldLabel className="text-xs">Email</FieldLabel>
                                         <FieldContent>
-                                            <PasswordInput className="h-11 rounded-xl transition-colors duration-200" {...form.register("password")} />
-                                            <FieldError errors={[form.formState.errors.password]} />
+                                            <Input className="h-10 rounded-xl transition-colors duration-200 text-sm" placeholder="Optional" {...form.register("email")} />
+                                            <FieldError errors={[form.formState.errors.email]} className="text-[10px]" />
+                                        </FieldContent>
+                                    </Field>
+                                </FieldGroup>
+
+                                <FieldGroup className="grid gap-3.5 sm:grid-cols-2">
+                                    <Field data-invalid={!!form.formState.errors.password} className="space-y-1">
+                                        <FieldLabel required className="text-xs">Password</FieldLabel>
+                                        <FieldContent>
+                                            <PasswordInput className="h-10 rounded-xl transition-colors duration-200 text-sm" {...form.register("password")} />
+                                            <FieldError errors={[form.formState.errors.password]} className="text-[10px]" />
                                         </FieldContent>
                                     </Field>
 
-                                    <Field data-invalid={!!form.formState.errors.confirmPassword}>
-                                        <FieldLabel required>Confirm password</FieldLabel>
+                                    <Field data-invalid={!!form.formState.errors.confirmPassword} className="space-y-1">
+                                        <FieldLabel required className="text-xs">Confirm password</FieldLabel>
                                         <FieldContent>
-                                            <PasswordInput className="h-11 rounded-xl transition-colors duration-200" {...form.register("confirmPassword")} />
-                                            <FieldError errors={[form.formState.errors.confirmPassword]} />
+                                            <PasswordInput className="h-10 rounded-xl transition-colors duration-200 text-sm" {...form.register("confirmPassword")} />
+                                            <FieldError errors={[form.formState.errors.confirmPassword]} className="text-[10px]" />
                                         </FieldContent>
                                     </Field>
                                 </FieldGroup>
 
                                 <Button
                                     type="submit"
-                                    className="h-11 w-full rounded-xl transition-all duration-200"
+                                    className="h-10 w-full rounded-xl transition-all duration-200 text-sm"
                                     disabled={registerMutation.isPending}
                                 >
                                     {registerMutation.isPending ? "Sending OTP..." : "Send OTP"}
@@ -244,18 +241,19 @@ const RegisterPage = () => {
                             </>
                         )}
 
-                        <p className="text-center text-sm text-muted-foreground">
-                            Already have an account?{" "}
-                            <Link to="/login" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
-                                Login here
-                            </Link>
-                        </p>
-                        <p className="text-center text-sm text-muted-foreground">
-                            Need the device route instead?{" "}
-                            <Link to="/pos/login" className="font-medium text-primary transition-colors duration-200 hover:text-primary/80">
-                                Open POS login
-                            </Link>
-                        </p>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2.5 border-t border-border/40">
+                            <p>
+                                Already have an account?{" "}
+                                <Link to="/login" className="font-semibold text-primary hover:underline">
+                                    Login
+                                </Link>
+                            </p>
+                            <p>
+                                <Link to="/pos/login" className="font-semibold text-primary hover:underline">
+                                    Open POS login
+                                </Link>
+                            </p>
+                        </div>
                     </form>
                 </CardContent>
             </Card>
