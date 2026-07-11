@@ -82,9 +82,31 @@ export const BundleProductComponentDTOSchema = z.object({
     updatedAt: dtoDateSchema,
 });
 
+export const BundleProductComponentAddOnDTOSchema = z.object({
+    id: z.uuid("Invalid bundle component add-on id"),
+    organizationId: z.uuid("Invalid organization id"),
+    bundleProductComponentId: z.uuid("Invalid bundle component id"),
+    addOnId: z.uuid("Invalid add-on id"),
+    quantity: wholeCountQuantitySchema,
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const BundleProductComponentAddOnInputSchema = z.object({
+    addOnId: z.uuid("Invalid add-on id"),
+    quantity: wholeCountQuantitySchema,
+});
+
 export const BundleProductComponentInputSchema = z.object({
     productId: z.uuid("Invalid product id"),
     quantity: wholeCountQuantitySchema,
+    addOns: z.array(BundleProductComponentAddOnInputSchema).optional(),
+});
+
+export const BundleProductComponentResponseDTOSchema = BundleProductComponentDTOSchema.extend({
+    addOns: z.array(BundleProductComponentAddOnDTOSchema),
 });
 
 export const AddOnDTOSchema = z.object({

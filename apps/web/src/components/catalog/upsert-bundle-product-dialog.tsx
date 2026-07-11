@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useFieldArray, useForm, type SubmitHandler } from "react-hook-form";
 import {
     createBundleProduct,
     getBundleProduct,
+    getProductAddOnAttachments,
     updateBundleProduct,
 } from "@repo/services";
 import {
@@ -56,6 +57,13 @@ const sanitizeDecimalInput = (value: string) => {
     return digitsAndDot.slice(0, dotIndex + 1) + digitsAndDot.slice(dotIndex + 1).replace(/\./g, "");
 };
 
+const wholeCountFieldSchema = z
+    .string()
+    .refine((value) => value.length > 0, "Quantity is required")
+    .refine((value) => /^\d+$/.test(value), "Quantity must be a whole number")
+    .transform((value) => Number(value))
+    .pipe(z.number().int().min(1, "Quantity must be at least 1"));
+
 const UpsertBundleProductFormSchema = z.object({
     categoryId: z.uuid("Invalid category id"),
     name: z
@@ -83,25 +91,33 @@ const UpsertBundleProductFormSchema = z.object({
         .array(
             z.object({
                 productId: z.uuid("Invalid product id"),
-                quantity: z
-                    .string()
-                    .refine((value) => value.length > 0, "Quantity is required")
-                    .refine((value) => /^\d+$/.test(value), "Quantity must be a whole number")
-                    .transform((value) => Number(value))
-                    .pipe(z.number().int().min(1, "Quantity must be at least 1")),
+                quantity: wholeCountFieldSchema,
+                addOns: z
+                    .array(
+                        z.object({
+                            addOnId: z.uuid("Invalid add-on id"),
+                            quantity: wholeCountFieldSchema,
+                        }),
+                    )
+                    .optional()
+                    .default([]),
             }),
         )
         .min(1, "A bundle must include at least one product component"),
 });
 
 type UpsertBundleProductFormInput = z.input<typeof UpsertBundleProductFormSchema>;
+type BundleFormComponentInput = UpsertBundleProductFormInput["components"][number];
+type BundleFormAddOnInput = NonNullable<BundleFormComponentInput["addOns"]>[number];
 
 type BundleFormComponentSource = {
     productId: string;
     quantity: string | number;
+    addOns?: Array<{
+        addOnId: string;
+        quantity: string | number;
+    }>;
 };
-
-type BundleFormComponentInput = UpsertBundleProductFormInput["components"][number];
 
 const defaultValues: UpsertBundleProductFormInput = {
     categoryId: "",
@@ -109,34 +125,65 @@ const defaultValues: UpsertBundleProductFormInput = {
     price: "",
     discount: "",
     status: "active",
-    components: [{ productId: "", quantity: "1" }],
+    components: [{ productId: "", quantity: "1", addOns: [] }],
 };
 
+const buildAddOnSignature = (addOns: Array<{ addOnId: string; quantity: string | number }>) => {
+    return [...addOns]
+        .filter((addOn) => addOn.addOnId)
+        .sort((left, right) => left.addOnId.localeCompare(right.addOnId))
+        .map((addOn) => `${addOn.addOnId}:${Number(addOn.quantity || "0")}`)
+        .join("|");
+};
+
+const buildComponentSignature = (component: BundleFormComponentSource) =>
+    `${component.productId}::${buildAddOnSignature(component.addOns ?? [])}`;
+
 const mergeBundleFormComponents = (components: BundleFormComponentSource[]): BundleFormComponentInput[] => {
-    const merged = new Map<string, number>();
+    const merged = new Map<string, BundleFormComponentInput>();
     const pending: BundleFormComponentInput[] = [];
 
     for (const component of components) {
+        const addOns: BundleFormAddOnInput[] = (component.addOns ?? [])
+            .filter((addOn) => addOn.addOnId)
+            .map((addOn) => ({
+                addOnId: addOn.addOnId,
+                quantity: String(addOn.quantity),
+            }));
+
         if (!component.productId) {
             pending.push({
                 productId: component.productId,
                 quantity: String(component.quantity),
+                addOns,
             });
             continue;
         }
 
+        const signature = buildComponentSignature({
+            productId: component.productId,
+            quantity: component.quantity,
+            addOns,
+        });
         const quantity = Number(component.quantity || "0");
-        const current = merged.get(component.productId) ?? 0;
-        merged.set(component.productId, current + quantity);
+        const existing = merged.get(signature);
+
+        if (existing) {
+            merged.set(signature, {
+                ...existing,
+                quantity: String(Number(existing.quantity) + quantity),
+            });
+            continue;
+        }
+
+        merged.set(signature, {
+            productId: component.productId,
+            quantity: String(quantity),
+            addOns,
+        });
     }
 
-    return [
-        ...[...merged.entries()].map(([productId, quantity]) => ({
-            productId,
-            quantity: String(quantity),
-        })),
-        ...pending,
-    ];
+    return [...merged.values(), ...pending];
 };
 
 const statusSelectOptions = ProductStatusSchema.options.map((status) => ({
@@ -161,10 +208,12 @@ const UpsertBundleProductDialog = ({
         defaultValues,
     });
 
-    const { fields, append, remove } = useFieldArray({
+    const { fields, append, remove, update } = useFieldArray({
         control: form.control,
         name: "components",
     });
+
+    const watchedComponents = form.watch("components");
 
     const resolveDefaultCategoryId = () => {
         if (defaultCategoryId && categories.some((category) => category.id === defaultCategoryId)) {
@@ -187,6 +236,51 @@ const UpsertBundleProductDialog = ({
         [categories],
     );
 
+    const selectedProductIds = useMemo(
+        () =>
+            [...new Set(
+                (watchedComponents ?? [])
+                    .map((component) => component.productId)
+                    .filter(Boolean),
+            )],
+        [watchedComponents],
+    );
+
+    const attachmentQueries = useQueries({
+        queries: selectedProductIds.map((productId) => ({
+            queryKey: catalogKeys.productAttachments(organizationId, productId),
+            queryFn: () => getProductAddOnAttachments(organizationId, productId),
+            enabled: open && Boolean(organizationId) && Boolean(productId),
+        })),
+    });
+
+    const attachmentsByProductId = useMemo(() => {
+        const map = new Map<string, Array<{ label: string; value: string; selectionCap: number }>>();
+
+        selectedProductIds.forEach((productId, index) => {
+            const response = attachmentQueries[index]?.data;
+            const attachments = response?.status === "success"
+                ? response.data?.attachments ?? []
+                : [];
+
+            map.set(
+                productId,
+                attachments
+                    .filter(
+                        (attachment) =>
+                            attachment.status === "active" && attachment.addOn.status === "active",
+                    )
+                    .map((attachment) => ({
+                        label: attachment.addOn.name,
+                        value: attachment.addOnId,
+                        selectionCap: attachment.selectionCap,
+                    })),
+            );
+        });
+
+        return map;
+    }, [attachmentQueries, selectedProductIds]);
+
     const bundleDetailsQuery = useQuery({
         queryKey: [...catalogKeys.products(organizationId), "bundle", product?.id],
         queryFn: () => getBundleProduct(organizationId, product!.id),
@@ -202,7 +296,11 @@ const UpsertBundleProductDialog = ({
             form.reset({
                 ...defaultValues,
                 categoryId: resolveDefaultCategoryId(),
-                components: [{ productId: componentProductOptions[0]?.value ?? "", quantity: "1" }],
+                components: [{
+                    productId: componentProductOptions[0]?.value ?? "",
+                    quantity: "1",
+                    addOns: [],
+                }],
             });
             return;
         }
@@ -221,8 +319,12 @@ const UpsertBundleProductDialog = ({
                 ? mergeBundleFormComponents(details.components.map((component) => ({
                     productId: component.componentProductId,
                     quantity: String(component.quantity),
+                    addOns: component.addOns.map((addOn) => ({
+                        addOnId: addOn.addOnId,
+                        quantity: String(addOn.quantity),
+                    })),
                 })))
-                : [{ productId: "", quantity: "1" }],
+                : [{ productId: "", quantity: "1", addOns: [] }],
         });
     }, [
         bundleDetailsQuery.data,
@@ -265,6 +367,12 @@ const UpsertBundleProductDialog = ({
             components: mergeBundleFormComponents(values.components).map((component) => ({
                 productId: component.productId,
                 quantity: Number(component.quantity),
+                addOns: (component.addOns ?? [])
+                    .filter((addOn) => addOn.addOnId)
+                    .map((addOn) => ({
+                        addOnId: addOn.addOnId,
+                        quantity: Number(addOn.quantity),
+                    })),
             })),
         });
     };
@@ -280,6 +388,51 @@ const UpsertBundleProductDialog = ({
         form.setValue(`components.${index}.quantity`, String(next), {
             shouldDirty: true,
             shouldValidate: true,
+        });
+    };
+
+    const updateAddOnQuantity = (componentIndex: number, addOnIndex: number, delta: number) => {
+        const path = `components.${componentIndex}.addOns.${addOnIndex}.quantity` as const;
+        const current = Number(form.getValues(path) || "1");
+        const productId = form.getValues(`components.${componentIndex}.productId`);
+        const addOnId = form.getValues(`components.${componentIndex}.addOns.${addOnIndex}.addOnId`);
+        const selectionCap = attachmentsByProductId
+            .get(productId)
+            ?.find((option) => option.value === addOnId)
+            ?.selectionCap ?? Number.POSITIVE_INFINITY;
+        const next = Math.min(selectionCap, Math.max(1, current + delta));
+
+        form.setValue(path, String(next), {
+            shouldDirty: true,
+            shouldValidate: true,
+        });
+    };
+
+    const addNestedAddOn = (componentIndex: number) => {
+        const current = form.getValues(`components.${componentIndex}`);
+        const productId = current.productId;
+        const options = attachmentsByProductId.get(productId) ?? [];
+        const usedIds = new Set((current.addOns ?? []).map((addOn) => addOn.addOnId));
+        const nextOption = options.find((option) => !usedIds.has(option.value));
+
+        if (!nextOption) {
+            return;
+        }
+
+        update(componentIndex, {
+            ...current,
+            addOns: [
+                ...(current.addOns ?? []),
+                { addOnId: nextOption.value, quantity: "1" },
+            ],
+        });
+    };
+
+    const removeNestedAddOn = (componentIndex: number, addOnIndex: number) => {
+        const current = form.getValues(`components.${componentIndex}`);
+        update(componentIndex, {
+            ...current,
+            addOns: (current.addOns ?? []).filter((_, index) => index !== addOnIndex),
         });
     };
 
@@ -299,7 +452,7 @@ const UpsertBundleProductDialog = ({
                     )
                 }
             />
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
                         <Boxes className="size-5" />
@@ -309,7 +462,7 @@ const UpsertBundleProductDialog = ({
                     </DialogTitle>
                     <DialogDescription className="text-center">
                         {hasComponentProducts
-                            ? "Create a fixed combo offer from existing products with its own price."
+                            ? "Compose a fixed combo from products and their attached add-ons."
                             : "Create at least one active product before composing a bundle."}
                     </DialogDescription>
                 </DialogHeader>
@@ -430,6 +583,7 @@ const UpsertBundleProductDialog = ({
                                         append({
                                             productId: componentProductOptions[0]?.value ?? "",
                                             quantity: "1",
+                                            addOns: [],
                                         })
                                     }
                                     disabled={!hasComponentProducts}
@@ -439,83 +593,237 @@ const UpsertBundleProductDialog = ({
                                 </Button>
                             </div>
 
-                            {fields.map((field, index) => (
-                                <div key={field.id} className="flex items-start gap-2">
-                                    <Controller
-                                        control={form.control}
-                                        name={`components.${index}.productId`}
-                                        render={({ field: productField, fieldState }) => (
-                                            <Field className="min-w-0 flex-1" data-invalid={fieldState.invalid}>
+                            {fields.map((field, index) => {
+                                const productId = watchedComponents?.[index]?.productId ?? "";
+                                const addOnOptions = attachmentsByProductId.get(productId) ?? [];
+                                const selectedAddOns = watchedComponents?.[index]?.addOns ?? [];
+                                const usedAddOnIds = new Set(selectedAddOns.map((addOn) => addOn.addOnId));
+                                const availableAddOnOptions = addOnOptions.filter(
+                                    (option) => !usedAddOnIds.has(option.value),
+                                );
+
+                                return (
+                                    <div
+                                        key={field.id}
+                                        className="space-y-3 rounded-2xl border border-border/60 p-3"
+                                    >
+                                        <div className="flex items-start gap-2">
+                                            <Controller
+                                                control={form.control}
+                                                name={`components.${index}.productId`}
+                                                render={({ field: productField, fieldState }) => (
+                                                    <Field className="min-w-0 flex-1" data-invalid={fieldState.invalid}>
+                                                        <FieldContent>
+                                                            <ReactSelect
+                                                                options={componentProductOptions}
+                                                                value={
+                                                                    componentProductOptions.find(
+                                                                        (option) => option.value === productField.value,
+                                                                    ) ?? null
+                                                                }
+                                                                onChange={(option) => {
+                                                                    productField.onChange(option?.value ?? "");
+                                                                    update(index, {
+                                                                        productId: option?.value ?? "",
+                                                                        quantity: form.getValues(
+                                                                            `components.${index}.quantity`,
+                                                                        ) || "1",
+                                                                        addOns: [],
+                                                                    });
+                                                                }}
+                                                                placeholder="Select product"
+                                                                classNames={{
+                                                                    control: () => "!min-h-11 rounded-xl",
+                                                                }}
+                                                            />
+                                                            <FieldError errors={[fieldState.error]} />
+                                                        </FieldContent>
+                                                    </Field>
+                                                )}
+                                            />
+
+                                            <Field
+                                                className="w-40"
+                                                data-invalid={!!form.formState.errors.components?.[index]?.quantity}
+                                            >
                                                 <FieldContent>
-                                                    <ReactSelect
-                                                        options={componentProductOptions}
-                                                        value={
-                                                            componentProductOptions.find(
-                                                                (option) => option.value === productField.value,
-                                                            ) ?? null
-                                                        }
-                                                        onChange={(option) =>
-                                                            productField.onChange(option?.value ?? "")
-                                                        }
-                                                        placeholder="Select product"
-                                                        classNames={{
-                                                            control: () => "!min-h-11 rounded-xl",
-                                                        }}
+                                                    <div className="flex h-11 items-center rounded-xl border border-input bg-background px-1">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-lg text-muted-foreground"
+                                                            onClick={() => updateComponentQuantity(index, -1)}
+                                                            aria-label="Decrease quantity"
+                                                        >
+                                                            <Minus className="size-4" />
+                                                        </Button>
+                                                        <Input
+                                                            {...form.register(`components.${index}.quantity`)}
+                                                            readOnly
+                                                            className="h-9 border-0 bg-transparent px-0 text-center shadow-none focus-visible:ring-0"
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-lg text-muted-foreground"
+                                                            onClick={() => updateComponentQuantity(index, 1)}
+                                                            aria-label="Increase quantity"
+                                                        >
+                                                            <Plus className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                    <FieldError
+                                                        errors={[form.formState.errors.components?.[index]?.quantity]}
                                                     />
-                                                    <FieldError errors={[fieldState.error]} />
                                                 </FieldContent>
                                             </Field>
-                                        )}
-                                    />
 
-                                    <Field className="w-40" data-invalid={!!form.formState.errors.components?.[index]?.quantity}>
-                                        <FieldContent>
-                                            <div className="flex h-11 items-center rounded-xl border border-input bg-background px-1">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="mt-0.5 h-11 w-11 rounded-xl text-muted-foreground"
+                                                onClick={() => remove(index)}
+                                                disabled={fields.length <= 1}
+                                                aria-label="Remove component"
+                                            >
+                                                <Trash2 className="size-4" />
+                                            </Button>
+                                        </div>
+
+                                        <div className="space-y-2 pl-1">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-sm text-muted-foreground">Add-ons</p>
                                                 <Button
                                                     type="button"
                                                     variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 rounded-lg text-muted-foreground"
-                                                    onClick={() => updateComponentQuantity(index, -1)}
-                                                    aria-label="Decrease quantity"
+                                                    size="sm"
+                                                    className="h-8 rounded-full"
+                                                    onClick={() => addNestedAddOn(index)}
+                                                    disabled={!productId || availableAddOnOptions.length === 0}
                                                 >
-                                                    <Minus className="size-4" />
-                                                </Button>
-                                                <Input
-                                                    {...form.register(`components.${index}.quantity`)}
-                                                    readOnly
-                                                    className="h-9 border-0 bg-transparent px-0 text-center shadow-none focus-visible:ring-0"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 rounded-lg text-muted-foreground"
-                                                    onClick={() => updateComponentQuantity(index, 1)}
-                                                    aria-label="Increase quantity"
-                                                >
-                                                    <Plus className="size-4" />
+                                                    <Plus className="mr-1 size-3.5" />
+                                                    Add add-on
                                                 </Button>
                                             </div>
-                                            <FieldError
-                                                errors={[form.formState.errors.components?.[index]?.quantity]}
-                                            />
-                                        </FieldContent>
-                                    </Field>
 
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className="mt-0.5 h-11 w-11 rounded-xl text-muted-foreground"
-                                        onClick={() => remove(index)}
-                                        disabled={fields.length <= 1}
-                                        aria-label="Remove component"
-                                    >
-                                        <Trash2 className="size-4" />
-                                    </Button>
-                                </div>
-                            ))}
+                                            {selectedAddOns.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {productId
+                                                        ? addOnOptions.length === 0
+                                                            ? "No active add-on attachments for this product."
+                                                            : "Optional. Nested add-ons stay under this product."
+                                                        : "Select a product to attach add-ons."}
+                                                </p>
+                                            ) : (
+                                                selectedAddOns.map((addOn, addOnIndex) => {
+                                                    const selectedOption = addOnOptions.find(
+                                                        (option) => option.value === addOn.addOnId,
+                                                    );
+                                                    const optionsForRow = [
+                                                        ...(selectedOption ? [selectedOption] : []),
+                                                        ...availableAddOnOptions,
+                                                    ];
+
+                                                    return (
+                                                        <div key={`${field.id}-addon-${addOnIndex}`} className="flex items-start gap-2">
+                                                            <Controller
+                                                                control={form.control}
+                                                                name={`components.${index}.addOns.${addOnIndex}.addOnId`}
+                                                                render={({ field: addOnField, fieldState }) => (
+                                                                    <Field
+                                                                        className="min-w-0 flex-1"
+                                                                        data-invalid={fieldState.invalid}
+                                                                    >
+                                                                        <FieldContent>
+                                                                            <ReactSelect
+                                                                                options={optionsForRow}
+                                                                                value={
+                                                                                    optionsForRow.find(
+                                                                                        (option) =>
+                                                                                            option.value === addOnField.value,
+                                                                                    ) ?? null
+                                                                                }
+                                                                                onChange={(option) => {
+                                                                                    addOnField.onChange(option?.value ?? "");
+                                                                                    form.setValue(
+                                                                                        `components.${index}.addOns.${addOnIndex}.quantity`,
+                                                                                        "1",
+                                                                                        {
+                                                                                            shouldDirty: true,
+                                                                                            shouldValidate: true,
+                                                                                        },
+                                                                                    );
+                                                                                }}
+                                                                                placeholder="Select add-on"
+                                                                                classNames={{
+                                                                                    control: () => "!min-h-10 rounded-xl",
+                                                                                }}
+                                                                            />
+                                                                            <FieldError errors={[fieldState.error]} />
+                                                                        </FieldContent>
+                                                                    </Field>
+                                                                )}
+                                                            />
+
+                                                            <Field className="w-36">
+                                                                <FieldContent>
+                                                                    <div className="flex h-10 items-center rounded-xl border border-input bg-background px-1">
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7 rounded-lg text-muted-foreground"
+                                                                            onClick={() =>
+                                                                                updateAddOnQuantity(index, addOnIndex, -1)
+                                                                            }
+                                                                            aria-label="Decrease add-on quantity"
+                                                                        >
+                                                                            <Minus className="size-3.5" />
+                                                                        </Button>
+                                                                        <Input
+                                                                            {...form.register(
+                                                                                `components.${index}.addOns.${addOnIndex}.quantity`,
+                                                                            )}
+                                                                            readOnly
+                                                                            className="h-8 border-0 bg-transparent px-0 text-center shadow-none focus-visible:ring-0"
+                                                                        />
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7 rounded-lg text-muted-foreground"
+                                                                            onClick={() =>
+                                                                                updateAddOnQuantity(index, addOnIndex, 1)
+                                                                            }
+                                                                            aria-label="Increase add-on quantity"
+                                                                        >
+                                                                            <Plus className="size-3.5" />
+                                                                        </Button>
+                                                                    </div>
+                                                                </FieldContent>
+                                                            </Field>
+
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-10 w-10 rounded-xl text-muted-foreground"
+                                                                onClick={() => removeNestedAddOn(index, addOnIndex)}
+                                                                aria-label="Remove add-on"
+                                                            >
+                                                                <Trash2 className="size-3.5" />
+                                                            </Button>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
 
                             {form.formState.errors.components?.root ? (
                                 <FieldError errors={[form.formState.errors.components.root]} />

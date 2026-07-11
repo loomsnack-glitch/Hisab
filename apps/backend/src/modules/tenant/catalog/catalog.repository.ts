@@ -3,9 +3,11 @@ import { snakeToCamel } from "@/utils/case";
 import { camelToSnakeSql } from "@/utils/case-sql";
 import type {
     AddOnDTO,
+    BundleProductComponentAddOnDTO,
     BundleProductComponentDTO,
     CategoryDTO,
     CreateAddOnREPO,
+    CreateBundleProductComponentAddOnREPO,
     CreateBundleProductComponentREPO,
     CreateCategoryREPO,
     CreateProductAddOnAttachmentREPO,
@@ -23,6 +25,14 @@ const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 
 const mapBundleComponent = (row: Record<string, unknown>): BundleProductComponentDTO => {
     const mapped = mapRow<BundleProductComponentDTO>(row);
+    return {
+        ...mapped,
+        quantity: Number(mapped.quantity),
+    };
+};
+
+const mapBundleComponentAddOn = (row: Record<string, unknown>): BundleProductComponentAddOnDTO => {
+    const mapped = mapRow<BundleProductComponentAddOnDTO>(row);
     return {
         ...mapped,
         quantity: Number(mapped.quantity),
@@ -666,4 +676,129 @@ export const deleteBundleProductComponentsByBundleProductId = async (
         WHERE organization_id = ${organizationId}
           AND bundle_product_id = ${bundleProductId}
     `;
+};
+
+export const createBundleProductComponentAddOn = async (
+    addOnData: CreateBundleProductComponentAddOnREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<BundleProductComponentAddOnDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO bundle_product_component_add_ons ${camelToSnakeSql(addOnData)}
+        RETURNING *
+    `;
+
+    return result ? mapBundleComponentAddOn(result) : null;
+};
+
+export const getBundleProductComponentAddOnsByComponentIds = async (
+    organizationId: string,
+    componentIds: string[],
+    tx?: Bun.TransactionSQL,
+): Promise<BundleProductComponentAddOnDTO[]> => {
+    if (componentIds.length === 0) {
+        return [];
+    }
+
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM bundle_product_component_add_ons
+        WHERE organization_id = ${organizationId}
+          AND bundle_product_component_id IN ${db(componentIds)}
+        ORDER BY created_at ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapBundleComponentAddOn(result));
+};
+
+export const countActiveBundlesByComponentProductId = async (
+    organizationId: string,
+    componentProductId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM bundle_product_components bpc
+        INNER JOIN products bp
+            ON bp.id = bpc.bundle_product_id
+           AND bp.organization_id = bpc.organization_id
+        WHERE bpc.organization_id = ${organizationId}
+          AND bpc.component_product_id = ${componentProductId}
+          AND bp.product_type = 'bundle'
+          AND bp.status = 'active'
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
+export const countActiveBundlesByComponentAddOnId = async (
+    organizationId: string,
+    addOnId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM bundle_product_component_add_ons bca
+        INNER JOIN bundle_product_components bpc
+            ON bpc.id = bca.bundle_product_component_id
+           AND bpc.organization_id = bca.organization_id
+        INNER JOIN products bp
+            ON bp.id = bpc.bundle_product_id
+           AND bp.organization_id = bpc.organization_id
+        WHERE bca.organization_id = ${organizationId}
+          AND bca.add_on_id = ${addOnId}
+          AND bp.product_type = 'bundle'
+          AND bp.status = 'active'
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
+export const countActiveBundlesByProductAddOnPair = async (
+    organizationId: string,
+    productId: string,
+    addOnId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM bundle_product_component_add_ons bca
+        INNER JOIN bundle_product_components bpc
+            ON bpc.id = bca.bundle_product_component_id
+           AND bpc.organization_id = bca.organization_id
+        INNER JOIN products bp
+            ON bp.id = bpc.bundle_product_id
+           AND bp.organization_id = bpc.organization_id
+        WHERE bca.organization_id = ${organizationId}
+          AND bpc.component_product_id = ${productId}
+          AND bca.add_on_id = ${addOnId}
+          AND bp.product_type = 'bundle'
+          AND bp.status = 'active'
+    `;
+
+    return Number(result?.total ?? 0);
+};
+
+export const countActiveBundlesByProductAddOnPairAboveQuantity = async (
+    organizationId: string,
+    productId: string,
+    addOnId: string,
+    quantity: number,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM bundle_product_component_add_ons bca
+        INNER JOIN bundle_product_components bpc
+            ON bpc.id = bca.bundle_product_component_id
+           AND bpc.organization_id = bca.organization_id
+        INNER JOIN products bp
+            ON bp.id = bpc.bundle_product_id
+           AND bp.organization_id = bpc.organization_id
+        WHERE bca.organization_id = ${organizationId}
+          AND bpc.component_product_id = ${productId}
+          AND bca.add_on_id = ${addOnId}
+          AND bca.quantity > ${quantity}
+          AND bp.product_type = 'bundle'
+          AND bp.status = 'active'
+    `;
+
+    return Number(result?.total ?? 0);
 };

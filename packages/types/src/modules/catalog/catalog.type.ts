@@ -1,7 +1,9 @@
 import type z from "zod";
 import type {
     AddOnDTOSchema,
+    BundleProductComponentAddOnDTOSchema,
     BundleProductComponentDTOSchema,
+    BundleProductComponentResponseDTOSchema,
     CategoryDTOSchema,
     CreateAddOnSchema,
     CreateBundleProductSchema,
@@ -23,6 +25,8 @@ export type CategoryDTO = z.infer<typeof CategoryDTOSchema>;
 export type ProductDTO = z.infer<typeof ProductDTOSchema>;
 export type ProductResponseDTO = z.infer<typeof ProductResponseDTOSchema>;
 export type BundleProductComponentDTO = z.infer<typeof BundleProductComponentDTOSchema>;
+export type BundleProductComponentAddOnDTO = z.infer<typeof BundleProductComponentAddOnDTOSchema>;
+export type BundleProductComponentResponseDTO = z.infer<typeof BundleProductComponentResponseDTOSchema>;
 export type AddOnDTO = z.infer<typeof AddOnDTOSchema>;
 export type ProductAddOnAttachmentDTO = z.infer<typeof ProductAddOnAttachmentDTOSchema>;
 export type ProductAddOnAttachmentResponseDTO = z.infer<typeof ProductAddOnAttachmentResponseDTOSchema>;
@@ -77,6 +81,13 @@ export type CreateBundleProductComponentREPO = Pick<
     updatedBy?: string | null;
 };
 
+export type CreateBundleProductComponentAddOnREPO = Pick<
+    BundleProductComponentAddOnDTO,
+    "id" | "organizationId" | "bundleProductComponentId" | "addOnId" | "quantity" | "createdBy"
+> & {
+    updatedBy?: string | null;
+};
+
 export type CreateAddOnJSON = z.infer<typeof CreateAddOnSchema>;
 export type CreateAddOnSVC = CreateAddOnJSON;
 export type CreateAddOnREPO = Pick<
@@ -127,7 +138,7 @@ export type ProductResponse = {
 
 export type BundleProductResponse = {
     product: ProductResponseDTO;
-    components: BundleProductComponentDTO[];
+    components: BundleProductComponentResponseDTO[];
 };
 
 export type AddOnsListResponse = {

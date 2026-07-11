@@ -1,152 +1,34 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-
-const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const productId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const addOnId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const attachmentId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-
-const now = new Date("2026-07-11T12:00:00.000Z");
-
-const organization = { id: organizationId, name: "Demo Org" };
-
-const product = {
-    id: productId,
-    organizationId,
-    categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
-    name: "Burger",
-    price: 100,
-    discount: 0,
-    imagePath: null,
-    productType: "single" as const,
-    status: "active" as const,
-    createdBy: userId,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-};
-
-const addOn = {
-    id: addOnId,
-    organizationId,
-    name: "Extra Cheese",
-    price: 20,
-    discount: 0,
-    status: "active" as const,
-    createdBy: userId,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-};
-
-const attachmentResponse: {
-    id: string;
-    organizationId: string;
-    productId: string;
-    addOnId: string;
-    selectionCap: number;
-    status: "active" | "inactive";
-    createdBy: string;
-    updatedBy: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-    addOn: typeof addOn;
-} = {
-    id: attachmentId,
-    organizationId,
-    productId,
-    addOnId,
-    selectionCap: 1,
-    status: "active",
-    createdBy: userId,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
     addOn,
-};
-
-const getOrganizationByIdForUser = mock(async () => organization);
-const addOnNameExistsInOrganization = mock(async () => false);
-const createAddOnRepo = mock(async (data: typeof addOn) => data);
-const getAddOnById = mock(async () => addOn);
-const updateAddOnRepo = mock(async (data: typeof addOn) => data);
-const getProductById = mock(async () => product);
-const productAddOnAttachmentExists = mock(async () => false);
-const createProductAddOnAttachmentRepo = mock(async (data: {
-    id: string;
-    organizationId: string;
-    productId: string;
-    addOnId: string;
-    selectionCap: number;
-    status: "active" | "inactive";
-    createdBy: string;
-}) => ({
-    id: data.id,
-    organizationId: data.organizationId,
-    productId: data.productId,
-    addOnId: data.addOnId,
-    selectionCap: data.selectionCap,
-    status: data.status,
-    createdBy: data.createdBy,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-}));
-const getProductAddOnAttachmentById = mock(async () => attachmentResponse);
-const updateProductAddOnAttachmentRepo = mock(async (data: {
-    id: string;
-    selectionCap: number;
-    status: "active" | "inactive";
-}) => ({
-    id: data.id,
-    organizationId,
-    productId,
     addOnId,
-    selectionCap: data.selectionCap,
-    status: data.status,
-    createdBy: userId,
-    updatedBy: userId,
-    createdAt: now,
-    updatedAt: now,
-}));
-const getSelectableProductAddOnAttachmentsByOrganizationId = mock(async () => [attachmentResponse]);
-const getActiveAddOnsByOrganizationId = mock(async () => [addOn]);
-const getActiveProductsByOrganizationId = mock(async () => [product]);
-const countAttachmentsByAddOnId = mock(async () => 0);
-const countSaleItemAddOnsByAddOnId = mock(async () => 0);
-const deleteAddOnRepo = mock(async () => addOn);
-
-mock.module("@/modules/tenant/organization/organization.repository", () => ({
-    getOrganizationByIdForUser,
-}));
-
-mock.module("@/services/storage", () => ({
-    deleteObject: mock(async () => undefined),
-    generateSignedUrl: mock(async () => null),
-}));
-
-mock.module("./catalog.repository", () => ({
     addOnNameExistsInOrganization,
-    createAddOn: createAddOnRepo,
-    getAddOnById,
-    updateAddOn: updateAddOnRepo,
-    getProductById,
-    productAddOnAttachmentExists,
-    createProductAddOnAttachment: createProductAddOnAttachmentRepo,
-    getProductAddOnAttachmentById,
-    updateProductAddOnAttachment: updateProductAddOnAttachmentRepo,
-    getSelectableProductAddOnAttachmentsByOrganizationId,
-    getActiveAddOnsByOrganizationId,
-    getActiveProductsByOrganizationId,
-    getAddOnsByOrganizationId: mock(async () => [addOn]),
-    getProductAddOnAttachmentsByProductId: mock(async () => [attachmentResponse]),
+    attachmentId,
+    attachmentResponse,
+    catalogService,
+    countActiveBundlesByComponentAddOnId,
+    countActiveBundlesByProductAddOnPair,
     countAttachmentsByAddOnId,
     countSaleItemAddOnsByAddOnId,
-    deleteAddOn: deleteAddOnRepo,
-    deleteProductAddOnAttachment: mock(async () => attachmentResponse),
-}));
-
-const catalogService = await import("./catalog.service");
+    createAddOnRepo,
+    createProductAddOnAttachmentRepo,
+    deleteAddOnRepo,
+    getActiveAddOnsByOrganizationId,
+    getActiveProductsByOrganizationId,
+    getAddOnById,
+    getOrganizationByIdForUser,
+    getProductAddOnAttachmentById,
+    getProductById,
+    getSelectableProductAddOnAttachmentsByOrganizationId,
+    organization,
+    organizationId,
+    product,
+    productAddOnAttachmentExists,
+    productId,
+    updateAddOnRepo,
+    updateProductAddOnAttachmentRepo,
+    userId,
+} from "./catalog.service.test-harness";
 
 describe("Add-On catalog service", () => {
     beforeEach(() => {
@@ -165,6 +47,8 @@ describe("Add-On catalog service", () => {
         getActiveProductsByOrganizationId.mockClear();
         countAttachmentsByAddOnId.mockClear();
         countSaleItemAddOnsByAddOnId.mockClear();
+        countActiveBundlesByComponentAddOnId.mockClear();
+        countActiveBundlesByProductAddOnPair.mockClear();
         deleteAddOnRepo.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
@@ -178,9 +62,20 @@ describe("Add-On catalog service", () => {
         getActiveProductsByOrganizationId.mockResolvedValue([product]);
         countAttachmentsByAddOnId.mockResolvedValue(0);
         countSaleItemAddOnsByAddOnId.mockResolvedValue(0);
+        countActiveBundlesByComponentAddOnId.mockResolvedValue(0);
+        countActiveBundlesByProductAddOnPair.mockResolvedValue(0);
         deleteAddOnRepo.mockResolvedValue(addOn);
         createAddOnRepo.mockImplementation(async (data) => data);
         updateAddOnRepo.mockImplementation(async (data) => data);
+        updateProductAddOnAttachmentRepo.mockImplementation(async (data) => ({
+            ...attachmentResponse,
+            selectionCap: data.selectionCap,
+            status: data.status,
+            createdBy: userId,
+            updatedBy: userId,
+            createdAt: attachmentResponse.createdAt,
+            updatedAt: attachmentResponse.updatedAt,
+        }));
     });
 
     test("creates an add-on with trusted catalog fields", async () => {

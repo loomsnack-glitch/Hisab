@@ -6,7 +6,6 @@ import {
     type CategoriesListResponse,
     type CategoryResponse,
     type CreateAddOnSVC,
-    type CreateBundleProductComponentREPO,
     type CreateBundleProductSVC,
     type CreateCategorySVC,
     type CreateProductAddOnAttachmentSVC,
@@ -565,6 +564,21 @@ export const updateProduct = async (
         }
     }
 
+    if (existingProduct.status === "active" && nextStatus === "inactive") {
+        const activeBundleCount = await catalogRepository.countActiveBundlesByComponentProductId(
+            organizationId,
+            productId,
+        );
+        if (activeBundleCount > 0) {
+            return {
+                status: "error",
+                message: "Product cannot be inactivated while it is used by an active bundle",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
     const product = await catalogRepository.updateProduct({
         id: productId,
         organizationId,
@@ -648,15 +662,106 @@ export const deleteProduct = async (
     };
 };
 
+type BundleComponentAddOnInput = {
+    addOnId: string;
+    quantity: number;
+};
+
 type BundleComponentInput = {
     productId: string;
     quantity: number;
+    addOns?: BundleComponentAddOnInput[];
+};
+
+type ValidatedBundleComponent = {
+    productId: string;
+    quantity: number;
+    addOns: BundleComponentAddOnInput[];
+};
+
+const buildBundleComponentAddOnSignature = (addOns: BundleComponentAddOnInput[]) => {
+    if (addOns.length === 0) {
+        return "";
+    }
+
+    return [...addOns]
+        .sort((left, right) => left.addOnId.localeCompare(right.addOnId))
+        .map((addOn) => `${addOn.addOnId}:${addOn.quantity}`)
+        .join("|");
+};
+
+const buildBundleComponentSignature = (component: ValidatedBundleComponent) =>
+    `${component.productId}::${buildBundleComponentAddOnSignature(component.addOns)}`;
+
+const normalizeBundleComponentAddOns = (
+    addOns: BundleComponentAddOnInput[] | undefined,
+):
+    | { error: ServiceResponse<null>; addOns?: undefined }
+    | { error?: undefined; addOns: BundleComponentAddOnInput[] } => {
+    const selectedAddOns = (addOns ?? []).map((addOn) => ({
+        addOnId: addOn.addOnId,
+        quantity: Number(addOn.quantity),
+    }));
+
+    const seenAddOnIds = new Set<string>();
+    for (const addOn of selectedAddOns) {
+        if (!Number.isInteger(addOn.quantity) || addOn.quantity < 1) {
+            return {
+                error: {
+                    status: "error",
+                    message: "Bundle add-on quantity must be a whole number of at least 1",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        if (seenAddOnIds.has(addOn.addOnId)) {
+            return {
+                error: {
+                    status: "error",
+                    message: "Duplicate add-ons are not allowed on the same bundle product component",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        seenAddOnIds.add(addOn.addOnId);
+    }
+
+    return {
+        addOns: [...selectedAddOns].sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
+    };
+};
+
+const mergeIdenticalBundleComponents = (
+    components: ValidatedBundleComponent[],
+): ValidatedBundleComponent[] => {
+    const mergedBySignature = new Map<string, ValidatedBundleComponent>();
+
+    for (const component of components) {
+        const signature = buildBundleComponentSignature(component);
+        const existing = mergedBySignature.get(signature);
+
+        if (existing) {
+            mergedBySignature.set(signature, {
+                ...existing,
+                quantity: existing.quantity + component.quantity,
+            });
+            continue;
+        }
+
+        mergedBySignature.set(signature, component);
+    }
+
+    return [...mergedBySignature.values()];
 };
 
 const validateBundleComponents = async (
     organizationId: string,
     components: BundleComponentInput[],
-): Promise<ServiceResponse<null> | { status: "success"; components: BundleComponentInput[] }> => {
+): Promise<ServiceResponse<null> | { status: "success"; components: ValidatedBundleComponent[] }> => {
     if (components.length === 0) {
         return {
             status: "error",
@@ -665,6 +770,8 @@ const validateBundleComponents = async (
             code: STATUS_CODES.BAD_REQUEST,
         };
     }
+
+    const validatedComponents: ValidatedBundleComponent[] = [];
 
     for (const component of components) {
         const product = await getProductForOrganization(organizationId, component.productId);
@@ -694,25 +801,134 @@ const validateBundleComponents = async (
                 code: STATUS_CODES.BAD_REQUEST,
             };
         }
+
+        const normalizedAddOns = normalizeBundleComponentAddOns(component.addOns);
+        if (normalizedAddOns.error) {
+            return normalizedAddOns.error;
+        }
+
+        for (const addOn of normalizedAddOns.addOns) {
+            const attachment = await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+                organizationId,
+                component.productId,
+                addOn.addOnId,
+            );
+
+            if (!attachment) {
+                return {
+                    status: "error",
+                    message: "Bundle add-ons must use an active product add-on attachment",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                };
+            }
+
+            if (addOn.quantity > attachment.selectionCap) {
+                return {
+                    status: "error",
+                    message: "Bundle add-on quantity exceeds the add-on selection cap",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                };
+            }
+        }
+
+        validatedComponents.push({
+            productId: component.productId,
+            quantity: Number(component.quantity),
+            addOns: normalizedAddOns.addOns,
+        });
     }
 
-    return { status: "success", components };
+    return {
+        status: "success",
+        components: mergeIdenticalBundleComponents(validatedComponents),
+    };
 };
 
-const toBundleComponentRepos = (
+const loadBundleComponentsWithAddOns = async (
+    organizationId: string,
+    bundleProductId: string,
+    tx?: Bun.TransactionSQL,
+) => {
+    const components = await catalogRepository.getBundleProductComponentsByBundleProductId(
+        organizationId,
+        bundleProductId,
+        tx,
+    );
+    const addOns = await catalogRepository.getBundleProductComponentAddOnsByComponentIds(
+        organizationId,
+        components.map((component) => component.id),
+        tx,
+    );
+    const addOnsByComponentId = new Map<string, typeof addOns>();
+
+    for (const addOn of addOns) {
+        const existing = addOnsByComponentId.get(addOn.bundleProductComponentId) ?? [];
+        existing.push(addOn);
+        addOnsByComponentId.set(addOn.bundleProductComponentId, existing);
+    }
+
+    return components.map((component) => ({
+        ...component,
+        addOns: addOnsByComponentId.get(component.id) ?? [],
+    }));
+};
+
+const persistBundleComponents = async (
     organizationId: string,
     bundleProductId: string,
     userId: string,
-    components: BundleComponentInput[],
-): CreateBundleProductComponentREPO[] => {
-    return components.map((component) => ({
-        id: crypto.randomUUID(),
-        organizationId,
-        bundleProductId,
-        componentProductId: component.productId,
-        quantity: component.quantity,
-        createdBy: userId,
-    }));
+    components: ValidatedBundleComponent[],
+    tx: Bun.TransactionSQL,
+) => {
+    const createdComponents = [];
+
+    for (const component of components) {
+        const row = await catalogRepository.createBundleProductComponent(
+            {
+                id: crypto.randomUUID(),
+                organizationId,
+                bundleProductId,
+                componentProductId: component.productId,
+                quantity: component.quantity,
+                createdBy: userId,
+            },
+            tx,
+        );
+
+        if (!row) {
+            throw new Error("Failed to create bundle product component");
+        }
+
+        const createdAddOns = [];
+        for (const addOn of component.addOns) {
+            const addOnRow = await catalogRepository.createBundleProductComponentAddOn(
+                {
+                    id: crypto.randomUUID(),
+                    organizationId,
+                    bundleProductComponentId: row.id,
+                    addOnId: addOn.addOnId,
+                    quantity: addOn.quantity,
+                    createdBy: userId,
+                },
+                tx,
+            );
+
+            if (!addOnRow) {
+                throw new Error("Failed to create bundle product component add-on");
+            }
+
+            createdAddOns.push(addOnRow);
+        }
+
+        createdComponents.push({
+            ...row,
+            addOns: createdAddOns,
+        });
+    }
+
+    return createdComponents;
 };
 
 export const createBundleProduct = async (
@@ -761,7 +977,7 @@ export const createBundleProduct = async (
 
     const bundleProductId = crypto.randomUUID();
     let createdProduct: ProductDTO | null = null;
-    let createdComponents: Awaited<ReturnType<typeof catalogRepository.getBundleProductComponentsByBundleProductId>> = [];
+    let createdComponents: Awaited<ReturnType<typeof loadBundleComponentsWithAddOns>> = [];
 
     try {
         await pg.begin(async (tx) => {
@@ -785,19 +1001,13 @@ export const createBundleProduct = async (
                 throw new Error("Failed to create bundle product");
             }
 
-            createdComponents = [];
-            for (const component of toBundleComponentRepos(
+            createdComponents = await persistBundleComponents(
                 organizationId,
                 bundleProductId,
                 userId,
                 validatedComponents.components,
-            )) {
-                const row = await catalogRepository.createBundleProductComponent(component, tx);
-                if (!row) {
-                    throw new Error("Failed to create bundle product component");
-                }
-                createdComponents.push(row);
-            }
+                tx,
+            );
         });
     } catch {
         return {
@@ -853,10 +1063,7 @@ export const getBundleProductDetails = async (
         };
     }
 
-    const components = await catalogRepository.getBundleProductComponentsByBundleProductId(
-        organizationId,
-        productId,
-    );
+    const components = await loadBundleComponentsWithAddOns(organizationId, productId);
 
     return {
         status: "success",
@@ -933,7 +1140,7 @@ export const updateBundleProduct = async (
         }
     }
 
-    let nextComponents: BundleComponentInput[] | null = null;
+    let nextComponents: ValidatedBundleComponent[] | null = null;
     if (bundleData.components !== undefined) {
         const validatedComponents = await validateBundleComponents(organizationId, bundleData.components);
         if (validatedComponents.status === "error") {
@@ -943,10 +1150,7 @@ export const updateBundleProduct = async (
     }
 
     let updatedProduct: ProductDTO | null = null;
-    let components = await catalogRepository.getBundleProductComponentsByBundleProductId(
-        organizationId,
-        productId,
-    );
+    let components = await loadBundleComponentsWithAddOns(organizationId, productId);
 
     try {
         await pg.begin(async (tx) => {
@@ -975,19 +1179,13 @@ export const updateBundleProduct = async (
                     productId,
                     tx,
                 );
-                components = [];
-                for (const component of toBundleComponentRepos(
+                components = await persistBundleComponents(
                     organizationId,
                     productId,
                     userId,
                     nextComponents,
-                )) {
-                    const row = await catalogRepository.createBundleProductComponent(component, tx);
-                    if (!row) {
-                        throw new Error("Failed to update bundle product components");
-                    }
-                    components.push(row);
-                }
+                    tx,
+                );
             }
         });
     } catch {
@@ -1196,6 +1394,21 @@ export const updateAddOn = async (
             return {
                 status: "error",
                 message: "Add-on with the same name already exists in this organization",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
+    if (existingAddOn.status === "active" && nextStatus === "inactive") {
+        const activeBundleCount = await catalogRepository.countActiveBundlesByComponentAddOnId(
+            organizationId,
+            addOnId,
+        );
+        if (activeBundleCount > 0) {
+            return {
+                status: "error",
+                message: "Add-on cannot be inactivated while it is used by an active bundle",
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };
@@ -1480,12 +1693,50 @@ export const updateProductAddOnAttachment = async (
         };
     }
 
+    const nextSelectionCap = attachmentData.selectionCap ?? existingAttachment.selectionCap;
+    const nextStatus = attachmentData.status ?? existingAttachment.status;
+
+    if (existingAttachment.status === "active" && nextStatus === "inactive") {
+        const activeBundleCount = await catalogRepository.countActiveBundlesByProductAddOnPair(
+            organizationId,
+            productId,
+            existingAttachment.addOnId,
+        );
+        if (activeBundleCount > 0) {
+            return {
+                status: "error",
+                message: "Product add-on attachment cannot be deactivated while it is used by an active bundle",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
+    if (existingAttachment.status === "active"
+        && nextStatus === "active"
+        && nextSelectionCap < existingAttachment.selectionCap) {
+        const invalidatedBundleCount = await catalogRepository.countActiveBundlesByProductAddOnPairAboveQuantity(
+            organizationId,
+            productId,
+            existingAttachment.addOnId,
+            nextSelectionCap,
+        );
+        if (invalidatedBundleCount > 0) {
+            return {
+                status: "error",
+                message: "Product add-on attachment selection cap cannot be reduced below quantities used by active bundles",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
     const updated = await catalogRepository.updateProductAddOnAttachment({
         id: attachmentId,
         organizationId,
         productId,
-        selectionCap: attachmentData.selectionCap ?? existingAttachment.selectionCap,
-        status: attachmentData.status ?? existingAttachment.status,
+        selectionCap: nextSelectionCap,
+        status: nextStatus,
         updatedBy: userId,
     });
 
@@ -1553,6 +1804,20 @@ export const deleteProductAddOnAttachment = async (
             message: "Product add-on attachment not found",
             data: null,
             code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    const activeBundleCount = await catalogRepository.countActiveBundlesByProductAddOnPair(
+        organizationId,
+        productId,
+        existingAttachment.addOnId,
+    );
+    if (activeBundleCount > 0) {
+        return {
+            status: "error",
+            message: "Product add-on attachment cannot be deleted while it is used by an active bundle",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
         };
     }
 

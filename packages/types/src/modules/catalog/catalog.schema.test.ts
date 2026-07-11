@@ -90,6 +90,32 @@ describe("Bundle Product catalog contracts", () => {
         }
     });
 
+    test("create bundle accepts parent-scoped add-ons under product components", () => {
+        const result = CreateBundleProductSchema.safeParse({
+            categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            name: "Burger Combo",
+            price: 99,
+            components: [
+                {
+                    productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    quantity: 1,
+                    addOns: [
+                        {
+                            addOnId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                            quantity: 1,
+                        },
+                    ],
+                },
+            ],
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.components[0]?.addOns).toHaveLength(1);
+            expect(result.data.components[0]?.addOns?.[0]?.quantity).toBe(1);
+        }
+    });
+
     test("rejects bundle create without product components", () => {
         const result = CreateBundleProductSchema.safeParse({
             categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
@@ -110,6 +136,28 @@ describe("Bundle Product catalog contracts", () => {
                 {
                     productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
                     quantity: 1.5,
+                },
+            ],
+        });
+
+        expect(result.success).toBe(false);
+    });
+
+    test("rejects fractional nested add-on quantity", () => {
+        const result = CreateBundleProductSchema.safeParse({
+            categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            name: "Burger Combo",
+            price: 99,
+            components: [
+                {
+                    productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    quantity: 1,
+                    addOns: [
+                        {
+                            addOnId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                            quantity: 1.5,
+                        },
+                    ],
                 },
             ],
         });

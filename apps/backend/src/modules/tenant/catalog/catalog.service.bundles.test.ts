@@ -1,153 +1,49 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-
-const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const categoryId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
-const burgerId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const coffeeId = "11111111-1111-4111-8111-111111111111";
-const bundleId = "22222222-2222-4222-8222-222222222222";
-const otherBundleId = "33333333-3333-4333-8333-333333333333";
-
-const now = new Date("2026-07-12T12:00:00.000Z");
-
-const organization = { id: organizationId, name: "Demo Org" };
-
-const category = {
-    id: categoryId,
-    organizationId,
-    name: "Combos",
-    status: "active" as const,
-    createdBy: userId,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-};
-
-const burger = {
-    id: burgerId,
-    organizationId,
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
+    begin,
+    burger,
+    burgerId,
+    bundleId,
+    catalogService,
+    category,
     categoryId,
-    name: "Burger",
-    price: 80,
-    discount: 0,
-    imagePath: null,
-    productType: "single" as const,
-    status: "active" as const,
-    createdBy: userId,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-};
-
-const coffee = {
-    id: coffeeId,
-    organizationId,
-    categoryId,
-    name: "Cold Coffee",
-    price: 40,
-    discount: 0,
-    imagePath: null,
-    productType: "single" as const,
-    status: "active" as const,
-    createdBy: userId,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-};
-
-const existingBundle = {
-    id: otherBundleId,
-    organizationId,
-    categoryId,
-    name: "Existing Bundle",
-    price: 99,
-    discount: 0,
-    imagePath: null,
-    productType: "bundle" as const,
-    status: "active" as const,
-    createdBy: userId,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-};
-
-const getOrganizationByIdForUser = mock(async () => organization);
-const getCategoryById = mock(async () => category);
-const productNameExistsInCategory = mock(async () => false);
-const getProductById = mock(async (_organizationId: string, productId: string) => {
-    if (productId === burgerId) return burger;
-    if (productId === coffeeId) return coffee;
-    if (productId === otherBundleId) return existingBundle;
-    if (productId === bundleId) {
-        return {
-            ...existingBundle,
-            id: bundleId,
-            name: "Burger Combo",
-        };
-    }
-    return null;
-});
-const createProductRepo = mock(async (data: typeof burger) => data);
-const updateProductRepo = mock(async (data: typeof burger) => data);
-const createBundleProductComponentRepo = mock(async (data: {
-    id: string;
-    organizationId: string;
-    bundleProductId: string;
-    componentProductId: string;
-    quantity: number;
-    createdBy: string;
-}) => ({
-    id: data.id,
-    organizationId: data.organizationId,
-    bundleProductId: data.bundleProductId,
-    componentProductId: data.componentProductId,
-    quantity: data.quantity,
-    createdBy: data.createdBy,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-}));
-const getBundleProductComponentsByBundleProductId = mock(async () => [
-    {
-        id: "44444444-4444-4444-8444-444444444444",
-        organizationId,
-        bundleProductId: bundleId,
-        componentProductId: burgerId,
-        quantity: 1,
-        createdBy: userId,
-        updatedBy: null,
-        createdAt: now,
-        updatedAt: now,
-    },
-]);
-const deleteBundleProductComponentsByBundleProductId = mock(async () => undefined);
-const begin = mock(async (callback: (tx: unknown) => Promise<void>) => callback({}));
-
-mock.module("@/modules/tenant/organization/organization.repository", () => ({
-    getOrganizationByIdForUser,
-}));
-
-mock.module("@/services/storage", () => ({
-    deleteObject: mock(async () => undefined),
-    generateSignedUrl: mock(async () => null),
-}));
-
-mock.module("@/config/db", () => ({
-    pg: { begin },
-}));
-
-mock.module("./catalog.repository", () => ({
-    getCategoryById,
-    productNameExistsInCategory,
-    getProductById,
-    createProduct: createProductRepo,
-    updateProduct: updateProductRepo,
-    createBundleProductComponent: createBundleProductComponentRepo,
-    getBundleProductComponentsByBundleProductId,
+    cheeseAddOn,
+    cheeseAddOnId,
+    cheeseAttachment,
+    cheeseAttachmentId,
+    coffee,
+    coffeeId,
+    componentId,
+    countActiveBundlesByComponentAddOnId,
+    countActiveBundlesByComponentProductId,
+    countActiveBundlesByProductAddOnPair,
+    countActiveBundlesByProductAddOnPairAboveQuantity,
+    createBundleProductComponentAddOnRepo,
+    createBundleProductComponentRepo,
+    createProductRepo,
+    deleteProductAddOnAttachmentRepo,
     deleteBundleProductComponentsByBundleProductId,
-}));
-
-const catalogService = await import("./catalog.service");
+    existingBundle,
+    getAddOnById,
+    getBundleProductComponentAddOnsByComponentIds,
+    getBundleProductComponentsByBundleProductId,
+    getCategoryById,
+    getOrganizationByIdForUser,
+    getProductAddOnAttachmentById,
+    getProductById,
+    getSelectableProductAddOnAttachmentByProductAndAddOn,
+    now,
+    organization,
+    organizationId,
+    otherBundleId,
+    productNameExistsInCategory,
+    sauceAddOnId,
+    sauceAttachment,
+    updateAddOnRepo,
+    updateProductAddOnAttachmentRepo,
+    updateProductRepo,
+    userId,
+} from "./catalog.service.test-harness";
 
 describe("Bundle Product catalog service", () => {
     beforeEach(() => {
@@ -158,8 +54,19 @@ describe("Bundle Product catalog service", () => {
         createProductRepo.mockClear();
         updateProductRepo.mockClear();
         createBundleProductComponentRepo.mockClear();
+        createBundleProductComponentAddOnRepo.mockClear();
         getBundleProductComponentsByBundleProductId.mockClear();
+        getBundleProductComponentAddOnsByComponentIds.mockClear();
         deleteBundleProductComponentsByBundleProductId.mockClear();
+        getSelectableProductAddOnAttachmentByProductAndAddOn.mockClear();
+        countActiveBundlesByComponentProductId.mockClear();
+        countActiveBundlesByComponentAddOnId.mockClear();
+        countActiveBundlesByProductAddOnPair.mockClear();
+        countActiveBundlesByProductAddOnPairAboveQuantity.mockClear();
+        updateAddOnRepo.mockClear();
+        getProductAddOnAttachmentById.mockClear();
+        updateProductAddOnAttachmentRepo.mockClear();
+        deleteProductAddOnAttachmentRepo.mockClear();
         begin.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
@@ -169,7 +76,7 @@ describe("Bundle Product catalog service", () => {
         updateProductRepo.mockImplementation(async (data) => ({
             ...burger,
             ...data,
-            productType: "bundle" as const,
+            productType: data.productType ?? "single",
             createdBy: userId,
             updatedBy: userId,
             createdAt: now,
@@ -190,6 +97,40 @@ describe("Bundle Product catalog service", () => {
             }
             return null;
         });
+        getSelectableProductAddOnAttachmentByProductAndAddOn.mockImplementation(
+            async (_organizationId: string, productId: string, addOnId: string) => {
+                if (productId === burgerId && addOnId === cheeseAddOnId) return cheeseAttachment;
+                if (productId === burgerId && addOnId === sauceAddOnId) return sauceAttachment;
+                return null;
+            },
+        );
+        getBundleProductComponentsByBundleProductId.mockResolvedValue([
+            {
+                id: componentId,
+                organizationId,
+                bundleProductId: bundleId,
+                componentProductId: burgerId,
+                quantity: 1,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+            },
+        ]);
+        getBundleProductComponentAddOnsByComponentIds.mockResolvedValue([]);
+        countActiveBundlesByComponentProductId.mockResolvedValue(0);
+        countActiveBundlesByComponentAddOnId.mockResolvedValue(0);
+        countActiveBundlesByProductAddOnPair.mockResolvedValue(0);
+        countActiveBundlesByProductAddOnPairAboveQuantity.mockResolvedValue(0);
+        getAddOnById.mockResolvedValue(cheeseAddOn);
+        updateAddOnRepo.mockImplementation(async (data) => data);
+        getProductAddOnAttachmentById.mockResolvedValue(cheeseAttachment);
+        updateProductAddOnAttachmentRepo.mockImplementation(async (data) => ({
+            ...cheeseAttachment,
+            selectionCap: data.selectionCap,
+            status: data.status,
+            updatedBy: userId,
+        }));
     });
 
     test("creates a typed bundle product with top-level product components", async () => {
@@ -220,6 +161,32 @@ describe("Bundle Product catalog service", () => {
         );
     });
 
+    test("creates a bundle with one product plus nested add-ons", async () => {
+        const response = await catalogService.createBundleProduct(userId, organizationId, {
+            categoryId,
+            name: "Cheese Burger Combo",
+            price: 99,
+            components: [
+                {
+                    productId: burgerId,
+                    quantity: 1,
+                    addOns: [{ addOnId: cheeseAddOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createBundleProductComponentRepo).toHaveBeenCalledTimes(1);
+        expect(createBundleProductComponentAddOnRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                addOnId: cheeseAddOnId,
+                quantity: 1,
+            }),
+            expect.anything(),
+        );
+        expect(response.data?.components[0]?.addOns).toHaveLength(1);
+    });
+
     test("rejects bundle creation without product components", async () => {
         const response = await catalogService.createBundleProduct(userId, organizationId, {
             categoryId,
@@ -248,7 +215,68 @@ describe("Bundle Product catalog service", () => {
         expect(createProductRepo).not.toHaveBeenCalled();
     });
 
-    test("preserves repeated product components for future distinct bundle configurations", async () => {
+    test("rejects inactive product components during authoring", async () => {
+        getProductById.mockImplementation(async (_organizationId: string, productId: string) => {
+            if (productId === burgerId) return { ...burger, status: "inactive" as const };
+            return null;
+        });
+
+        const response = await catalogService.createBundleProduct(userId, organizationId, {
+            categoryId,
+            name: "Inactive Product Bundle",
+            price: 99,
+            components: [{ productId: burgerId, quantity: 1 }],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toContain("active products");
+        expect(createProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects bundle add-ons without an active product attachment", async () => {
+        getSelectableProductAddOnAttachmentByProductAndAddOn.mockResolvedValue(null);
+
+        const response = await catalogService.createBundleProduct(userId, organizationId, {
+            categoryId,
+            name: "Invalid Add-On Bundle",
+            price: 99,
+            components: [
+                {
+                    productId: burgerId,
+                    quantity: 1,
+                    addOns: [{ addOnId: cheeseAddOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toContain("active product add-on attachment");
+        expect(createProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects bundle add-on quantity above selection cap", async () => {
+        const response = await catalogService.createBundleProduct(userId, organizationId, {
+            categoryId,
+            name: "Over Cap Bundle",
+            price: 99,
+            components: [
+                {
+                    productId: burgerId,
+                    quantity: 1,
+                    addOns: [{ addOnId: cheeseAddOnId, quantity: 3 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toContain("selection cap");
+        expect(createProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("merges identical repeated components by quantity", async () => {
         const response = await catalogService.createBundleProduct(userId, organizationId, {
             categoryId,
             name: "Double Burger Combo",
@@ -260,15 +288,59 @@ describe("Bundle Product catalog service", () => {
         });
 
         expect(response.status).toBe("success");
-        expect(createBundleProductComponentRepo).toHaveBeenCalledTimes(2);
+        expect(createBundleProductComponentRepo).toHaveBeenCalledTimes(1);
         expect(createBundleProductComponentRepo.mock.calls[0]?.[0]).toMatchObject({
             componentProductId: burgerId,
-            quantity: 1,
+            quantity: 2,
         });
-        expect(createBundleProductComponentRepo.mock.calls[1]?.[0]).toMatchObject({
+    });
+
+    test("keeps same-product components separate when add-on shapes differ", async () => {
+        const response = await catalogService.createBundleProduct(userId, organizationId, {
+            categoryId,
+            name: "Mixed Burger Bundle",
+            price: 150,
+            components: [
+                { productId: burgerId, quantity: 1 },
+                {
+                    productId: burgerId,
+                    quantity: 1,
+                    addOns: [{ addOnId: cheeseAddOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createBundleProductComponentRepo).toHaveBeenCalledTimes(2);
+        expect(createBundleProductComponentAddOnRepo).toHaveBeenCalledTimes(1);
+    });
+
+    test("merges identical configured components including nested add-ons", async () => {
+        const response = await catalogService.createBundleProduct(userId, organizationId, {
+            categoryId,
+            name: "Twin Cheese Burgers",
+            price: 160,
+            components: [
+                {
+                    productId: burgerId,
+                    quantity: 1,
+                    addOns: [{ addOnId: cheeseAddOnId, quantity: 1 }],
+                },
+                {
+                    productId: burgerId,
+                    quantity: 1,
+                    addOns: [{ addOnId: cheeseAddOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createBundleProductComponentRepo).toHaveBeenCalledTimes(1);
+        expect(createBundleProductComponentRepo.mock.calls[0]?.[0]).toMatchObject({
             componentProductId: burgerId,
-            quantity: 1,
+            quantity: 2,
         });
+        expect(createBundleProductComponentAddOnRepo).toHaveBeenCalledTimes(1);
     });
 
     test("retires a bundle product through status update", async () => {
@@ -292,7 +364,11 @@ describe("Bundle Product catalog service", () => {
             name: "Burger Combo Plus",
             price: 109,
             components: [
-                { productId: burgerId, quantity: 1 },
+                {
+                    productId: burgerId,
+                    quantity: 1,
+                    addOns: [{ addOnId: cheeseAddOnId, quantity: 1 }],
+                },
                 { productId: coffeeId, quantity: 2 },
             ],
         });
@@ -302,5 +378,165 @@ describe("Bundle Product catalog service", () => {
         expect(response.data?.product.price).toBe(109);
         expect(deleteBundleProductComponentsByBundleProductId).toHaveBeenCalled();
         expect(createBundleProductComponentRepo).toHaveBeenCalled();
+        expect(createBundleProductComponentAddOnRepo).toHaveBeenCalled();
+    });
+
+    test("blocks product inactivation while an active bundle depends on it", async () => {
+        countActiveBundlesByComponentProductId.mockResolvedValue(1);
+
+        const response = await catalogService.updateProduct(userId, organizationId, burgerId, {
+            status: "inactive",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("used by an active bundle");
+        expect(updateProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("allows product inactivation after dependent active bundles are gone", async () => {
+        countActiveBundlesByComponentProductId.mockResolvedValue(0);
+
+        const response = await catalogService.updateProduct(userId, organizationId, burgerId, {
+            status: "inactive",
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.product.status).toBe("inactive");
+        expect(updateProductRepo).toHaveBeenCalled();
+    });
+
+    test("blocks add-on inactivation while an active bundle depends on it", async () => {
+        countActiveBundlesByComponentAddOnId.mockResolvedValue(1);
+
+        const response = await catalogService.updateAddOn(userId, organizationId, cheeseAddOnId, {
+            status: "inactive",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("used by an active bundle");
+        expect(updateAddOnRepo).not.toHaveBeenCalled();
+    });
+
+    test("allows add-on inactivation after dependent active bundles are gone", async () => {
+        countActiveBundlesByComponentAddOnId.mockResolvedValue(0);
+
+        const response = await catalogService.updateAddOn(userId, organizationId, cheeseAddOnId, {
+            status: "inactive",
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.addOn.status).toBe("inactive");
+        expect(updateAddOnRepo).toHaveBeenCalled();
+    });
+
+    test("blocks attachment deactivation while an active bundle depends on it", async () => {
+        countActiveBundlesByProductAddOnPair.mockResolvedValue(1);
+
+        const response = await catalogService.updateProductAddOnAttachment(
+            userId,
+            organizationId,
+            burgerId,
+            cheeseAttachmentId,
+            { status: "inactive" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("used by an active bundle");
+        expect(updateProductAddOnAttachmentRepo).not.toHaveBeenCalled();
+    });
+
+    test("allows attachment deactivation after dependent active bundles are gone", async () => {
+        countActiveBundlesByProductAddOnPair.mockResolvedValue(0);
+        getProductAddOnAttachmentById
+            .mockResolvedValueOnce(cheeseAttachment)
+            .mockResolvedValueOnce({
+                ...cheeseAttachment,
+                status: "inactive" as const,
+            });
+
+        const response = await catalogService.updateProductAddOnAttachment(
+            userId,
+            organizationId,
+            burgerId,
+            cheeseAttachmentId,
+            { status: "inactive" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.attachment.status).toBe("inactive");
+        expect(updateProductAddOnAttachmentRepo).toHaveBeenCalled();
+    });
+
+    test("blocks attachment selection cap reduction below quantities used by active bundles", async () => {
+        countActiveBundlesByProductAddOnPairAboveQuantity.mockResolvedValue(1);
+
+        const response = await catalogService.updateProductAddOnAttachment(
+            userId,
+            organizationId,
+            burgerId,
+            cheeseAttachmentId,
+            { selectionCap: 1 },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("selection cap cannot be reduced");
+        expect(updateProductAddOnAttachmentRepo).not.toHaveBeenCalled();
+    });
+
+    test("allows attachment selection cap reduction when no active bundle exceeds the next cap", async () => {
+        countActiveBundlesByProductAddOnPairAboveQuantity.mockResolvedValue(0);
+        getProductAddOnAttachmentById
+            .mockResolvedValueOnce(cheeseAttachment)
+            .mockResolvedValueOnce({
+                ...cheeseAttachment,
+                selectionCap: 1,
+            });
+
+        const response = await catalogService.updateProductAddOnAttachment(
+            userId,
+            organizationId,
+            burgerId,
+            cheeseAttachmentId,
+            { selectionCap: 1 },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.attachment.selectionCap).toBe(1);
+        expect(updateProductAddOnAttachmentRepo).toHaveBeenCalled();
+    });
+
+    test("blocks attachment deletion while an active bundle depends on it", async () => {
+        countActiveBundlesByProductAddOnPair.mockResolvedValue(1);
+
+        const response = await catalogService.deleteProductAddOnAttachment(
+            userId,
+            organizationId,
+            burgerId,
+            cheeseAttachmentId,
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("used by an active bundle");
+        expect(deleteProductAddOnAttachmentRepo).not.toHaveBeenCalled();
+    });
+
+    test("allows attachment deletion after dependent active bundles are gone", async () => {
+        countActiveBundlesByProductAddOnPair.mockResolvedValue(0);
+
+        const response = await catalogService.deleteProductAddOnAttachment(
+            userId,
+            organizationId,
+            burgerId,
+            cheeseAttachmentId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.attachment.id).toBe(cheeseAttachmentId);
+        expect(deleteProductAddOnAttachmentRepo).toHaveBeenCalled();
     });
 });
