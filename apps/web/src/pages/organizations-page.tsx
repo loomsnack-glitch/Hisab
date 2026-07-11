@@ -43,9 +43,6 @@ const OrganizationsPage = () => {
 
                         <div className="flex flex-wrap gap-3">
                             <CreateOrganizationDialog />
-                            <Button variant="outline" className="rounded-full" render={<Link to="/dashboard" />}>
-                                Back to dashboard
-                            </Button>
                         </div>
                     </div>
                 </CardContent>

@@ -7,7 +7,6 @@ import {
     ChevronLeft,
     ChevronRight,
     HelpCircle,
-    LayoutDashboard,
     ReceiptText,
     Settings2,
     Store,
@@ -19,6 +18,7 @@ import { Button } from "@repo/ui/components/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { cn } from "@repo/ui/lib/utils";
 
+import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
@@ -40,8 +40,6 @@ type AppSidebarProps = {
         phone?: string;
     };
 };
-
-
 
 export const readSidebarCollapsed = () => {
     if (typeof window === "undefined") {
@@ -74,57 +72,64 @@ const AppSidebar = ({
         [organizationsQuery.data],
     );
 
+    const effectiveOrgId = organizationId || resolveDefaultOrgId(organizations) || "";
+    const homePath = getAuthenticatedHomePath(organizations);
+
     const expandedNavRowClass = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3";
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";
     const collapsedNavRowClass = "relative mx-auto flex h-10 w-10 items-center justify-center";
 
     const mainNavItems = useMemo(() => {
-        return [
-            { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
-            { to: "/organizations", label: "Organizations", icon: Building2, isActive: location.pathname === "/organizations" },
-            ...(organizationId
-                ? [
-                      {
-                          to: `/organizations/${organizationId}/stores`,
-                          label: "Stores",
-                          icon: Store,
-                          isActive: location.pathname === `/organizations/${organizationId}/stores`,
-                      },
-                      {
-                          to: `/organizations/${organizationId}/products`,
-                          label: "Product",
-                          icon: Package2,
-                          isActive: location.pathname === `/organizations/${organizationId}/products`,
-                      },
-                      {
-                          to: `/organizations/${organizationId}/billing`,
-                          label: "Billing",
-                          icon: ReceiptText,
-                          isActive: location.pathname === `/organizations/${organizationId}/billing`,
-                      },
-                  ]
-                : []),
+        const items: Array<{
+            to: string;
+            label: string;
+            icon: typeof Building2;
+            isActive: boolean;
+        }> = [
+            {
+                to: "/organizations",
+                label: "Organizations",
+                icon: Building2,
+                isActive: location.pathname === "/organizations",
+            },
         ];
-    }, [location.pathname, organizationId]);
+
+        if (organizations.length > 0 && effectiveOrgId) {
+            items.push(
+                {
+                    to: `/organizations/${effectiveOrgId}/stores`,
+                    label: "Stores",
+                    icon: Store,
+                    isActive: /\/organizations\/[^/]+\/stores\/?$/.test(location.pathname),
+                },
+                {
+                    to: `/organizations/${effectiveOrgId}/products`,
+                    label: "Product",
+                    icon: Package2,
+                    isActive: /\/organizations\/[^/]+\/products\/?$/.test(location.pathname),
+                },
+                {
+                    to: `/organizations/${effectiveOrgId}/billing`,
+                    label: "Billing",
+                    icon: ReceiptText,
+                    isActive: /\/organizations\/[^/]+\/billing/.test(location.pathname),
+                },
+            );
+        }
+
+        return items;
+    }, [location.pathname, organizations.length, effectiveOrgId]);
 
     const renderNavItem = (item: (typeof mainNavItems)[number], badge?: number) => {
         const Icon = item.icon;
         const collapsed = !isMobile && isCollapsed;
 
-        const checkActive = (routerActive: boolean) => {
-            if ("isActive" in item && typeof item.isActive === "boolean") {
-                return item.isActive;
-            }
-            return routerActive;
-        };
-
         const link = (
             <NavLink
                 to={item.to}
-                end={"end" in item ? item.end : undefined}
                 onClick={onNavigate}
-                className={({ isActive }) => {
-                    const active = checkActive(isActive);
+                className={() => {
+                    const active = item.isActive;
                     return cn(
                         "sidebar-nav-link group rounded-xl text-sm font-medium transition-all duration-200",
                         collapsed
@@ -139,8 +144,8 @@ const AppSidebar = ({
                     );
                 }}
             >
-                {({ isActive }) => {
-                    const active = checkActive(isActive);
+                {() => {
+                    const active = item.isActive;
                     return (
                         <>
                             {collapsed && active ? <span className="sidebar-active-rail" aria-hidden /> : null}
@@ -234,7 +239,7 @@ const AppSidebar = ({
                     )}
                 >
                     <Link
-                        to="/dashboard"
+                        to={homePath}
                         onClick={onNavigate}
                         className={cn(
                             "flex min-w-0 items-center transition-opacity hover:opacity-90",

@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
 import ThemeToggle from "@/components/dashboard/theme-toggle";
 import CreateOrganizationDialog from "@/components/organizations/create-organization-dialog";
+import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import { authKeys, organizationKeys } from "@/lib/query-keys";
 
@@ -105,7 +106,11 @@ const DashboardLayout = () => {
         });
     };
 
-    const activeOrgId = organizationId || localStorage.getItem("hisab_recent_org_id") || starredOrgId || "";
+    const activeOrgId =
+        organizationId ||
+        resolveDefaultOrgId(organizations) ||
+        localStorage.getItem("hisab_recent_org_id") ||
+        "";
 
     const activeOrg = useMemo(() => {
         return organizations.find((org) => org.id === activeOrgId) || organizations.find((org) => org.id === organizationId);
@@ -133,27 +138,26 @@ const DashboardLayout = () => {
     const [hasAttemptedRedirect, setHasAttemptedRedirect] = useState(false);
 
     useEffect(() => {
-        if (hasAttemptedRedirect || organizationsQuery.isPending || organizations.length === 0) {
+        if (hasAttemptedRedirect || organizationsQuery.isPending) {
             return;
         }
 
-        const isAtDashboardOrRoot = location.pathname === "/dashboard" || location.pathname === "/";
         const wasRedirectedThisSession = sessionStorage.getItem("hisab_initial_org_redirected");
+        const isLandingPath =
+            location.pathname === "/" ||
+            location.pathname === "/dashboard" ||
+            location.pathname === "/organizations";
 
-        if (isAtDashboardOrRoot && !wasRedirectedThisSession) {
-            const starredId = localStorage.getItem("hisab_starred_org_id");
-            const recentId = localStorage.getItem("hisab_recent_org_id");
-
-            const targetId = starredId || recentId;
-            if (targetId && organizations.some((org) => org.id === targetId)) {
-                sessionStorage.setItem("hisab_initial_org_redirected", "true");
-                setHasAttemptedRedirect(true);
-                navigate(`/organizations/${targetId}/stores`, { replace: true });
-                return;
+        if (!wasRedirectedThisSession && isLandingPath) {
+            const homePath = getAuthenticatedHomePath(organizations);
+            sessionStorage.setItem("hisab_initial_org_redirected", "true");
+            setHasAttemptedRedirect(true);
+            if (homePath !== location.pathname) {
+                navigate(homePath, { replace: true });
             }
+            return;
         }
 
-        sessionStorage.setItem("hisab_initial_org_redirected", "true");
         setHasAttemptedRedirect(true);
     }, [organizationsQuery.isPending, organizations, location.pathname, navigate, hasAttemptedRedirect]);
 
@@ -171,6 +175,7 @@ const DashboardLayout = () => {
             if (res.status === "success") {
                 clearUser();
                 queryClient.removeQueries({ queryKey: authKeys.me });
+                sessionStorage.removeItem("hisab_initial_org_redirected");
                 toast.success("Logged out successfully");
                 navigate("/login");
             } else {

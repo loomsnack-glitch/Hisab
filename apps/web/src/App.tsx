@@ -6,9 +6,7 @@ import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import BillingPage from "@/pages/billing-page";
-import DashboardPage from "@/pages/dashboard-page";
 import LoginPage from "@/pages/login-page";
-import OrganizationDetailPage from "@/pages/organization-detail-page";
 import OrganizationsPage from "@/pages/organizations-page";
 import PosLoginPage from "@/pages/pos-login-page";
 import PosPage from "@/pages/pos-page";
@@ -78,18 +76,18 @@ const App = () => {
     return (
         <>
             <Routes>
-                <Route path="/" element={<Navigate to={authenticatedUser ? "/dashboard" : "/login"} replace />} />
-                <Route path="/login" element={authenticatedUser ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+                <Route path="/" element={<Navigate to={authenticatedUser ? "/organizations" : "/login"} replace />} />
+                <Route path="/login" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LoginPage />} />
                 <Route
                     path="/register"
-                    element={authenticatedUser ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
+                    element={authenticatedUser ? <Navigate to="/organizations" replace /> : <RegisterPage />}
                 />
                 <Route path="/pos/login" element={<PosLoginPage />} />
                 <Route path="/pos" element={<PosPage />} />
                 <Route
                     element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                 >
-                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/dashboard" element={<Navigate to="/organizations" replace />} />
                     <Route path="/organizations" element={<OrganizationsPage />} />
                     <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
                     <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
