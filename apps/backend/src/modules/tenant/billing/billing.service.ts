@@ -6,8 +6,8 @@ import {
     type CommitSaleSVC,
     type CreateCustomerSVC,
     type CreateDraftSaleSVC,
-    type CreatePaymentREPO,
     type CreatePaymentSVC,
+    type CreateSaleItemAddOnREPO,
     type CreateSaleItemREPO,
     type CustomerDTO,
     type CustomerLedgerResponse,
@@ -44,13 +44,45 @@ const moneyFrom = (value: number | string | null | undefined) => roundMoney(Numb
 const sumMoney = (values: Array<number | string | null | undefined>) =>
     roundMoney(values.reduce((total: number, value) => total + Number(value ?? 0), 0));
 
-const getLineDiscountTotal = (items: Array<{ discountAmount: number | string | null | undefined }>) =>
-    sumMoney(items.map((item) => item.discountAmount));
+const getParentAndAddOnLineDiscountTotal = (
+    items: Array<{
+        discountAmount: number | string | null | undefined;
+        addOns?: Array<{ discountAmount: number | string | null | undefined }>;
+    }>,
+) =>
+    sumMoney([
+        ...items.map((item) => item.discountAmount),
+        ...items.flatMap((item) => (item.addOns ?? []).map((addOn) => addOn.discountAmount)),
+    ]);
+
+const getParentAndAddOnSubtotal = (
+    items: Array<{
+        lineSubtotal: number | string | null | undefined;
+        addOns?: Array<{ lineSubtotal: number | string | null | undefined }>;
+    }>,
+) =>
+    sumMoney([
+        ...items.map((item) => item.lineSubtotal),
+        ...items.flatMap((item) => (item.addOns ?? []).map((addOn) => addOn.lineSubtotal)),
+    ]);
 
 const deriveOrderDiscountAmount = (
     discountTotal: number | string | null | undefined,
     lineDiscountTotal: number | string | null | undefined,
 ) => roundMoney(Math.max(moneyFrom(discountTotal) - moneyFrom(lineDiscountTotal), 0));
+
+const buildConfigurationSignature = (
+    addOns: Array<{ addOnId: string; quantity: number }>,
+) => {
+    if (addOns.length === 0) {
+        return "";
+    }
+
+    return [...addOns]
+        .sort((left, right) => left.addOnId.localeCompare(right.addOnId))
+        .map((addOn) => `${addOn.addOnId}:${addOn.quantity}`)
+        .join("|");
+};
 
 type SalePricingTotals = {
     subtotal: number;
@@ -58,6 +90,11 @@ type SalePricingTotals = {
     orderDiscountAmount: number;
     discountTotal: number;
     grandTotal: number;
+};
+
+type PreparedSaleLine = {
+    item: CreateSaleItemREPO;
+    addOns: CreateSaleItemAddOnREPO[];
 };
 
 const buildSalePricingTotals = (
@@ -181,7 +218,7 @@ const buildSaleDetails = async (
         billingRepository.getSaleItemsBySaleId(saleId, tx),
         billingRepository.getPaymentsBySaleId(saleId, tx),
     ]);
-    const lineDiscountTotal = getLineDiscountTotal(items);
+    const lineDiscountTotal = getParentAndAddOnLineDiscountTotal(items);
 
     return {
         ...sale,
@@ -198,29 +235,33 @@ const prepareSaleItems = async (
     items: SaleItemInput[],
     orderDiscountAmount: number | string | null | undefined,
 ): Promise<
-    | { error: ServiceResponse<null>; items?: undefined; totals?: undefined }
+    | { error: ServiceResponse<null>; lines?: undefined; totals?: undefined }
     | {
         error?: undefined;
-        items: CreateSaleItemREPO[];
+        lines: PreparedSaleLine[];
         totals: SalePricingTotals;
     }
 > => {
-    const seenProductIds = new Set<string>();
-    const preparedItems: CreateSaleItemREPO[] = [];
+    const seenConfigurationKeys = new Set<string>();
+    const preparedLines: PreparedSaleLine[] = [];
 
     for (const item of items) {
-        if (seenProductIds.has(item.productId)) {
+        const selectedAddOns = (item.addOns ?? []).filter((addOn) => Number(addOn.quantity) > 0);
+        const configurationSignature = buildConfigurationSignature(selectedAddOns);
+        const configurationKey = `${item.productId}::${configurationSignature}`;
+
+        if (seenConfigurationKeys.has(configurationKey)) {
             return {
                 error: {
                     status: "error",
-                    message: "Duplicate products are not allowed within the same sale",
+                    message: "Duplicate configured products are not allowed within the same sale",
                     data: null,
                     code: STATUS_CODES.CONFLICT,
                 },
             };
         }
 
-        seenProductIds.add(item.productId);
+        seenConfigurationKeys.add(configurationKey);
 
         const product = await catalogRepository.getProductById(organizationId, item.productId);
         if (!product) {
@@ -234,10 +275,103 @@ const prepareSaleItems = async (
             };
         }
 
-        const quantity = Number(item.quantity);
-        const unitPrice = roundMoney(item.unitPrice ?? moneyFrom(product.price));
-        const lineSubtotal = roundMoney(quantity * unitPrice);
-        const discountAmount = roundMoney(item.discountAmount ?? moneyFrom(product.discount) * quantity);
+        if (product.status !== "active") {
+            return {
+                error: {
+                    status: "error",
+                    message: `Product "${product.name}" is not available for new sale selections`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        const seenAddOnIds = new Set<string>();
+        const preparedAddOns: CreateSaleItemAddOnREPO[] = [];
+        const parentQuantity = Number(item.quantity);
+        const saleItemId = crypto.randomUUID();
+
+        for (const selectedAddOn of selectedAddOns) {
+            if (seenAddOnIds.has(selectedAddOn.addOnId)) {
+                return {
+                    error: {
+                        status: "error",
+                        message: "Duplicate add-ons are not allowed within the same configured product",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            seenAddOnIds.add(selectedAddOn.addOnId);
+
+            const attachment = await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+                organizationId,
+                item.productId,
+                selectedAddOn.addOnId,
+            );
+
+            if (!attachment) {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Add-on is not selectable for product "${product.name}"`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            const quantityPerParent = Number(selectedAddOn.quantity);
+            if (quantityPerParent > attachment.selectionCap) {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Add-on "${attachment.addOn.name}" exceeds the selection cap of ${attachment.selectionCap}`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            const unitPrice = moneyFrom(attachment.addOn.price);
+            const unitDiscount = moneyFrom(attachment.addOn.discount);
+            const totalQuantity = quantityPerParent * parentQuantity;
+            const lineSubtotal = roundMoney(totalQuantity * unitPrice);
+            const discountAmount = roundMoney(totalQuantity * unitDiscount);
+
+            if (discountAmount > lineSubtotal) {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Discount for add-on "${attachment.addOn.name}" cannot exceed the line subtotal`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            preparedAddOns.push({
+                id: crypto.randomUUID(),
+                organizationId,
+                storeId,
+                saleId,
+                saleItemId,
+                addOnId: attachment.addOn.id,
+                quantityPerParent,
+                totalQuantity,
+                addOnNameSnapshot: attachment.addOn.name,
+                unitPriceSnapshot: unitPrice,
+                unitDiscountSnapshot: unitDiscount,
+                discountAmount,
+                lineSubtotal,
+                lineTotal: roundMoney(lineSubtotal - discountAmount),
+            });
+        }
+
+        const unitPrice = moneyFrom(product.price);
+        const lineSubtotal = roundMoney(parentQuantity * unitPrice);
+        const discountAmount = roundMoney(moneyFrom(product.discount) * parentQuantity);
 
         if (discountAmount > lineSubtotal) {
             return {
@@ -250,24 +384,38 @@ const prepareSaleItems = async (
             };
         }
 
-        preparedItems.push({
-            id: crypto.randomUUID(),
-            organizationId,
-            storeId,
-            saleId,
-            productId: product.id,
-            quantity,
-            productNameSnapshot: product.name,
-            unitPriceSnapshot: unitPrice,
-            discountAmount,
-            lineSubtotal,
-            lineTotal: roundMoney(lineSubtotal - discountAmount),
+        preparedLines.push({
+            item: {
+                id: saleItemId,
+                organizationId,
+                storeId,
+                saleId,
+                productId: product.id,
+                quantity: parentQuantity,
+                configurationSignature,
+                productNameSnapshot: product.name,
+                unitPriceSnapshot: unitPrice,
+                discountAmount,
+                lineSubtotal,
+                lineTotal: roundMoney(lineSubtotal - discountAmount),
+            },
+            addOns: preparedAddOns,
         });
     }
 
     const pricingTotals = buildSalePricingTotals(
-        sumMoney(preparedItems.map((item) => item.lineSubtotal)),
-        getLineDiscountTotal(preparedItems),
+        getParentAndAddOnSubtotal(
+            preparedLines.map((line) => ({
+                lineSubtotal: line.item.lineSubtotal,
+                addOns: line.addOns,
+            })),
+        ),
+        getParentAndAddOnLineDiscountTotal(
+            preparedLines.map((line) => ({
+                discountAmount: line.item.discountAmount,
+                addOns: line.addOns,
+            })),
+        ),
         orderDiscountAmount,
     );
 
@@ -283,7 +431,7 @@ const prepareSaleItems = async (
     }
 
     return {
-        items: preparedItems,
+        lines: preparedLines,
         totals: pricingTotals.totals,
     };
 };
@@ -508,10 +656,17 @@ const createDraftSaleInStore = async (
             throw new Error("Failed to create draft sale");
         }
 
-        for (const item of prepared.items) {
-            const createdItem = await billingRepository.createSaleItem(item, tx);
+        for (const line of prepared.lines) {
+            const createdItem = await billingRepository.createSaleItem(line.item, tx);
             if (!createdItem) {
                 throw new Error("Failed to create sale item");
+            }
+
+            for (const addOn of line.addOns) {
+                const createdAddOn = await billingRepository.createSaleItemAddOn(addOn, tx);
+                if (!createdAddOn) {
+                    throw new Error("Failed to create sale item add-on");
+                }
             }
         }
     });
@@ -580,7 +735,7 @@ const updateDraftSaleInStore = async (
         ? (() => {
             const pricingTotals = buildSalePricingTotals(
                 existingSale.subtotal,
-                getLineDiscountTotal(existingSale.items),
+                getParentAndAddOnLineDiscountTotal(existingSale.items),
                 nextOrderDiscountAmount,
             );
 
@@ -596,18 +751,37 @@ const updateDraftSaleInStore = async (
             }
 
             return {
-                items: existingSale.items.map((item) => ({
-                    id: item.id,
-                    organizationId: item.organizationId,
-                    storeId: item.storeId,
-                    saleId: item.saleId,
-                    productId: item.productId,
-                    quantity: Number(item.quantity),
-                    productNameSnapshot: item.productNameSnapshot,
-                    unitPriceSnapshot: Number(item.unitPriceSnapshot),
-                    discountAmount: Number(item.discountAmount),
-                    lineSubtotal: Number(item.lineSubtotal),
-                    lineTotal: Number(item.lineTotal),
+                lines: existingSale.items.map((item): PreparedSaleLine => ({
+                    item: {
+                        id: item.id,
+                        organizationId: item.organizationId,
+                        storeId: item.storeId,
+                        saleId: item.saleId,
+                        productId: item.productId,
+                        quantity: Number(item.quantity),
+                        configurationSignature: item.configurationSignature ?? "",
+                        productNameSnapshot: item.productNameSnapshot,
+                        unitPriceSnapshot: Number(item.unitPriceSnapshot),
+                        discountAmount: Number(item.discountAmount),
+                        lineSubtotal: Number(item.lineSubtotal),
+                        lineTotal: Number(item.lineTotal),
+                    },
+                    addOns: (item.addOns ?? []).map((addOn) => ({
+                        id: addOn.id,
+                        organizationId: addOn.organizationId,
+                        storeId: addOn.storeId,
+                        saleId: addOn.saleId,
+                        saleItemId: addOn.saleItemId,
+                        addOnId: addOn.addOnId,
+                        quantityPerParent: Number(addOn.quantityPerParent),
+                        totalQuantity: Number(addOn.totalQuantity),
+                        addOnNameSnapshot: addOn.addOnNameSnapshot,
+                        unitPriceSnapshot: Number(addOn.unitPriceSnapshot),
+                        unitDiscountSnapshot: Number(addOn.unitDiscountSnapshot),
+                        discountAmount: Number(addOn.discountAmount),
+                        lineSubtotal: Number(addOn.lineSubtotal),
+                        lineTotal: Number(addOn.lineTotal),
+                    })),
                 })),
                 totals: pricingTotals.totals,
             };
@@ -643,10 +817,17 @@ const updateDraftSaleInStore = async (
         if (saleData.items !== undefined) {
             await billingRepository.deleteSaleItemsBySaleId(organizationId, storeId, saleId, tx);
 
-            for (const item of preparedItems.items) {
-                const createdItem = await billingRepository.createSaleItem(item, tx);
+            for (const line of preparedItems.lines) {
+                const createdItem = await billingRepository.createSaleItem(line.item, tx);
                 if (!createdItem) {
                     throw new Error("Failed to recreate sale item");
+                }
+
+                for (const addOn of line.addOns) {
+                    const createdAddOn = await billingRepository.createSaleItemAddOn(addOn, tx);
+                    if (!createdAddOn) {
+                        throw new Error("Failed to recreate sale item add-on");
+                    }
                 }
             }
         }
@@ -721,7 +902,7 @@ const commitSaleInStore = async (
         : moneyFrom(commitData.orderDiscountAmount);
     const pricingTotals = buildSalePricingTotals(
         existingSale.subtotal,
-        getLineDiscountTotal(existingSale.items),
+        getParentAndAddOnLineDiscountTotal(existingSale.items),
         nextOrderDiscountAmount,
     );
 
@@ -734,7 +915,8 @@ const commitSaleInStore = async (
         };
     }
 
-    const grandTotal = pricingTotals.totals.grandTotal;
+    const committedTotals = pricingTotals.totals;
+    const grandTotal = committedTotals.grandTotal;
 
     if (totalPayment > grandTotal) {
         return {
@@ -777,8 +959,8 @@ const commitSaleInStore = async (
                 status: "completed",
                 paymentStatus,
                 updatedByDeviceId: actor.deviceId ?? null,
-                subtotal: pricingTotals.totals.subtotal,
-                discountTotal: pricingTotals.totals.discountTotal,
+                subtotal: committedTotals.subtotal,
+                discountTotal: committedTotals.discountTotal,
                 grandTotal,
                 notes: nextNotes,
                 committedAt,

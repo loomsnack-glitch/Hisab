@@ -93,7 +93,14 @@ const SaleDetailDialog = ({
 
     const sale = saleQuery.data?.status === "success" ? saleQuery.data.data?.sale ?? null : null;
     const itemDiscountTotal = sale
-        ? sale.items.reduce((total, item) => total + Number(item.discountAmount ?? 0), 0)
+        ? sale.items.reduce((total, item) => {
+            const parentDiscount = Number(item.discountAmount ?? 0);
+            const addOnDiscount = (item.addOns ?? []).reduce(
+                (addOnTotal, addOn) => addOnTotal + Number(addOn.discountAmount ?? 0),
+                0,
+            );
+            return total + parentDiscount + addOnDiscount;
+        }, 0)
         : 0;
     const discountedItemsSubtotal = sale
         ? Math.max(Number(sale.subtotal ?? 0) - itemDiscountTotal, 0)
@@ -187,6 +194,13 @@ const SaleDetailDialog = ({
             if (Number(item.discountAmount) > 0) {
                 text += `  * Disc: -${item.discountAmount}\n`;
             }
+            (item.addOns ?? []).forEach((addOn) => {
+                const addOnName = `+ ${addOn.addOnNameSnapshot}`.padEnd(20).substring(0, 20);
+                const addOnQty = String(Number(addOn.totalQuantity)).padStart(5);
+                const addOnPrice = String(addOn.unitPriceSnapshot).padStart(8);
+                const addOnTotal = String(addOn.lineTotal).padStart(8);
+                text += `${addOnName}${addOnQty}${addOnPrice}${addOnTotal}\n`;
+            });
         });
 
         text += `${separator}\n`;
@@ -344,34 +358,68 @@ const SaleDetailDialog = ({
                                             <h3 className="font-semibold text-foreground">Line items</h3>
                                         </div>
                                         <div className="mt-4 space-y-2">
-                                            {sale.items.map((item) => (
-                                                <div
-                                                    key={item.id}
-                                                    className="group flex items-center justify-between rounded-2xl border border-border/50 bg-background/40 hover:bg-background/80 px-4 py-3.5 transition-all duration-200"
-                                                >
-                                                    <div className="flex items-start gap-3">
-                                                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                                            <ReceiptText className="size-4" />
+                                            {sale.items.map((item) => {
+                                                const addOns = item.addOns ?? [];
+                                                const configuredLineTotal = Number(item.lineTotal)
+                                                    + addOns.reduce((total, addOn) => total + Number(addOn.lineTotal), 0);
+
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        className="rounded-2xl border border-border/50 bg-background/40 px-4 py-3.5"
+                                                    >
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <div className="flex items-start gap-3">
+                                                                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                                    <ReceiptText className="size-4" />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-semibold text-sm text-foreground/90">{item.productNameSnapshot}</p>
+                                                                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                                                                        <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-bold text-foreground/75">
+                                                                            Qty {Number(item.quantity)}
+                                                                        </span>
+                                                                        <span>×</span>
+                                                                        <span>{formatCurrency(item.unitPriceSnapshot)}</span>
+                                                                        {Number(item.discountAmount) > 0 && (
+                                                                            <span className="text-rose-500 font-medium">
+                                                                                (Disc. -{formatCurrency(item.discountAmount)})
+                                                                            </span>
+                                                                        )}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <p className="font-bold text-sm text-foreground">{formatCurrency(configuredLineTotal)}</p>
                                                         </div>
-                                                        <div>
-                                                            <p className="font-semibold text-sm text-foreground/90">{item.productNameSnapshot}</p>
-                                                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                                                                <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-bold text-foreground/75">
-                                                                    Qty {Number(item.quantity)}
-                                                                </span>
-                                                                <span>×</span>
-                                                                <span>{formatCurrency(item.unitPriceSnapshot)}</span>
-                                                                {Number(item.discountAmount) > 0 && (
-                                                                    <span className="text-rose-500 font-medium">
-                                                                        (Disc. -{formatCurrency(item.discountAmount)})
-                                                                    </span>
-                                                                )}
-                                                            </p>
-                                                        </div>
+
+                                                        {addOns.length > 0 ? (
+                                                            <div className="mt-3 space-y-2 border-l border-border/60 ml-3.5 pl-4">
+                                                                {addOns.map((addOn) => (
+                                                                    <div
+                                                                        key={addOn.id}
+                                                                        className="flex items-center justify-between gap-3"
+                                                                    >
+                                                                        <div>
+                                                                            <p className="text-sm text-foreground/85">
+                                                                                + {addOn.addOnNameSnapshot}
+                                                                            </p>
+                                                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                                                Qty {Number(addOn.totalQuantity)} × {formatCurrency(addOn.unitPriceSnapshot)}
+                                                                                {Number(addOn.discountAmount) > 0
+                                                                                    ? ` (Disc. -${formatCurrency(addOn.discountAmount)})`
+                                                                                    : ""}
+                                                                            </p>
+                                                                        </div>
+                                                                        <p className="text-sm font-semibold text-foreground/90">
+                                                                            {formatCurrency(addOn.lineTotal)}
+                                                                        </p>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : null}
                                                     </div>
-                                                    <p className="font-bold text-sm text-foreground">{formatCurrency(item.lineTotal)}</p>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </CardContent>
                                 </Card>

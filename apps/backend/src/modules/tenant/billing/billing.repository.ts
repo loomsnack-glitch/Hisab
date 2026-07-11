@@ -5,11 +5,13 @@ import type {
     CreateCustomerLedgerEntryREPO,
     CreateCustomerREPO,
     CreatePaymentREPO,
+    CreateSaleItemAddOnREPO,
     CreateSaleItemREPO,
     CreateSaleREPO,
     CustomerDTO,
     CustomerLedgerEntryDTO,
     PaymentDTO,
+    SaleItemAddOnDTO,
     SaleItemDTO,
     SaleSummaryDTO,
     SalesListQuery,
@@ -377,7 +379,25 @@ export const createSaleItem = async (
         RETURNING *
     `;
 
-    return result ? mapRow<SaleItemDTO>(result) : null;
+    return result
+        ? {
+            ...mapRow<Omit<SaleItemDTO, "addOns">>(result),
+            addOns: [],
+        }
+        : null;
+};
+
+export const createSaleItemAddOn = async (
+    saleItemAddOnData: CreateSaleItemAddOnREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<SaleItemAddOnDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO sale_item_add_ons ${camelToSnakeSql(saleItemAddOnData)}
+        RETURNING *
+    `;
+
+    return result ? mapRow<SaleItemAddOnDTO>(result) : null;
 };
 
 export const deleteSaleItemsBySaleId = async (
@@ -395,19 +415,51 @@ export const deleteSaleItemsBySaleId = async (
     `;
 };
 
+export const getSaleItemAddOnsBySaleId = async (
+    saleId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<SaleItemAddOnDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM sale_item_add_ons
+        WHERE sale_id = ${saleId}
+        ORDER BY created_at ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapRow<SaleItemAddOnDTO>(result));
+};
+
 export const getSaleItemsBySaleId = async (
     saleId: string,
     tx?: Bun.TransactionSQL,
 ): Promise<SaleItemDTO[]> => {
     const db = tx || pg;
-    const results = await db`
-        SELECT *
-        FROM sale_items
-        WHERE sale_id = ${saleId}
-        ORDER BY created_at ASC
-    `;
+    const [itemResults, addOnResults] = await Promise.all([
+        db`
+            SELECT *
+            FROM sale_items
+            WHERE sale_id = ${saleId}
+            ORDER BY created_at ASC
+        `,
+        getSaleItemAddOnsBySaleId(saleId, tx),
+    ]);
 
-    return results.map((result: Record<string, unknown>) => mapRow<SaleItemDTO>(result));
+    const addOnsBySaleItemId = new Map<string, SaleItemAddOnDTO[]>();
+    for (const addOn of addOnResults) {
+        const existing = addOnsBySaleItemId.get(addOn.saleItemId) ?? [];
+        existing.push(addOn);
+        addOnsBySaleItemId.set(addOn.saleItemId, existing);
+    }
+
+    return itemResults.map((result: Record<string, unknown>) => {
+        const item = mapRow<Omit<SaleItemDTO, "addOns">>(result);
+        return {
+            ...item,
+            configurationSignature: String(item.configurationSignature ?? ""),
+            addOns: addOnsBySaleItemId.get(item.id) ?? [],
+        };
+    });
 };
 
 export const createPayment = async (

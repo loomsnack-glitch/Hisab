@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,6 +11,7 @@ import {
     getOrganizationDetails,
     getPosCategories,
     getPosCustomers,
+    getPosProductAddOnAttachments,
     getPosProducts,
     getPosSale,
     getPosSales,
@@ -49,6 +50,7 @@ import {
     ReceiptText,
     Search,
     ShoppingCart,
+    SlidersHorizontal,
     Smartphone,
     Store,
     Trash2,
@@ -57,19 +59,26 @@ import {
 import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
+import CustomizeProductDialog, {
+    type CustomizeAddOnSelection,
+} from "@/components/billing/customize-product-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
 
+type ComposerAddOn = CustomizeAddOnSelection;
+
 type ComposerItem = {
+    key: string;
     productId: string;
     name: string;
     categoryId: string;
     unitPrice: number;
     unitDiscount: number;
     quantity: number;
+    addOns: ComposerAddOn[];
 };
 
 type SettlementMode = "full" | "partial" | "due";
@@ -155,6 +164,7 @@ const BillingPage = ({
     const [viewLayout, setViewLayout] = useState<"large" | "small" | "list">("large");
     const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "cash" | "upi" | "card">("all");
     const [dateFilter, setDateFilter] = useState<"all" | "today" | "yesterday" | "this-week">("all");
+    const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
 
     const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
@@ -181,6 +191,12 @@ const BillingPage = ({
         enabled: Boolean(organizationId),
     });
 
+    const selectableAttachmentsQuery = useQuery({
+        queryKey: catalogKeys.selectableProductAttachments(organizationId),
+        queryFn: () => getPosProductAddOnAttachments(),
+        enabled: isDeviceMode && Boolean(organizationId),
+    });
+
     const customersQuery = useQuery({
         queryKey: billingKeys.customers(organizationId),
         queryFn: () => isDeviceMode ? getPosCustomers({ limit: 100 }) : getCustomers(organizationId, { limit: 100 }),
@@ -201,10 +217,29 @@ const BillingPage = ({
         categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? [] : [];
     const products =
         productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? [] : [];
+    const selectableAttachments =
+        selectableAttachmentsQuery.data?.status === "success"
+            ? selectableAttachmentsQuery.data.data?.attachments ?? []
+            : [];
     const customers =
         customersQuery.data?.status === "success" ? customersQuery.data.data?.customers ?? [] : [];
     const sales =
         salesQuery.data?.status === "success" ? salesQuery.data.data?.sales ?? [] : [];
+
+    const attachmentsByProductId = useMemo(() => {
+        const grouped = new Map<string, typeof selectableAttachments>();
+        for (const attachment of selectableAttachments) {
+            const existing = grouped.get(attachment.productId) ?? [];
+            existing.push(attachment);
+            grouped.set(attachment.productId, existing);
+        }
+        return grouped;
+    }, [selectableAttachments]);
+
+    const customizeProduct = products.find((product) => product.id === customizeProductId) ?? null;
+    const customizeAttachments = customizeProduct
+        ? attachmentsByProductId.get(customizeProduct.id) ?? []
+        : [];
 
     const organizationStores = isDeviceMode && session ? [session.store] : organization?.stores ?? [];
     const selectedStore = isDeviceMode
@@ -325,8 +360,22 @@ const BillingPage = ({
             return 0;
         });
 
-    const subtotal = items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
-    const lineDiscountTotal = items.reduce((total, item) => total + item.unitDiscount * item.quantity, 0);
+    const subtotal = items.reduce((total, item) => {
+        const parentSubtotal = item.unitPrice * item.quantity;
+        const addOnSubtotal = item.addOns.reduce(
+            (addOnTotal, addOn) => addOnTotal + addOn.unitPrice * addOn.quantity * item.quantity,
+            0,
+        );
+        return total + parentSubtotal + addOnSubtotal;
+    }, 0);
+    const lineDiscountTotal = items.reduce((total, item) => {
+        const parentDiscount = item.unitDiscount * item.quantity;
+        const addOnDiscount = item.addOns.reduce(
+            (addOnTotal, addOn) => addOnTotal + addOn.unitDiscount * addOn.quantity * item.quantity,
+            0,
+        );
+        return total + parentDiscount + addOnDiscount;
+    }, 0);
     const orderDiscountAmount = Math.max(Number(discountInput || 0), 0);
     const totalDiscount = lineDiscountTotal + orderDiscountAmount;
     const grandTotal = Math.max(subtotal - totalDiscount, 0);
@@ -360,10 +409,12 @@ const BillingPage = ({
 
     const addProductToBill = (product: ProductResponseDTO) => {
         setItems((current) => {
-            const existingItem = current.find((item) => item.productId === product.id);
-            if (existingItem) {
+            const existingPlainItem = current.find(
+                (item) => item.productId === product.id && item.addOns.length === 0,
+            );
+            if (existingPlainItem) {
                 return current.map((item) =>
-                    item.productId === product.id
+                    item.key === existingPlainItem.key
                         ? { ...item, quantity: item.quantity + 1 }
                         : item,
                 );
@@ -372,21 +423,47 @@ const BillingPage = ({
             return [
                 ...current,
                 {
+                    key: crypto.randomUUID(),
                     productId: product.id,
                     name: product.name,
                     categoryId: product.categoryId,
                     unitPrice: Number(product.price),
                     unitDiscount: Number(product.discount ?? 0),
                     quantity: 1,
+                    addOns: [],
                 },
             ];
         });
     };
 
-    const updateItemQuantity = (productId: string, nextQuantity: number) => {
+    const addConfiguredProductToBill = (
+        product: ProductResponseDTO,
+        addOns: CustomizeAddOnSelection[],
+    ) => {
+        if (addOns.length === 0) {
+            addProductToBill(product);
+            return;
+        }
+
+        setItems((current) => [
+            ...current,
+            {
+                key: crypto.randomUUID(),
+                productId: product.id,
+                name: product.name,
+                categoryId: product.categoryId,
+                unitPrice: Number(product.price),
+                unitDiscount: Number(product.discount ?? 0),
+                quantity: 1,
+                addOns,
+            },
+        ]);
+    };
+
+    const updateItemQuantity = (itemKey: string, nextQuantity: number) => {
         setItems((current) =>
             current.flatMap((item) => {
-                if (item.productId !== productId) {
+                if (item.key !== itemKey) {
                     return item;
                 }
 
@@ -415,8 +492,10 @@ const BillingPage = ({
         items: items.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            discountAmount: item.unitDiscount * item.quantity,
+            addOns: item.addOns.map((addOn) => ({
+                addOnId: addOn.addOnId,
+                quantity: addOn.quantity,
+            })),
         })),
     });
 
@@ -557,12 +636,20 @@ const BillingPage = ({
             setNotes(sale.notes ?? "");
             setItems(
                 sale.items.map((item) => ({
+                    key: item.id,
                     productId: item.productId,
                     name: item.productNameSnapshot,
                     categoryId: "",
                     unitPrice: Number(item.unitPriceSnapshot),
                     unitDiscount: Number(item.quantity) > 0 ? Number(item.discountAmount) / Number(item.quantity) : 0,
                     quantity: Number(item.quantity),
+                    addOns: (item.addOns ?? []).map((addOn) => ({
+                        addOnId: addOn.addOnId,
+                        name: addOn.addOnNameSnapshot,
+                        unitPrice: Number(addOn.unitPriceSnapshot),
+                        unitDiscount: Number(addOn.unitDiscountSnapshot),
+                        quantity: Number(addOn.quantityPerParent),
+                    })),
                 })),
             );
             setSettlementMode("full");
@@ -832,50 +919,71 @@ const BillingPage = ({
                                     {filteredProducts.map((product) => {
                                         const catName = categories.find((c) => c.id === product.categoryId)?.name || "Item";
                                         const emoji = getProductEmoji(catName);
-                                        const isInCart = items.some((item) => item.productId === product.id);
+                                        const cartQuantity = items
+                                            .filter((item) => item.productId === product.id)
+                                            .reduce((total, item) => total + item.quantity, 0);
+                                        const isInCart = cartQuantity > 0;
+                                        const productAttachments = attachmentsByProductId.get(product.id) ?? [];
+                                        const canCustomize = canMutate && productAttachments.length > 0;
 
                                         return (
-                                            <button
+                                            <div
                                                 key={product.id}
-                                                type="button"
-                                                onClick={() => addProductToBill(product)}
                                                 className={cn(
                                                     "group relative flex flex-col items-center rounded-2xl border p-4 text-center transition-all duration-200",
-                                                    "hover:-translate-y-0.5 hover:shadow-lg",
                                                     isInCart
                                                         ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
-                                                        : "border-border/50 bg-card/80 hover:border-primary/30",
+                                                        : "border-border/50 bg-card/80",
                                                 )}
                                             >
                                                 {isInCart && (
                                                     <div className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm">
-                                                        {items.find((i) => i.productId === product.id)?.quantity}
+                                                        {cartQuantity}
                                                     </div>
                                                 )}
-                                                <div className="relative mb-2.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
-                                                    {product.imagePath?.startsWith("icon:") ? (
-                                                        <span className="text-3xl select-none select-none-emoji">{product.imagePath.replace("icon:", "")}</span>
-                                                    ) : product.imageSignedUrl ? (
-                                                        <img
-                                                            src={product.imageSignedUrl}
-                                                            alt={product.name}
-                                                            className="h-full w-full rounded-full object-cover border border-border/40"
-                                                        />
-                                                    ) : (
-                                                        <span className="text-3xl select-none select-none-emoji">{emoji}</span>
-                                                    )}
-                                                </div>
-                                                <p className="mt-2.5 text-sm font-semibold leading-tight text-foreground">
-                                                    {product.name}
-                                                </p>
-                                                <p className="mt-0.5 text-xs text-muted-foreground">{catName}</p>
-                                                <ProductPriceDisplay
-                                                    className="mt-2"
-                                                    price={product.price}
-                                                    discount={product.discount}
-                                                    size="md"
-                                                />
-                                            </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => addProductToBill(product)}
+                                                    className="flex w-full flex-col items-center hover:-translate-y-0.5 transition-transform"
+                                                >
+                                                    <div className="relative mb-2.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
+                                                        {product.imagePath?.startsWith("icon:") ? (
+                                                            <span className="text-3xl select-none select-none-emoji">{product.imagePath.replace("icon:", "")}</span>
+                                                        ) : product.imageSignedUrl ? (
+                                                            <img
+                                                                src={product.imageSignedUrl}
+                                                                alt={product.name}
+                                                                className="h-full w-full rounded-full object-cover border border-border/40"
+                                                            />
+                                                        ) : (
+                                                            <span className="text-3xl select-none select-none-emoji">{emoji}</span>
+                                                        )}
+                                                    </div>
+                                                    <p className="mt-2.5 text-sm font-semibold leading-tight text-foreground">
+                                                        {product.name}
+                                                    </p>
+                                                    <p className="mt-0.5 text-xs text-muted-foreground">{catName}</p>
+                                                    <ProductPriceDisplay
+                                                        className="mt-2"
+                                                        price={product.price}
+                                                        discount={product.discount}
+                                                        size="md"
+                                                    />
+                                                </button>
+                                                {canCustomize ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setCustomizeProductId(product.id);
+                                                        }}
+                                                        className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                                                    >
+                                                        <SlidersHorizontal className="size-3" />
+                                                        Customize
+                                                    </button>
+                                                ) : null}
+                                            </div>
                                         );
                                     })}
                                 </div>
@@ -1589,76 +1697,106 @@ const BillingPage = ({
                                         const associatedProduct = products.find((p) => p.id === item.productId);
                                         const catName = categories.find((c) => c.id === item.categoryId)?.name || "Item";
                                         const emoji = getProductEmoji(catName);
-                                        const lineTotal = (item.unitPrice - item.unitDiscount) * item.quantity;
+                                        const parentTotal = (item.unitPrice - item.unitDiscount) * item.quantity;
+                                        const addOnTotal = item.addOns.reduce(
+                                            (total, addOn) =>
+                                                total + (addOn.unitPrice - addOn.unitDiscount) * addOn.quantity * item.quantity,
+                                            0,
+                                        );
+                                        const lineTotal = parentTotal + addOnTotal;
 
                                         return (
                                             <div
-                                                key={item.productId}
-                                                className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/60 px-3 py-2.5"
+                                                key={item.key}
+                                                className="rounded-xl border border-border/40 bg-background/60 px-3 py-2.5"
                                             >
-                                                {/* Image/Emoji */}
-                                                <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner">
-                                                    {associatedProduct?.imagePath?.startsWith("icon:") ? (
-                                                        <span className="text-lg select-none select-none-emoji">{associatedProduct.imagePath.replace("icon:", "")}</span>
-                                                    ) : associatedProduct?.imageSignedUrl ? (
-                                                        <img
-                                                            src={associatedProduct.imageSignedUrl}
-                                                            alt={item.name}
-                                                            className="h-full w-full rounded-full object-cover border border-border/40"
+                                                <div className="flex items-center gap-3">
+                                                    {/* Image/Emoji */}
+                                                    <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner">
+                                                        {associatedProduct?.imagePath?.startsWith("icon:") ? (
+                                                            <span className="text-lg select-none select-none-emoji">{associatedProduct.imagePath.replace("icon:", "")}</span>
+                                                        ) : associatedProduct?.imageSignedUrl ? (
+                                                            <img
+                                                                src={associatedProduct.imageSignedUrl}
+                                                                alt={item.name}
+                                                                className="h-full w-full rounded-full object-cover border border-border/40"
+                                                            />
+                                                        ) : (
+                                                            <span className="text-lg select-none select-none-emoji">{emoji}</span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Name & Price */}
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="truncate text-sm font-semibold text-foreground">
+                                                            {item.name}
+                                                        </p>
+                                                        <ProductPriceDisplay
+                                                            price={item.unitPrice}
+                                                            discount={item.unitDiscount}
+                                                            size="sm"
+                                                            align="left"
+                                                            singleTone="foreground"
                                                         />
-                                                    ) : (
-                                                        <span className="text-lg select-none select-none-emoji">{emoji}</span>
-                                                    )}
-                                                </div>
+                                                    </div>
 
-                                                {/* Name & Price */}
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-semibold text-foreground">
-                                                        {item.name}
+                                                    {/* Quantity Controls */}
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateItemQuantity(item.key, item.quantity - 1)}
+                                                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                                        >
+                                                            <Minus className="size-3" />
+                                                        </button>
+                                                        <span className="w-6 text-center text-sm font-bold text-foreground">
+                                                            {item.quantity}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateItemQuantity(item.key, item.quantity + 1)}
+                                                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                                                        >
+                                                            <Plus className="size-3" />
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Line Total */}
+                                                    <p className="w-16 text-right text-sm font-bold text-foreground shrink-0">
+                                                        {formatCurrency(lineTotal)}
                                                     </p>
-                                                    <ProductPriceDisplay
-                                                        price={item.unitPrice}
-                                                        discount={item.unitDiscount}
-                                                        size="sm"
-                                                        align="left"
-                                                        singleTone="foreground"
-                                                    />
-                                                </div>
 
-                                                {/* Quantity Controls */}
-                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    {/* Delete */}
                                                     <button
                                                         type="button"
-                                                        onClick={() => updateItemQuantity(item.productId, item.quantity - 1)}
-                                                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                                        onClick={() => updateItemQuantity(item.key, 0)}
+                                                        className="text-muted-foreground/50 transition-colors hover:text-destructive shrink-0"
                                                     >
-                                                        <Minus className="size-3" />
-                                                    </button>
-                                                    <span className="w-6 text-center text-sm font-bold text-foreground">
-                                                        {item.quantity}
-                                                    </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => updateItemQuantity(item.productId, item.quantity + 1)}
-                                                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                                                    >
-                                                        <Plus className="size-3" />
+                                                        <Trash2 className="size-4" />
                                                     </button>
                                                 </div>
 
-                                                {/* Line Total */}
-                                                <p className="w-16 text-right text-sm font-bold text-foreground shrink-0">
-                                                    {formatCurrency(lineTotal)}
-                                                </p>
-
-                                                {/* Delete */}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => updateItemQuantity(item.productId, 0)}
-                                                    className="text-muted-foreground/50 transition-colors hover:text-destructive shrink-0"
-                                                >
-                                                    <Trash2 className="size-4" />
-                                                </button>
+                                                {item.addOns.length > 0 ? (
+                                                    <div className="mt-2 space-y-1 border-l border-border/50 pl-4 ml-4">
+                                                        {item.addOns.map((addOn) => (
+                                                            <div
+                                                                key={`${item.key}-${addOn.addOnId}`}
+                                                                className="flex items-center justify-between gap-3 text-xs text-muted-foreground"
+                                                            >
+                                                                <span className="truncate">
+                                                                    + {addOn.name} × {addOn.quantity}
+                                                                </span>
+                                                                <span className="shrink-0 font-medium text-foreground/80">
+                                                                    {formatCurrency(
+                                                                        (addOn.unitPrice - addOn.unitDiscount)
+                                                                        * addOn.quantity
+                                                                        * item.quantity,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
                                             </div>
                                         );
                                     })}
@@ -1988,6 +2126,18 @@ const BillingPage = ({
                     </aside>
                 )}
             </div>
+
+            <CustomizeProductDialog
+                open={Boolean(customizeProductId)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setCustomizeProductId(null);
+                    }
+                }}
+                product={customizeProduct}
+                attachments={customizeAttachments}
+                onConfirm={addConfiguredProductToBill}
+            />
 
             <SaleDetailDialog
                 open={saleDialogOpen}

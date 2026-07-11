@@ -19,6 +19,8 @@ export const catalogKeys = {
     addOns: (organizationId: string) => [...catalogKeys.all, "add-ons", organizationId] as const,
     productAttachments: (organizationId: string, productId: string) =>
         [...catalogKeys.all, "product-attachments", organizationId, productId] as const,
+    selectableProductAttachments: (organizationId: string) =>
+        [...catalogKeys.all, "selectable-product-attachments", organizationId] as const,
 };
 
 export const billingKeys = {

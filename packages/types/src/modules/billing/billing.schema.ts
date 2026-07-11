@@ -33,6 +33,7 @@ const positiveMoneySchema = z
 
 const quantitySchema = z
     .number({ error: "Quantity is required" })
+    .int("Quantity must be a whole number")
     .gt(0, "Quantity must be greater than 0");
 
 const positiveIntLimitSchema = z.coerce
@@ -71,6 +72,25 @@ export const CustomerSummaryDTOSchema = CustomerDTOSchema.pick({
     isActive: true,
 });
 
+export const SaleItemAddOnDTOSchema = z.object({
+    id: z.uuid("Invalid sale item add-on id"),
+    organizationId: z.uuid("Invalid organization id"),
+    storeId: z.uuid("Invalid store id"),
+    saleId: z.uuid("Invalid sale id"),
+    saleItemId: z.uuid("Invalid sale item id"),
+    addOnId: z.uuid("Invalid add-on id"),
+    quantityPerParent: quantitySchema,
+    totalQuantity: quantitySchema,
+    addOnNameSnapshot: nameSchema,
+    unitPriceSnapshot: moneySchema,
+    unitDiscountSnapshot: moneySchema,
+    discountAmount: moneySchema,
+    lineSubtotal: moneySchema,
+    lineTotal: moneySchema,
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
 export const SaleItemDTOSchema = z.object({
     id: z.uuid("Invalid sale item id"),
     organizationId: z.uuid("Invalid organization id"),
@@ -78,11 +98,13 @@ export const SaleItemDTOSchema = z.object({
     saleId: z.uuid("Invalid sale id"),
     productId: z.uuid("Invalid product id"),
     quantity: quantitySchema,
+    configurationSignature: z.string(),
     productNameSnapshot: nameSchema,
     unitPriceSnapshot: moneySchema,
     discountAmount: moneySchema,
     lineSubtotal: moneySchema,
     lineTotal: moneySchema,
+    addOns: z.array(SaleItemAddOnDTOSchema).default([]),
     createdAt: dtoDateSchema,
     updatedAt: dtoDateSchema,
 });
@@ -173,11 +195,15 @@ export const CustomerListQuerySchema = z.object({
     limit: positiveIntLimitSchema.optional(),
 });
 
+export const SaleItemAddOnInputSchema = z.object({
+    addOnId: z.uuid("Invalid add-on id"),
+    quantity: quantitySchema,
+});
+
 export const SaleItemInputSchema = z.object({
     productId: z.uuid("Invalid product id"),
     quantity: quantitySchema,
-    unitPrice: moneySchema.optional(),
-    discountAmount: moneySchema.optional(),
+    addOns: z.array(SaleItemAddOnInputSchema).optional().default([]),
 });
 
 export const CreateDraftSaleSchema = z.object({

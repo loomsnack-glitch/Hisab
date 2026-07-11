@@ -458,6 +458,45 @@ export const getSelectableProductAddOnAttachmentsByOrganizationId = async (
     return results.map((result: Record<string, unknown>) => mapAttachmentWithAddOn(result));
 };
 
+export const getSelectableProductAddOnAttachmentByProductAndAddOn = async (
+    organizationId: string,
+    productId: string,
+    addOnId: string,
+): Promise<ProductAddOnAttachmentResponseDTO | null> => {
+    const [result] = await pg`
+        SELECT
+            a.id,
+            a.organization_id,
+            a.product_id,
+            a.add_on_id,
+            a.selection_cap,
+            a.status,
+            a.created_by,
+            a.updated_by,
+            a.created_at,
+            a.updated_at,
+            ao.name AS add_on_name,
+            ao.price AS add_on_price,
+            ao.discount AS add_on_discount,
+            ao.status AS add_on_status,
+            ao.created_by AS add_on_created_by,
+            ao.updated_by AS add_on_updated_by,
+            ao.created_at AS add_on_created_at,
+            ao.updated_at AS add_on_updated_at
+        FROM product_add_on_attachments a
+        INNER JOIN add_ons ao
+            ON ao.id = a.add_on_id
+           AND ao.organization_id = a.organization_id
+        WHERE a.organization_id = ${organizationId}
+          AND a.product_id = ${productId}
+          AND a.add_on_id = ${addOnId}
+          AND a.status = 'active'
+          AND ao.status = 'active'
+    `;
+
+    return result ? mapAttachmentWithAddOn(result) : null;
+};
+
 export const getProductAddOnAttachmentById = async (
     organizationId: string,
     productId: string,

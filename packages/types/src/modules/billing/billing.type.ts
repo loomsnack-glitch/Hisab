@@ -10,7 +10,10 @@ import type {
     PaymentDTOSchema,
     SaleDeviceAuditDTOSchema,
     SaleDetailDTOSchema,
+    SaleItemAddOnDTOSchema,
+    SaleItemAddOnInputSchema,
     SaleItemDTOSchema,
+    SaleItemInputSchema,
     SaleSummaryDTOSchema,
     SalesListQuerySchema,
     UpdateCustomerSchema,
@@ -19,6 +22,7 @@ import type {
 } from "./billing.schema";
 
 export type CustomerDTO = z.infer<typeof CustomerDTOSchema>;
+export type SaleItemAddOnDTO = z.infer<typeof SaleItemAddOnDTOSchema>;
 export type SaleItemDTO = z.infer<typeof SaleItemDTOSchema>;
 export type PaymentDTO = z.infer<typeof PaymentDTOSchema>;
 export type CustomerLedgerEntryDTO = z.infer<typeof CustomerLedgerEntryDTOSchema>;
@@ -53,7 +57,8 @@ export type UpdateCustomerREPO = Pick<
 export type CustomerListQuery = z.infer<typeof CustomerListQuerySchema>;
 export type SalesListQuery = z.infer<typeof SalesListQuerySchema>;
 
-export type SaleItemInput = z.infer<typeof CreateDraftSaleSchema>["items"][number];
+export type SaleItemAddOnInput = z.infer<typeof SaleItemAddOnInputSchema>;
+export type SaleItemInput = z.infer<typeof SaleItemInputSchema>;
 export type CreateDraftSaleJSON = z.infer<typeof CreateDraftSaleSchema>;
 export type CreateDraftSaleSVC = CreateDraftSaleJSON;
 export type UpdateDraftSaleJSON = z.infer<typeof UpdateDraftSaleSchema>;
@@ -102,7 +107,36 @@ export type UpdateSaleREPO = Pick<
 
 export type CreateSaleItemREPO = Pick<
     SaleItemDTO,
-    "id" | "organizationId" | "storeId" | "saleId" | "productId" | "quantity" | "productNameSnapshot" | "unitPriceSnapshot" | "discountAmount" | "lineSubtotal" | "lineTotal"
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "saleId"
+    | "productId"
+    | "quantity"
+    | "configurationSignature"
+    | "productNameSnapshot"
+    | "unitPriceSnapshot"
+    | "discountAmount"
+    | "lineSubtotal"
+    | "lineTotal"
+>;
+
+export type CreateSaleItemAddOnREPO = Pick<
+    SaleItemAddOnDTO,
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "saleId"
+    | "saleItemId"
+    | "addOnId"
+    | "quantityPerParent"
+    | "totalQuantity"
+    | "addOnNameSnapshot"
+    | "unitPriceSnapshot"
+    | "unitDiscountSnapshot"
+    | "discountAmount"
+    | "lineSubtotal"
+    | "lineTotal"
 >;
 
 export type CreatePaymentREPO = Pick<
