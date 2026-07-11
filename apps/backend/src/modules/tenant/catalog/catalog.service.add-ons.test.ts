@@ -110,6 +110,7 @@ const updateProductAddOnAttachmentRepo = mock(async (data: {
 }));
 const getSelectableProductAddOnAttachmentsByOrganizationId = mock(async () => [attachmentResponse]);
 const getActiveAddOnsByOrganizationId = mock(async () => [addOn]);
+const getActiveProductsByOrganizationId = mock(async () => [product]);
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
@@ -132,6 +133,7 @@ mock.module("./catalog.repository", () => ({
     updateProductAddOnAttachment: updateProductAddOnAttachmentRepo,
     getSelectableProductAddOnAttachmentsByOrganizationId,
     getActiveAddOnsByOrganizationId,
+    getActiveProductsByOrganizationId,
     getAddOnsByOrganizationId: mock(async () => [addOn]),
     getProductAddOnAttachmentsByProductId: mock(async () => [attachmentResponse]),
     countAttachmentsByAddOnId: mock(async () => 0),
@@ -155,6 +157,7 @@ describe("Add-On catalog service", () => {
         updateProductAddOnAttachmentRepo.mockClear();
         getSelectableProductAddOnAttachmentsByOrganizationId.mockClear();
         getActiveAddOnsByOrganizationId.mockClear();
+        getActiveProductsByOrganizationId.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
         addOnNameExistsInOrganization.mockResolvedValue(false);
@@ -164,6 +167,7 @@ describe("Add-On catalog service", () => {
         getProductAddOnAttachmentById.mockResolvedValue(attachmentResponse);
         getSelectableProductAddOnAttachmentsByOrganizationId.mockResolvedValue([attachmentResponse]);
         getActiveAddOnsByOrganizationId.mockResolvedValue([addOn]);
+        getActiveProductsByOrganizationId.mockResolvedValue([product]);
         createAddOnRepo.mockImplementation(async (data) => data);
         updateAddOnRepo.mockImplementation(async (data) => data);
     });
@@ -281,5 +285,19 @@ describe("Add-On catalog service", () => {
         expect(response.status).toBe("success");
         expect(response.data?.addOns).toEqual([addOn]);
         expect(getActiveAddOnsByOrganizationId).toHaveBeenCalledWith(organizationId);
+    });
+
+    test("POS product reads return only active products", async () => {
+        getActiveProductsByOrganizationId.mockResolvedValue([product]);
+
+        const response = await catalogService.getProductsForDevice({
+            organization: { id: organizationId },
+            store: { id: "store-1" },
+            device: { id: "device-1" },
+        } as never);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.products).toEqual([{ ...product, imageSignedUrl: null }]);
+        expect(getActiveProductsByOrganizationId).toHaveBeenCalledWith(organizationId);
     });
 });

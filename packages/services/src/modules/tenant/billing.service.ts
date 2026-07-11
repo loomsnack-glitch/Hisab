@@ -1,4 +1,5 @@
 import type {
+    AddOnSalesRollupsListResponse,
     CommitSaleJSON,
     CreateCustomerJSON,
     CreatePaymentJSON,
@@ -155,6 +156,20 @@ export const voidSale = async (
 ): Promise<ServiceResponse<SaleResponse | null>> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/sales/${saleId}/void`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getAddOnSalesRollups = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<AddOnSalesRollupsListResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/stores/${storeId}/add-on-sales-rollups`,
+        );
         return response.data;
     } catch (error) {
         return handleApiError(error);

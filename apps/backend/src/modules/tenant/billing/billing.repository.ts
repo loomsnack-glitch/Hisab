@@ -2,6 +2,7 @@ import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
 import { camelToSnakeSql } from "@/utils/case-sql";
 import type {
+    AddOnScopedSalesRollupDTO,
     CreateCustomerLedgerEntryREPO,
     CreateCustomerREPO,
     CreatePaymentREPO,
@@ -10,6 +11,7 @@ import type {
     CreateSaleREPO,
     CustomerDTO,
     CustomerLedgerEntryDTO,
+    ParentScopedAddOnSalesRollupDTO,
     PaymentDTO,
     SaleItemAddOnDTO,
     SaleItemDTO,
@@ -574,4 +576,82 @@ export const incrementStoreSaleCounter = async (
     `;
 
     return Number(result?.sale_number ?? 1);
+};
+
+export const getParentScopedAddOnSalesRollups = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ParentScopedAddOnSalesRollupDTO[]> => {
+    const results = await pg`
+        SELECT
+            si.product_id,
+            COALESCE(MAX(p.name), MAX(si.product_name_snapshot)) AS product_name_snapshot,
+            sia.add_on_id,
+            COALESCE(MAX(ao.name), MAX(sia.add_on_name_snapshot)) AS add_on_name_snapshot,
+            SUM(sia.total_quantity)::int AS total_quantity,
+            COALESCE(SUM(sia.line_subtotal), 0) AS line_subtotal,
+            COALESCE(SUM(sia.discount_amount), 0) AS discount_amount,
+            COALESCE(SUM(sia.line_total), 0) AS line_total
+        FROM sale_item_add_ons sia
+        INNER JOIN sale_items si
+            ON si.id = sia.sale_item_id
+           AND si.organization_id = sia.organization_id
+           AND si.store_id = sia.store_id
+           AND si.sale_id = sia.sale_id
+        INNER JOIN sales s
+            ON s.id = sia.sale_id
+           AND s.organization_id = sia.organization_id
+           AND s.store_id = sia.store_id
+        LEFT JOIN products p
+            ON p.id = si.product_id
+           AND p.organization_id = si.organization_id
+        LEFT JOIN add_ons ao
+            ON ao.id = sia.add_on_id
+           AND ao.organization_id = sia.organization_id
+        WHERE sia.organization_id = ${organizationId}
+          AND sia.store_id = ${storeId}
+          AND s.status = 'completed'
+        GROUP BY si.product_id, sia.add_on_id
+        ORDER BY
+            COALESCE(MAX(p.name), MAX(si.product_name_snapshot)) ASC,
+            COALESCE(MAX(ao.name), MAX(sia.add_on_name_snapshot)) ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapRow<ParentScopedAddOnSalesRollupDTO>(result));
+};
+
+export const getAddOnScopedSalesRollups = async (
+    organizationId: string,
+    storeId: string,
+): Promise<AddOnScopedSalesRollupDTO[]> => {
+    const results = await pg`
+        SELECT
+            sia.add_on_id,
+            COALESCE(MAX(ao.name), MAX(sia.add_on_name_snapshot)) AS add_on_name_snapshot,
+            SUM(sia.total_quantity)::int AS total_quantity,
+            COALESCE(SUM(sia.line_subtotal), 0) AS line_subtotal,
+            COALESCE(SUM(sia.discount_amount), 0) AS discount_amount,
+            COALESCE(SUM(sia.line_total), 0) AS line_total,
+            COUNT(DISTINCT si.product_id)::int AS parent_product_count
+        FROM sale_item_add_ons sia
+        INNER JOIN sale_items si
+            ON si.id = sia.sale_item_id
+           AND si.organization_id = sia.organization_id
+           AND si.store_id = sia.store_id
+           AND si.sale_id = sia.sale_id
+        INNER JOIN sales s
+            ON s.id = sia.sale_id
+           AND s.organization_id = sia.organization_id
+           AND s.store_id = sia.store_id
+        LEFT JOIN add_ons ao
+            ON ao.id = sia.add_on_id
+           AND ao.organization_id = sia.organization_id
+        WHERE sia.organization_id = ${organizationId}
+          AND sia.store_id = ${storeId}
+          AND s.status = 'completed'
+        GROUP BY sia.add_on_id
+        ORDER BY COALESCE(MAX(ao.name), MAX(sia.add_on_name_snapshot)) ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapRow<AddOnScopedSalesRollupDTO>(result));
 };

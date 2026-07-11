@@ -176,6 +176,13 @@ const updateSale = mock(async (data: Record<string, unknown>) => {
 });
 
 const getCustomerById = mock(async () => null);
+const createPayment = mock(async (data: Record<string, unknown>) => ({
+    ...data,
+    createdAt: now,
+    updatedAt: now,
+}));
+const getParentScopedAddOnSalesRollups = mock(async () => []);
+const getAddOnScopedSalesRollups = mock(async () => []);
 
 mock.module("@/config/db", () => ({
     pg: {
@@ -205,10 +212,12 @@ mock.module("./billing.repository", () => ({
     customerPhoneExistsInOrganization: mock(async () => false),
     getCustomerLedgerByCustomerId: mock(async () => []),
     getSalesByStore: mock(async () => []),
-    createPayment: mock(async () => null),
+    createPayment,
     createCustomerLedgerEntry: mock(async () => null),
     updateCustomerBalance: mock(async () => null),
     incrementStoreSaleCounter: mock(async () => 1),
+    getParentScopedAddOnSalesRollups,
+    getAddOnScopedSalesRollups,
 }));
 
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
@@ -240,6 +249,11 @@ describe("Configured product billing with trusted snapshots", () => {
         getSaleItemsBySaleId.mockClear();
         deleteSaleItemsBySaleId.mockClear();
         updateSale.mockClear();
+        createPayment.mockClear();
+        getParentScopedAddOnSalesRollups.mockClear();
+        getAddOnScopedSalesRollups.mockClear();
+        getParentScopedAddOnSalesRollups.mockResolvedValue([]);
+        getAddOnScopedSalesRollups.mockResolvedValue([]);
 
         getProductByIdSpy = spyOn(catalogRepository, "getProductById").mockResolvedValue(product as never);
         getSelectableAttachmentSpy = spyOn(
@@ -673,5 +687,231 @@ describe("Configuration-aware Draft Sale behavior", () => {
         expect(response.data?.sale.items[0]?.addOns).toHaveLength(2);
         // parent: 2*(100)=200, cheese: 2*1*20=40, mayo: 2*2*5=20 => 260
         expect(response.data?.sale.subtotal).toBe(260);
+    });
+
+    test("rejects inactive products for new selections", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            status: "inactive",
+        } as never);
+
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("not available for new sale selections");
+        expect(createSale).not.toHaveBeenCalled();
+    });
+
+    test("keeps frozen configured draft lines readable and updatable after catalog deactivation", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id;
+        expect(saleId).toBeTruthy();
+
+        const originalUnitPrice = createdSaleItems[0]?.unitPriceSnapshot;
+        const originalAddOnUnitPrice = createdSaleItemAddOns[0]?.unitPriceSnapshot;
+        const originalAddOnName = createdSaleItemAddOns[0]?.addOnNameSnapshot;
+
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            status: "inactive",
+            price: 999,
+            name: "Retired Burger",
+        } as never);
+        getSelectableAttachmentSpy.mockResolvedValue(null);
+
+        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId!, {
+            items: [
+                {
+                    productId,
+                    quantity: 2,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(updated.status).toBe("success");
+        expect(updated.data?.sale.items).toHaveLength(1);
+        expect(updated.data?.sale.items[0]?.productNameSnapshot).toBe("Burger");
+        expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(originalUnitPrice);
+        expect(updated.data?.sale.items[0]?.quantity).toBe(2);
+        expect(updated.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe(originalAddOnName);
+        expect(updated.data?.sale.items[0]?.addOns[0]?.unitPriceSnapshot).toBe(originalAddOnUnitPrice);
+        expect(updated.data?.sale.items[0]?.addOns[0]?.totalQuantity).toBe(2);
+        expect(getProductByIdSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("commits a draft with frozen configured lines after later catalog deactivation", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id!;
+        const grandTotal = Number(created.data?.sale.grandTotal);
+
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            status: "inactive",
+        } as never);
+        getSelectableAttachmentSpy.mockResolvedValue(null);
+
+        const committed = await billingService.commitSale(userId, organizationId, storeId, saleId, {
+            payments: [
+                {
+                    amount: grandTotal,
+                    method: "cash",
+                },
+            ],
+        });
+
+        expect(committed.status).toBe("success");
+        expect(committed.data?.sale.status).toBe("completed");
+        expect(committed.data?.sale.items[0]?.addOns).toHaveLength(1);
+        expect(committed.data?.sale.items[0]?.productNameSnapshot).toBe("Burger");
+        expect(committed.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+        expect(createPayment).toHaveBeenCalled();
+    });
+
+    test("blocks new configured selections after deactivation while preserving existing frozen lines", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id!;
+
+        getSelectableAttachmentSpy.mockResolvedValue(null);
+
+        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId: addOnId2, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(updated.status).toBe("error");
+        expect(updated.message).toContain("not selectable");
+    });
+
+    test("exposes nested add-ons in receipt-like bill detail output after commit", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [
+                        { addOnId, quantity: 1 },
+                        { addOnId: addOnId2, quantity: 2 },
+                    ],
+                },
+            ],
+        });
+
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id!;
+        const grandTotal = Number(created.data?.sale.grandTotal);
+
+        const committed = await billingService.commitSale(userId, organizationId, storeId, saleId, {
+            payments: [{ amount: grandTotal, method: "cash" }],
+        });
+
+        expect(committed.status).toBe("success");
+        const parent = committed.data?.sale.items[0];
+        expect(parent?.productNameSnapshot).toBe("Burger");
+        expect(parent?.addOns.map((addOn) => ({
+            name: addOn.addOnNameSnapshot,
+            quantityPerParent: addOn.quantityPerParent,
+            lineTotal: addOn.lineTotal,
+        }))).toEqual(
+            expect.arrayContaining([
+                { name: "Extra Cheese", quantityPerParent: 1, lineTotal: 18 },
+                { name: "Mayo", quantityPerParent: 2, lineTotal: 10 },
+            ]),
+        );
+    });
+
+    test("returns parent-scoped and add-on-scoped sales rollups", async () => {
+        const parentScoped = [
+            {
+                productId,
+                productNameSnapshot: "Burger",
+                addOnId,
+                addOnNameSnapshot: "Extra Cheese",
+                totalQuantity: 3,
+                lineSubtotal: 60,
+                discountAmount: 6,
+                lineTotal: 54,
+            },
+            {
+                productId: "12121212-1212-4121-8121-121212121212",
+                productNameSnapshot: "Pizza",
+                addOnId,
+                addOnNameSnapshot: "Extra Cheese",
+                totalQuantity: 2,
+                lineSubtotal: 40,
+                discountAmount: 4,
+                lineTotal: 36,
+            },
+        ];
+        const addOnScoped = [
+            {
+                addOnId,
+                addOnNameSnapshot: "Extra Cheese",
+                totalQuantity: 5,
+                lineSubtotal: 100,
+                discountAmount: 10,
+                lineTotal: 90,
+                parentProductCount: 2,
+            },
+        ];
+
+        getParentScopedAddOnSalesRollups.mockResolvedValue(parentScoped as never);
+        getAddOnScopedSalesRollups.mockResolvedValue(addOnScoped as never);
+
+        const response = await billingService.getAddOnSalesRollups(userId, organizationId, storeId);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.rollups.parentScoped).toEqual(parentScoped);
+        expect(response.data?.rollups.addOnScoped).toEqual(addOnScoped);
+        expect(getParentScopedAddOnSalesRollups).toHaveBeenCalledWith(organizationId, storeId);
+        expect(getAddOnScopedSalesRollups).toHaveBeenCalledWith(organizationId, storeId);
     });
 });

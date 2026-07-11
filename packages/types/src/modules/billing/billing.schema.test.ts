@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { SaleItemInputSchema, SaleDetailDTOSchema } from "./billing.schema";
+import {
+    AddOnSalesRollupsResponseSchema,
+    SaleItemInputSchema,
+    SaleDetailDTOSchema,
+} from "./billing.schema";
 
 describe("Configured sale billing contracts", () => {
     test("sale item input accepts selection-only product and add-on ids with quantities", () => {
@@ -144,6 +148,40 @@ describe("Configured sale billing contracts", () => {
         if (result.success) {
             expect(result.data.items[0]?.addOns).toHaveLength(1);
             expect(result.data.items[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+        }
+    });
+
+    test("add-on sales rollups contract supports parent-scoped and add-on-scoped views", () => {
+        const result = AddOnSalesRollupsResponseSchema.safeParse({
+            parentScoped: [
+                {
+                    productId: "11111111-1111-4111-8111-111111111111",
+                    productNameSnapshot: "Burger",
+                    addOnId: "22222222-2222-4222-8222-222222222222",
+                    addOnNameSnapshot: "Extra Cheese",
+                    totalQuantity: 3,
+                    lineSubtotal: 60,
+                    discountAmount: 6,
+                    lineTotal: 54,
+                },
+            ],
+            addOnScoped: [
+                {
+                    addOnId: "22222222-2222-4222-8222-222222222222",
+                    addOnNameSnapshot: "Extra Cheese",
+                    totalQuantity: 5,
+                    lineSubtotal: 100,
+                    discountAmount: 10,
+                    lineTotal: 90,
+                    parentProductCount: 2,
+                },
+            ],
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.parentScoped[0]?.productNameSnapshot).toBe("Burger");
+            expect(result.data.addOnScoped[0]?.parentProductCount).toBe(2);
         }
     });
 });

@@ -257,3 +257,29 @@ export const SalesListQuerySchema = z.object({
     search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
     limit: positiveIntLimitSchema.optional(),
 });
+
+export const ParentScopedAddOnSalesRollupDTOSchema = z.object({
+    productId: z.uuid("Invalid product id"),
+    productNameSnapshot: nameSchema,
+    addOnId: z.uuid("Invalid add-on id"),
+    addOnNameSnapshot: nameSchema,
+    totalQuantity: z.number().int().min(0),
+    lineSubtotal: moneySchema,
+    discountAmount: moneySchema,
+    lineTotal: moneySchema,
+});
+
+export const AddOnScopedSalesRollupDTOSchema = z.object({
+    addOnId: z.uuid("Invalid add-on id"),
+    addOnNameSnapshot: nameSchema,
+    totalQuantity: z.number().int().min(0),
+    lineSubtotal: moneySchema,
+    discountAmount: moneySchema,
+    lineTotal: moneySchema,
+    parentProductCount: z.number().int().min(0),
+});
+
+export const AddOnSalesRollupsResponseSchema = z.object({
+    parentScoped: z.array(ParentScopedAddOnSalesRollupDTOSchema),
+    addOnScoped: z.array(AddOnScopedSalesRollupDTOSchema),
+});

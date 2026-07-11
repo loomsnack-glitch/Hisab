@@ -3,6 +3,7 @@ import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository"
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import {
     STATUS_CODES,
+    type AddOnSalesRollupsListResponse,
     type CommitSaleSVC,
     type CreateCustomerSVC,
     type CreateDraftSaleSVC,
@@ -16,6 +17,7 @@ import {
     type DeviceSessionDTO,
     type PaymentResponse,
     type SaleDetailDTO,
+    type SaleItemDTO,
     type SaleItemInput,
     type SaleResponse,
     type SalesListQuery,
@@ -320,12 +322,75 @@ const buildSaleDetails = async (
     };
 };
 
+const configurationKeyFor = (productId: string, configurationSignature: string) =>
+    `${productId}::${configurationSignature}`;
+
+const rescaleFrozenConfiguredLine = (
+    frozen: SaleItemDTO,
+    parentQuantity: number,
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): PreparedSaleLine => {
+    const saleItemId = crypto.randomUUID();
+    const unitPrice = moneyFrom(frozen.unitPriceSnapshot);
+    const previousQuantity = Number(frozen.quantity);
+    const unitDiscount = previousQuantity > 0
+        ? roundMoney(moneyFrom(frozen.discountAmount) / previousQuantity)
+        : 0;
+    const lineSubtotal = roundMoney(parentQuantity * unitPrice);
+    const discountAmount = roundMoney(unitDiscount * parentQuantity);
+
+    return {
+        item: {
+            id: saleItemId,
+            organizationId,
+            storeId,
+            saleId,
+            productId: frozen.productId,
+            quantity: parentQuantity,
+            configurationSignature: frozen.configurationSignature ?? "",
+            productNameSnapshot: frozen.productNameSnapshot,
+            unitPriceSnapshot: unitPrice,
+            discountAmount,
+            lineSubtotal,
+            lineTotal: roundMoney(lineSubtotal - discountAmount),
+        },
+        addOns: (frozen.addOns ?? []).map((addOn) => {
+            const quantityPerParent = Number(addOn.quantityPerParent);
+            const totalQuantity = quantityPerParent * parentQuantity;
+            const addOnUnitPrice = moneyFrom(addOn.unitPriceSnapshot);
+            const addOnUnitDiscount = moneyFrom(addOn.unitDiscountSnapshot);
+            const addOnLineSubtotal = roundMoney(totalQuantity * addOnUnitPrice);
+            const addOnDiscountAmount = roundMoney(totalQuantity * addOnUnitDiscount);
+
+            return {
+                id: crypto.randomUUID(),
+                organizationId,
+                storeId,
+                saleId,
+                saleItemId,
+                addOnId: addOn.addOnId,
+                quantityPerParent,
+                totalQuantity,
+                addOnNameSnapshot: addOn.addOnNameSnapshot,
+                unitPriceSnapshot: addOnUnitPrice,
+                unitDiscountSnapshot: addOnUnitDiscount,
+                discountAmount: addOnDiscountAmount,
+                lineSubtotal: addOnLineSubtotal,
+                lineTotal: roundMoney(addOnLineSubtotal - addOnDiscountAmount),
+            };
+        }),
+    };
+};
+
 const prepareSaleItems = async (
     organizationId: string,
     storeId: string,
     saleId: string,
     items: SaleItemInput[],
     orderDiscountAmount: number | string | null | undefined,
+    existingItems: SaleItemDTO[] = [],
 ): Promise<
     | { error: ServiceResponse<null>; lines?: undefined; totals?: undefined }
     | {
@@ -339,11 +404,36 @@ const prepareSaleItems = async (
         return { error: mergedItems.error };
     }
 
+    const frozenByConfiguration = new Map<string, SaleItemDTO>();
+    for (const existingItem of existingItems) {
+        frozenByConfiguration.set(
+            configurationKeyFor(existingItem.productId, existingItem.configurationSignature ?? ""),
+            existingItem,
+        );
+    }
+
     const preparedLines: PreparedSaleLine[] = [];
 
     for (const item of mergedItems.items) {
         const selectedAddOns = item.addOns ?? [];
         const configurationSignature = buildConfigurationSignature(selectedAddOns);
+        const parentQuantity = Number(item.quantity);
+        const frozen = frozenByConfiguration.get(
+            configurationKeyFor(item.productId, configurationSignature),
+        );
+
+        if (frozen) {
+            preparedLines.push(
+                rescaleFrozenConfiguredLine(
+                    frozen,
+                    parentQuantity,
+                    organizationId,
+                    storeId,
+                    saleId,
+                ),
+            );
+            continue;
+        }
 
         const product = await catalogRepository.getProductById(organizationId, item.productId);
         if (!product) {
@@ -369,7 +459,6 @@ const prepareSaleItems = async (
         }
 
         const preparedAddOns: CreateSaleItemAddOnREPO[] = [];
-        const parentQuantity = Number(item.quantity);
         const saleItemId = crypto.randomUUID();
 
         for (const selectedAddOn of selectedAddOns) {
@@ -854,7 +943,14 @@ const updateDraftSaleInStore = async (
                 totals: pricingTotals.totals,
             };
         })()
-        : await prepareSaleItems(organizationId, storeId, saleId, saleData.items, nextOrderDiscountAmount);
+        : await prepareSaleItems(
+            organizationId,
+            storeId,
+            saleId,
+            saleData.items,
+            nextOrderDiscountAmount,
+            existingSale.items,
+        );
 
     if ("error" in preparedItems && preparedItems.error) {
         return preparedItems.error;
@@ -1606,6 +1702,34 @@ export const voidSale = async (
     }
 
     return voidSaleInStore({ userId }, organizationId, storeId, saleId, voidData);
+};
+
+export const getAddOnSalesRollups = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<AddOnSalesRollupsListResponse | null>> => {
+    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+    if (scopeError) {
+        return scopeError;
+    }
+
+    const [parentScoped, addOnScoped] = await Promise.all([
+        billingRepository.getParentScopedAddOnSalesRollups(organizationId, storeId),
+        billingRepository.getAddOnScopedSalesRollups(organizationId, storeId),
+    ]);
+
+    return {
+        status: "success",
+        data: {
+            rollups: {
+                parentScoped,
+                addOnScoped,
+            },
+        },
+        message: "Add-on sales rollups fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
 };
 
 export const getCustomersForDevice = async (

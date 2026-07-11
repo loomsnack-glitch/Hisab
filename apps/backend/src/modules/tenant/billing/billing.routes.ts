@@ -178,4 +178,25 @@ router.get("/:organizationId/stores/:storeId/sales/:saleId", async (c) => {
     }
 });
 
+router.get("/:organizationId/stores/:storeId/add-on-sales-rollups", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalidParams = validateOrgAndStoreParams(organizationId, storeId);
+        if (invalidParams) {
+            return c.json(invalidParams, invalidParams.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await billingService.getAddOnSalesRollups(
+            authUser.id,
+            organizationId,
+            storeId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getAddOnSalesRollups", c, error);
+    }
+});
+
 export default router;

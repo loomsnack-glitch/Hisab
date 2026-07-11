@@ -178,6 +178,18 @@ export const getProductsByOrganizationId = async (organizationId: string): Promi
     return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
 };
 
+export const getActiveProductsByOrganizationId = async (organizationId: string): Promise<ProductDTO[]> => {
+    const results = await pg`
+        SELECT *
+        FROM products
+        WHERE organization_id = ${organizationId}
+          AND status = 'active'
+        ORDER BY created_at ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
+};
+
 export const getProductsByCategoryId = async (
     organizationId: string,
     categoryId: string,

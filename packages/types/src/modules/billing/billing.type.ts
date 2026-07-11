@@ -1,5 +1,7 @@
 import type z from "zod";
 import type {
+    AddOnSalesRollupsResponseSchema,
+    AddOnScopedSalesRollupDTOSchema,
     CommitSaleSchema,
     CreateCustomerSchema,
     CreateDraftSaleSchema,
@@ -7,6 +9,7 @@ import type {
     CustomerDTOSchema,
     CustomerLedgerEntryDTOSchema,
     CustomerListQuerySchema,
+    ParentScopedAddOnSalesRollupDTOSchema,
     PaymentDTOSchema,
     SaleDeviceAuditDTOSchema,
     SaleDetailDTOSchema,
@@ -29,6 +32,9 @@ export type CustomerLedgerEntryDTO = z.infer<typeof CustomerLedgerEntryDTOSchema
 export type SaleDeviceAuditDTO = z.infer<typeof SaleDeviceAuditDTOSchema>;
 export type SaleSummaryDTO = z.infer<typeof SaleSummaryDTOSchema>;
 export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema>;
+export type ParentScopedAddOnSalesRollupDTO = z.infer<typeof ParentScopedAddOnSalesRollupDTOSchema>;
+export type AddOnScopedSalesRollupDTO = z.infer<typeof AddOnScopedSalesRollupDTOSchema>;
+export type AddOnSalesRollupsResponse = z.infer<typeof AddOnSalesRollupsResponseSchema>;
 
 export type SaleStatus = SaleSummaryDTO["status"];
 export type PaymentStatus = SaleSummaryDTO["paymentStatus"];
@@ -182,4 +188,8 @@ export type SaleResponse = {
 export type PaymentResponse = {
     payment: PaymentDTO;
     sale: SaleDetailDTO;
+};
+
+export type AddOnSalesRollupsListResponse = {
+    rollups: AddOnSalesRollupsResponse;
 };

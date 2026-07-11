@@ -351,7 +351,7 @@ export const getCategoriesForDevice = async (
 export const getProductsForDevice = async (
     session: DeviceSessionDTO,
 ): Promise<ServiceResponse<ProductsListResponse | null>> => {
-    const products = await catalogRepository.getProductsByOrganizationId(session.organization.id);
+    const products = await catalogRepository.getActiveProductsByOrganizationId(session.organization.id);
     return {
         status: "success",
         data: { products: await resolveProducts(products) },
