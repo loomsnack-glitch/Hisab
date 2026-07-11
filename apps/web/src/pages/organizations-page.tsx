@@ -6,9 +6,10 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
-import { ArrowRight, Building2, CalendarDays } from "lucide-react";
+import { ArrowRight, Building2, CalendarDays, Pencil } from "lucide-react";
 
 import CreateOrganizationDialog from "@/components/organizations/create-organization-dialog";
+import EditOrganizationDialog from "@/components/organizations/edit-organization-dialog";
 import { formatDateTime } from "@/lib/format";
 import { organizationKeys } from "@/lib/query-keys";
 
@@ -103,17 +104,37 @@ const OrganizationsPage = () => {
                     ) : (
                         <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                             {organizations.map((organization, index) => (
-                                <Link
+                                <div
                                     key={organization.id}
-                                    to={`/organizations/${organization.id}/stores`}
-                                    className="group rounded-2xl border border-border/60 bg-background/80 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
+                                    className="group relative rounded-2xl border border-border/60 bg-background/80 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
                                 >
-                                    <div className="flex items-start gap-4">
+                                    <Link
+                                        to={`/organizations/${organization.id}/stores`}
+                                        className="absolute inset-0 rounded-2xl"
+                                        aria-label={`Open ${organization.name}`}
+                                    />
+                                    <div className="relative flex items-start gap-4">
                                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-amber-400/20 text-primary">
                                             <span className="text-sm font-semibold">{String(index + 1).padStart(2, "0")}</span>
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p className="text-lg font-semibold text-foreground">{organization.name}</p>
+                                            <div className="flex items-start justify-between gap-2">
+                                                <p className="text-lg font-semibold text-foreground">{organization.name}</p>
+                                                <EditOrganizationDialog
+                                                    organization={organization}
+                                                    trigger={
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon-sm"
+                                                            className="relative z-10 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                            aria-label={`Edit ${organization.name}`}
+                                                        >
+                                                            <Pencil className="size-4" />
+                                                        </Button>
+                                                    }
+                                                />
+                                            </div>
                                             <div className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
                                                 <CalendarDays className="size-3.5 shrink-0" />
                                                 <span>{formatDateTime(organization.createdAt)}</span>
@@ -121,11 +142,11 @@ const OrganizationsPage = () => {
                                         </div>
                                     </div>
 
-                                    <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
+                                    <div className="relative mt-4 flex items-center justify-between border-t border-border/40 pt-4 pointer-events-none">
                                         <span className="text-sm font-medium text-primary">Open workspace</span>
                                         <ArrowRight className="size-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-1 group-hover:text-primary" />
                                     </div>
-                                </Link>
+                                </div>
                             ))}
                         </div>
                     )}
