@@ -5,7 +5,9 @@ const storeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const userId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const productId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const addOnId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const addOnId2 = "99999999-9999-4999-8999-999999999999";
 const attachmentId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const attachmentId2 = "88888888-8888-4888-8888-888888888888";
 
 const now = new Date("2026-07-11T12:00:00.000Z");
 
@@ -40,6 +42,19 @@ const addOn = {
     updatedAt: now,
 };
 
+const addOn2 = {
+    id: addOnId2,
+    organizationId,
+    name: "Mayo",
+    price: 5,
+    discount: 0,
+    status: "active" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
 const selectableAttachment = {
     id: attachmentId,
     organizationId,
@@ -52,6 +67,20 @@ const selectableAttachment = {
     createdAt: now,
     updatedAt: now,
     addOn,
+};
+
+const selectableAttachment2 = {
+    id: attachmentId2,
+    organizationId,
+    productId,
+    addOnId: addOnId2,
+    selectionCap: 3,
+    status: "active" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+    addOn: addOn2,
 };
 
 const createdSales: Array<Record<string, unknown>> = [];
@@ -115,8 +144,37 @@ const getSaleItemsBySaleId = mock(async (saleId: string) => {
 });
 
 const getPaymentsBySaleId = mock(async () => []);
-const deleteSaleItemsBySaleId = mock(async () => undefined);
-const updateSale = mock(async () => null);
+
+const deleteSaleItemsBySaleId = mock(async (_organizationId: string, _storeId: string, saleId: string) => {
+    const itemIds = new Set(
+        createdSaleItems.filter((item) => item.saleId === saleId).map((item) => item.id as string),
+    );
+    for (let index = createdSaleItemAddOns.length - 1; index >= 0; index -= 1) {
+        if (itemIds.has(createdSaleItemAddOns[index]?.saleItemId as string)) {
+            createdSaleItemAddOns.splice(index, 1);
+        }
+    }
+    for (let index = createdSaleItems.length - 1; index >= 0; index -= 1) {
+        if (createdSaleItems[index]?.saleId === saleId) {
+            createdSaleItems.splice(index, 1);
+        }
+    }
+});
+
+const updateSale = mock(async (data: Record<string, unknown>) => {
+    const index = createdSales.findIndex((row) => row.id === data.id);
+    if (index < 0) {
+        return null;
+    }
+
+    createdSales[index] = {
+        ...createdSales[index],
+        ...data,
+        updatedAt: now,
+    };
+    return createdSales[index];
+});
+
 const getCustomerById = mock(async () => null);
 
 mock.module("@/config/db", () => ({
@@ -156,6 +214,16 @@ mock.module("./billing.repository", () => ({
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
 const billingService = await import("./billing.service");
 
+const resolveSelectableAttachment = (requestedAddOnId: string) => {
+    if (requestedAddOnId === addOnId) {
+        return selectableAttachment;
+    }
+    if (requestedAddOnId === addOnId2) {
+        return selectableAttachment2;
+    }
+    return null;
+};
+
 describe("Configured product billing with trusted snapshots", () => {
     let getProductByIdSpy: ReturnType<typeof spyOn>;
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
@@ -170,12 +238,16 @@ describe("Configured product billing with trusted snapshots", () => {
         createSaleItemAddOn.mockClear();
         getSaleById.mockClear();
         getSaleItemsBySaleId.mockClear();
+        deleteSaleItemsBySaleId.mockClear();
+        updateSale.mockClear();
 
         getProductByIdSpy = spyOn(catalogRepository, "getProductById").mockResolvedValue(product as never);
         getSelectableAttachmentSpy = spyOn(
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
-        ).mockResolvedValue(selectableAttachment as never);
+        ).mockImplementation(async (_organizationId, _productId, requestedAddOnId) =>
+            resolveSelectableAttachment(requestedAddOnId) as never,
+        );
     });
 
     afterEach(() => {
@@ -296,5 +368,310 @@ describe("Configured product billing with trusted snapshots", () => {
             unitPriceSnapshot: 20,
             unitDiscountSnapshot: 2,
         });
+    });
+});
+
+describe("Configuration-aware Draft Sale behavior", () => {
+    let getProductByIdSpy: ReturnType<typeof spyOn>;
+    let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+        createdSales.length = 0;
+        createdSaleItems.length = 0;
+        createdSaleItemAddOns.length = 0;
+
+        createSale.mockClear();
+        createSaleItem.mockClear();
+        createSaleItemAddOn.mockClear();
+        getSaleById.mockClear();
+        getSaleItemsBySaleId.mockClear();
+        deleteSaleItemsBySaleId.mockClear();
+        updateSale.mockClear();
+
+        getProductByIdSpy = spyOn(catalogRepository, "getProductById").mockResolvedValue(product as never);
+        getSelectableAttachmentSpy = spyOn(
+            catalogRepository,
+            "getSelectableProductAddOnAttachmentByProductAndAddOn",
+        ).mockImplementation(async (_organizationId, _productId, requestedAddOnId) =>
+            resolveSelectableAttachment(requestedAddOnId) as never,
+        );
+    });
+
+    afterEach(() => {
+        getProductByIdSpy.mockRestore();
+        getSelectableAttachmentSpy.mockRestore();
+    });
+
+    test("merges identical configurations by quantity", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                { productId, quantity: 1, addOns: [{ addOnId, quantity: 1 }] },
+                { productId, quantity: 2, addOns: [{ addOnId, quantity: 1 }] },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItems[0]?.quantity).toBe(3);
+        expect(createdSaleItems[0]?.configurationSignature).toBe(`${addOnId}:1`);
+        expect(createdSaleItemAddOns).toHaveLength(1);
+        expect(createdSaleItemAddOns[0]?.quantityPerParent).toBe(1);
+        expect(createdSaleItemAddOns[0]?.totalQuantity).toBe(3);
+        expect(response.data?.sale.items).toHaveLength(1);
+        expect(response.data?.sale.items[0]?.quantity).toBe(3);
+    });
+
+    test("keeps different configurations of the same product on separate lines", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                { productId, quantity: 1, addOns: [] },
+                { productId, quantity: 1, addOns: [{ addOnId, quantity: 1 }] },
+                { productId, quantity: 1, addOns: [{ addOnId, quantity: 2 }] },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(3);
+
+        const signatures = createdSaleItems.map((item) => item.configurationSignature).sort();
+        expect(signatures).toEqual(["", `${addOnId}:1`, `${addOnId}:2`]);
+        expect(response.data?.sale.items).toHaveLength(3);
+    });
+
+    test("normalized signature ignores add-on selection order", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [
+                        { addOnId, quantity: 1 },
+                        { addOnId: addOnId2, quantity: 2 },
+                    ],
+                },
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [
+                        { addOnId: addOnId2, quantity: 2 },
+                        { addOnId, quantity: 1 },
+                    ],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItems[0]?.quantity).toBe(2);
+
+        const sortedSignature = [`${addOnId}:1`, `${addOnId2}:2`].sort().join("|");
+        expect(createdSaleItems[0]?.configurationSignature).toBe(sortedSignature);
+        expect(createdSaleItemAddOns).toHaveLength(2);
+    });
+
+    test("customize with no selected add-ons merges into the plain product line", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                { productId, quantity: 1, addOns: [] },
+                { productId, quantity: 2 },
+                { productId, quantity: 1, addOns: [] },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItems[0]?.quantity).toBe(4);
+        expect(createdSaleItems[0]?.configurationSignature).toBe("");
+        expect(createdSaleItemAddOns).toHaveLength(0);
+    });
+
+    test("rejects decimal product quantities", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId, quantity: 1.5, addOns: [] }],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("whole number");
+        expect(createSale).not.toHaveBeenCalled();
+        expect(createSaleItem).not.toHaveBeenCalled();
+    });
+
+    test("rejects negative add-on quantities in backend validation", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: -1 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("whole number");
+        expect(createSale).not.toHaveBeenCalled();
+        expect(createSaleItem).not.toHaveBeenCalled();
+    });
+
+    test("rejects decimal add-on quantities", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1.5 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("whole number");
+        expect(createSale).not.toHaveBeenCalled();
+        expect(createSaleItem).not.toHaveBeenCalled();
+    });
+
+    test("rejects add-on quantity above the selection cap", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 3 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("selection cap");
+        expect(createSale).not.toHaveBeenCalled();
+        expect(createSaleItem).not.toHaveBeenCalled();
+        expect(createSaleItemAddOn).not.toHaveBeenCalled();
+    });
+
+    test("rejects invalid configured selections atomically", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [
+                        { addOnId, quantity: 1 },
+                        { addOnId, quantity: 1 },
+                    ],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("Duplicate add-ons");
+        expect(createSale).not.toHaveBeenCalled();
+        expect(createSaleItem).not.toHaveBeenCalled();
+        expect(createSaleItemAddOn).not.toHaveBeenCalled();
+    });
+
+    test("rejects inactive or unattached add-ons atomically without partial save", async () => {
+        getSelectableAttachmentSpy.mockImplementation(async (_organizationId, _productId, requestedAddOnId) => {
+            if (requestedAddOnId === addOnId) {
+                return selectableAttachment as never;
+            }
+            return null;
+        });
+
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [
+                        { addOnId, quantity: 1 },
+                        { addOnId: addOnId2, quantity: 1 },
+                    ],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("not selectable");
+        expect(createSale).not.toHaveBeenCalled();
+        expect(createSaleItem).not.toHaveBeenCalled();
+        expect(createSaleItemAddOn).not.toHaveBeenCalled();
+    });
+
+    test("quantity updates scale the frozen configuration without changing add-on selection", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [
+                        { addOnId, quantity: 1 },
+                        { addOnId: addOnId2, quantity: 2 },
+                    ],
+                },
+            ],
+        });
+
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id;
+        expect(saleId).toBeTruthy();
+
+        const originalSignature = createdSaleItems[0]?.configurationSignature;
+        expect(createdSaleItemAddOns.map((row) => ({
+            addOnId: row.addOnId,
+            quantityPerParent: row.quantityPerParent,
+        }))).toEqual(
+            expect.arrayContaining([
+                { addOnId, quantityPerParent: 1 },
+                { addOnId: addOnId2, quantityPerParent: 2 },
+            ]),
+        );
+
+        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId!, {
+            items: [
+                {
+                    productId,
+                    quantity: 3,
+                    addOns: [
+                        { addOnId: addOnId2, quantity: 2 },
+                        { addOnId, quantity: 1 },
+                    ],
+                },
+            ],
+        });
+
+        expect(updated.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItems[0]?.quantity).toBe(3);
+        expect(createdSaleItems[0]?.configurationSignature).toBe(originalSignature);
+        expect(createdSaleItemAddOns).toHaveLength(2);
+
+        const cheese = createdSaleItemAddOns.find((row) => row.addOnId === addOnId);
+        const mayo = createdSaleItemAddOns.find((row) => row.addOnId === addOnId2);
+        expect(cheese?.quantityPerParent).toBe(1);
+        expect(cheese?.totalQuantity).toBe(3);
+        expect(mayo?.quantityPerParent).toBe(2);
+        expect(mayo?.totalQuantity).toBe(6);
+    });
+
+    test("accepts multiple different add-ons on one configured product line", async () => {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
+                    productId,
+                    quantity: 2,
+                    addOns: [
+                        { addOnId, quantity: 1 },
+                        { addOnId: addOnId2, quantity: 2 },
+                    ],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItemAddOns).toHaveLength(2);
+        expect(response.data?.sale.items[0]?.addOns).toHaveLength(2);
+        // parent: 2*(100)=200, cheese: 2*1*20=40, mayo: 2*2*5=20 => 260
+        expect(response.data?.sale.subtotal).toBe(260);
     });
 });

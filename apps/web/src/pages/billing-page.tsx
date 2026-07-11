@@ -81,6 +81,26 @@ type ComposerItem = {
     addOns: ComposerAddOn[];
 };
 
+const buildComposerConfigurationSignature = (addOns: ComposerAddOn[]) => {
+    const selected = addOns.filter((addOn) => addOn.quantity > 0);
+    if (selected.length === 0) {
+        return "";
+    }
+
+    return [...selected]
+        .sort((left, right) => left.addOnId.localeCompare(right.addOnId))
+        .map((addOn) => `${addOn.addOnId}:${addOn.quantity}`)
+        .join("|");
+};
+
+const isSameComposerConfiguration = (left: ComposerItem, right: {
+    productId: string;
+    addOns: ComposerAddOn[];
+}) =>
+    left.productId === right.productId
+    && buildComposerConfigurationSignature(left.addOns)
+        === buildComposerConfigurationSignature(right.addOns);
+
 type SettlementMode = "full" | "partial" | "due";
 
 /* ---------- emoji map for product categories ---------- */
@@ -410,7 +430,7 @@ const BillingPage = ({
     const addProductToBill = (product: ProductResponseDTO) => {
         setItems((current) => {
             const existingPlainItem = current.find(
-                (item) => item.productId === product.id && item.addOns.length === 0,
+                (item) => isSameComposerConfiguration(item, { productId: product.id, addOns: [] }),
             );
             if (existingPlainItem) {
                 return current.map((item) =>
@@ -445,19 +465,33 @@ const BillingPage = ({
             return;
         }
 
-        setItems((current) => [
-            ...current,
-            {
-                key: crypto.randomUUID(),
-                productId: product.id,
-                name: product.name,
-                categoryId: product.categoryId,
-                unitPrice: Number(product.price),
-                unitDiscount: Number(product.discount ?? 0),
-                quantity: 1,
-                addOns,
-            },
-        ]);
+        setItems((current) => {
+            const existingConfiguredItem = current.find((item) =>
+                isSameComposerConfiguration(item, { productId: product.id, addOns }),
+            );
+
+            if (existingConfiguredItem) {
+                return current.map((item) =>
+                    item.key === existingConfiguredItem.key
+                        ? { ...item, quantity: item.quantity + 1 }
+                        : item,
+                );
+            }
+
+            return [
+                ...current,
+                {
+                    key: crypto.randomUUID(),
+                    productId: product.id,
+                    name: product.name,
+                    categoryId: product.categoryId,
+                    unitPrice: Number(product.price),
+                    unitDiscount: Number(product.discount ?? 0),
+                    quantity: 1,
+                    addOns,
+                },
+            ];
+        });
     };
 
     const updateItemQuantity = (itemKey: string, nextQuantity: number) => {

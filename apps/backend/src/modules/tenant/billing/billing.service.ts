@@ -71,6 +71,8 @@ const deriveOrderDiscountAmount = (
     lineDiscountTotal: number | string | null | undefined,
 ) => roundMoney(Math.max(moneyFrom(discountTotal) - moneyFrom(lineDiscountTotal), 0));
 
+const isWholeCount = (value: number) => Number.isInteger(value) && value > 0;
+
 const buildConfigurationSignature = (
     addOns: Array<{ addOnId: string; quantity: number }>,
 ) => {
@@ -82,6 +84,96 @@ const buildConfigurationSignature = (
         .sort((left, right) => left.addOnId.localeCompare(right.addOnId))
         .map((addOn) => `${addOn.addOnId}:${addOn.quantity}`)
         .join("|");
+};
+
+const normalizeSelectedAddOns = (
+    addOns: SaleItemInput["addOns"] | undefined,
+):
+    | { error: ServiceResponse<null>; addOns?: undefined }
+    | { error?: undefined; addOns: Array<{ addOnId: string; quantity: number }> } => {
+    const selectedAddOns = (addOns ?? [])
+        .map((addOn) => ({
+            addOnId: addOn.addOnId,
+            quantity: Number(addOn.quantity),
+        }));
+
+    const seenAddOnIds = new Set<string>();
+    for (const addOn of selectedAddOns) {
+        if (!isWholeCount(addOn.quantity)) {
+            return {
+                error: {
+                    status: "error",
+                    message: "Add-on quantity must be a whole number greater than 0",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        if (seenAddOnIds.has(addOn.addOnId)) {
+            return {
+                error: {
+                    status: "error",
+                    message: "Duplicate add-ons are not allowed within the same configured product",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        seenAddOnIds.add(addOn.addOnId);
+    }
+
+    return {
+        addOns: [...selectedAddOns].sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
+    };
+};
+
+const mergeSaleItemInputsByConfiguration = (
+    items: SaleItemInput[],
+):
+    | { error: ServiceResponse<null>; items?: undefined }
+    | { error?: undefined; items: SaleItemInput[] } => {
+    const mergedByKey = new Map<string, SaleItemInput>();
+
+    for (const item of items) {
+        const parentQuantity = Number(item.quantity);
+        if (!isWholeCount(parentQuantity)) {
+            return {
+                error: {
+                    status: "error",
+                    message: "Product quantity must be a whole number greater than 0",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        const normalizedAddOns = normalizeSelectedAddOns(item.addOns);
+        if (normalizedAddOns.error) {
+            return { error: normalizedAddOns.error };
+        }
+
+        const configurationSignature = buildConfigurationSignature(normalizedAddOns.addOns);
+        const configurationKey = `${item.productId}::${configurationSignature}`;
+        const existing = mergedByKey.get(configurationKey);
+
+        if (existing) {
+            mergedByKey.set(configurationKey, {
+                ...existing,
+                quantity: Number(existing.quantity) + parentQuantity,
+            });
+            continue;
+        }
+
+        mergedByKey.set(configurationKey, {
+            productId: item.productId,
+            quantity: parentQuantity,
+            addOns: normalizedAddOns.addOns,
+        });
+    }
+
+    return { items: [...mergedByKey.values()] };
 };
 
 type SalePricingTotals = {
@@ -242,26 +334,16 @@ const prepareSaleItems = async (
         totals: SalePricingTotals;
     }
 > => {
-    const seenConfigurationKeys = new Set<string>();
+    const mergedItems = mergeSaleItemInputsByConfiguration(items);
+    if (mergedItems.error) {
+        return { error: mergedItems.error };
+    }
+
     const preparedLines: PreparedSaleLine[] = [];
 
-    for (const item of items) {
-        const selectedAddOns = (item.addOns ?? []).filter((addOn) => Number(addOn.quantity) > 0);
+    for (const item of mergedItems.items) {
+        const selectedAddOns = item.addOns ?? [];
         const configurationSignature = buildConfigurationSignature(selectedAddOns);
-        const configurationKey = `${item.productId}::${configurationSignature}`;
-
-        if (seenConfigurationKeys.has(configurationKey)) {
-            return {
-                error: {
-                    status: "error",
-                    message: "Duplicate configured products are not allowed within the same sale",
-                    data: null,
-                    code: STATUS_CODES.CONFLICT,
-                },
-            };
-        }
-
-        seenConfigurationKeys.add(configurationKey);
 
         const product = await catalogRepository.getProductById(organizationId, item.productId);
         if (!product) {
@@ -286,25 +368,11 @@ const prepareSaleItems = async (
             };
         }
 
-        const seenAddOnIds = new Set<string>();
         const preparedAddOns: CreateSaleItemAddOnREPO[] = [];
         const parentQuantity = Number(item.quantity);
         const saleItemId = crypto.randomUUID();
 
         for (const selectedAddOn of selectedAddOns) {
-            if (seenAddOnIds.has(selectedAddOn.addOnId)) {
-                return {
-                    error: {
-                        status: "error",
-                        message: "Duplicate add-ons are not allowed within the same configured product",
-                        data: null,
-                        code: STATUS_CODES.BAD_REQUEST,
-                    },
-                };
-            }
-
-            seenAddOnIds.add(selectedAddOn.addOnId);
-
             const attachment = await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
                 organizationId,
                 item.productId,

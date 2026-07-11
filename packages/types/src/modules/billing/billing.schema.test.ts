@@ -43,6 +43,33 @@ describe("Configured sale billing contracts", () => {
         expect(result.success).toBe(false);
     });
 
+    test("sale item add-on input rejects decimal quantities", () => {
+        const result = SaleItemInputSchema.safeParse({
+            productId: "11111111-1111-4111-8111-111111111111",
+            quantity: 1,
+            addOns: [
+                {
+                    addOnId: "22222222-2222-4222-8222-222222222222",
+                    quantity: 1.25,
+                },
+            ],
+        });
+
+        expect(result.success).toBe(false);
+    });
+
+    test("sale item input defaults missing add-ons to an empty selection", () => {
+        const result = SaleItemInputSchema.safeParse({
+            productId: "11111111-1111-4111-8111-111111111111",
+            quantity: 1,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.addOns).toEqual([]);
+        }
+    });
+
     test("sale detail nests add-ons under parent product rows", () => {
         const now = new Date("2026-07-11T12:00:00.000Z");
         const result = SaleDetailDTOSchema.safeParse({
