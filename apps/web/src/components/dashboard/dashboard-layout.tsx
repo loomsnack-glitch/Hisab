@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations, userLogout } from "@repo/services";
@@ -17,7 +17,7 @@ import {
 import { Avatar, AvatarFallback } from "@repo/ui/components/avatar";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { ChevronDown, Check, Plus, User, LogOut, Phone, MonitorSmartphone } from "lucide-react";
+import { ChevronDown, Check, Plus, User, LogOut, Phone, MonitorSmartphone, Star } from "lucide-react";
 import { toast } from "sonner";
 
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
@@ -40,6 +40,33 @@ const getUserFullName = (user: any) => {
     return [salutation, user?.firstName, user?.lastName].filter(Boolean).join(" ");
 };
 
+const getOrgInitials = (name?: string) => {
+    if (!name) return "OR";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+};
+
+const getOrgBgColor = (id?: string) => {
+    if (!id) return "bg-primary/10 text-primary border-primary/20";
+    const colors = [
+        "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+        "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+        "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+        "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+        "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
+    ];
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+        hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+};
+
 const DashboardLayout = () => {
     const location = useLocation();
     const authUser = useAuthUser();
@@ -59,10 +86,76 @@ const DashboardLayout = () => {
         [organizationsQuery.data],
     );
 
-    const currentOrg = useMemo(
-        () => organizations.find((org) => org.id === organizationId),
-        [organizations, organizationId],
-    );
+    const [starredOrgId, setStarredOrgId] = useState<string>(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("hisab_starred_org_id") || "";
+        }
+        return "";
+    });
+
+    const handleToggleStar = (orgId: string) => {
+        setStarredOrgId((prev) => {
+            const next = prev === orgId ? "" : orgId;
+            if (next) {
+                localStorage.setItem("hisab_starred_org_id", next);
+            } else {
+                localStorage.removeItem("hisab_starred_org_id");
+            }
+            return next;
+        });
+    };
+
+    const activeOrgId = organizationId || localStorage.getItem("hisab_recent_org_id") || starredOrgId || "";
+
+    const activeOrg = useMemo(() => {
+        return organizations.find((org) => org.id === activeOrgId) || organizations.find((org) => org.id === organizationId);
+    }, [organizations, activeOrgId, organizationId]);
+
+    const activeOrgName = useMemo(() => {
+        if (activeOrg) return activeOrg.name;
+        // Fallback display name during reload/refresh while query is pending
+        if (organizationId && localStorage.getItem("hisab_recent_org_id") === organizationId) {
+            return localStorage.getItem("hisab_recent_org_name") || "";
+        }
+        return "";
+    }, [activeOrg, organizationId]);
+
+    useEffect(() => {
+        if (organizationId) {
+            localStorage.setItem("hisab_recent_org_id", organizationId);
+            const org = organizations.find((o) => o.id === organizationId);
+            if (org) {
+                localStorage.setItem("hisab_recent_org_name", org.name);
+            }
+        }
+    }, [organizationId, organizations]);
+
+    const [hasAttemptedRedirect, setHasAttemptedRedirect] = useState(false);
+
+    useEffect(() => {
+        if (hasAttemptedRedirect || organizationsQuery.isPending || organizations.length === 0) {
+            return;
+        }
+
+        const isAtDashboardOrRoot = location.pathname === "/dashboard" || location.pathname === "/";
+        const wasRedirectedThisSession = sessionStorage.getItem("hisab_initial_org_redirected");
+
+        if (isAtDashboardOrRoot && !wasRedirectedThisSession) {
+            const starredId = localStorage.getItem("hisab_starred_org_id");
+            const recentId = localStorage.getItem("hisab_recent_org_id");
+
+            const targetId = starredId || recentId;
+            if (targetId && organizations.some((org) => org.id === targetId)) {
+                sessionStorage.setItem("hisab_initial_org_redirected", "true");
+                setHasAttemptedRedirect(true);
+                navigate(`/organizations/${targetId}`, { replace: true });
+                return;
+            }
+        }
+
+        sessionStorage.setItem("hisab_initial_org_redirected", "true");
+        setHasAttemptedRedirect(true);
+    }, [organizationsQuery.isPending, organizations, location.pathname, navigate, hasAttemptedRedirect]);
 
     const toggleSidebar = useCallback(() => {
         setIsSidebarCollapsed((previous) => {
@@ -93,6 +186,8 @@ const DashboardLayout = () => {
         onToggle: toggleSidebar,
     };
 
+    const isStarredActive = starredOrgId && activeOrg && starredOrgId === activeOrg.id;
+
     return (
         <div className="min-h-screen bg-background text-foreground">
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -120,44 +215,87 @@ const DashboardLayout = () => {
                                     render={
                                         <Button
                                             variant="outline"
-                                            className="h-9 gap-2 rounded-xl border-border/70 bg-background/50 px-3 py-1.5 text-sm font-medium hover:bg-muted/50"
+                                            className={cn(
+                                                "h-9 gap-2.5 rounded-xl border border-border/70 bg-background/50 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-muted/30 hover:border-amber-500/50 focus:border-amber-500/60 focus:ring-1 focus:ring-amber-500/60",
+                                                activeOrg && "pl-2.5 pr-3"
+                                            )}
                                         >
-                                            <span className="truncate max-w-[160px]">
-                                                {currentOrg ? currentOrg.name : "Select organization"}
+                                            {activeOrg && (
+                                                <Star className={cn("size-4 shrink-0 transition-transform", isStarredActive ? "text-amber-500 fill-amber-500 scale-105" : "text-muted-foreground/50")} />
+                                            )}
+                                            {activeOrg && (
+                                                <div className={cn("size-6 rounded-full flex items-center justify-center text-[10px] font-bold border shrink-0", getOrgBgColor(activeOrg.id))}>
+                                                    {getOrgInitials(activeOrgName)}
+                                                </div>
+                                            )}
+                                            <span className="truncate max-w-[140px] text-foreground">
+                                                {activeOrgName || "Select organization"}
                                             </span>
+                                            {activeOrg && (
+                                                <div className="h-4 w-px bg-border/60 mx-0.5 shrink-0" />
+                                            )}
                                             <ChevronDown className="size-4 text-muted-foreground shrink-0" />
                                         </Button>
                                     }
                                 />
-                                <DropdownMenuContent align="start" className="w-56 rounded-xl border border-border/60 bg-popover/95 p-1 shadow-lg backdrop-blur-xl z-50">
+                                <DropdownMenuContent align="start" className="w-64 rounded-xl border border-border/60 bg-popover/95 p-1.5 shadow-xl backdrop-blur-xl z-50 space-y-0.5">
                                     {organizations.length === 0 ? (
                                         <div className="px-2.5 py-2 text-xs text-muted-foreground">
                                             No organizations
                                         </div>
                                     ) : (
-                                        organizations.map((org) => (
-                                            <DropdownMenuItem
-                                                key={org.id}
-                                                onClick={() =>
-                                                    navigate(
-                                                        location.pathname.includes("/billing")
-                                                            ? `/organizations/${org.id}/billing`
-                                                            : `/organizations/${org.id}`,
-                                                    )
-                                                }
-                                                className={cn(
-                                                    "flex items-center justify-between rounded-lg px-2.5 py-2 text-sm cursor-pointer",
-                                                    org.id === organizationId
-                                                        ? "bg-primary/10 text-primary font-medium focus:bg-primary/15 focus:text-primary"
-                                                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                                                )}
-                                            >
-                                                <span className="truncate">{org.name}</span>
-                                                {org.id === organizationId && (
-                                                    <Check className="size-4 text-primary shrink-0" />
-                                                )}
-                                            </DropdownMenuItem>
-                                        ))
+                                        organizations.map((org) => {
+                                            const isOrgStarred = starredOrgId === org.id;
+                                            const isOrgActive = activeOrgId === org.id || organizationId === org.id;
+
+                                            return (
+                                                <DropdownMenuItem
+                                                    key={org.id}
+                                                    onClick={() =>
+                                                        navigate(
+                                                            location.pathname.includes("/billing")
+                                                                ? `/organizations/${org.id}/billing`
+                                                                : `/organizations/${org.id}`,
+                                                        )
+                                                    }
+                                                    className={cn(
+                                                        "flex items-center justify-between gap-2.5 rounded-lg px-2.5 py-2 text-sm cursor-pointer transition-colors duration-150",
+                                                        isOrgActive
+                                                            ? "bg-primary/10 text-primary font-medium focus:bg-primary/15"
+                                                            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                                                    )}
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleToggleStar(org.id);
+                                                            }}
+                                                            className="p-1 hover:bg-muted/70 rounded-md transition-colors text-muted-foreground/60 hover:text-amber-500 shrink-0"
+                                                            title={isOrgStarred ? "Unstar organization" : "Star organization"}
+                                                        >
+                                                            <Star
+                                                                className={cn(
+                                                                    "size-4 transition-all hover:scale-110",
+                                                                    isOrgStarred ? "text-amber-500 fill-amber-500" : "text-muted-foreground/45 hover:text-amber-500"
+                                                                )}
+                                                            />
+                                                        </button>
+
+                                                        <div className={cn("size-6 rounded-full flex items-center justify-center text-[10px] font-bold border shrink-0", getOrgBgColor(org.id))}>
+                                                            {getOrgInitials(org.name)}
+                                                        </div>
+
+                                                        <span className="truncate font-medium text-foreground">{org.name}</span>
+                                                    </div>
+
+                                                    {isOrgActive && (
+                                                        <Check className="size-4 text-amber-500 shrink-0 font-bold" />
+                                                    )}
+                                                </DropdownMenuItem>
+                                            );
+                                        })
                                     )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
