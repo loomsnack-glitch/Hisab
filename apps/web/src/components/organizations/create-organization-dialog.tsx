@@ -114,14 +114,10 @@ const CreateOrganizationDialog = ({ trigger }: CreateOrganizationDialogProps) =>
                 }
             />
              <DialogContent className="relative overflow-hidden sm:max-w-md border-border/80 shadow-2xl backdrop-blur-md">
-                <DialogHeader className="flex flex-row items-center gap-3 border-b border-border/30 pb-3">
-                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary transition-all duration-300 hover:scale-105 group">
-                        <Building2 className="size-5 transition-transform duration-300" />
-                    </div>
-                    <DialogTitle className="text-left text-lg font-bold tracking-tight text-foreground font-display">
-                        Create organization
-                    </DialogTitle>
-                </DialogHeader>
+                <DialogHeader
+                    icon={<Building2 className="size-5 transition-transform duration-300" />}
+                    title="Create organization"
+                />
 
                 <form className="space-y-6 pt-3" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
@@ -169,7 +165,7 @@ const CreateOrganizationDialog = ({ trigger }: CreateOrganizationDialogProps) =>
                         </FieldContent>
                     </Field>
 
-                    <DialogFooter className="mt-6">
+                    <DialogFooter className="mt-6 border-t border-border/30">
                         <Button
                             type="button"
                             variant="outline"

@@ -141,7 +141,7 @@ function DialogContent({
             ref={popupRef}
             data-slot="dialog-content"
             className={cn(
-              "bg-background data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 text-sm ring-1 sm:max-w-sm w-full outline-none relative transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50",
+              "bg-background/90 data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 text-sm ring-1 sm:max-w-md w-full outline-none relative transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50 border border-border/80 shadow-2xl backdrop-blur-md overflow-hidden",
               className
             )}
             style={getNestedPopupStyle(style, 60)}
@@ -170,13 +170,58 @@ function DialogContent({
   )
 }
 
-function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+function DialogHeader({
+  className,
+  icon,
+  title,
+  subtitle,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & {
+  icon?: React.ReactNode
+  title?: React.ReactNode
+  subtitle?: React.ReactNode
+}) {
+  if (icon || title) {
+    return (
+      <div
+        data-slot="dialog-header"
+        className={cn(
+          "flex flex-row items-center gap-3 border-b border-border/30 pb-3",
+          className
+        )}
+        {...props}
+      >
+        {icon && (
+          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary transition-all duration-300 hover:scale-105 group">
+            {icon}
+          </div>
+        )}
+        <div className="flex flex-col min-w-0">
+          {title && (
+            <DialogPrimitive.Title className="text-left text-lg font-bold tracking-tight text-foreground font-display">
+              {title}
+            </DialogPrimitive.Title>
+          )}
+          {subtitle && (
+            <p className="text-left text-xs text-muted-foreground">
+              {subtitle}
+            </p>
+          )}
+        </div>
+        {children}
+      </div>
+    )
+  }
+
   return (
     <div
       data-slot="dialog-header"
       className={cn("gap-2 flex flex-col", className)}
       {...props}
-    />
+    >
+      {children}
+    </div>
   )
 }
 
@@ -192,7 +237,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        "bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t border-border/30 p-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
         className
       )}
       {...props}

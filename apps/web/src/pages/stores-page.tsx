@@ -4,7 +4,7 @@ import { getOrganizationDetails } from "@repo/services";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Button } from "@repo/ui/components/button";
-import { Store } from "lucide-react";
+
 
 import StoresSection from "@/components/organizations/stores-section";
 import { organizationKeys } from "@/lib/query-keys";
@@ -51,19 +51,6 @@ const StoresPage = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Store className="size-4" />
-                </div>
-                <div>
-                    <h3 className="font-display text-xl font-semibold text-foreground">
-                        Stores
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                        Manage your store branches and registered devices.
-                    </p>
-                </div>
-            </div>
             <StoresSection organizationId={organization.id} stores={organization.stores} />
         </div>
     );

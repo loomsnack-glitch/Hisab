@@ -4,7 +4,7 @@ import { getOrganizationDetails } from "@repo/services";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Button } from "@repo/ui/components/button";
-import { Package2 } from "lucide-react";
+
 
 import CatalogSection from "@/components/catalog/catalog-section";
 import { organizationKeys } from "@/lib/query-keys";
@@ -51,19 +51,6 @@ const ProductsPage = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                    <Package2 className="size-4" />
-                </div>
-                <div>
-                    <h3 className="font-display text-xl font-semibold text-foreground">
-                        Products
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                        Manage your categories and product menu.
-                    </p>
-                </div>
-            </div>
             <CatalogSection organizationId={organization.id} />
         </div>
     );

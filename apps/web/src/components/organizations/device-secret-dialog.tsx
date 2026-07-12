@@ -5,10 +5,8 @@ import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
-    DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Eye, EyeOff, KeyRound, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
@@ -53,16 +51,11 @@ const DeviceSecretDialog = ({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-xl">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-                        <KeyRound className="size-4 text-primary" />
-                        Device secret
-                    </DialogTitle>
-                    <DialogDescription>
-                        The secret for <span className="font-medium text-foreground">{deviceName}</span> is hidden by
-                        default. Reveal it only when you need to connect or troubleshoot a POS terminal.
-                    </DialogDescription>
-                </DialogHeader>
+                <DialogHeader
+                    icon={<KeyRound className="size-5 transition-transform duration-300" />}
+                    title="Device secret"
+                    subtitle={<>The secret for <span className="font-semibold text-foreground">{deviceName}</span> is hidden by default. Reveal it only when you need to connect or troubleshoot a POS terminal.</>}
+                />
 
                 {isLoading ? (
                     <div className="flex min-h-48 items-center justify-center">

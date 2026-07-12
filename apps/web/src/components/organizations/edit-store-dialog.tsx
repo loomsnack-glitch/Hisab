@@ -8,7 +8,6 @@ import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -21,6 +20,7 @@ import { Pencil, Store } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type EditStoreDialogProps = {
     organizationId: string;
@@ -39,6 +39,9 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
             address: store.address ?? "",
         },
     });
+
+    const storeName = form.watch("name");
+    const address = form.watch("address");
 
     useEffect(() => {
         if (open) {
@@ -66,6 +69,47 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
         },
     });
 
+    const { AlertDialogComponent, interceptClose } = useUnsavedChanges({
+        isDirty: form.formState.isDirty,
+        onSave: async () => {
+            let result = false;
+            await form.handleSubmit(async (values) => {
+                try {
+                    const response = await updateMutation.mutateAsync({
+                        name: values.name.trim(),
+                        address: values.address,
+                    });
+                    if (response.status === "success") {
+                        result = true;
+                    }
+                } catch (err) {
+                    result = false;
+                }
+            })();
+            return result;
+        },
+        onDiscard: () => {
+            form.reset({
+                name: store.name,
+                address: store.address ?? "",
+            });
+        },
+    });
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (!nextOpen) {
+            interceptClose(() => {
+                setOpen(false);
+                form.reset({
+                    name: store.name,
+                    address: store.address ?? "",
+                });
+            });
+        } else {
+            setOpen(true);
+        }
+    };
+
     const onSubmit: SubmitHandler<UpdateStoreJSON> = (values) => {
         updateMutation.mutate({
             name: values.name.trim(),
@@ -74,7 +118,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger
                 render={
                     trigger ?? (
@@ -84,31 +128,47 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                     )
                 }
             />
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <Store className="size-5" />
-                    </div>
-                    <DialogTitle className="text-center text-lg font-semibold">Edit store</DialogTitle>
-                    <DialogDescription className="text-center">
-                        Update the name or address for this branch.
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="relative overflow-hidden sm:max-w-md border-border/80 shadow-2xl backdrop-blur-md">
+                <DialogHeader
+                    icon={<Store className="size-5 transition-transform duration-300" />}
+                    title="Edit store"
+                />
 
-                <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="space-y-6 pt-3" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
-                        <FieldLabel required>Store name</FieldLabel>
-                        <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="e.g. Main Street Branch" {...form.register("name")} />
+                        <div className="flex items-center justify-between">
+                            <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 mb-1.5" required>
+                                Store name
+                            </FieldLabel>
+                            <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
+                                {(storeName ?? "").length}/255
+                            </span>
+                        </div>
+                        <FieldContent className="space-y-4">
+                            <Input
+                                variant="ringShadow"
+                                className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
+                                maxLength={255}
+                                placeholder="e.g. Main Street Branch"
+                                {...form.register("name")}
+                            />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
 
                     <Field data-invalid={!!form.formState.errors.address}>
-                        <FieldLabel>Address <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
-                        <FieldContent>
+                        <div className="flex items-center justify-between">
+                            <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 mb-1.5">
+                                Address <span className="font-normal text-muted-foreground/60 lowercase normal-case">(optional)</span>
+                            </FieldLabel>
+                            <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
+                                {(address ?? "").length}/500
+                            </span>
+                        </div>
+                        <FieldContent className="space-y-4">
                             <Textarea
-                                className="min-h-20 rounded-xl"
+                                className="min-h-20 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner resize-none"
+                                maxLength={500}
                                 placeholder="e.g. 123 Main St, City, State"
                                 {...form.register("address")}
                             />
@@ -116,24 +176,25 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                         </FieldContent>
                     </Field>
 
-                    <DialogFooter>
+                    <DialogFooter className="mt-6 border-t border-border/30">
                         <Button
                             type="button"
                             variant="outline"
-                            className="rounded-xl"
-                            onClick={() => setOpen(false)}
+                            className="rounded-xl px-5 font-semibold text-muted-foreground hover:text-foreground transition-all duration-200"
+                            onClick={() => handleOpenChange(false)}
                         >
                             Cancel
                         </Button>
                         <Button
                             type="submit"
-                            className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+                            className="rounded-xl px-5 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold transition-all duration-200"
                             disabled={updateMutation.isPending}
                         >
                             {updateMutation.isPending ? "Saving..." : "Save changes"}
                         </Button>
                     </DialogFooter>
                 </form>
+                {AlertDialogComponent}
             </DialogContent>
         </Dialog>
     );
