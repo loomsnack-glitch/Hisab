@@ -72,6 +72,7 @@ export default defineConfig(({ mode }) => {
             ],
         },
         server: {
+            host: true,
             port: 5173,
             watch: {
                 // Workspace packages are symlinked; pick up new named exports without a full restart.

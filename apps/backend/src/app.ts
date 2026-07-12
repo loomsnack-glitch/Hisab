@@ -23,7 +23,12 @@ const allowedOrigins = process.env.NODE_ENV === "production"
     ];
 
 app.use('*', cors({
-    origin: allowedOrigins,
+    origin: (origin) => {
+        if (process.env.NODE_ENV !== "production") {
+            return origin;
+        }
+        return allowedOrigins.includes(origin) ? origin : undefined;
+    },
     credentials: true,
 }));
 
