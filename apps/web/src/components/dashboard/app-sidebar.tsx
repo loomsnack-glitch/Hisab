@@ -106,7 +106,7 @@ const AppSidebar = ({
                     to: `/organizations/${effectiveOrgId}/products`,
                     label: "Product",
                     icon: Package2,
-                    isActive: /\/organizations\/[^/]+\/products\/?$/.test(location.pathname),
+                    isActive: /\/organizations\/[^/]+\/products(\/|$)/.test(location.pathname),
                 },
                 {
                     to: `/organizations/${effectiveOrgId}/billing`,

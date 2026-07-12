@@ -13,6 +13,9 @@ import PosPage from "@/pages/pos-page";
 import RegisterPage from "@/pages/register-page";
 import StoresPage from "@/pages/stores-page";
 import ProductsPage from "@/pages/products-page";
+import ProductsListPage from "@/pages/products-list-page";
+import CategoriesPage from "@/pages/categories-page";
+import AddOnsPage from "@/pages/add-ons-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 
@@ -91,7 +94,12 @@ const App = () => {
                     <Route path="/organizations" element={<OrganizationsPage />} />
                     <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
                     <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
-                    <Route path="/organizations/:organizationId/products" element={<ProductsPage />} />
+                    <Route path="/organizations/:organizationId/products" element={<ProductsPage />}>
+                        <Route index element={<Navigate to="list" replace />} />
+                        <Route path="list" element={<ProductsListPage />} />
+                        <Route path="categories" element={<CategoriesPage />} />
+                        <Route path="add-ons" element={<AddOnsPage />} />
+                    </Route>
                     <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />

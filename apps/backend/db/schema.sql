@@ -16,6 +16,16 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: add_on_status_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.add_on_status_enum AS ENUM (
+    'active',
+    'inactive'
+);
+
+
+--
 -- Name: category_status_enum; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -62,12 +72,32 @@ CREATE TYPE public.payment_status_enum AS ENUM (
 
 
 --
+-- Name: product_add_on_attachment_status_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.product_add_on_attachment_status_enum AS ENUM (
+    'active',
+    'inactive'
+);
+
+
+--
 -- Name: product_status_enum; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.product_status_enum AS ENUM (
     'active',
     'inactive'
+);
+
+
+--
+-- Name: product_type_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.product_type_enum AS ENUM (
+    'single',
+    'bundle'
 );
 
 
@@ -162,6 +192,63 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: add_ons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.add_ons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    price numeric(10,2) NOT NULL,
+    discount numeric(10,2) DEFAULT 0 NOT NULL,
+    status public.add_on_status_enum DEFAULT 'active'::public.add_on_status_enum NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT add_ons_discount_check CHECK ((discount >= (0)::numeric)),
+    CONSTRAINT add_ons_price_check CHECK ((price >= (0)::numeric))
+);
+
+
+--
+-- Name: bundle_product_component_add_ons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.bundle_product_component_add_ons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    bundle_product_component_id uuid CONSTRAINT bundle_product_component_ad_bundle_product_component_i_not_null NOT NULL,
+    add_on_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT bundle_product_component_add_ons_quantity_check CHECK ((quantity >= 1))
+);
+
+
+--
+-- Name: bundle_product_components; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.bundle_product_components (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    bundle_product_id uuid NOT NULL,
+    component_product_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT bundle_product_components_not_self CHECK ((bundle_product_id <> component_product_id)),
+    CONSTRAINT bundle_product_components_quantity_check CHECK ((quantity >= 1))
+);
+
+
+--
 -- Name: categories; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -239,7 +326,7 @@ CREATE TABLE public.payments (
     organization_id uuid NOT NULL,
     store_id uuid NOT NULL,
     sale_id uuid NOT NULL,
-    collected_by uuid NOT NULL,
+    collected_by uuid,
     amount numeric(12,2) NOT NULL,
     method public.payment_method_enum NOT NULL,
     reference_number character varying(255),
@@ -248,6 +335,25 @@ CREATE TABLE public.payments (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT payments_amount_check CHECK ((amount > (0)::numeric))
+);
+
+
+--
+-- Name: product_add_on_attachments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_add_on_attachments (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    add_on_id uuid NOT NULL,
+    selection_cap integer DEFAULT 1 NOT NULL,
+    status public.product_add_on_attachment_status_enum DEFAULT 'active'::public.product_add_on_attachment_status_enum NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT product_add_on_attachments_selection_cap_check CHECK ((selection_cap >= 1))
 );
 
 
@@ -268,8 +374,91 @@ CREATE TABLE public.products (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    product_type public.product_type_enum DEFAULT 'single'::public.product_type_enum NOT NULL,
     CONSTRAINT products_discount_check CHECK ((discount >= (0)::numeric)),
     CONSTRAINT products_price_check CHECK ((price >= (0)::numeric))
+);
+
+
+--
+-- Name: sale_item_add_ons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sale_item_add_ons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    store_id uuid NOT NULL,
+    sale_id uuid NOT NULL,
+    sale_item_id uuid NOT NULL,
+    add_on_id uuid NOT NULL,
+    quantity_per_parent integer NOT NULL,
+    total_quantity integer NOT NULL,
+    add_on_name_snapshot character varying(255) NOT NULL,
+    unit_price_snapshot numeric(10,2) NOT NULL,
+    unit_discount_snapshot numeric(10,2) DEFAULT 0 NOT NULL,
+    discount_amount numeric(10,2) DEFAULT 0 NOT NULL,
+    line_subtotal numeric(12,2) NOT NULL,
+    line_total numeric(12,2) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sale_item_add_ons_discount_amount_check CHECK (((discount_amount >= (0)::numeric) AND (discount_amount <= line_subtotal))),
+    CONSTRAINT sale_item_add_ons_line_subtotal_check CHECK ((line_subtotal >= (0)::numeric)),
+    CONSTRAINT sale_item_add_ons_line_total_check CHECK (((line_total >= (0)::numeric) AND (line_total = (line_subtotal - discount_amount)))),
+    CONSTRAINT sale_item_add_ons_quantity_per_parent_check CHECK ((quantity_per_parent >= 1)),
+    CONSTRAINT sale_item_add_ons_total_quantity_check CHECK ((total_quantity >= 1)),
+    CONSTRAINT sale_item_add_ons_unit_discount_snapshot_check CHECK ((unit_discount_snapshot >= (0)::numeric)),
+    CONSTRAINT sale_item_add_ons_unit_price_snapshot_check CHECK ((unit_price_snapshot >= (0)::numeric))
+);
+
+
+--
+-- Name: sale_item_bundle_component_add_ons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sale_item_bundle_component_add_ons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    store_id uuid NOT NULL,
+    sale_id uuid NOT NULL,
+    sale_item_id uuid NOT NULL,
+    sale_item_bundle_component_id uuid CONSTRAINT sale_item_bundle_component__sale_item_bundle_component_not_null NOT NULL,
+    add_on_id uuid NOT NULL,
+    quantity_per_component integer CONSTRAINT sale_item_bundle_component_add__quantity_per_component_not_null NOT NULL,
+    total_quantity integer NOT NULL,
+    add_on_name_snapshot character varying(255) CONSTRAINT sale_item_bundle_component_add_on_add_on_name_snapshot_not_null NOT NULL,
+    unit_price_snapshot numeric(10,2) NOT NULL,
+    unit_discount_snapshot numeric(10,2) DEFAULT 0 CONSTRAINT sale_item_bundle_component_add__unit_discount_snapshot_not_null NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sale_item_bundle_component_add_ons_quantity_per_component_check CHECK ((quantity_per_component >= 1)),
+    CONSTRAINT sale_item_bundle_component_add_ons_total_quantity_check CHECK ((total_quantity >= 1)),
+    CONSTRAINT sale_item_bundle_component_add_ons_unit_discount_snapshot_check CHECK ((unit_discount_snapshot >= (0)::numeric)),
+    CONSTRAINT sale_item_bundle_component_add_ons_unit_price_snapshot_check CHECK ((unit_price_snapshot >= (0)::numeric))
+);
+
+
+--
+-- Name: sale_item_bundle_components; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sale_item_bundle_components (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    store_id uuid NOT NULL,
+    sale_id uuid NOT NULL,
+    sale_item_id uuid NOT NULL,
+    component_product_id uuid NOT NULL,
+    quantity_per_bundle integer NOT NULL,
+    total_quantity integer NOT NULL,
+    product_name_snapshot character varying(255) NOT NULL,
+    unit_price_snapshot numeric(10,2) NOT NULL,
+    unit_discount_snapshot numeric(10,2) DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sale_item_bundle_components_quantity_per_bundle_check CHECK ((quantity_per_bundle >= 1)),
+    CONSTRAINT sale_item_bundle_components_total_quantity_check CHECK ((total_quantity >= 1)),
+    CONSTRAINT sale_item_bundle_components_unit_discount_snapshot_check CHECK ((unit_discount_snapshot >= (0)::numeric)),
+    CONSTRAINT sale_item_bundle_components_unit_price_snapshot_check CHECK ((unit_price_snapshot >= (0)::numeric))
 );
 
 
@@ -283,7 +472,7 @@ CREATE TABLE public.sale_items (
     store_id uuid NOT NULL,
     sale_id uuid NOT NULL,
     product_id uuid NOT NULL,
-    quantity numeric(10,3) NOT NULL,
+    quantity integer NOT NULL,
     product_name_snapshot character varying(255) NOT NULL,
     unit_price_snapshot numeric(10,2) NOT NULL,
     discount_amount numeric(10,2) DEFAULT 0 NOT NULL,
@@ -291,10 +480,11 @@ CREATE TABLE public.sale_items (
     line_total numeric(12,2) NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    configuration_signature text DEFAULT ''::text NOT NULL,
     CONSTRAINT sale_items_discount_amount_check CHECK (((discount_amount >= (0)::numeric) AND (discount_amount <= line_subtotal))),
     CONSTRAINT sale_items_line_subtotal_check CHECK ((line_subtotal >= (0)::numeric)),
     CONSTRAINT sale_items_line_total_check CHECK (((line_total >= (0)::numeric) AND (line_total = (line_subtotal - discount_amount)))),
-    CONSTRAINT sale_items_quantity_check CHECK ((quantity > (0)::numeric)),
+    CONSTRAINT sale_items_quantity_check CHECK (((quantity)::numeric > (0)::numeric)),
     CONSTRAINT sale_items_unit_price_snapshot_check CHECK ((unit_price_snapshot >= (0)::numeric))
 );
 
@@ -309,7 +499,7 @@ CREATE TABLE public.sales (
     store_id uuid NOT NULL,
     sale_number bigint,
     customer_id uuid,
-    user_id uuid NOT NULL,
+    user_id uuid,
     status public.sale_status_enum DEFAULT 'draft'::public.sale_status_enum NOT NULL,
     payment_status public.payment_status_enum DEFAULT 'pending'::public.payment_status_enum NOT NULL,
     subtotal numeric(12,2) DEFAULT 0 NOT NULL,
@@ -321,6 +511,8 @@ CREATE TABLE public.sales (
     void_reason text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by_device_id uuid,
+    updated_by_device_id uuid,
     CONSTRAINT sales_discount_total_check CHECK (((discount_total >= (0)::numeric) AND (discount_total <= subtotal))),
     CONSTRAINT sales_draft_commit_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (committed_at IS NULL) AND (payment_status = 'pending'::public.payment_status_enum)) OR ((status <> 'draft'::public.sale_status_enum) AND (committed_at IS NOT NULL)))),
     CONSTRAINT sales_draft_sale_number_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL)))),
@@ -408,6 +600,70 @@ CREATE TABLE public.users (
 
 
 --
+-- Name: add_ons add_ons_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.add_ons
+    ADD CONSTRAINT add_ons_id_organization_id_key UNIQUE (id, organization_id);
+
+
+--
+-- Name: add_ons add_ons_organization_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.add_ons
+    ADD CONSTRAINT add_ons_organization_id_name_key UNIQUE (organization_id, name);
+
+
+--
+-- Name: add_ons add_ons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.add_ons
+    ADD CONSTRAINT add_ons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bundle_product_component_add_ons bundle_product_component_add__bundle_product_component_id_a_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_component_add_ons
+    ADD CONSTRAINT bundle_product_component_add__bundle_product_component_id_a_key UNIQUE (bundle_product_component_id, add_on_id);
+
+
+--
+-- Name: bundle_product_component_add_ons bundle_product_component_add_ons_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_component_add_ons
+    ADD CONSTRAINT bundle_product_component_add_ons_id_organization_id_key UNIQUE (id, organization_id);
+
+
+--
+-- Name: bundle_product_component_add_ons bundle_product_component_add_ons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_component_add_ons
+    ADD CONSTRAINT bundle_product_component_add_ons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bundle_product_components bundle_product_components_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_components
+    ADD CONSTRAINT bundle_product_components_id_organization_id_key UNIQUE (id, organization_id);
+
+
+--
+-- Name: bundle_product_components bundle_product_components_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_components
+    ADD CONSTRAINT bundle_product_components_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: categories categories_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -480,6 +736,30 @@ ALTER TABLE ONLY public.payments
 
 
 --
+-- Name: product_add_on_attachments product_add_on_attachments_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_add_on_attachments
+    ADD CONSTRAINT product_add_on_attachments_id_organization_id_key UNIQUE (id, organization_id);
+
+
+--
+-- Name: product_add_on_attachments product_add_on_attachments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_add_on_attachments
+    ADD CONSTRAINT product_add_on_attachments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: product_add_on_attachments product_add_on_attachments_product_id_add_on_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_add_on_attachments
+    ADD CONSTRAINT product_add_on_attachments_product_id_add_on_id_key UNIQUE (product_id, add_on_id);
+
+
+--
 -- Name: products products_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -501,6 +781,62 @@ ALTER TABLE ONLY public.products
 
 ALTER TABLE ONLY public.products
     ADD CONSTRAINT products_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sale_item_add_ons sale_item_add_ons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_add_ons
+    ADD CONSTRAINT sale_item_add_ons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sale_item_add_ons sale_item_add_ons_sale_item_id_add_on_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_add_ons
+    ADD CONSTRAINT sale_item_add_ons_sale_item_id_add_on_id_key UNIQUE (sale_item_id, add_on_id);
+
+
+--
+-- Name: sale_item_bundle_component_add_ons sale_item_bundle_component_ad_sale_item_bundle_component_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_component_add_ons
+    ADD CONSTRAINT sale_item_bundle_component_ad_sale_item_bundle_component_id_key UNIQUE (sale_item_bundle_component_id, add_on_id);
+
+
+--
+-- Name: sale_item_bundle_component_add_ons sale_item_bundle_component_add_ons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_component_add_ons
+    ADD CONSTRAINT sale_item_bundle_component_add_ons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sale_item_bundle_components sale_item_bundle_components_id_scope_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_components
+    ADD CONSTRAINT sale_item_bundle_components_id_scope_key UNIQUE (id, organization_id, store_id, sale_id, sale_item_id);
+
+
+--
+-- Name: sale_item_bundle_components sale_item_bundle_components_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_components
+    ADD CONSTRAINT sale_item_bundle_components_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sale_items sale_items_id_organization_store_sale_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_items
+    ADD CONSTRAINT sale_items_id_organization_store_sale_key UNIQUE (id, organization_id, store_id, sale_id);
 
 
 --
@@ -541,6 +877,14 @@ ALTER TABLE ONLY public.sales
 
 ALTER TABLE ONLY public.schema_migrations
     ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: store_devices store_devices_id_organization_id_store_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_devices
+    ADD CONSTRAINT store_devices_id_organization_id_store_id_key UNIQUE (id, organization_id, store_id);
 
 
 --
@@ -608,6 +952,62 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_add_ons_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_add_ons_organization_id ON public.add_ons USING btree (organization_id);
+
+
+--
+-- Name: idx_add_ons_organization_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_add_ons_organization_status ON public.add_ons USING btree (organization_id, status);
+
+
+--
+-- Name: idx_bundle_product_component_add_ons_add_on_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bundle_product_component_add_ons_add_on_id ON public.bundle_product_component_add_ons USING btree (add_on_id);
+
+
+--
+-- Name: idx_bundle_product_component_add_ons_component_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bundle_product_component_add_ons_component_id ON public.bundle_product_component_add_ons USING btree (bundle_product_component_id);
+
+
+--
+-- Name: idx_bundle_product_component_add_ons_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bundle_product_component_add_ons_organization_id ON public.bundle_product_component_add_ons USING btree (organization_id);
+
+
+--
+-- Name: idx_bundle_product_components_bundle_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bundle_product_components_bundle_product_id ON public.bundle_product_components USING btree (bundle_product_id);
+
+
+--
+-- Name: idx_bundle_product_components_component_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bundle_product_components_component_product_id ON public.bundle_product_components USING btree (component_product_id);
+
+
+--
+-- Name: idx_bundle_product_components_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bundle_product_components_organization_id ON public.bundle_product_components USING btree (organization_id);
+
+
+--
 -- Name: idx_categories_organization_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -657,6 +1057,34 @@ CREATE INDEX idx_payments_sale_id ON public.payments USING btree (sale_id);
 
 
 --
+-- Name: idx_product_add_on_attachments_add_on_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_add_on_attachments_add_on_id ON public.product_add_on_attachments USING btree (add_on_id);
+
+
+--
+-- Name: idx_product_add_on_attachments_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_add_on_attachments_organization_id ON public.product_add_on_attachments USING btree (organization_id);
+
+
+--
+-- Name: idx_product_add_on_attachments_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_add_on_attachments_product_id ON public.product_add_on_attachments USING btree (product_id);
+
+
+--
+-- Name: idx_product_add_on_attachments_product_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_add_on_attachments_product_status ON public.product_add_on_attachments USING btree (product_id, status);
+
+
+--
 -- Name: idx_products_category_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -671,10 +1099,87 @@ CREATE INDEX idx_products_organization_id ON public.products USING btree (organi
 
 
 --
+-- Name: idx_products_organization_product_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_products_organization_product_type ON public.products USING btree (organization_id, product_type);
+
+
+--
 -- Name: idx_products_organization_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_products_organization_status ON public.products USING btree (organization_id, status);
+
+
+--
+-- Name: idx_sale_item_add_ons_add_on_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_add_ons_add_on_id ON public.sale_item_add_ons USING btree (add_on_id);
+
+
+--
+-- Name: idx_sale_item_add_ons_sale_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_add_ons_sale_id ON public.sale_item_add_ons USING btree (sale_id);
+
+
+--
+-- Name: idx_sale_item_add_ons_sale_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_add_ons_sale_item_id ON public.sale_item_add_ons USING btree (sale_item_id);
+
+
+--
+-- Name: idx_sale_item_bundle_component_add_ons_add_on_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_bundle_component_add_ons_add_on_id ON public.sale_item_bundle_component_add_ons USING btree (add_on_id);
+
+
+--
+-- Name: idx_sale_item_bundle_component_add_ons_component_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_bundle_component_add_ons_component_id ON public.sale_item_bundle_component_add_ons USING btree (sale_item_bundle_component_id);
+
+
+--
+-- Name: idx_sale_item_bundle_component_add_ons_sale_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_bundle_component_add_ons_sale_id ON public.sale_item_bundle_component_add_ons USING btree (sale_id);
+
+
+--
+-- Name: idx_sale_item_bundle_component_add_ons_sale_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_bundle_component_add_ons_sale_item_id ON public.sale_item_bundle_component_add_ons USING btree (sale_item_id);
+
+
+--
+-- Name: idx_sale_item_bundle_components_component_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_bundle_components_component_product_id ON public.sale_item_bundle_components USING btree (component_product_id);
+
+
+--
+-- Name: idx_sale_item_bundle_components_sale_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_bundle_components_sale_id ON public.sale_item_bundle_components USING btree (sale_id);
+
+
+--
+-- Name: idx_sale_item_bundle_components_sale_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_item_bundle_components_sale_item_id ON public.sale_item_bundle_components USING btree (sale_item_id);
 
 
 --
@@ -685,10 +1190,24 @@ CREATE INDEX idx_sale_items_product_id ON public.sale_items USING btree (product
 
 
 --
+-- Name: idx_sale_items_sale_configuration_signature; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sale_items_sale_configuration_signature ON public.sale_items USING btree (sale_id, product_id, configuration_signature);
+
+
+--
 -- Name: idx_sale_items_sale_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_sale_items_sale_id ON public.sale_items USING btree (sale_id);
+
+
+--
+-- Name: idx_sales_created_by_device_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sales_created_by_device_id ON public.sales USING btree (created_by_device_id);
 
 
 --
@@ -720,6 +1239,13 @@ CREATE INDEX idx_sales_store_sale_number ON public.sales USING btree (store_id, 
 
 
 --
+-- Name: idx_sales_updated_by_device_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sales_updated_by_device_id ON public.sales USING btree (updated_by_device_id);
+
+
+--
 -- Name: idx_store_devices_store_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -745,6 +1271,110 @@ CREATE TRIGGER trg_payments_require_completed_sale BEFORE INSERT OR UPDATE ON pu
 --
 
 CREATE TRIGGER trg_sales_prevent_void_with_payments BEFORE UPDATE ON public.sales FOR EACH ROW EXECUTE FUNCTION public.prevent_voided_sale_with_payments();
+
+
+--
+-- Name: add_ons add_ons_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.add_ons
+    ADD CONSTRAINT add_ons_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: add_ons add_ons_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.add_ons
+    ADD CONSTRAINT add_ons_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: add_ons add_ons_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.add_ons
+    ADD CONSTRAINT add_ons_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: bundle_product_component_add_ons bundle_product_component_add__bundle_product_component_id__fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_component_add_ons
+    ADD CONSTRAINT bundle_product_component_add__bundle_product_component_id__fkey FOREIGN KEY (bundle_product_component_id, organization_id) REFERENCES public.bundle_product_components(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: bundle_product_component_add_ons bundle_product_component_add_ons_add_on_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_component_add_ons
+    ADD CONSTRAINT bundle_product_component_add_ons_add_on_id_organization_id_fkey FOREIGN KEY (add_on_id, organization_id) REFERENCES public.add_ons(id, organization_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: bundle_product_component_add_ons bundle_product_component_add_ons_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_component_add_ons
+    ADD CONSTRAINT bundle_product_component_add_ons_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: bundle_product_component_add_ons bundle_product_component_add_ons_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_component_add_ons
+    ADD CONSTRAINT bundle_product_component_add_ons_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: bundle_product_component_add_ons bundle_product_component_add_ons_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_component_add_ons
+    ADD CONSTRAINT bundle_product_component_add_ons_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: bundle_product_components bundle_product_components_bundle_product_id_organization_i_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_components
+    ADD CONSTRAINT bundle_product_components_bundle_product_id_organization_i_fkey FOREIGN KEY (bundle_product_id, organization_id) REFERENCES public.products(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: bundle_product_components bundle_product_components_component_product_id_organizatio_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_components
+    ADD CONSTRAINT bundle_product_components_component_product_id_organizatio_fkey FOREIGN KEY (component_product_id, organization_id) REFERENCES public.products(id, organization_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: bundle_product_components bundle_product_components_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_components
+    ADD CONSTRAINT bundle_product_components_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: bundle_product_components bundle_product_components_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_components
+    ADD CONSTRAINT bundle_product_components_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: bundle_product_components bundle_product_components_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bundle_product_components
+    ADD CONSTRAINT bundle_product_components_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -876,6 +1506,46 @@ ALTER TABLE ONLY public.payments
 
 
 --
+-- Name: product_add_on_attachments product_add_on_attachments_add_on_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_add_on_attachments
+    ADD CONSTRAINT product_add_on_attachments_add_on_id_organization_id_fkey FOREIGN KEY (add_on_id, organization_id) REFERENCES public.add_ons(id, organization_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: product_add_on_attachments product_add_on_attachments_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_add_on_attachments
+    ADD CONSTRAINT product_add_on_attachments_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: product_add_on_attachments product_add_on_attachments_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_add_on_attachments
+    ADD CONSTRAINT product_add_on_attachments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: product_add_on_attachments product_add_on_attachments_product_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_add_on_attachments
+    ADD CONSTRAINT product_add_on_attachments_product_id_organization_id_fkey FOREIGN KEY (product_id, organization_id) REFERENCES public.products(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: product_add_on_attachments product_add_on_attachments_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_add_on_attachments
+    ADD CONSTRAINT product_add_on_attachments_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
 -- Name: products products_category_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -905,6 +1575,134 @@ ALTER TABLE ONLY public.products
 
 ALTER TABLE ONLY public.products
     ADD CONSTRAINT products_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: sale_item_add_ons sale_item_add_ons_add_on_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_add_ons
+    ADD CONSTRAINT sale_item_add_ons_add_on_id_organization_id_fkey FOREIGN KEY (add_on_id, organization_id) REFERENCES public.add_ons(id, organization_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: sale_item_add_ons sale_item_add_ons_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_add_ons
+    ADD CONSTRAINT sale_item_add_ons_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_add_ons sale_item_add_ons_sale_id_organization_id_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_add_ons
+    ADD CONSTRAINT sale_item_add_ons_sale_id_organization_id_store_id_fkey FOREIGN KEY (sale_id, organization_id, store_id) REFERENCES public.sales(id, organization_id, store_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_add_ons sale_item_add_ons_sale_item_id_organization_id_store_id_sa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_add_ons
+    ADD CONSTRAINT sale_item_add_ons_sale_item_id_organization_id_store_id_sa_fkey FOREIGN KEY (sale_item_id, organization_id, store_id, sale_id) REFERENCES public.sale_items(id, organization_id, store_id, sale_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_add_ons sale_item_add_ons_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_add_ons
+    ADD CONSTRAINT sale_item_add_ons_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_component_add_ons sale_item_bundle_component_ad_sale_id_organization_id_stor_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_component_add_ons
+    ADD CONSTRAINT sale_item_bundle_component_ad_sale_id_organization_id_stor_fkey FOREIGN KEY (sale_id, organization_id, store_id) REFERENCES public.sales(id, organization_id, store_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_component_add_ons sale_item_bundle_component_ad_sale_item_bundle_component_i_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_component_add_ons
+    ADD CONSTRAINT sale_item_bundle_component_ad_sale_item_bundle_component_i_fkey FOREIGN KEY (sale_item_bundle_component_id, organization_id, store_id, sale_id, sale_item_id) REFERENCES public.sale_item_bundle_components(id, organization_id, store_id, sale_id, sale_item_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_component_add_ons sale_item_bundle_component_ad_sale_item_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_component_add_ons
+    ADD CONSTRAINT sale_item_bundle_component_ad_sale_item_id_organization_id_fkey FOREIGN KEY (sale_item_id, organization_id, store_id, sale_id) REFERENCES public.sale_items(id, organization_id, store_id, sale_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_component_add_ons sale_item_bundle_component_add_o_add_on_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_component_add_ons
+    ADD CONSTRAINT sale_item_bundle_component_add_o_add_on_id_organization_id_fkey FOREIGN KEY (add_on_id, organization_id) REFERENCES public.add_ons(id, organization_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: sale_item_bundle_component_add_ons sale_item_bundle_component_add_on_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_component_add_ons
+    ADD CONSTRAINT sale_item_bundle_component_add_on_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_component_add_ons sale_item_bundle_component_add_ons_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_component_add_ons
+    ADD CONSTRAINT sale_item_bundle_component_add_ons_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_components sale_item_bundle_components_component_product_id_organizat_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_components
+    ADD CONSTRAINT sale_item_bundle_components_component_product_id_organizat_fkey FOREIGN KEY (component_product_id, organization_id) REFERENCES public.products(id, organization_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: sale_item_bundle_components sale_item_bundle_components_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_components
+    ADD CONSTRAINT sale_item_bundle_components_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_components sale_item_bundle_components_sale_id_organization_id_store__fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_components
+    ADD CONSTRAINT sale_item_bundle_components_sale_id_organization_id_store__fkey FOREIGN KEY (sale_id, organization_id, store_id) REFERENCES public.sales(id, organization_id, store_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_components sale_item_bundle_components_sale_item_id_organization_id_s_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_components
+    ADD CONSTRAINT sale_item_bundle_components_sale_item_id_organization_id_s_fkey FOREIGN KEY (sale_item_id, organization_id, store_id, sale_id) REFERENCES public.sale_items(id, organization_id, store_id, sale_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sale_item_bundle_components sale_item_bundle_components_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sale_item_bundle_components
+    ADD CONSTRAINT sale_item_bundle_components_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
 
 
 --
@@ -940,6 +1738,14 @@ ALTER TABLE ONLY public.sale_items
 
 
 --
+-- Name: sales sales_created_by_device_id_organization_id_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales
+    ADD CONSTRAINT sales_created_by_device_id_organization_id_store_id_fkey FOREIGN KEY (created_by_device_id, organization_id, store_id) REFERENCES public.store_devices(id, organization_id, store_id) ON DELETE RESTRICT;
+
+
+--
 -- Name: sales sales_customer_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -961,6 +1767,14 @@ ALTER TABLE ONLY public.sales
 
 ALTER TABLE ONLY public.sales
     ADD CONSTRAINT sales_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: sales sales_updated_by_device_id_organization_id_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales
+    ADD CONSTRAINT sales_updated_by_device_id_organization_id_store_id_fkey FOREIGN KEY (updated_by_device_id, organization_id, store_id) REFERENCES public.store_devices(id, organization_id, store_id) ON DELETE RESTRICT;
 
 
 --
@@ -1043,4 +1857,12 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260625143000'),
     ('20260625150000'),
     ('20260626120000'),
-    ('20260626123000');
+    ('20260626123000'),
+    ('20260628010000'),
+    ('20260711190000'),
+    ('20260711200000'),
+    ('20260712030000'),
+    ('20260712043000'),
+    ('20260712050000'),
+    ('20260712051500'),
+    ('20260712060000');

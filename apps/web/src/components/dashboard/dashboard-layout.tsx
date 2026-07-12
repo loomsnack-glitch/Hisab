@@ -256,13 +256,15 @@ const DashboardLayout = () => {
                                             return (
                                                 <DropdownMenuItem
                                                     key={org.id}
-                                                    onClick={() =>
-                                                        navigate(
-                                                            location.pathname.includes("/billing")
-                                                                ? `/organizations/${org.id}/billing`
-                                                                : `/organizations/${org.id}/stores`,
-                                                        )
-                                                    }
+                                                    onClick={() => {
+                                                        let targetPath = `/organizations/${org.id}/stores`;
+                                                        if (location.pathname.includes("/billing")) {
+                                                            targetPath = `/organizations/${org.id}/billing`;
+                                                        } else if (location.pathname.includes("/products")) {
+                                                            targetPath = `/organizations/${org.id}/products`;
+                                                        }
+                                                        navigate(targetPath);
+                                                    }}
                                                     className={cn(
                                                         "flex items-center justify-between gap-2.5 rounded-lg px-2.5 py-2 text-sm cursor-pointer transition-colors duration-150",
                                                         isOrgActive
