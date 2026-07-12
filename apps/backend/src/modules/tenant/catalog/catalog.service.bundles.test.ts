@@ -545,6 +545,26 @@ describe("Bundle Product catalog service", () => {
         expect(updateProductRepo).not.toHaveBeenCalled();
     });
 
+    test("requires bundle products to use the bundle update workflow", async () => {
+        const response = await catalogService.updateProduct(userId, organizationId, bundleId, {
+            status: "inactive",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toContain("bundle update workflow");
+        expect(updateProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not delete a bundle product with a persisted composition", async () => {
+        const response = await catalogService.deleteProduct(userId, organizationId, bundleId);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toContain("Bundle products cannot be deleted");
+        expect(deleteProductRepo).not.toHaveBeenCalled();
+    });
+
     test("does not delete a product referenced by a bundle", async () => {
         countBundleProductComponentsByComponentProductId.mockResolvedValue(1);
 

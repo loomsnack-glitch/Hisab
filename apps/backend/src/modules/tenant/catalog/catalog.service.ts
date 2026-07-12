@@ -523,6 +523,15 @@ export const updateProduct = async (
         };
     }
 
+    if (existingProduct.productType === "bundle") {
+        return {
+            status: "error",
+            message: "Bundle products must use the bundle update workflow",
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+        };
+    }
+
     const nextCategoryId = productData.categoryId ?? existingProduct.categoryId;
     const nextName = productData.name ?? existingProduct.name;
     const nextPrice = productData.price ?? existingProduct.price;
@@ -632,6 +641,15 @@ export const deleteProduct = async (
             message: "Product not found",
             data: null,
             code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    if (existingProduct.productType === "bundle") {
+        return {
+            status: "error",
+            message: "Bundle products cannot be deleted. Set them to inactive instead.",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
         };
     }
 
