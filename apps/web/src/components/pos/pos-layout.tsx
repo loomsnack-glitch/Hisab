@@ -48,15 +48,15 @@ const PosLayout = ({ children, session }: PosLayoutProps) => {
                     to="/pos"
                     className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90"
                 >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-foreground shadow-sm">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-primary to-primary/80 shadow-sm shadow-primary/20">
                         <img src={logo} alt="Ganatri" className="h-5 w-5 object-contain brightness-0 invert" />
                     </div>
-                    <div className="min-w-0">
-                        <p className="truncate font-display text-[15px] font-semibold tracking-tight text-foreground">
-                            Ganatri
-                        </p>
-                        <p className="truncate text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                    <div className="min-w-0 flex flex-col justify-center">
+                        <p className="truncate text-[9px] font-bold uppercase tracking-[0.25em] text-primary leading-tight">
                             Loomsnack
+                        </p>
+                        <p className="truncate font-display text-[15px] font-semibold tracking-tight text-foreground leading-tight mt-0.5">
+                            Ganatri
                         </p>
                     </div>
                 </Link>
