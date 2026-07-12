@@ -318,3 +318,39 @@ export const AddOnSalesRollupsResponseSchema = z.object({
     parentScoped: z.array(ParentScopedAddOnSalesRollupDTOSchema),
     addOnScoped: z.array(AddOnScopedSalesRollupDTOSchema),
 });
+
+export const BundleCommercialSalesRollupDTOSchema = z.object({
+    bundleProductId: z.uuid("Invalid bundle product id"),
+    bundleProductNameSnapshot: nameSchema,
+    saleCount: z.number().int().min(0),
+    totalQuantity: z.number().int().min(0),
+    lineSubtotal: moneySchema,
+    discountAmount: moneySchema,
+    lineTotal: moneySchema,
+});
+
+export const BundleComponentProductUsageRollupDTOSchema = z.object({
+    bundleProductId: z.uuid("Invalid bundle product id"),
+    bundleProductNameSnapshot: nameSchema,
+    componentProductId: z.uuid("Invalid component product id"),
+    componentProductNameSnapshot: nameSchema,
+    saleCount: z.number().int().min(0),
+    totalQuantity: z.number().int().min(0),
+});
+
+export const BundleComponentAddOnUsageRollupDTOSchema = z.object({
+    bundleProductId: z.uuid("Invalid bundle product id"),
+    bundleProductNameSnapshot: nameSchema,
+    componentProductId: z.uuid("Invalid component product id"),
+    componentProductNameSnapshot: nameSchema,
+    addOnId: z.uuid("Invalid add-on id"),
+    addOnNameSnapshot: nameSchema,
+    saleCount: z.number().int().min(0),
+    totalQuantity: z.number().int().min(0),
+});
+
+export const BundleSalesRollupsResponseSchema = z.object({
+    commercial: z.array(BundleCommercialSalesRollupDTOSchema),
+    componentProductUsage: z.array(BundleComponentProductUsageRollupDTOSchema),
+    componentAddOnUsage: z.array(BundleComponentAddOnUsageRollupDTOSchema),
+});

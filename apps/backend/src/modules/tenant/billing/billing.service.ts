@@ -4,6 +4,7 @@ import * as organizationRepository from "@/modules/tenant/organization/organizat
 import {
     STATUS_CODES,
     type AddOnSalesRollupsListResponse,
+    type BundleSalesRollupsListResponse,
     type CommitSaleSVC,
     type CreateCustomerSVC,
     type CreateDraftSaleSVC,
@@ -2046,6 +2047,36 @@ export const getAddOnSalesRollups = async (
             },
         },
         message: "Add-on sales rollups fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getBundleSalesRollups = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<BundleSalesRollupsListResponse | null>> => {
+    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+    if (scopeError) {
+        return scopeError;
+    }
+
+    const [commercial, componentProductUsage, componentAddOnUsage] = await Promise.all([
+        billingRepository.getBundleCommercialSalesRollups(organizationId, storeId),
+        billingRepository.getBundleComponentProductUsageRollups(organizationId, storeId),
+        billingRepository.getBundleComponentAddOnUsageRollups(organizationId, storeId),
+    ]);
+
+    return {
+        status: "success",
+        data: {
+            rollups: {
+                commercial,
+                componentProductUsage,
+                componentAddOnUsage,
+            },
+        },
+        message: "Bundle sales rollups fetched successfully",
         code: STATUS_CODES.SUCCESS,
     };
 };

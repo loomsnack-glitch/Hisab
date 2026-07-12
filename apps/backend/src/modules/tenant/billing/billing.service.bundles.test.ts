@@ -257,6 +257,10 @@ const updateSale = mock(async (data: Record<string, unknown>) => {
     return createdSales[index];
 });
 
+const getBundleCommercialSalesRollups = mock(async () => []);
+const getBundleComponentProductUsageRollups = mock(async () => []);
+const getBundleComponentAddOnUsageRollups = mock(async () => []);
+
 mock.module("@/config/db", () => ({
     pg: {
         begin: async (callback: (tx: unknown) => Promise<void>) => callback({}),
@@ -297,6 +301,9 @@ mock.module("./billing.repository", () => ({
     incrementStoreSaleCounter: mock(async () => 1),
     getParentScopedAddOnSalesRollups: mock(async () => []),
     getAddOnScopedSalesRollups: mock(async () => []),
+    getBundleCommercialSalesRollups,
+    getBundleComponentProductUsageRollups,
+    getBundleComponentAddOnUsageRollups,
 }));
 
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
@@ -571,6 +578,90 @@ describe("Bundle product billing with trusted snapshots", () => {
         expect(committed.data?.sale.items[0]?.bundleComponents[0]?.addOns[0]?.addOnNameSnapshot).toBe(
             "Extra Cheese",
         );
+    });
+
+    test("keeps bundle revenue on its priced line while applying a sale-wide order discount", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
+        });
+
+        const saleId = created.data?.sale.id!;
+        const committed = await billingService.commitSale(userId, organizationId, storeId, saleId, {
+            orderDiscountAmount: 10,
+            payments: [{ amount: 80, method: "cash" }],
+        });
+
+        expect(committed.status).toBe("success");
+        expect(committed.data?.sale.subtotal).toBe(99);
+        expect(committed.data?.sale.discountTotal).toBe(19);
+        expect(committed.data?.sale.orderDiscountAmount).toBe(10);
+        expect(committed.data?.sale.grandTotal).toBe(80);
+        expect(committed.data?.sale.items[0]).toMatchObject({
+            productNameSnapshot: "Burger Combo",
+            lineSubtotal: 99,
+            discountAmount: 9,
+            lineTotal: 90,
+        });
+        expect(committed.data?.sale.items[0]?.bundleComponents).toHaveLength(2);
+    });
+
+    test("returns commercial bundle sales alongside usage-only component rollups", async () => {
+        const commercial = [
+            {
+                bundleProductId,
+                bundleProductNameSnapshot: "Burger Combo",
+                saleCount: 2,
+                totalQuantity: 3,
+                lineSubtotal: 297,
+                discountAmount: 27,
+                lineTotal: 270,
+            },
+        ];
+        const componentProductUsage = [
+            {
+                bundleProductId,
+                bundleProductNameSnapshot: "Burger Combo",
+                componentProductId: burgerProductId,
+                componentProductNameSnapshot: "Burger",
+                saleCount: 2,
+                totalQuantity: 3,
+            },
+        ];
+        const componentAddOnUsage = [
+            {
+                bundleProductId,
+                bundleProductNameSnapshot: "Burger Combo",
+                componentProductId: burgerProductId,
+                componentProductNameSnapshot: "Burger",
+                addOnId,
+                addOnNameSnapshot: "Extra Cheese",
+                saleCount: 2,
+                totalQuantity: 3,
+            },
+        ];
+
+        getBundleCommercialSalesRollups.mockResolvedValue(commercial as never);
+        getBundleComponentProductUsageRollups.mockResolvedValue(componentProductUsage as never);
+        getBundleComponentAddOnUsageRollups.mockResolvedValue(componentAddOnUsage as never);
+
+        const response = await billingService.getBundleSalesRollups(userId, organizationId, storeId);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.rollups).toEqual({
+            commercial,
+            componentProductUsage,
+            componentAddOnUsage,
+        });
+        expect(response.data?.rollups.componentProductUsage[0]).not.toHaveProperty("lineTotal");
+        expect(response.data?.rollups.componentAddOnUsage[0]).not.toHaveProperty("discountAmount");
+        expect(response.data?.rollups.componentAddOnUsage[0]).toMatchObject({
+            bundleProductId,
+            componentProductId: burgerProductId,
+            addOnId,
+        });
+        expect(getBundleCommercialSalesRollups).toHaveBeenCalledWith(organizationId, storeId);
+        expect(getBundleComponentProductUsageRollups).toHaveBeenCalledWith(organizationId, storeId);
+        expect(getBundleComponentAddOnUsageRollups).toHaveBeenCalledWith(organizationId, storeId);
     });
 
     test("rejects add-on selections on bundle products", async () => {

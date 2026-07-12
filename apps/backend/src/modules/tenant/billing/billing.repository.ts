@@ -3,6 +3,9 @@ import { snakeToCamel } from "@/utils/case";
 import { camelToSnakeSql } from "@/utils/case-sql";
 import type {
     AddOnScopedSalesRollupDTO,
+    BundleCommercialSalesRollupDTO,
+    BundleComponentAddOnUsageRollupDTO,
+    BundleComponentProductUsageRollupDTO,
     CreateCustomerLedgerEntryREPO,
     CreateCustomerREPO,
     CreatePaymentREPO,
@@ -733,4 +736,119 @@ export const getAddOnScopedSalesRollups = async (
     `;
 
     return results.map((result: Record<string, unknown>) => mapRow<AddOnScopedSalesRollupDTO>(result));
+};
+
+export const getBundleCommercialSalesRollups = async (
+    organizationId: string,
+    storeId: string,
+): Promise<BundleCommercialSalesRollupDTO[]> => {
+    const results = await pg`
+        SELECT
+            si.product_id AS bundle_product_id,
+            MAX(si.product_name_snapshot) AS bundle_product_name_snapshot,
+            COUNT(DISTINCT si.sale_id)::int AS sale_count,
+            SUM(si.quantity)::int AS total_quantity,
+            COALESCE(SUM(si.line_subtotal), 0) AS line_subtotal,
+            COALESCE(SUM(si.discount_amount), 0) AS discount_amount,
+            COALESCE(SUM(si.line_total), 0) AS line_total
+        FROM sale_items si
+        INNER JOIN sales s
+            ON s.id = si.sale_id
+           AND s.organization_id = si.organization_id
+           AND s.store_id = si.store_id
+        WHERE si.organization_id = ${organizationId}
+          AND si.store_id = ${storeId}
+          AND s.status = 'completed'
+          AND EXISTS (
+              SELECT 1
+              FROM sale_item_bundle_components sibc
+              WHERE sibc.sale_item_id = si.id
+                AND sibc.organization_id = si.organization_id
+                AND sibc.store_id = si.store_id
+                AND sibc.sale_id = si.sale_id
+          )
+        GROUP BY si.product_id
+        ORDER BY MAX(si.product_name_snapshot) ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapRow<BundleCommercialSalesRollupDTO>(result));
+};
+
+export const getBundleComponentProductUsageRollups = async (
+    organizationId: string,
+    storeId: string,
+): Promise<BundleComponentProductUsageRollupDTO[]> => {
+    const results = await pg`
+        SELECT
+            si.product_id AS bundle_product_id,
+            MAX(si.product_name_snapshot) AS bundle_product_name_snapshot,
+            sibc.component_product_id,
+            MAX(sibc.product_name_snapshot) AS component_product_name_snapshot,
+            COUNT(DISTINCT sibc.sale_id)::int AS sale_count,
+            SUM(sibc.total_quantity)::int AS total_quantity
+        FROM sale_item_bundle_components sibc
+        INNER JOIN sale_items si
+            ON si.id = sibc.sale_item_id
+           AND si.organization_id = sibc.organization_id
+           AND si.store_id = sibc.store_id
+           AND si.sale_id = sibc.sale_id
+        INNER JOIN sales s
+            ON s.id = sibc.sale_id
+           AND s.organization_id = sibc.organization_id
+           AND s.store_id = sibc.store_id
+        WHERE sibc.organization_id = ${organizationId}
+          AND sibc.store_id = ${storeId}
+          AND s.status = 'completed'
+        GROUP BY si.product_id, sibc.component_product_id
+        ORDER BY MAX(si.product_name_snapshot) ASC, MAX(sibc.product_name_snapshot) ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) =>
+        mapRow<BundleComponentProductUsageRollupDTO>(result),
+    );
+};
+
+export const getBundleComponentAddOnUsageRollups = async (
+    organizationId: string,
+    storeId: string,
+): Promise<BundleComponentAddOnUsageRollupDTO[]> => {
+    const results = await pg`
+        SELECT
+            si.product_id AS bundle_product_id,
+            MAX(si.product_name_snapshot) AS bundle_product_name_snapshot,
+            sibc.component_product_id,
+            MAX(sibc.product_name_snapshot) AS component_product_name_snapshot,
+            sibca.add_on_id,
+            MAX(sibca.add_on_name_snapshot) AS add_on_name_snapshot,
+            COUNT(DISTINCT sibca.sale_id)::int AS sale_count,
+            SUM(sibca.total_quantity)::int AS total_quantity
+        FROM sale_item_bundle_component_add_ons sibca
+        INNER JOIN sale_item_bundle_components sibc
+            ON sibc.id = sibca.sale_item_bundle_component_id
+           AND sibc.organization_id = sibca.organization_id
+           AND sibc.store_id = sibca.store_id
+           AND sibc.sale_id = sibca.sale_id
+           AND sibc.sale_item_id = sibca.sale_item_id
+        INNER JOIN sale_items si
+            ON si.id = sibca.sale_item_id
+           AND si.organization_id = sibca.organization_id
+           AND si.store_id = sibca.store_id
+           AND si.sale_id = sibca.sale_id
+        INNER JOIN sales s
+            ON s.id = sibca.sale_id
+           AND s.organization_id = sibca.organization_id
+           AND s.store_id = sibca.store_id
+        WHERE sibca.organization_id = ${organizationId}
+          AND sibca.store_id = ${storeId}
+          AND s.status = 'completed'
+        GROUP BY si.product_id, sibc.component_product_id, sibca.add_on_id
+        ORDER BY
+            MAX(si.product_name_snapshot) ASC,
+            MAX(sibc.product_name_snapshot) ASC,
+            MAX(sibca.add_on_name_snapshot) ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) =>
+        mapRow<BundleComponentAddOnUsageRollupDTO>(result),
+    );
 };
