@@ -842,17 +842,17 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const panelMaxHeight = isDeviceMode ? "calc(100vh - 3.5rem)" : "calc(100vh - 3.5rem - 57px)";
 
     return (
-        <div className="billing-pos-layout flex flex-col gap-0" style={{ minHeight: "calc(100vh - 3.5rem)" }}>
+        <div className="billing-pos-layout flex flex-col gap-0 min-h-[calc(100vh-3.5rem)] xl:h-[calc(100vh-3.5rem)] xl:min-h-0 xl:overflow-hidden">
             {!isDeviceMode ? (
-                <header className="flex items-center justify-between border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm">
-                    <div className="flex items-center gap-4">
+                <header className="flex flex-col gap-3 border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-4">
                         <div>
                             <h1 className="font-display text-xl font-bold tracking-tight text-foreground">
                                 Billing history
                             </h1>
                             <p className="text-xs text-muted-foreground">Admin read-only mode</p>
                         </div>
-                        <span className="text-sm text-muted-foreground">{formatLongDate()}</span>
+                        <span className="text-sm text-muted-foreground hidden sm:inline">{formatLongDate()}</span>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -860,11 +860,17 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                             <Store className="size-4" />
                             <span className="hidden sm:inline">Store:</span>
                         </div>
-                        <Select value={selectedStoreId} onValueChange={setStore}>
-                            <SelectTrigger className="h-9 min-w-[160px] rounded-xl bg-background/80 px-3 text-sm">
-                                <SelectValue placeholder="Choose store" />
+                        <Select
+                            key={`${selectedStoreId}-${organizationStores.length}`}
+                            value={selectedStoreId}
+                            onValueChange={setStore}
+                        >
+                            <SelectTrigger className="h-9 min-w-[160px] max-w-[240px] rounded-xl bg-background/80 px-3 text-sm">
+                                <SelectValue placeholder="Choose store">
+                                    {selectedStore?.name}
+                                </SelectValue>
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent alignItemWithTrigger={false} align="end">
                                 {organizationStores.map((store) => (
                                     <SelectItem key={store.id} value={store.id}>
                                         {store.name}
