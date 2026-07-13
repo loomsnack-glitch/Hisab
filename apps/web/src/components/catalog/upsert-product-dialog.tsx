@@ -29,6 +29,7 @@ import { Plus, UploadCloud, Pencil, ImageOff, Package2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { catalogKeys } from "@/lib/query-keys";
+import { safeRandomUUID } from "@/lib/uuid";
 
 type UpsertProductDialogProps = {
     organizationId: string;
@@ -100,7 +101,7 @@ const getFileExtension = (fileName: string) => {
 
 const createProductImagePath = (organizationId: string, file: File) => {
     const extension = getFileExtension(file.name);
-    return `organizations/${organizationId}/products/${crypto.randomUUID()}.${extension}`;
+    return `organizations/${organizationId}/products/${safeRandomUUID()}.${extension}`;
 };
 
 const UpsertProductDialog = ({

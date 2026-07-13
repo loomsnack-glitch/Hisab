@@ -25,6 +25,7 @@ type CustomerQuickCreateDialogProps = {
     organizationId: string;
     mode?: BillingWorkspaceMode;
     suggestedName?: string;
+    suggestedPhone?: string;
     trigger?: React.ReactElement;
     onCreated?: (customer: CustomerDTO) => void;
 };
@@ -33,6 +34,7 @@ const CustomerQuickCreateDialog = ({
     organizationId,
     mode = "admin",
     suggestedName,
+    suggestedPhone,
     trigger,
     onCreated,
 }: CustomerQuickCreateDialogProps) => {
@@ -43,7 +45,7 @@ const CustomerQuickCreateDialog = ({
         resolver: zodResolver(CreateCustomerSchema),
         defaultValues: {
             name: suggestedName?.trim() || "",
-            phone: "",
+            phone: suggestedPhone?.trim() || "",
             isActive: true,
         },
     });
@@ -52,11 +54,11 @@ const CustomerQuickCreateDialog = ({
         if (!open) {
             form.reset({
                 name: suggestedName?.trim() || "",
-                phone: "",
+                phone: suggestedPhone?.trim() || "",
                 isActive: true,
             });
         }
-    }, [form, open, suggestedName]);
+    }, [form, open, suggestedName, suggestedPhone]);
 
     const createCustomerMutation = useMutation({
         mutationFn: (payload: CreateCustomerJSON) =>

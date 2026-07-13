@@ -66,6 +66,7 @@ import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
+import { safeRandomUUID } from "@/lib/uuid";
 
 type ComposerAddOn = CustomizeAddOnSelection;
 
@@ -458,7 +459,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
             return [
                 ...current,
                 {
-                    key: crypto.randomUUID(),
+                    key: safeRandomUUID(),
                     productId: product.id,
                     name: product.name,
                     categoryId: product.categoryId,
@@ -492,7 +493,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
             return [
                 ...current,
                 {
-                    key: crypto.randomUUID(),
+                    key: safeRandomUUID(),
                     productId: product.id,
                     name: product.name,
                     categoryId: product.categoryId,
@@ -1803,7 +1804,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                         <CustomerQuickCreateDialog
                                             organizationId={organizationId}
                                             mode={mode}
-                                            suggestedName={customerSearch}
+                                            suggestedName={/^[+\d\s()-]+$/.test(customerSearch) ? "" : customerSearch}
+                                            suggestedPhone={/^[+\d\s()-]+$/.test(customerSearch) ? customerSearch : ""}
                                             onCreated={(customer) => {
                                                 setSelectedCustomerId(customer.id);
                                                 setCustomerSearch(customer.phone || customer.name);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -35,6 +35,30 @@ const PosLoginPage = () => {
             deviceSecret: "",
         },
     });
+
+    const [copiedDeviceId, setCopiedDeviceId] = useState<string | null>(null);
+    const [copiedDeviceSecret, setCopiedDeviceSecret] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            setCopiedDeviceId(localStorage.getItem("copied_device_id"));
+            setCopiedDeviceSecret(localStorage.getItem("copied_device_secret"));
+        }
+    }, []);
+
+    const handlePasteDeviceId = () => {
+        if (copiedDeviceId) {
+            form.setValue("deviceId", copiedDeviceId, { shouldValidate: true });
+            toast.success("Device ID pasted");
+        }
+    };
+
+    const handlePasteDeviceSecret = () => {
+        if (copiedDeviceSecret) {
+            form.setValue("deviceSecret", copiedDeviceSecret, { shouldValidate: true });
+            toast.success("Device secret pasted");
+        }
+    };
 
     const isPending = deviceAuthQuery.isPending;
 
@@ -105,11 +129,22 @@ const PosLoginPage = () => {
                             <Field data-invalid={!!form.formState.errors.deviceId} className="space-y-1">
                                 <FieldLabel required className="text-xs">Device id</FieldLabel>
                                 <FieldContent>
-                                    <Input
-                                        className="h-10 rounded-xl transition-colors duration-200 text-sm"
-                                        placeholder="Store device UUID"
-                                        {...form.register("deviceId")}
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            className="h-10 rounded-xl transition-colors duration-200 text-sm pr-16"
+                                            placeholder="Store device UUID"
+                                            {...form.register("deviceId")}
+                                        />
+                                        {copiedDeviceId && (
+                                            <button
+                                                type="button"
+                                                onClick={handlePasteDeviceId}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95 border border-emerald-500/20 shadow-xs cursor-pointer flex items-center"
+                                            >
+                                                Paste
+                                            </button>
+                                        )}
+                                    </div>
                                     <FieldError errors={[form.formState.errors.deviceId]} className="text-[10px]" />
                                 </FieldContent>
                             </Field>
@@ -117,12 +152,23 @@ const PosLoginPage = () => {
                             <Field data-invalid={!!form.formState.errors.deviceSecret} className="space-y-1">
                                 <FieldLabel required className="text-xs">Device secret</FieldLabel>
                                 <FieldContent>
-                                    <Input
-                                        type="password"
-                                        className="h-10 rounded-xl transition-colors duration-200 text-sm"
-                                        placeholder="Enter the store device secret"
-                                        {...form.register("deviceSecret")}
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            type="password"
+                                            className="h-10 rounded-xl transition-colors duration-200 text-sm pr-16"
+                                            placeholder="Enter the store device secret"
+                                            {...form.register("deviceSecret")}
+                                        />
+                                        {copiedDeviceSecret && (
+                                            <button
+                                                type="button"
+                                                onClick={handlePasteDeviceSecret}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95 border border-emerald-500/20 shadow-xs cursor-pointer flex items-center"
+                                            >
+                                                Paste
+                                            </button>
+                                        )}
+                                    </div>
                                     <FieldError errors={[form.formState.errors.deviceSecret]} className="text-[10px]" />
                                 </FieldContent>
                             </Field>

@@ -80,7 +80,7 @@ const PosLayout = ({ children, session }: PosLayoutProps) => {
                 </div>
             </header>
 
-            <main className="mx-auto max-w-[1600px] px-0">{children}</main>
+            <main className="w-full px-0">{children}</main>
         </div>
     );
 };
