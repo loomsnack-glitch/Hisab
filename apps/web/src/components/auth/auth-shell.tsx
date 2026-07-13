@@ -27,7 +27,7 @@ const featureItems = [
 
 const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
     return (
-        <div className="relative h-screen w-screen bg-background overflow-hidden flex items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div className="relative min-h-screen lg:h-screen w-full bg-background flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto lg:overflow-hidden">
             <div className="absolute right-4 top-4 z-20 sm:right-6 lg:right-8">
                 <ThemeToggle />
             </div>
@@ -37,7 +37,7 @@ const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
                 <div className="grid-bg absolute inset-0 opacity-20 dark:opacity-10" />
             </div>
 
-            <div className="w-full h-full max-w-7xl overflow-hidden rounded-[2.5rem] border border-border/70 bg-card shadow-2xl grid lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="w-full h-auto lg:h-full max-w-xl lg:max-w-7xl overflow-hidden lg:rounded-3xl lg:border lg:border-border/70 lg:bg-card lg:shadow-2xl grid lg:grid-cols-[1.05fr_0.95fr]">
                 {/* Left Panel - Hidden on small screens, premium gradient and glows on large screens */}
                 <div className="relative hidden overflow-hidden bg-slate-950 p-10 text-slate-100 lg:flex lg:flex-col lg:justify-between border-r border-border/10">
                     <div className="absolute -left-20 -top-20 w-80 h-80 rounded-full bg-primary/15 blur-[100px] pointer-events-none" />
@@ -96,7 +96,7 @@ const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
                 </div>
 
                 {/* Right Panel - Fits perfectly on one page without scrollbars */}
-                <div className="flex flex-col justify-center p-4 sm:p-6 lg:p-8 h-full overflow-hidden">
+                <div className="flex flex-col justify-center p-0 lg:p-8 h-auto lg:h-full overflow-visible lg:overflow-hidden">
                     <div className="w-full max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both py-2">
                         <div className="mb-6 flex items-center justify-between lg:hidden">
                             <Link to="/" className="inline-flex items-center gap-3 transition-opacity duration-200 hover:opacity-90">

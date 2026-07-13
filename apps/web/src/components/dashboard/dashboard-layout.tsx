@@ -17,8 +17,9 @@ import {
 import { Avatar, AvatarFallback } from "@repo/ui/components/avatar";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { ChevronDown, Check, Plus, User, LogOut, Phone, MonitorSmartphone, Star } from "lucide-react";
+import { ChevronDown, Check, Plus, User, LogOut, Phone, MonitorSmartphone, Star, Menu } from "lucide-react";
 import { toast } from "sonner";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@repo/ui/components/sheet";
 
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
 import ThemeToggle from "@/components/dashboard/theme-toggle";
@@ -76,6 +77,7 @@ const DashboardLayout = () => {
     const navigate = useNavigate();
     const { organizationId } = useParams();
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readSidebarCollapsed);
+    const [isMobileOpen, setIsMobileOpen] = useState(false);
 
     const organizationsQuery = useQuery({
         queryKey: organizationKeys.list(),
@@ -215,6 +217,32 @@ const DashboardLayout = () => {
                     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
                         {/* Left side: Organization selector and Create button */}
                         <div className="flex items-center gap-2">
+                            <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+                                <SheetTrigger
+                                    render={
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            className="h-9 w-9 rounded-xl lg:hidden hover:bg-muted/70"
+                                            aria-label="Open navigation menu"
+                                        >
+                                            <Menu className="size-5 text-muted-foreground hover:text-foreground" />
+                                        </Button>
+                                    }
+                                />
+                                <SheetContent side="left" className="p-0 data-[side=left]:w-[220px] data-[side=left]:sm:max-w-[220px] border-r-0">
+                                    <div className="sr-only">
+                                        <SheetTitle>Navigation Menu</SheetTitle>
+                                    </div>
+                                    <AppSidebar
+                                        isMobile={true}
+                                        isCollapsed={false}
+                                        onToggle={() => {}}
+                                        onNavigate={() => setIsMobileOpen(false)}
+                                    />
+                                </SheetContent>
+                            </Sheet>
+
                             <DropdownMenu>
                                 <DropdownMenuTrigger
                                     render={
