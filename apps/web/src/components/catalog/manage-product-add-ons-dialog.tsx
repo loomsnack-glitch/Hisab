@@ -285,15 +285,28 @@ const ManageProductAddOnsDialog = ({
                                                 <th className="px-4 py-3 font-medium">Add-on status</th>
                                             </tr>
                                         </thead>
-                                        <tbody>
-                                            {attachments.map((attachment) => (
-                                                <tr key={attachment.id} className="border-b border-border/40 last:border-0">
-                                                    <td className="px-4 py-3 font-medium">{attachment.addOn.name}</td>
+                                        <tbody className="divide-y divide-border/40">
+                                            {attachments.map((attachment, index) => (
+                                                <tr
+                                                    key={attachment.id}
+                                                    className={`transition-colors duration-150 hover:bg-muted/30 ${
+                                                        index % 2 !== 0 ? "bg-muted/10" : ""
+                                                    }`}
+                                                >
+                                                    <td className="px-4 py-3 font-medium text-foreground">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                                <Puzzle className="size-3.5" />
+                                                            </div>
+                                                            <span className="font-medium text-foreground">{attachment.addOn.name}</span>
+                                                        </div>
+                                                    </td>
                                                     <td className="px-4 py-3">
                                                         <ProductPriceDisplay
                                                             price={attachment.addOn.price}
                                                             discount={attachment.addOn.discount}
                                                             size="sm"
+                                                            align="left"
                                                         />
                                                     </td>
                                                     <td className="px-4 py-3">

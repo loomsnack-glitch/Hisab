@@ -130,8 +130,8 @@ const ManageCategoriesDialog = ({
                                                 <td className="px-4 py-3.5 text-muted-foreground">
                                                     {formatDateTime(category.createdAt)}
                                                 </td>
-                                                <td className="px-4 py-3.5">
-                                                    <div className="flex items-center justify-end gap-2">
+                                                <td className="px-4 py-3.5 text-right">
+                                                    <div className="inline-flex items-center gap-2">
                                                         <UpsertCategoryDialog
                                                             organizationId={organizationId}
                                                             category={category}

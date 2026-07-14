@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { deleteAddOn, getAddOns } from "@repo/services";
@@ -27,6 +27,7 @@ import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertAddOnDialog from "@/components/catalog/upsert-add-on-dialog";
 import { formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
+import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
 const DeleteAddOnButton = ({
     organizationId,
@@ -59,13 +60,9 @@ const DeleteAddOnButton = ({
         <AlertDialog open={open} onOpenChange={setOpen}>
             <AlertDialogTrigger
                 render={
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Delete ${addOn.name}`}
-                        className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    >
-                        <Trash2 className="size-3.5" />
+                    <Button variant="destructive" size="sm" className="rounded-full">
+                        <Trash2 className="mr-1.5 size-3" />
+                        Delete
                     </Button>
                 }
             />
@@ -109,6 +106,72 @@ const AddOnsPage = () => {
 
     const addOns = addOnsQuery.data?.status === "success" ? addOnsQuery.data.data?.addOns ?? [] : [];
 
+    const columns = useMemo<ColumnDef<typeof addOns[number]>[]>(() => [
+        {
+            id: "name",
+            header: "Add-on",
+            accessor: (addOn) => (
+                <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Puzzle className="size-3.5" />
+                    </div>
+                    <span className="font-medium text-foreground">{addOn.name}</span>
+                </div>
+            ),
+            sortable: true,
+            getSortValue: (addOn) => addOn.name,
+        },
+        {
+            id: "price",
+            header: "Price",
+            accessor: (addOn) => (
+                <ProductPriceDisplay
+                    price={addOn.price}
+                    discount={addOn.discount}
+                    size="sm"
+                    align="left"
+                />
+            ),
+            sortable: true,
+            getSortValue: (addOn) => addOn.price,
+        },
+        {
+            id: "status",
+            header: "Status",
+            accessor: (addOn) => <ProductStatusBadge status={addOn.status} />,
+            sortable: true,
+            getSortValue: (addOn) => addOn.status,
+            filterOptions: [
+                { label: "Active", value: "active" },
+                { label: "Inactive", value: "inactive" },
+            ],
+            getFilterValue: (addOn) => addOn.status,
+        },
+        {
+            id: "updatedAt",
+            header: "Updated",
+            accessor: (addOn) => formatDateTime(addOn.updatedAt),
+            sortable: true,
+            getSortValue: (addOn) => addOn.updatedAt,
+        },
+    ], []);
+
+    const renderActions = (addOn: typeof addOns[number]) => (
+        <>
+            <UpsertAddOnDialog
+                organizationId={organizationId}
+                addOn={addOn}
+                trigger={
+                    <Button variant="outline" size="sm" className="rounded-full">
+                        <Pencil className="mr-1.5 size-3" />
+                        Edit
+                    </Button>
+                }
+            />
+            <DeleteAddOnButton organizationId={organizationId} addOn={addOn} />
+        </>
+    );
+
     if (addOnsQuery.isPending) {
         return (
             <div className="flex min-h-[30vh] items-center justify-center">
@@ -150,26 +213,6 @@ const AddOnsPage = () => {
 
     return (
         <div className="space-y-5">
-            {/* Header with Add Add-on button */}
-            {addOns.length > 0 && (
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-muted-foreground">
-                            {addOns.length} add-on{addOns.length === 1 ? "" : "s"}
-                        </p>
-                    </div>
-                    <UpsertAddOnDialog
-                        organizationId={organizationId}
-                        trigger={
-                            <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-5">
-                                <PlusCircle className="mr-2 size-4" />
-                                Add add-on
-                            </Button>
-                        }
-                    />
-                </div>
-            )}
-
             {/* Add-Ons Content */}
             {addOns.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">
@@ -191,58 +234,29 @@ const AddOnsPage = () => {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="overflow-x-auto rounded-2xl border border-border/60 bg-card/30">
-                    <table className="min-w-full text-sm">
-                        <thead>
-                            <tr className="border-b border-border/50 bg-muted/20 text-left text-muted-foreground sticky top-0 backdrop-blur-md z-10">
-                                <th className="px-4 py-3 font-medium">Add-on</th>
-                                <th className="px-4 py-3 font-medium">Price</th>
-                                <th className="px-4 py-3 font-medium">Status</th>
-                                <th className="px-4 py-3 font-medium">Updated</th>
-                                <th className="px-4 py-3 font-medium text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {addOns.map((addOn) => (
-                                <tr key={addOn.id} className="border-b border-border/40 last:border-0">
-                                    <td className="px-4 py-3 font-medium text-foreground">{addOn.name}</td>
-                                    <td className="px-4 py-3">
-                                        <ProductPriceDisplay
-                                            price={addOn.price}
-                                            discount={addOn.discount}
-                                            size="sm"
-                                        />
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <ProductStatusBadge status={addOn.status} />
-                                    </td>
-                                    <td className="px-4 py-3 text-muted-foreground">
-                                        {formatDateTime(addOn.updatedAt)}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center justify-end gap-0.5">
-                                            <UpsertAddOnDialog
-                                                organizationId={organizationId}
-                                                addOn={addOn}
-                                                trigger={
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        aria-label={`Edit ${addOn.name}`}
-                                                        className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                                    >
-                                                        <Pencil className="size-3.5" />
-                                                    </Button>
-                                                }
-                                            />
-                                            <DeleteAddOnButton organizationId={organizationId} addOn={addOn} />
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                <PremiumTable
+                    data={addOns}
+                    columns={columns}
+                    actions={renderActions}
+                    rowIdKey="id"
+                    defaultPageSize={15}
+                    searchPlaceholder="Search add-ons..."
+                    searchKeys={[
+                        (addOn) => addOn.name,
+                    ]}
+                    infoText={`${addOns.length} add-on${addOns.length === 1 ? "" : "s"}`}
+                    toolbarActions={
+                        <UpsertAddOnDialog
+                            organizationId={organizationId}
+                            trigger={
+                                <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-4">
+                                    <PlusCircle className="mr-1.5 size-3.5" />
+                                    Add add-on
+                                </Button>
+                            }
+                        />
+                    }
+                />
             )}
         </div>
     );

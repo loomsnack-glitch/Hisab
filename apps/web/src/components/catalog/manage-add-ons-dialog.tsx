@@ -70,13 +70,9 @@ const DeleteAddOnButton = ({
         <AlertDialog open={open} onOpenChange={setOpen}>
             <AlertDialogTrigger
                 render={
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Delete ${addOn.name}`}
-                        className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    >
-                        <Trash2 className="size-3.5" />
+                    <Button variant="destructive" size="sm" className="rounded-full">
+                        <Trash2 className="mr-1.5 size-3" />
+                        Delete
                     </Button>
                 }
             />
@@ -187,43 +183,52 @@ const ManageAddOnsDialog = ({ organizationId, trigger }: ManageAddOnsDialogProps
                             <table className="min-w-full text-sm">
                                 <thead>
                                     <tr className="border-b border-border/50 bg-muted/20 text-left text-muted-foreground sticky top-0 backdrop-blur-md z-10">
-                                        <th className="px-4 py-3 font-medium">Add-on</th>
-                                        <th className="px-4 py-3 font-medium">Price</th>
-                                        <th className="px-4 py-3 font-medium">Status</th>
-                                        <th className="px-4 py-3 font-medium">Updated</th>
-                                        <th className="px-4 py-3 font-medium text-right">Actions</th>
+                                        <th className="px-4 py-3.5 font-medium">Add-on</th>
+                                        <th className="px-4 py-3.5 font-medium">Price</th>
+                                        <th className="px-4 py-3.5 font-medium">Status</th>
+                                        <th className="px-4 py-3.5 font-medium">Updated</th>
+                                        <th className="px-4 py-3.5 font-medium text-right">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    {addOns.map((addOn) => (
-                                        <tr key={addOn.id} className="border-b border-border/40 last:border-0">
-                                            <td className="px-4 py-3 font-medium text-foreground">{addOn.name}</td>
-                                            <td className="px-4 py-3">
+                                <tbody className="divide-y divide-border/40">
+                                    {addOns.map((addOn, index) => (
+                                        <tr
+                                            key={addOn.id}
+                                            className={`transition-colors duration-150 hover:bg-muted/30 ${
+                                                index % 2 !== 0 ? "bg-muted/10" : ""
+                                            }`}
+                                        >
+                                            <td className="px-4 py-3.5 font-medium text-foreground">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                        <Puzzle className="size-3.5" />
+                                                    </div>
+                                                    <span className="font-medium text-foreground">{addOn.name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3.5">
                                                 <ProductPriceDisplay
                                                     price={addOn.price}
                                                     discount={addOn.discount}
                                                     size="sm"
+                                                    align="left"
                                                 />
                                             </td>
-                                            <td className="px-4 py-3">
+                                            <td className="px-4 py-3.5">
                                                 <ProductStatusBadge status={addOn.status} />
                                             </td>
-                                            <td className="px-4 py-3 text-muted-foreground">
+                                            <td className="px-4 py-3.5 text-muted-foreground">
                                                 {formatDateTime(addOn.updatedAt)}
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center justify-end gap-0.5">
+                                            <td className="px-4 py-3.5 text-right">
+                                                <div className="inline-flex items-center gap-2">
                                                     <UpsertAddOnDialog
                                                         organizationId={organizationId}
                                                         addOn={addOn}
                                                         trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                aria-label={`Edit ${addOn.name}`}
-                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                                            >
-                                                                <Pencil className="size-3.5" />
+                                                            <Button variant="outline" size="sm" className="rounded-full">
+                                                                <Pencil className="mr-1.5 size-3" />
+                                                                Edit
                                                             </Button>
                                                         }
                                                     />

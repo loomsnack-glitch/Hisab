@@ -214,6 +214,7 @@
 
   body {
     @apply bg-background text-foreground;
+    padding-right: 0px !important;
   }
 }
 
