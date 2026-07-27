@@ -34,11 +34,11 @@ export type CreateStoreDeviceSVC = CreateStoreDeviceJSON;
 export type UpdateStoreDeviceJSON = z.infer<typeof UpdateStoreDeviceSchema>;
 export type UpdateStoreDeviceSVC = UpdateStoreDeviceJSON;
 
-export type CreateOrganizationREPO = Pick<OrganizationDTO, "id" | "name" | "createdBy"> & {
+export type CreateOrganizationREPO = Pick<OrganizationDTO, "id" | "name" | "username" | "createdBy"> & {
     updatedBy?: string | null;
 };
 
-export type UpdateOrganizationREPO = Pick<OrganizationDTO, "id" | "name"> & {
+export type UpdateOrganizationREPO = Pick<OrganizationDTO, "id" | "name" | "username"> & {
     updatedBy: string;
 };
 
@@ -54,13 +54,14 @@ export type UpdateStoreREPO = Pick<StoreDTO, "id" | "name"> & {
 
 export type CreateStoreDeviceREPO = Pick<
     StoreDeviceDTO,
-    "id" | "storeId" | "organizationId" | "name" | "createdBy"
+    "id" | "storeId" | "organizationId" | "name" | "loginUsername" | "createdBy"
 > & {
     deviceSecretEncrypted: string;
     updatedBy?: string | null;
 };
 
 export type UpdateStoreDeviceREPO = Pick<StoreDeviceDTO, "id" | "name" | "status"> & {
+    loginUsername?: string;
     updatedBy: string;
     deviceSecretEncrypted?: string;
 };

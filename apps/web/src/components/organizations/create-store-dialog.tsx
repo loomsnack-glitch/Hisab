@@ -113,17 +113,17 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
                     title="Add store"
                 />
 
-                <form className="space-y-6 pt-3" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="space-y-4 pt-3" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
                         <div className="flex items-center justify-between">
-                            <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 mb-1.5" required>
+                            <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80" required>
                                 Store name
                             </FieldLabel>
                             <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
                                 {(storeName ?? "").length}/255
                             </span>
                         </div>
-                        <FieldContent className="space-y-4">
+                        <FieldContent>
                             <Input
                                 variant="ringShadow"
                                 className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
@@ -137,14 +137,14 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
 
                     <Field data-invalid={!!form.formState.errors.address}>
                         <div className="flex items-center justify-between">
-                            <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 mb-1.5">
+                            <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
                                 Address <span className="font-normal text-muted-foreground/60 lowercase normal-case">(optional)</span>
                             </FieldLabel>
                             <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
                                 {(address ?? "").length}/500
                             </span>
                         </div>
-                        <FieldContent className="space-y-4">
+                        <FieldContent>
                             <Textarea
                                 className="min-h-20 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner resize-none"
                                 maxLength={500}
@@ -155,7 +155,7 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
                         </FieldContent>
                     </Field>
 
-                    <DialogFooter className="mt-6 border-t border-border/30">
+                    <DialogFooter className="mt-4 border-t border-border/30">
                         <Button
                             type="button"
                             variant="outline"

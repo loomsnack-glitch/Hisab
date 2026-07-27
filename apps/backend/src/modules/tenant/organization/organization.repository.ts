@@ -50,6 +50,16 @@ export const getOrganizationById = async (organizationId: string): Promise<Organ
     return result ? snakeToCamel(result) : null;
 };
 
+export const getOrganizationByUsername = async (username: string): Promise<OrganizationDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM organizations
+        WHERE username = ${username}
+    `;
+
+    return result ? snakeToCamel(result) : null;
+};
+
 export const getOrganizationByIdForUser = async (
     organizationId: string,
     userId: string,
@@ -89,12 +99,35 @@ export const organizationNameExistsForUser = async (
     return Boolean(results[0]);
 };
 
+export const organizationUsernameExists = async (
+    username: string,
+    excludeId?: string,
+): Promise<boolean> => {
+    const results = excludeId
+        ? await pg`
+            SELECT 1
+            FROM organizations
+            WHERE username = ${username}
+              AND id <> ${excludeId}
+            LIMIT 1
+        `
+        : await pg`
+            SELECT 1
+            FROM organizations
+            WHERE username = ${username}
+            LIMIT 1
+        `;
+
+    return Boolean(results[0]);
+};
+
 export const updateOrganization = async (
     organizationData: UpdateOrganizationREPO,
 ): Promise<OrganizationDTO | null> => {
     const [result] = await pg`
         UPDATE organizations
         SET name = ${organizationData.name},
+            username = ${organizationData.username},
             updated_by = ${organizationData.updatedBy},
             updated_at = NOW()
         WHERE id = ${organizationData.id}
@@ -235,13 +268,65 @@ export const deviceNameExistsInStore = async (storeId: string, name: string, exc
     return Boolean(results[0]);
 };
 
+export const loginUsernameExistsInOrg = async (organizationId: string, loginUsername: string, excludeId?: string): Promise<boolean> => {
+    const results = excludeId
+        ? await pg`
+            SELECT 1
+            FROM store_devices
+            WHERE organization_id = ${organizationId}
+              AND login_username = ${loginUsername}
+              AND id <> ${excludeId}
+            LIMIT 1
+        `
+        : await pg`
+            SELECT 1
+            FROM store_devices
+            WHERE organization_id = ${organizationId}
+              AND login_username = ${loginUsername}
+            LIMIT 1
+        `;
+
+    return Boolean(results[0]);
+};
+
 export const updateStoreDevice = async (deviceData: UpdateStoreDeviceREPO): Promise<StoreDeviceDTO | null> => {
+    if (deviceData.deviceSecretEncrypted && deviceData.loginUsername) {
+        const [result] = await pg`
+            UPDATE store_devices
+            SET name = ${deviceData.name},
+                login_username = ${deviceData.loginUsername},
+                status = ${deviceData.status},
+                device_secret_encrypted = ${deviceData.deviceSecretEncrypted},
+                updated_by = ${deviceData.updatedBy},
+                updated_at = NOW()
+            WHERE id = ${deviceData.id}
+            RETURNING *
+        `;
+
+        return result ? snakeToCamel(result) : null;
+    }
+
     if (deviceData.deviceSecretEncrypted) {
         const [result] = await pg`
             UPDATE store_devices
             SET name = ${deviceData.name},
                 status = ${deviceData.status},
                 device_secret_encrypted = ${deviceData.deviceSecretEncrypted},
+                updated_by = ${deviceData.updatedBy},
+                updated_at = NOW()
+            WHERE id = ${deviceData.id}
+            RETURNING *
+        `;
+
+        return result ? snakeToCamel(result) : null;
+    }
+
+    if (deviceData.loginUsername) {
+        const [result] = await pg`
+            UPDATE store_devices
+            SET name = ${deviceData.name},
+                login_username = ${deviceData.loginUsername},
+                status = ${deviceData.status},
                 updated_by = ${deviceData.updatedBy},
                 updated_at = NOW()
             WHERE id = ${deviceData.id}
@@ -275,6 +360,20 @@ export const getStoreDeviceById = async (
         WHERE id = ${deviceId}
           AND organization_id = ${organizationId}
           AND store_id = ${storeId}
+    `;
+
+    return result ? snakeToCamel(result) : null;
+};
+
+export const getStoreDeviceByLoginUsername = async (
+    organizationId: string,
+    loginUsername: string,
+): Promise<StoreDeviceDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM store_devices
+        WHERE organization_id = ${organizationId}
+          AND login_username = ${loginUsername}
     `;
 
     return result ? snakeToCamel(result) : null;

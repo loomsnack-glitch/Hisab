@@ -13,6 +13,7 @@ const mapDeviceSession = (row: DeviceSessionRow): DeviceSessionDTO => {
             organizationId: String(mapped.organizationId),
             storeId: String(mapped.storeId),
             name: String(mapped.name),
+            loginUsername: String(mapped.loginUsername),
             status: mapped.status as DeviceSessionDTO["device"]["status"],
             lastSeenAt: (mapped.lastSeenAt as string | null | undefined) ?? null,
         },
@@ -25,6 +26,7 @@ const mapDeviceSession = (row: DeviceSessionRow): DeviceSessionDTO => {
         organization: {
             id: String(mapped.organizationId),
             name: String(mapped.organizationName),
+            username: String(mapped.organizationUsername),
         },
     };
 };
@@ -35,7 +37,8 @@ export const getDeviceSessionById = async (deviceId: string): Promise<DeviceSess
             d.*,
             s.name AS store_name,
             s.address AS store_address,
-            o.name AS organization_name
+            o.name AS organization_name,
+            o.username AS organization_username
         FROM store_devices d
         INNER JOIN stores s
             ON s.id = d.store_id
@@ -43,6 +46,30 @@ export const getDeviceSessionById = async (deviceId: string): Promise<DeviceSess
         INNER JOIN organizations o
             ON o.id = d.organization_id
         WHERE d.id = ${deviceId}
+    `;
+
+    return result ? mapDeviceSession(result) : null;
+};
+
+export const getDeviceSessionByLoginUsername = async (
+    organizationUsername: string,
+    deviceUsername: string,
+): Promise<DeviceSessionDTO | null> => {
+    const [result] = await pg`
+        SELECT
+            d.*,
+            s.name AS store_name,
+            s.address AS store_address,
+            o.name AS organization_name,
+            o.username AS organization_username
+        FROM store_devices d
+        INNER JOIN stores s
+            ON s.id = d.store_id
+           AND s.organization_id = d.organization_id
+        INNER JOIN organizations o
+            ON o.id = d.organization_id
+        WHERE o.username = ${organizationUsername}
+          AND d.login_username = ${deviceUsername}
     `;
 
     return result ? mapDeviceSession(result) : null;

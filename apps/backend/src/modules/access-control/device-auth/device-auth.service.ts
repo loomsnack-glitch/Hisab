@@ -25,7 +25,10 @@ const buildToken = async (deviceId: string) => {
 export const login = async (
     loginData: DeviceLoginSVC,
 ): Promise<ServiceResponse<DeviceAuthResponse | null>> => {
-    const session = await deviceAuthRepository.getDeviceSessionById(loginData.deviceId);
+    const organizationUsername = loginData.organizationUsername.trim().toLowerCase();
+    const deviceUsername = loginData.deviceUsername.trim().toLowerCase();
+
+    const session = await deviceAuthRepository.getDeviceSessionByLoginUsername(organizationUsername, deviceUsername);
     if (!session) {
         return {
             status: "error",
@@ -44,7 +47,7 @@ export const login = async (
         };
     }
 
-    const encryptedSecret = await deviceAuthRepository.getDeviceSecretEncryptedById(loginData.deviceId);
+    const encryptedSecret = await deviceAuthRepository.getDeviceSecretEncryptedById(session.device.id);
     if (!encryptedSecret) {
         return {
             status: "error",

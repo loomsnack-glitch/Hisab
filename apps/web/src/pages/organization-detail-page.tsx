@@ -177,7 +177,7 @@ const OrganizationDetailPage = () => {
                                 </p>
                             </div>
                         </div>
-                        <StoresSection organizationId={organization.id} stores={organization.stores} />
+                        <StoresSection organizationId={organization.id} organizationUsername={organization.username} stores={organization.stores} />
                     </section>
                 </TabsContent>
 

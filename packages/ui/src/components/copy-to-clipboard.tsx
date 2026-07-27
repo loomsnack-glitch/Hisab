@@ -12,6 +12,7 @@ interface CopyToClipboardProps {
     text?: string
     size?: "default" | "xs" | "sm" | "lg" | "icon" | "icon-sm"
     tooltip?: string
+    showTooltip?: boolean
 }
 
 const copyTextToClipboard = async (text: string): Promise<boolean> => {
@@ -45,7 +46,7 @@ const copyTextToClipboard = async (text: string): Promise<boolean> => {
     }
 }
 
-const CopyToClipboard = ({ getValue, className, variant, text, size, tooltip }: CopyToClipboardProps) => {
+const CopyToClipboard = ({ getValue, className, variant, text, size, tooltip, showTooltip = true }: CopyToClipboardProps) => {
     const [copyState, setCopyState] = useState<'idle' | 'loading' | 'copied'>('idle')
     const [open, setOpen] = useState(false)
 
@@ -133,6 +134,7 @@ const CopyToClipboard = ({ getValue, className, variant, text, size, tooltip }: 
                                     : 'active:scale-90',
                                 className
                             )}
+                            aria-label={tooltip ?? "Copy to clipboard"}
                         >
                             <span className="relative flex items-center justify-center size-3.5 shrink-0">
                                 {/* Copy Icon */}
@@ -176,7 +178,7 @@ const CopyToClipboard = ({ getValue, className, variant, text, size, tooltip }: 
                         </Button>
                     }
                 />
-                {(tooltip || isCopied) && (
+                {showTooltip && (tooltip || isCopied) && (
                     <TooltipContent>
                         <p className='mb-0'>{isCopied ? 'Copied to clipboard!' : tooltip}</p>
                     </TooltipContent>
@@ -187,5 +189,3 @@ const CopyToClipboard = ({ getValue, className, variant, text, size, tooltip }: 
 }
 
 export default CopyToClipboard
-
-

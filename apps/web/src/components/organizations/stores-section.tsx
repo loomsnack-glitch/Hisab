@@ -3,26 +3,26 @@ import { Link } from "react-router-dom";
 import type { StoreWithDevicesDTO } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import CopyToClipboard from "@repo/ui/components/copy-to-clipboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
-import { MonitorSmartphone, Pencil, PlusCircle, Store, Search } from "lucide-react";
+import { ExternalLink, MonitorSmartphone, Pencil, PlusCircle, Store, Search } from "lucide-react";
 
 import CreateDeviceDialog from "@/components/organizations/create-device-dialog";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
+import DeviceActionsMenu from "@/components/organizations/device-actions-menu";
 import DeviceStatusBadge from "@/components/organizations/device-status-badge";
 import EditDeviceDialog from "@/components/organizations/edit-device-dialog";
 import EditStoreDialog from "@/components/organizations/edit-store-dialog";
-import RevealDeviceSecretButton from "@/components/organizations/reveal-device-secret-button";
 import { formatDateTime } from "@/lib/format";
 
 type StoresSectionProps = {
     organizationId: string;
+    organizationUsername: string;
     stores: StoreWithDevicesDTO[];
 };
 
-const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
+const StoresSection = ({ organizationId, organizationUsername, stores }: StoresSectionProps) => {
     const [searchQuery, setSearchQuery] = useState("");
 
     const filteredStores = useMemo(() => {
@@ -144,6 +144,7 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                     />
                                     <CreateDeviceDialog
                                         organizationId={organizationId}
+                                        organizationUsername={organizationUsername}
                                         storeId={store.id}
                                         storeName={store.name}
                                         trigger={
@@ -172,96 +173,148 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                     <EmptyContent>
                                         <CreateDeviceDialog
                                             organizationId={organizationId}
+                                            organizationUsername={organizationUsername}
                                             storeId={store.id}
                                             storeName={store.name}
                                         />
                                     </EmptyContent>
                                 </Empty>
                             ) : (
-                                <div className="overflow-x-auto rounded-2xl border border-border/60">
-                                    <table className="min-w-full text-sm">
-                                        <thead>
-                                            <tr className="border-b border-border/50 bg-muted/20 text-left text-muted-foreground">
-                                                <th className="px-4 py-3 font-medium">Device</th>
-                                                <th className="px-4 py-3 font-medium">Status</th>
-                                                <th className="px-4 py-3 font-medium">Last seen</th>
-                                                <th className="px-4 py-3 font-medium">Created</th>
-                                                <th className="px-4 py-3 font-medium">Secret</th>
-                                                <th className="px-4 py-3 font-medium">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border/40">
-                                            {store.devices.map((device, index) => (
-                                                <tr
-                                                    key={device.id}
-                                                    className={`transition-colors duration-150 hover:bg-muted/30 ${index % 2 === 0 ? "" : "bg-muted/10"}`}
-                                                >
-                                                    <td className="px-4 py-3.5">
-                                                        <div>
-                                                            <p className="font-medium text-foreground">{device.name}</p>
-                                                            <div className="mt-1 flex items-center gap-1">
-                                                                <code className="break-all font-mono text-xs text-muted-foreground">
-                                                                    {device.id}
-                                                                </code>
-                                                                <CopyToClipboard
-                                                                    getValue={() => device.id}
-                                                                    tooltip="Copy device ID"
-                                                                    variant="ghost"
-                                                                    size="icon-sm"
-                                                                    className="shrink-0 rounded-full"
+                                <>
+                                    {/* Desktop table */}
+                                    <div className="hidden xl:block overflow-x-auto rounded-2xl border border-border/60">
+                                        <table className="min-w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-border/50 bg-muted/20 text-left text-muted-foreground">
+                                                    <th className="px-4 py-3 font-medium">Device</th>
+                                                    <th className="px-4 py-3 font-medium">Status</th>
+                                                    <th className="px-4 py-3 font-medium">Last seen</th>
+                                                    <th className="px-4 py-3 font-medium">Created</th>
+                                                    <th className="px-4 py-3 font-medium">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border/40">
+                                                {store.devices.map((device, index) => (
+                                                    <tr
+                                                        key={device.id}
+                                                        className={`transition-colors duration-150 hover:bg-muted/30 ${index % 2 === 0 ? "" : "bg-muted/10"}`}
+                                                    >
+                                                        <td className="px-4 py-3.5">
+                                                            <div>
+                                                                <p className="font-medium text-foreground">{device.name}</p>
+                                                                <div className="mt-1 flex items-center gap-1">
+                                                                    <code className="break-all font-mono text-xs text-muted-foreground">
+                                                                        {device.loginUsername}
+                                                                    </code>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3.5">
+                                                            <DeviceStatusBadge status={device.status} />
+                                                        </td>
+                                                        <td className="px-4 py-3.5 text-muted-foreground">
+                                                            {formatDateTime(device.lastSeenAt)}
+                                                        </td>
+                                                        <td className="px-4 py-3.5 text-muted-foreground">
+                                                            {formatDateTime(device.createdAt)}
+                                                        </td>
+                                                        <td className="px-4 py-3.5">
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                {device.status !== "active" ? (
+                                                                    <span className="text-xs text-red-600 dark:text-red-400 font-medium whitespace-nowrap">
+                                                                        {device.status === "revoked" ? "Revoked" : "Inactive"} — POS login disabled
+                                                                    </span>
+                                                                ) : (
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="rounded-full"
+                                                                        render={<Link target="_blank" rel="noopener noreferrer" to={`/pos/login?org=${encodeURIComponent(organizationUsername)}&device=${encodeURIComponent(device.loginUsername)}`} />}
+                                                                    >
+                                                                        <ExternalLink className="mr-2 size-4" />
+                                                                        Open POS
+                                                                    </Button>
+                                                                )}
+                                                                <DeviceActionsMenu
+                                                                    organizationId={organizationId}
+                                                                    organizationUsername={organizationUsername}
+                                                                    storeId={store.id}
+                                                                    device={device}
                                                                 />
                                                             </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3.5">
-                                                        <DeviceStatusBadge status={device.status} />
-                                                    </td>
-                                                    <td className="px-4 py-3.5 text-muted-foreground">
-                                                        {formatDateTime(device.lastSeenAt)}
-                                                    </td>
-                                                    <td className="px-4 py-3.5 text-muted-foreground">
-                                                        {formatDateTime(device.createdAt)}
-                                                    </td>
-                                                    <td className="px-4 py-3.5">
-                                                        <div className="flex items-center gap-2">
-                                                            <Button
-                                                                type="button"
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="rounded-full"
-                                                                render={<Link to={`/pos/login?deviceId=${device.id}`} />}
-                                                            >
-                                                                POS
-                                                            </Button>
-                                                            <code className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-xs text-muted-foreground">
-                                                                ••••••••
-                                                            </code>
-                                                            <RevealDeviceSecretButton
-                                                                organizationId={organizationId}
-                                                                storeId={store.id}
-                                                                deviceId={device.id}
-                                                                deviceName={device.name}
-                                                            />
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3.5">
-                                                        <EditDeviceDialog
-                                                            organizationId={organizationId}
-                                                            storeId={store.id}
-                                                            device={device}
-                                                            trigger={
-                                                                <Button variant="outline" size="sm" className="rounded-full">
-                                                                    <Pencil className="mr-2 size-4" />
-                                                                    Edit
-                                                                </Button>
-                                                            }
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Tablet/mobile cards */}
+                                    <div className="block xl:hidden space-y-3">
+                                        {store.devices.map((device) => (
+                                            <div
+                                                key={device.id}
+                                                className="rounded-2xl border border-border/60 bg-card p-4 space-y-3"
+                                            >
+                                                {/* Header: name + status */}
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <p className="font-medium text-foreground truncate">{device.name}</p>
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                                            Last seen: {formatDateTime(device.lastSeenAt)}
+                                                        </p>
+                                                    </div>
+                                                    <DeviceStatusBadge status={device.status} className="shrink-0" />
+                                                </div>
+
+                                                {/* Status warning for non-active devices */}
+                                                {device.status !== "active" && (
+                                                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                                                        {device.status === "revoked" ? "Revoked" : "Inactive"} — POS login disabled
+                                                    </div>
+                                                )}
+
+                                                {/* Device username row */}
+                                                <div className="flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2">
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs text-muted-foreground">Device username</p>
+                                                        <code className="break-all font-mono text-sm text-foreground">
+                                                            {device.loginUsername}
+                                                        </code>
+                                                    </div>
+                                                </div>
+
+                                                {/* Created date */}
+                                                <p className="text-xs text-muted-foreground">
+                                                    Created {formatDateTime(device.createdAt)}
+                                                </p>
+
+                                                {/* Actions grid */}
+                                                <div className="grid grid-cols-2 max-sm:grid-cols-1 gap-2 pt-1">
+                                                    {device.status === "active" && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="rounded-full"
+                                                            render={<Link target="_blank" rel="noopener noreferrer" to={`/pos/login?org=${encodeURIComponent(organizationUsername)}&device=${encodeURIComponent(device.loginUsername)}`} />}
+                                                        >
+                                                            <ExternalLink className="mr-2 size-4" />
+                                                            Open POS
+                                                        </Button>
+                                                    )}
+                                                    <DeviceActionsMenu
+                                                        organizationId={organizationId}
+                                                        organizationUsername={organizationUsername}
+                                                        storeId={store.id}
+                                                        device={device}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
                             )}
                         </CardContent>
                     </Card>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,8 +20,6 @@ const PosLoginPage = () => {
     const queryClient = useQueryClient();
     const [searchParams] = useSearchParams();
 
-    const initialDeviceId = useMemo(() => searchParams.get("deviceId") ?? "", [searchParams]);
-
     const deviceAuthQuery = useQuery({
         queryKey: deviceAuthKeys.me,
         queryFn: deviceAuthenticate,
@@ -31,27 +29,30 @@ const PosLoginPage = () => {
     const form = useForm<DeviceLoginJSON>({
         resolver: zodResolver(DeviceLoginSchema),
         defaultValues: {
-            deviceId: initialDeviceId,
+            organizationUsername: searchParams.get("org") ?? "",
+            deviceUsername: searchParams.get("device") ?? "",
             deviceSecret: "",
         },
     });
 
-    const [copiedDeviceId, setCopiedDeviceId] = useState<string | null>(null);
+    useEffect(() => {
+        const org = searchParams.get("org");
+        const device = searchParams.get("device");
+        if (org !== null) {
+            form.setValue("organizationUsername", org, { shouldValidate: false });
+        }
+        if (device !== null) {
+            form.setValue("deviceUsername", device, { shouldValidate: false });
+        }
+    }, [searchParams, form]);
+
     const [copiedDeviceSecret, setCopiedDeviceSecret] = useState<string | null>(null);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
-            setCopiedDeviceId(localStorage.getItem("copied_device_id"));
             setCopiedDeviceSecret(localStorage.getItem("copied_device_secret"));
         }
     }, []);
-
-    const handlePasteDeviceId = () => {
-        if (copiedDeviceId) {
-            form.setValue("deviceId", copiedDeviceId, { shouldValidate: true });
-            toast.success("Device ID pasted");
-        }
-    };
 
     const handlePasteDeviceSecret = () => {
         if (copiedDeviceSecret) {
@@ -64,7 +65,7 @@ const PosLoginPage = () => {
 
     useEffect(() => {
         if (!isPending) {
-            form.setFocus("deviceId");
+            form.setFocus("organizationUsername");
         }
     }, [isPending, form.setFocus]);
 
@@ -106,8 +107,8 @@ const PosLoginPage = () => {
 
     return (
         <AuthShell
-            title="Device login"
-            subtitle="Use the credentials from the device onboarding flow. Secrets remain hidden on the admin side until revealed intentionally."
+            title="POS login"
+            subtitle="Enter your business username, device username, and device secret to start a POS session."
         >
             <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 flex items-center justify-between gap-4 text-xs">
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -126,26 +127,27 @@ const PosLoginPage = () => {
                         </div>
                     ) : (
                         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-                            <Field data-invalid={!!form.formState.errors.deviceId} className="space-y-1">
-                                <FieldLabel required className="text-xs">Device id</FieldLabel>
+                            <Field data-invalid={!!form.formState.errors.organizationUsername} className="space-y-1">
+                                <FieldLabel required className="text-xs">Business username</FieldLabel>
                                 <FieldContent>
-                                    <div className="relative">
-                                        <Input
-                                            className="h-10 rounded-xl transition-colors duration-200 text-sm pr-16"
-                                            placeholder="Store device UUID"
-                                            {...form.register("deviceId")}
-                                        />
-                                        {copiedDeviceId && (
-                                            <button
-                                                type="button"
-                                                onClick={handlePasteDeviceId}
-                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95 border border-emerald-500/20 shadow-xs cursor-pointer flex items-center"
-                                            >
-                                                Paste
-                                            </button>
-                                        )}
-                                    </div>
-                                    <FieldError errors={[form.formState.errors.deviceId]} className="text-[10px]" />
+                                    <Input
+                                        className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                        placeholder="e.g. demo-grocery-mart"
+                                        {...form.register("organizationUsername")}
+                                    />
+                                    <FieldError errors={[form.formState.errors.organizationUsername]} className="text-[10px]" />
+                                </FieldContent>
+                            </Field>
+
+                            <Field data-invalid={!!form.formState.errors.deviceUsername} className="space-y-1">
+                                <FieldLabel required className="text-xs">Device username</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                        placeholder="e.g. counter1"
+                                        {...form.register("deviceUsername")}
+                                    />
+                                    <FieldError errors={[form.formState.errors.deviceUsername]} className="text-[10px]" />
                                 </FieldContent>
                             </Field>
 
@@ -156,7 +158,7 @@ const PosLoginPage = () => {
                                         <Input
                                             type="password"
                                             className="h-10 rounded-xl transition-colors duration-200 text-sm pr-16"
-                                            placeholder="Enter the store device secret"
+                                            placeholder="Enter the device secret"
                                             {...form.register("deviceSecret")}
                                         />
                                         {copiedDeviceSecret && (
@@ -172,11 +174,6 @@ const PosLoginPage = () => {
                                     <FieldError errors={[form.formState.errors.deviceSecret]} className="text-[10px]" />
                                 </FieldContent>
                             </Field>
-
-                            <div className="rounded-xl border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground leading-relaxed">
-                                This login does not switch stores later. If you need a different counter, log out and
-                                authenticate with a different device.
-                            </div>
 
                             <Button
                                 type="submit"

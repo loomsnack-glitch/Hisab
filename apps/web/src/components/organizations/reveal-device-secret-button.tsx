@@ -11,16 +11,31 @@ type RevealDeviceSecretButtonProps = {
     organizationId: string;
     storeId: string;
     deviceId: string;
+    organizationUsername: string;
+    deviceLoginUsername: string;
     deviceName: string;
+    canOpenPos: boolean;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    trigger?: React.ReactElement;
 };
 
 const RevealDeviceSecretButton = ({
     organizationId,
     storeId,
     deviceId,
+    organizationUsername,
+    deviceLoginUsername,
     deviceName,
+    canOpenPos,
+    open: controlledOpen,
+    onOpenChange,
+    trigger,
 }: RevealDeviceSecretButtonProps) => {
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const isControlled = controlledOpen !== undefined;
+    const open = controlledOpen ?? internalOpen;
+    const setOpen = onOpenChange ?? setInternalOpen;
 
     const secretMutation = useMutation({
         mutationFn: () => getStoreDeviceSecret(organizationId, storeId, deviceId),
@@ -43,22 +58,26 @@ const RevealDeviceSecretButton = ({
 
     return (
         <>
-            <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="rounded-full"
-                onClick={() => setOpen(true)}
-            >
-                <Eye className="mr-2 size-4" />
-                View
-            </Button>
+            {isControlled ? null : trigger ?? (
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setOpen(true)}
+                >
+                    <Eye className="mr-2 size-4" />
+                    Show device secret
+                </Button>
+            )}
 
             <DeviceSecretDialog
                 open={open}
                 onOpenChange={setOpen}
-                deviceId={deviceId}
+                organizationUsername={organizationUsername}
+                deviceLoginUsername={deviceLoginUsername}
                 deviceName={deviceName}
+                canOpenPos={canOpenPos}
                 deviceSecret={deviceSecret}
                 isLoading={secretMutation.isPending}
                 errorMessage={errorMessage}

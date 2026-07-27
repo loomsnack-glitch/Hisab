@@ -310,10 +310,12 @@ CREATE TABLE public.customers (
 CREATE TABLE public.organizations (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name character varying(255) NOT NULL,
+    username character varying(64) NOT NULL,
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT organizations_username_check CHECK (((username)::text ~ '^[a-z0-9][a-z0-9_-]{1,63}$'::text))
 );
 
 
@@ -542,13 +544,15 @@ CREATE TABLE public.store_devices (
     store_id uuid NOT NULL,
     organization_id uuid NOT NULL,
     name character varying(255) NOT NULL,
+    login_username character varying(64) NOT NULL,
     device_secret_encrypted character varying(255) CONSTRAINT store_devices_device_secret_hash_not_null NOT NULL,
     status public.store_device_status_enum DEFAULT 'active'::public.store_device_status_enum NOT NULL,
     last_seen_at timestamp with time zone,
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT store_devices_login_username_check CHECK (((login_username)::text ~ '^[a-z0-9][a-z0-9_-]{1,63}$'::text))
 );
 
 
@@ -728,6 +732,14 @@ ALTER TABLE ONLY public.organizations
 
 
 --
+-- Name: organizations organizations_username_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.organizations
+    ADD CONSTRAINT organizations_username_key UNIQUE (username);
+
+
+--
 -- Name: payments payments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -901,6 +913,14 @@ ALTER TABLE ONLY public.store_devices
 
 ALTER TABLE ONLY public.store_devices
     ADD CONSTRAINT store_devices_store_id_name_key UNIQUE (store_id, name);
+
+
+--
+-- Name: store_devices store_devices_organization_id_login_username_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_devices
+    ADD CONSTRAINT store_devices_organization_id_login_username_key UNIQUE (organization_id, login_username);
 
 
 --
@@ -1865,4 +1885,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260712043000'),
     ('20260712050000'),
     ('20260712051500'),
-    ('20260712060000');
+    ('20260712060000'),
+    ('20260727120000');

@@ -61,9 +61,20 @@ export const createOrganization = async (
         };
     }
 
+    const usernameExists = await organizationRepository.organizationUsernameExists(organizationData.username);
+    if (usernameExists) {
+        return {
+            status: "error",
+            message: "Organization username is already taken",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
     const organization = await organizationRepository.createOrganization({
         id: crypto.randomUUID(),
         name: organizationData.name,
+        username: organizationData.username,
         createdBy: userId,
     });
 
@@ -100,6 +111,7 @@ export const updateOrganization = async (
     }
 
     const nextName = organizationData.name.trim();
+    const nextUsername = organizationData.username.trim().toLowerCase();
 
     if (nextName.toLowerCase() !== organization.name.toLowerCase()) {
         const alreadyExists = await organizationRepository.organizationNameExistsForUser(
@@ -117,9 +129,22 @@ export const updateOrganization = async (
         }
     }
 
+    if (nextUsername !== organization.username) {
+        const usernameExists = await organizationRepository.organizationUsernameExists(nextUsername, organizationId);
+        if (usernameExists) {
+            return {
+                status: "error",
+                message: "Organization username is already taken",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
     const updatedOrganization = await organizationRepository.updateOrganization({
         id: organizationId,
         name: nextName,
+        username: nextUsername,
         updatedBy: userId,
     });
 
@@ -391,12 +416,24 @@ export const createStoreDevice = async (
         };
     }
 
+    const loginUsername = deviceData.loginUsername.trim().toLowerCase();
+    const usernameExists = await organizationRepository.loginUsernameExistsInOrg(organizationId, loginUsername);
+    if (usernameExists) {
+        return {
+            status: "error",
+            message: "Device login username is already taken in this organization",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
     const deviceSecretEncrypted = await encryptDeviceSecret(deviceData.deviceSecret);
     const device = await organizationRepository.createStoreDevice({
         id: crypto.randomUUID(),
         organizationId,
         storeId,
         name: deviceData.name,
+        loginUsername,
         deviceSecretEncrypted,
         createdBy: userId,
     });
@@ -471,6 +508,19 @@ export const updateStoreDevice = async (
         }
     }
 
+    const nextLoginUsername = deviceData.loginUsername?.trim().toLowerCase();
+    if (nextLoginUsername && nextLoginUsername !== device.loginUsername) {
+        const usernameExists = await organizationRepository.loginUsernameExistsInOrg(organizationId, nextLoginUsername, deviceId);
+        if (usernameExists) {
+            return {
+                status: "error",
+                message: "Device login username is already taken in this organization",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+    }
+
     const trimmedSecret = deviceData.deviceSecret?.trim();
     const updatePayload: Parameters<typeof organizationRepository.updateStoreDevice>[0] = {
         id: deviceId,
@@ -478,6 +528,10 @@ export const updateStoreDevice = async (
         status: deviceData.status,
         updatedBy: userId,
     };
+
+    if (nextLoginUsername) {
+        updatePayload.loginUsername = nextLoginUsername;
+    }
 
     if (trimmedSecret) {
         updatePayload.deviceSecretEncrypted = await encryptDeviceSecret(trimmedSecret);

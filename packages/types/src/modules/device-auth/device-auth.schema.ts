@@ -7,8 +7,23 @@ const deviceSecretSchema = z
     .min(8, "Device secret must be at least 8 characters")
     .max(128, "Device secret must be at most 128 characters");
 
+const organizationUsernameSchema = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(2, "Organization username must be at least 2 characters")
+    .max(64, "Organization username must be at most 64 characters");
+
+const deviceUsernameSchema = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(2, "Device username must be at least 2 characters")
+    .max(64, "Device username must be at most 64 characters");
+
 export const DeviceLoginSchema = z.object({
-    deviceId: z.uuid("Invalid device id"),
+    organizationUsername: organizationUsernameSchema,
+    deviceUsername: deviceUsernameSchema,
     deviceSecret: deviceSecretSchema,
 });
 
@@ -17,6 +32,7 @@ export const DeviceSessionDeviceDTOSchema = StoreDeviceDTOSchema.pick({
     organizationId: true,
     storeId: true,
     name: true,
+    loginUsername: true,
     status: true,
     lastSeenAt: true,
 });
@@ -31,6 +47,7 @@ export const DeviceSessionStoreDTOSchema = StoreDTOSchema.pick({
 export const DeviceSessionOrganizationDTOSchema = OrganizationDTOSchema.pick({
     id: true,
     name: true,
+    username: true,
 });
 
 export const DeviceSessionDTOSchema = z.object({

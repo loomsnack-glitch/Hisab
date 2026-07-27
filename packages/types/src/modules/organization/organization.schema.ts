@@ -7,6 +7,14 @@ const nameSchema = z
     .min(1, "Name is required")
     .max(255, "Name must be at most 255 characters");
 
+const usernameSchema = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9][a-z0-9_-]{1,63}$/, "Username must be 2-64 characters: lowercase letters, numbers, hyphens, underscores. Must start with a letter or number.")
+    .min(2, "Username must be at least 2 characters")
+    .max(64, "Username must be at most 64 characters");
+
 const optionalAddressSchema = z
     .union([
         z.literal(""),
@@ -25,6 +33,7 @@ export const StoreDeviceStatusSchema = z.enum(["active", "inactive", "revoked"])
 export const OrganizationDTOSchema = z.object({
     id: z.uuid("Invalid organization id"),
     name: nameSchema,
+    username: usernameSchema,
     createdBy: z.uuid("Invalid creator id"),
     updatedBy: z.uuid("Invalid updater id").nullable().optional(),
     createdAt: dtoDateSchema,
@@ -47,6 +56,7 @@ export const StoreDeviceDTOSchema = z.object({
     storeId: z.uuid("Invalid store id"),
     organizationId: z.uuid("Invalid organization id"),
     name: nameSchema,
+    loginUsername: usernameSchema,
     status: StoreDeviceStatusSchema,
     lastSeenAt: dtoDateSchema.nullable().optional(),
     createdBy: z.uuid("Invalid creator id"),
@@ -57,10 +67,12 @@ export const StoreDeviceDTOSchema = z.object({
 
 export const CreateOrganizationSchema = z.object({
     name: nameSchema,
+    username: usernameSchema,
 });
 
 export const UpdateOrganizationSchema = z.object({
     name: nameSchema,
+    username: usernameSchema,
 });
 
 export const CreateStoreSchema = z.object({
@@ -75,11 +87,13 @@ export const UpdateStoreSchema = z.object({
 
 export const CreateStoreDeviceSchema = z.object({
     name: nameSchema,
+    loginUsername: usernameSchema,
     deviceSecret: deviceSecretSchema,
 });
 
 export const UpdateStoreDeviceSchema = z.object({
     name: nameSchema,
+    loginUsername: usernameSchema.optional(),
     status: StoreDeviceStatusSchema,
     deviceSecret: z.union([z.literal(""), deviceSecretSchema]).optional(),
 });
