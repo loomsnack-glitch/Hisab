@@ -378,7 +378,8 @@ CREATE TABLE public.products (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     product_type public.product_type_enum DEFAULT 'single'::public.product_type_enum NOT NULL,
     CONSTRAINT products_discount_check CHECK ((discount >= (0)::numeric)),
-    CONSTRAINT products_price_check CHECK ((price >= (0)::numeric))
+    CONSTRAINT products_price_check CHECK ((price >= (0)::numeric)),
+    CONSTRAINT products_image_path_no_icons CHECK (((image_path IS NULL) OR (image_path !~~ 'icon:%'::character varying)))
 );
 
 
@@ -1886,4 +1887,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260712050000'),
     ('20260712051500'),
     ('20260712060000'),
-    ('20260727120000');
+    ('20260727120000'),
+    ('20260728100000');

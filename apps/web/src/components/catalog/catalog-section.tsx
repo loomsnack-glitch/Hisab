@@ -303,11 +303,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                 >
                                     <div className="flex items-center gap-3.5">
                                         <div className="relative flex h-[4.25rem] w-[4.25rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-[1.02] dark:ring-white/5">
-                                            {product.imagePath?.startsWith("icon:") ? (
-                                                <span className="text-4xl select-none select-none-emoji">
-                                                    {product.imagePath.replace("icon:", "")}
-                                                </span>
-                                            ) : product.imageSignedUrl ? (
+                                            {product.imageSignedUrl ? (
                                                 <img
                                                     src={product.imageSignedUrl}
                                                     alt={product.name}

@@ -1063,11 +1063,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                     }`}
                                                 >
                                                     <div className="relative mb-2.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
-                                                        {product.imagePath?.startsWith("icon:") ? (
-                                                            <span className="text-3xl select-none select-none-emoji">
-                                                                {product.imagePath.replace("icon:", "")}
-                                                            </span>
-                                                        ) : product.imageSignedUrl ? (
+                                                        {product.imageSignedUrl ? (
                                                             <img
                                                                 src={product.imageSignedUrl}
                                                                 alt={product.name}
@@ -1879,11 +1875,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                     <div className="flex items-center gap-3">
                                                         {/* Image/Emoji */}
                                                         <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner">
-                                                            {associatedProduct?.imagePath?.startsWith("icon:") ? (
-                                                                <span className="text-lg select-none select-none-emoji">
-                                                                    {associatedProduct.imagePath.replace("icon:", "")}
-                                                                </span>
-                                                            ) : associatedProduct?.imageSignedUrl ? (
+                                                            {associatedProduct?.imageSignedUrl ? (
                                                                 <img
                                                                     src={associatedProduct.imageSignedUrl}
                                                                     alt={item.name}

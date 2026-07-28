@@ -43,7 +43,7 @@ const getOrganizationForUser = async (organizationId: string, userId: string) =>
 };
 
 const getSignedUrlIfPossible = async (path?: string | null): Promise<string | null> => {
-    if (!storageBucketName || !path || path.startsWith("icon:")) {
+    if (!storageBucketName || !path) {
         return null;
     }
 
