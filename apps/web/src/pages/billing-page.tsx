@@ -1,6 +1,7 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSwipeable } from "react-swipeable";
 import {
     commitSale,
     commitPosSale,
@@ -55,6 +56,7 @@ import {
     Store,
     Trash2,
     User,
+    X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -199,6 +201,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "cash" | "upi" | "card">("all");
     const [dateFilter, setDateFilter] = useState<"all" | "today" | "yesterday" | "this-week">("all");
     const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
+    const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
     const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
@@ -258,6 +261,34 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const customers = customersQuery.data?.status === "success" ? (customersQuery.data.data?.customers ?? []) : [];
     const sales = salesQuery.data?.status === "success" ? (salesQuery.data.data?.sales ?? []) : [];
 
+    const categoryOptions = [{ id: "all", name: "All" }, ...categories];
+    const activeCategoryFilter =
+        categoryFilter !== "all" && !categories.some((category) => category.id === categoryFilter)
+            ? "all"
+            : categoryFilter;
+
+    const selectAdjacentCategory = (direction: -1 | 1) => {
+        const currentIndex = Math.max(
+            0,
+            categoryOptions.findIndex((category) => category.id === activeCategoryFilter),
+        );
+        const nextIndex = Math.min(Math.max(currentIndex + direction, 0), categoryOptions.length - 1);
+        const nextCategory = categoryOptions[nextIndex];
+
+        if (nextCategory && nextCategory.id !== activeCategoryFilter) {
+            setCategoryFilter(nextCategory.id);
+        }
+    };
+
+    const categorySwipeHandlers = useSwipeable({
+        onSwipedLeft: () => selectAdjacentCategory(1),
+        onSwipedRight: () => selectAdjacentCategory(-1),
+        delta: 50,
+        preventScrollOnSwipe: false,
+        trackMouse: false,
+        trackTouch: true,
+    });
+
     const attachmentsByProductId = useMemo(() => {
         const grouped = new Map<string, typeof selectableAttachments>();
         for (const attachment of selectableAttachments) {
@@ -304,10 +335,11 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
     const activeProducts = products.filter((product) => product.status === "active");
     const filteredProducts = activeProducts.filter((product) => {
-        const matchesCategory = categoryFilter === "all" || product.categoryId === categoryFilter;
+        const matchesCategory = activeCategoryFilter === "all" || product.categoryId === activeCategoryFilter;
         const matchesSearch = !deferredProductSearch || product.name.toLowerCase().includes(deferredProductSearch);
         return matchesCategory && matchesSearch;
     });
+    const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
 
     const filteredCustomers = customers
         .filter((customer) => {
@@ -843,7 +875,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const panelMaxHeight = isDeviceMode ? "calc(100vh - 3.5rem)" : "calc(100vh - 3.5rem - 57px)";
 
     return (
-        <div className="billing-pos-layout flex flex-col gap-0 min-h-[calc(100vh-3.5rem)] xl:h-[calc(100vh-3.5rem)] xl:min-h-0 xl:overflow-hidden">
+        <div className="billing-pos-layout flex min-h-[calc(100vh-3.5rem)] flex-col gap-0 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:overflow-hidden">
             {!isDeviceMode ? (
                 <header className="flex flex-col gap-3 border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-4">
@@ -884,9 +916,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
             ) : null}
 
             {/* ─── Main Two-Panel Layout ─── */}
-            <div className="flex flex-1 flex-col xl:flex-row">
+            <div className="flex flex-1 flex-col lg:flex-row">
                 {/* ─── LEFT PANEL: Product Grid ─── */}
-                <div className="flex-1 overflow-y-auto p-5" style={{ maxHeight: panelMaxHeight }}>
+                <div className="flex-1 overflow-y-auto p-5 pb-28 lg:min-w-0 lg:pb-5" style={{ maxHeight: panelMaxHeight }}>
                     {/* Tab Switcher */}
                     {canMutate ? (
                         <div className="mb-5 flex gap-2 border-b border-border/40 pb-3">
@@ -960,63 +992,72 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
                     {canMutate && leftPanelTab === "products" ? (
                         <>
-                            {/* Search Bar */}
-                            <div className="relative mb-4">
-                                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    className="h-10 rounded-xl bg-background/80 pl-10 text-sm"
-                                    placeholder="Search products..."
-                                    value={productSearch}
-                                    onChange={(event) => setProductSearch(event.target.value)}
-                                />
-                            </div>
-
-                            {/* Category Filter Pills */}
-                            <div className="mb-5 flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setCategoryFilter("all")}
-                                    className={cn(
-                                        "rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
-                                        categoryFilter === "all"
-                                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                            : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                    )}
-                                >
-                                    All
-                                </button>
-                                {categories.map((category) => (
-                                    <button
-                                        key={category.id}
-                                        type="button"
-                                        onClick={() => setCategoryFilter(category.id)}
-                                        className={cn(
-                                            "rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
-                                            categoryFilter === category.id
-                                                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                        )}
-                                    >
-                                        {category.name}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Product Grid */}
-                            {productsQuery.isPending ? (
-                                <div className="flex min-h-[320px] items-center justify-center">
-                                    <Spinner className="size-6 text-primary" />
+                            <div {...categorySwipeHandlers} className="touch-pan-y">
+                                {/* Search Bar */}
+                                <div className="relative mb-4">
+                                    <Search className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        className="h-12 rounded-xl bg-background/80 pl-11 pr-11 text-base"
+                                        placeholder="Search products..."
+                                        value={productSearch}
+                                        onChange={(event) => setProductSearch(event.target.value)}
+                                        aria-label="Search products"
+                                    />
+                                    {productSearch ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setProductSearch("")}
+                                            className="absolute top-1/2 right-2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                                            aria-label="Clear product search"
+                                        >
+                                            <X className="size-4" />
+                                        </button>
+                                    ) : null}
                                 </div>
-                            ) : filteredProducts.length === 0 ? (
-                                <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40">
-                                    <ShoppingCart className="size-8 text-muted-foreground/50" />
-                                    <p className="mt-3 font-medium text-foreground">No products found</p>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        Try a different search or category.
-                                    </p>
+
+                                {/* Category Filter Pills */}
+                                <div className="mb-5">
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                            Categories
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground sm:hidden">Swipe to change</p>
+                                    </div>
+                                    <div className="scrollbar-none flex min-h-11 gap-2 overflow-x-auto pb-1">
+                                        {categoryOptions.map((category) => (
+                                            <button
+                                                key={category.id}
+                                                type="button"
+                                                onClick={() => setCategoryFilter(category.id)}
+                                                aria-pressed={activeCategoryFilter === category.id}
+                                                className={cn(
+                                                    "min-h-11 shrink-0 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-200",
+                                                    activeCategoryFilter === category.id
+                                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                                )}
+                                            >
+                                                {category.name}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            ) : (
-                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+
+                                {/* Product Grid */}
+                                {productsQuery.isPending ? (
+                                    <div className="flex min-h-[320px] items-center justify-center">
+                                        <Spinner className="size-8 text-primary" />
+                                    </div>
+                                ) : filteredProducts.length === 0 ? (
+                                    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-6 text-center">
+                                        <ShoppingCart className="size-10 text-muted-foreground/50" />
+                                        <p className="mt-3 font-medium text-foreground">No products found</p>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            Try a different search or category.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                                     {filteredProducts.map((product) => {
                                         const catName =
                                             categories.find((c) => c.id === product.categoryId)?.name || "Item";
@@ -1035,7 +1076,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             <div
                                                 key={product.id}
                                                 className={cn(
-                                                    "group relative flex flex-col items-center rounded-2xl border p-4 text-center transition-all duration-200",
+                                                    "group relative flex min-h-[218px] flex-col items-center rounded-2xl border p-4 text-center transition-all duration-200",
                                                     isInCart
                                                         ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
                                                         : "border-border/50 bg-card/80",
@@ -1062,7 +1103,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                             : "cursor-not-allowed opacity-70"
                                                     }`}
                                                 >
-                                                    <div className="relative mb-2.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted/40 transition-transform duration-300 group-hover:scale-105 shadow-inner">
+                                                    <div className="relative mb-2.5 flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner transition-transform duration-300 group-hover:scale-105">
                                                         {product.imageSignedUrl ? (
                                                             <img
                                                                 src={product.imageSignedUrl}
@@ -1070,7 +1111,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                                 className="h-full w-full rounded-full object-cover border border-border/40"
                                                             />
                                                         ) : (
-                                                            <span className="text-3xl select-none select-none-emoji">
+                                                            <span className="text-4xl select-none select-none-emoji">
                                                                 {emoji}
                                                             </span>
                                                         )}
@@ -1096,7 +1137,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                             event.stopPropagation();
                                                             setCustomizeProductId(product.id);
                                                         }}
-                                                        className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                                                        className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
                                                     >
                                                         <SlidersHorizontal className="size-3" />
                                                         Customize
@@ -1105,8 +1146,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             </div>
                                         );
                                     })}
-                                </div>
-                            )}
+                                    </div>
+                                )}
+                            </div>
                         </>
                     ) : !canMutate && leftPanelTab === "customers" ? (
                         <>
@@ -1719,30 +1761,72 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
                 {/* ─── RIGHT PANEL: Current Order ─── */}
                 {canMutate ? (
-                    <aside
-                        className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm xl:w-[380px] xl:border-t-0 xl:border-l"
+                    <>
+                        {!mobileCartOpen ? (
+                            <div className="fixed inset-x-3 bottom-3 z-30 lg:hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setMobileCartOpen(true)}
+                                    className="flex min-h-16 w-full items-center justify-between rounded-2xl bg-primary px-4 text-left text-primary-foreground shadow-xl shadow-primary/25"
+                                    aria-label="Open current order"
+                                >
+                                    <span className="flex items-center gap-3">
+                                        <span className="flex size-10 items-center justify-center rounded-xl bg-primary-foreground/15">
+                                            <ShoppingCart className="size-5" />
+                                        </span>
+                                        <span>
+                                            <span className="block text-sm font-bold">
+                                                {cartItemCount} item{cartItemCount === 1 ? "" : "s"} in cart
+                                            </span>
+                                            <span className="block text-xs text-primary-foreground/75">
+                                                Tap to review order
+                                            </span>
+                                        </span>
+                                    </span>
+                                    <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
+                                </button>
+                            </div>
+                        ) : null}
+
+                        <aside
+                            className={cn(
+                                "flex w-full flex-col border-t border-border/50 bg-card/95 backdrop-blur-sm lg:static lg:w-[380px] lg:border-t-0 lg:border-l",
+                                mobileCartOpen
+                                    ? "fixed inset-x-0 bottom-0 z-40 max-h-[calc(100vh-4rem)]"
+                                    : "hidden lg:flex",
+                            )}
                         style={{ maxHeight: panelMaxHeight }}
-                    >
+                        >
                         {/* Order Header */}
                         <div className="border-b border-border/40 px-5 py-4">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <h2 className="text-lg font-bold text-foreground">Current Order</h2>
                                     <p className="text-sm text-muted-foreground">
-                                        {items.length === 0
+                                        {cartItemCount === 0
                                             ? "0 items in cart"
-                                            : `${items.reduce((s, i) => s + i.quantity, 0)} item${items.reduce((s, i) => s + i.quantity, 0) !== 1 ? "s" : ""} in cart`}
+                                            : `${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} in cart`}
                                     </p>
                                 </div>
-                                {items.length > 0 && (
+                                <div className="flex items-center gap-3">
+                                    {items.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={resetComposer}
+                                            className="min-h-10 rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
+                                        >
+                                            Clear all
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
-                                        onClick={resetComposer}
-                                        className="text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
+                                        onClick={() => setMobileCartOpen(false)}
+                                        className="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+                                        aria-label="Close current order"
                                     >
-                                        Clear all
+                                        <X className="size-5" />
                                     </button>
-                                )}
+                                </div>
                             </div>
                         </div>
 
@@ -1754,8 +1838,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                     <div className="relative flex-1">
                                         <User className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                                         <Input
-                                            className="h-10 rounded-xl bg-background/70 pl-9 text-sm"
-                                            placeholder="Phone number"
+                                            className="h-12 rounded-xl bg-background/70 pl-9 text-base"
+                                            placeholder="Customer phone"
                                             value={customerSearch}
                                             onChange={(event) => {
                                                 setCustomerSearch(event.target.value);
@@ -1766,7 +1850,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                     </div>
                                     <Button
                                         type="button"
-                                        className="h-10 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+                                        className="h-12 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
                                         onClick={handleFindCustomer}
                                     >
                                         Find
@@ -1909,9 +1993,10 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                                 onClick={() =>
                                                                     updateItemQuantity(item.key, item.quantity - 1)
                                                                 }
-                                                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                                                className="flex size-10 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                                                aria-label={`Decrease ${item.name} quantity`}
                                                             >
-                                                                <Minus className="size-3" />
+                                                                <Minus className="size-4" />
                                                             </button>
                                                             <span className="w-6 text-center text-sm font-bold text-foreground">
                                                                 {item.quantity}
@@ -1921,9 +2006,10 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                                 onClick={() =>
                                                                     updateItemQuantity(item.key, item.quantity + 1)
                                                                 }
-                                                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                                                                className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                                                                aria-label={`Increase ${item.name} quantity`}
                                                             >
-                                                                <Plus className="size-3" />
+                                                                <Plus className="size-4" />
                                                             </button>
                                                         </div>
 
@@ -1936,7 +2022,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                         <button
                                                             type="button"
                                                             onClick={() => updateItemQuantity(item.key, 0)}
-                                                            className="text-muted-foreground/50 transition-colors hover:text-destructive shrink-0"
+                                                            className="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                                            aria-label={`Remove ${item.name} from order`}
                                                         >
                                                             <Trash2 className="size-4" />
                                                         </button>
@@ -2012,7 +2099,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                     type="number"
                                     min="0"
                                     step="1"
-                                    className="h-10 rounded-xl bg-background/60 text-sm"
+                                    className="h-12 rounded-xl bg-background/60 text-base"
                                     placeholder="Discount ₹"
                                     value={discountInput}
                                     onChange={(e) => setDiscountInput(e.target.value)}
@@ -2059,12 +2146,12 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                                     Settlement
                                 </p>
-                                <div className="grid grid-cols-3 gap-1.5">
+                                <div className="grid grid-cols-3 gap-2">
                                     <button
                                         type="button"
                                         onClick={() => setSettlementMode("full")}
                                         className={cn(
-                                            "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                            "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
                                             settlementMode === "full"
                                                 ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
@@ -2077,7 +2164,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                         type="button"
                                         onClick={() => setSettlementMode("partial")}
                                         className={cn(
-                                            "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                            "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
                                             settlementMode === "partial"
                                                 ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
@@ -2090,7 +2177,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                         type="button"
                                         onClick={() => setSettlementMode("due")}
                                         className={cn(
-                                            "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                            "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
                                             settlementMode === "due"
                                                 ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
@@ -2107,12 +2194,12 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                     <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                                         Payment Method
                                     </p>
-                                    <div className="grid grid-cols-3 gap-1.5">
+                                    <div className="grid grid-cols-3 gap-2">
                                         <button
                                             type="button"
                                             onClick={() => setSelectedPaymentMethod("cash")}
                                             className={cn(
-                                                "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                                "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
                                                 selectedPaymentMethod === "cash"
                                                     ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
                                                     : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
@@ -2125,7 +2212,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             type="button"
                                             onClick={() => setSelectedPaymentMethod("upi")}
                                             className={cn(
-                                                "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                                "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
                                                 selectedPaymentMethod === "upi"
                                                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                                                     : "border border-border/60 bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground",
@@ -2138,7 +2225,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             type="button"
                                             onClick={() => setSelectedPaymentMethod("card")}
                                             className={cn(
-                                                "flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all duration-200",
+                                                "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
                                                 selectedPaymentMethod === "card"
                                                     ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
                                                     : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
@@ -2157,7 +2244,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                         type="number"
                                         min="0"
                                         step="0.01"
-                                        className="h-10 rounded-xl bg-background/60 text-sm"
+                                        className="h-12 rounded-xl bg-background/60 text-base"
                                         placeholder="Collected Amount INR"
                                         value={partialPaymentAmount}
                                         onChange={(e) => setPartialPaymentAmount(e.target.value)}
@@ -2190,11 +2277,11 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-3 mt-4">
+                            <div className="mt-4 grid grid-cols-2 gap-3">
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    className="h-11 rounded-xl text-sm font-semibold"
+                                    className="h-14 rounded-xl text-sm font-semibold"
                                     disabled={
                                         saveDraftMutation.isPending ||
                                         completeSaleMutation.isPending ||
@@ -2210,7 +2297,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                 </Button>
                                 <Button
                                     type="button"
-                                    className="h-11 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/20 hover:bg-primary/90 text-sm"
+                                    className="h-14 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
                                     disabled={
                                         completeSaleMutation.isPending ||
                                         saveDraftMutation.isPending ||
@@ -2226,9 +2313,10 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                             </div>
                         </div>
                     </aside>
+                    </>
                 ) : (
                     <aside
-                        className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm xl:w-[380px] xl:border-t-0 xl:border-l"
+                        className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm lg:w-[380px] lg:border-t-0 lg:border-l"
                         style={{ maxHeight: panelMaxHeight }}
                     >
                         <div className="space-y-5 border-b border-border/40 px-5 py-5">
