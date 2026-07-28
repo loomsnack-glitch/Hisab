@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { deviceAuthenticate } from "@repo/services";
@@ -8,6 +9,7 @@ import { deviceAuthKeys } from "@/lib/query-keys";
 import BillingPage from "@/pages/billing-page";
 
 const PosPage = () => {
+  const [productSearch, setProductSearch] = useState("");
     const deviceAuthQuery = useQuery({
         queryKey: deviceAuthKeys.me,
         queryFn: deviceAuthenticate,
@@ -16,7 +18,7 @@ const PosPage = () => {
 
     const session =
         deviceAuthQuery.data?.status === "success"
-            ? deviceAuthQuery.data.data?.session ?? null
+      ? (deviceAuthQuery.data.data?.session ?? null)
             : null;
 
     if (deviceAuthQuery.isPending) {
@@ -27,13 +29,25 @@ const PosPage = () => {
         );
     }
 
-    if (deviceAuthQuery.isError || deviceAuthQuery.data?.status === "error" || !session) {
+  if (
+    deviceAuthQuery.isError ||
+    deviceAuthQuery.data?.status === "error" ||
+    !session
+  ) {
         return <Navigate to="/pos/login" replace />;
     }
 
     return (
-        <PosLayout session={session}>
-            <BillingPage mode="device" session={session} />
+    <PosLayout
+      session={session}
+      productSearch={productSearch}
+      onProductSearchChange={setProductSearch}
+    >
+      <BillingPage
+        mode="device"
+        session={session}
+        productSearch={productSearch}
+      />
         </PosLayout>
     );
 };

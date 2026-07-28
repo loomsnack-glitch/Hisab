@@ -42,12 +42,16 @@ const normalizeOptionalUuid = (value?: string | null) => {
     return trimmed ? trimmed : null;
 };
 
-const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const roundMoney = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
 
-const moneyFrom = (value: number | string | null | undefined) => roundMoney(Number(value ?? 0));
+const moneyFrom = (value: number | string | null | undefined) =>
+  roundMoney(Number(value ?? 0));
 
 const sumMoney = (values: Array<number | string | null | undefined>) =>
-    roundMoney(values.reduce((total: number, value) => total + Number(value ?? 0), 0));
+  roundMoney(
+    values.reduce((total: number, value) => total + Number(value ?? 0), 0),
+  );
 
 const getParentAndAddOnLineDiscountTotal = (
     items: Array<{
@@ -57,7 +61,9 @@ const getParentAndAddOnLineDiscountTotal = (
 ) =>
     sumMoney([
         ...items.map((item) => item.discountAmount),
-        ...items.flatMap((item) => (item.addOns ?? []).map((addOn) => addOn.discountAmount)),
+    ...items.flatMap((item) =>
+      (item.addOns ?? []).map((addOn) => addOn.discountAmount),
+    ),
     ]);
 
 const getParentAndAddOnSubtotal = (
@@ -68,17 +74,24 @@ const getParentAndAddOnSubtotal = (
 ) =>
     sumMoney([
         ...items.map((item) => item.lineSubtotal),
-        ...items.flatMap((item) => (item.addOns ?? []).map((addOn) => addOn.lineSubtotal)),
+    ...items.flatMap((item) =>
+      (item.addOns ?? []).map((addOn) => addOn.lineSubtotal),
+    ),
     ]);
 
 const deriveOrderDiscountAmount = (
     discountTotal: number | string | null | undefined,
     lineDiscountTotal: number | string | null | undefined,
-) => roundMoney(Math.max(moneyFrom(discountTotal) - moneyFrom(lineDiscountTotal), 0));
+) =>
+  roundMoney(
+    Math.max(moneyFrom(discountTotal) - moneyFrom(lineDiscountTotal), 0),
+  );
 
 const isWholeCount = (value: number) => Number.isInteger(value) && value > 0;
 
-const buildConfigurationSignature = (addOns: Array<{ addOnId: string; quantity: number }>) => {
+const buildConfigurationSignature = (
+  addOns: Array<{ addOnId: string; quantity: number }>,
+) => {
     if (addOns.length === 0) {
         return "";
     }
@@ -119,7 +132,8 @@ const normalizeSelectedAddOns = (
             return {
                 error: {
                     status: "error",
-                    message: "Duplicate add-ons are not allowed within the same configured product",
+          message:
+            "Duplicate add-ons are not allowed within the same configured product",
                     data: null,
                     code: STATUS_CODES.BAD_REQUEST,
                 },
@@ -130,13 +144,17 @@ const normalizeSelectedAddOns = (
     }
 
     return {
-        addOns: [...selectedAddOns].sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
+    addOns: [...selectedAddOns].sort((left, right) =>
+      left.addOnId.localeCompare(right.addOnId),
+    ),
     };
 };
 
 const mergeSaleItemInputsByConfiguration = (
     items: SaleItemInput[],
-): { error: ServiceResponse<null>; items?: undefined } | { error?: undefined; items: SaleItemInput[] } => {
+):
+  | { error: ServiceResponse<null>; items?: undefined }
+  | { error?: undefined; items: SaleItemInput[] } => {
     const mergedByKey = new Map<string, SaleItemInput>();
 
     for (const item of items) {
@@ -157,7 +175,9 @@ const mergeSaleItemInputsByConfiguration = (
             return { error: normalizedAddOns.error };
         }
 
-        const configurationSignature = buildConfigurationSignature(normalizedAddOns.addOns);
+    const configurationSignature = buildConfigurationSignature(
+      normalizedAddOns.addOns,
+    );
         const configurationKey = `${item.productId}::${configurationSignature}`;
         const existing = mergedByKey.get(configurationKey);
 
@@ -206,20 +226,25 @@ const buildSalePricingTotals = (
     const normalizedSubtotal = moneyFrom(subtotal);
     const normalizedLineDiscountTotal = moneyFrom(lineDiscountTotal);
     const normalizedOrderDiscountAmount = moneyFrom(orderDiscountAmount);
-    const maxOrderDiscountAmount = roundMoney(normalizedSubtotal - normalizedLineDiscountTotal);
+  const maxOrderDiscountAmount = roundMoney(
+    normalizedSubtotal - normalizedLineDiscountTotal,
+  );
 
     if (normalizedOrderDiscountAmount > maxOrderDiscountAmount) {
         return {
             error: {
                 status: "error",
-                message: "Order discount cannot exceed the remaining sale subtotal after line discounts",
+        message:
+          "Order discount cannot exceed the remaining sale subtotal after line discounts",
                 data: null,
                 code: STATUS_CODES.BAD_REQUEST,
             },
         };
     }
 
-    const discountTotal = roundMoney(normalizedLineDiscountTotal + normalizedOrderDiscountAmount);
+  const discountTotal = roundMoney(
+    normalizedLineDiscountTotal + normalizedOrderDiscountAmount,
+  );
     const grandTotal = roundMoney(normalizedSubtotal - discountTotal);
 
     return {
@@ -233,23 +258,39 @@ const buildSalePricingTotals = (
     };
 };
 
-const getOrganizationForUser = async (organizationId: string, userId: string) => {
-    return organizationRepository.getOrganizationByIdForUser(organizationId, userId);
+const getOrganizationForUser = async (
+  organizationId: string,
+  userId: string,
+) => {
+  return organizationRepository.getOrganizationByIdForUser(
+    organizationId,
+    userId,
+  );
 };
 
 const getOrganizationById = async (organizationId: string) => {
     return organizationRepository.getOrganizationById(organizationId);
 };
 
-const getStoreForOrganization = async (organizationId: string, storeId: string) => {
+const getStoreForOrganization = async (
+  organizationId: string,
+  storeId: string,
+) => {
     return organizationRepository.getStoreById(organizationId, storeId);
 };
 
-const getCustomerForOrganization = async (organizationId: string, customerId: string) => {
+const getCustomerForOrganization = async (
+  organizationId: string,
+  customerId: string,
+) => {
     return billingRepository.getCustomerById(organizationId, customerId);
 };
 
-const getSaleForStore = async (organizationId: string, storeId: string, saleId: string) => {
+const getSaleForStore = async (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+) => {
     return billingRepository.getSaleById(organizationId, storeId, saleId);
 };
 
@@ -291,7 +332,10 @@ const validateSalesListCustomerFilter = async (
         return null;
     }
 
-    const customer = await getCustomerForOrganization(organizationId, query.customerId);
+  const customer = await getCustomerForOrganization(
+    organizationId,
+    query.customerId,
+  );
     if (!customer) {
         return {
             status: "error",
@@ -310,7 +354,12 @@ const buildSaleDetails = async (
     saleId: string,
     tx?: Bun.TransactionSQL,
 ): Promise<SaleDetailDTO | null> => {
-    const sale = await billingRepository.getSaleById(organizationId, storeId, saleId, tx);
+  const sale = await billingRepository.getSaleById(
+    organizationId,
+    storeId,
+    saleId,
+    tx,
+  );
     if (!sale) {
         return null;
     }
@@ -325,12 +374,17 @@ const buildSaleDetails = async (
         ...sale,
         items,
         payments,
-        orderDiscountAmount: deriveOrderDiscountAmount(sale.discountTotal, lineDiscountTotal),
+    orderDiscountAmount: deriveOrderDiscountAmount(
+      sale.discountTotal,
+      lineDiscountTotal,
+    ),
     };
 };
 
-const configurationKeyFor = (productId: string, configurationSignature: string) =>
-    `${productId}::${configurationSignature}`;
+const configurationKeyFor = (
+  productId: string,
+  configurationSignature: string,
+) => `${productId}::${configurationSignature}`;
 
 const rescaleFrozenConfiguredLine = (
     frozen: SaleItemDTO,
@@ -342,7 +396,10 @@ const rescaleFrozenConfiguredLine = (
     const saleItemId = crypto.randomUUID();
     const unitPrice = moneyFrom(frozen.unitPriceSnapshot);
     const previousQuantity = Number(frozen.quantity);
-    const unitDiscount = previousQuantity > 0 ? roundMoney(moneyFrom(frozen.discountAmount) / previousQuantity) : 0;
+  const unitDiscount =
+    previousQuantity > 0
+      ? roundMoney(moneyFrom(frozen.discountAmount) / previousQuantity)
+      : 0;
     const lineSubtotal = roundMoney(parentQuantity * unitPrice);
     const discountAmount = roundMoney(unitDiscount * parentQuantity);
 
@@ -439,8 +496,15 @@ const prepareBundleSaleLine = async (
         discount: number | string;
     },
     parentQuantity: number,
-): Promise<{ error: ServiceResponse<null>; line?: undefined } | { error?: undefined; line: PreparedSaleLine }> => {
-    const components = await catalogRepository.getBundleProductComponentsByBundleProductId(organizationId, product.id);
+): Promise<
+  | { error: ServiceResponse<null>; line?: undefined }
+  | { error?: undefined; line: PreparedSaleLine }
+> => {
+  const components =
+    await catalogRepository.getBundleProductComponentsByBundleProductId(
+      organizationId,
+      product.id,
+    );
 
     if (components.length === 0) {
         return {
@@ -453,13 +517,15 @@ const prepareBundleSaleLine = async (
         };
     }
 
-    const componentAddOns = await catalogRepository.getBundleProductComponentAddOnsByComponentIds(
+  const componentAddOns =
+    await catalogRepository.getBundleProductComponentAddOnsByComponentIds(
         organizationId,
         components.map((component) => component.id),
     );
     const addOnsByComponentId = new Map<string, typeof componentAddOns>();
     for (const addOn of componentAddOns) {
-        const existing = addOnsByComponentId.get(addOn.bundleProductComponentId) ?? [];
+    const existing =
+      addOnsByComponentId.get(addOn.bundleProductComponentId) ?? [];
         existing.push(addOn);
         addOnsByComponentId.set(addOn.bundleProductComponentId, existing);
     }
@@ -467,7 +533,10 @@ const prepareBundleSaleLine = async (
     const preparedBundleComponents: PreparedBundleComponent[] = [];
 
     for (const component of components) {
-        const componentProduct = await catalogRepository.getProductById(organizationId, component.componentProductId);
+    const componentProduct = await catalogRepository.getProductById(
+      organizationId,
+      component.componentProductId,
+    );
         if (!componentProduct) {
             return {
                 error: {
@@ -496,7 +565,10 @@ const prepareBundleSaleLine = async (
         const preparedAddOns: CreateSaleItemBundleComponentAddOnREPO[] = [];
 
         for (const componentAddOn of addOnsByComponentId.get(component.id) ?? []) {
-            const addOn = await catalogRepository.getAddOnById(organizationId, componentAddOn.addOnId);
+      const addOn = await catalogRepository.getAddOnById(
+        organizationId,
+        componentAddOn.addOnId,
+      );
             if (!addOn) {
                 return {
                     error: {
@@ -520,7 +592,8 @@ const prepareBundleSaleLine = async (
             }
 
             const quantityPerComponent = Number(componentAddOn.quantity);
-            const attachment = await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+      const attachment =
+        await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
                 organizationId,
                 component.componentProductId,
                 componentAddOn.addOnId,
@@ -583,7 +656,9 @@ const prepareBundleSaleLine = async (
 
     const unitPrice = moneyFrom(product.price);
     const lineSubtotal = roundMoney(parentQuantity * unitPrice);
-    const discountAmount = roundMoney(moneyFrom(product.discount) * parentQuantity);
+  const discountAmount = roundMoney(
+    moneyFrom(product.discount) * parentQuantity,
+  );
 
     if (discountAmount > lineSubtotal) {
         return {
@@ -641,7 +716,10 @@ const prepareSaleItems = async (
     const frozenByConfiguration = new Map<string, SaleItemDTO>();
     for (const existingItem of existingItems) {
         frozenByConfiguration.set(
-            configurationKeyFor(existingItem.productId, existingItem.configurationSignature ?? ""),
+      configurationKeyFor(
+        existingItem.productId,
+        existingItem.configurationSignature ?? "",
+      ),
             existingItem,
         );
     }
@@ -652,14 +730,27 @@ const prepareSaleItems = async (
         const selectedAddOns = item.addOns ?? [];
         const configurationSignature = buildConfigurationSignature(selectedAddOns);
         const parentQuantity = Number(item.quantity);
-        const frozen = frozenByConfiguration.get(configurationKeyFor(item.productId, configurationSignature));
+    const frozen = frozenByConfiguration.get(
+      configurationKeyFor(item.productId, configurationSignature),
+    );
 
         if (frozen) {
-            preparedLines.push(rescaleFrozenConfiguredLine(frozen, parentQuantity, organizationId, storeId, saleId));
+      preparedLines.push(
+        rescaleFrozenConfiguredLine(
+          frozen,
+          parentQuantity,
+          organizationId,
+          storeId,
+          saleId,
+        ),
+      );
             continue;
         }
 
-        const product = await catalogRepository.getProductById(organizationId, item.productId);
+    const product = await catalogRepository.getProductById(
+      organizationId,
+      item.productId,
+    );
         if (!product) {
             return {
                 error: {
@@ -715,7 +806,8 @@ const prepareSaleItems = async (
         const preparedAddOns: CreateSaleItemAddOnREPO[] = [];
 
         for (const selectedAddOn of selectedAddOns) {
-            const attachment = await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+      const attachment =
+        await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
                 organizationId,
                 item.productId,
                 selectedAddOn.addOnId,
@@ -781,7 +873,9 @@ const prepareSaleItems = async (
 
         const unitPrice = moneyFrom(product.price);
         const lineSubtotal = roundMoney(parentQuantity * unitPrice);
-        const discountAmount = roundMoney(moneyFrom(product.discount) * parentQuantity);
+    const discountAmount = roundMoney(
+      moneyFrom(product.discount) * parentQuantity,
+    );
 
         if (discountAmount > lineSubtotal) {
             return {
@@ -880,7 +974,9 @@ const appendCustomerLedgerEntry = async (
         notes?: string | null;
     },
 ) => {
-    const nextBalance = roundMoney(moneyFrom(params.customer.balance) + params.amount);
+  const nextBalance = roundMoney(
+    moneyFrom(params.customer.balance) + params.amount,
+  );
     const updatedCustomer = await billingRepository.updateCustomerBalance(
         params.organizationId,
         params.customer.id,
@@ -918,7 +1014,10 @@ const getCustomersInOrganization = async (
     organizationId: string,
     query: { search?: string; limit?: number },
 ): Promise<ServiceResponse<CustomersListResponse | null>> => {
-    const customers = await billingRepository.getCustomersByOrganizationId(organizationId, query);
+  const customers = await billingRepository.getCustomersByOrganizationId(
+    organizationId,
+    query,
+  );
     return {
         status: "success",
         data: { customers },
@@ -934,11 +1033,16 @@ const createCustomerInOrganization = async (
 ): Promise<ServiceResponse<CustomerResponse | null>> => {
     const phone = normalizeOptionalText(customerData.phone);
     if (phone) {
-        const alreadyExists = await billingRepository.customerPhoneExistsInOrganization(organizationId, phone);
+    const alreadyExists =
+      await billingRepository.customerPhoneExistsInOrganization(
+        organizationId,
+        phone,
+      );
         if (alreadyExists) {
             return {
                 status: "error",
-                message: "Customer with the same phone already exists in this organization",
+        message:
+          "Customer with the same phone already exists in this organization",
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };
@@ -977,12 +1081,19 @@ const getSalesInStore = async (
     storeId: string,
     query: SalesListQuery,
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
-    const invalidCustomerFilter = await validateSalesListCustomerFilter(organizationId, query);
+  const invalidCustomerFilter = await validateSalesListCustomerFilter(
+    organizationId,
+    query,
+  );
     if (invalidCustomerFilter) {
         return invalidCustomerFilter;
     }
 
-    const sales = await billingRepository.getSalesByStore(organizationId, storeId, query);
+  const sales = await billingRepository.getSalesByStore(
+    organizationId,
+    storeId,
+    query,
+  );
     return {
         status: "success",
         data: { sales },
@@ -1026,7 +1137,10 @@ const createDraftSaleInStore = async (
     saleData: CreateDraftSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
     const customerId = normalizeOptionalUuid(saleData.customerId);
-    const customerResult = await validateCustomerAssignment(organizationId, customerId);
+  const customerResult = await validateCustomerAssignment(
+    organizationId,
+    customerId,
+  );
     if ("status" in customerResult) {
         return customerResult;
     }
@@ -1074,14 +1188,18 @@ const createDraftSaleInStore = async (
             }
 
             for (const addOn of line.addOns) {
-                const createdAddOn = await billingRepository.createSaleItemAddOn(addOn, tx);
+        const createdAddOn = await billingRepository.createSaleItemAddOn(
+          addOn,
+          tx,
+        );
                 if (!createdAddOn) {
                     throw new Error("Failed to create sale item add-on");
                 }
             }
 
             for (const bundleComponent of line.bundleComponents) {
-                const createdComponent = await billingRepository.createSaleItemBundleComponent(
+        const createdComponent =
+          await billingRepository.createSaleItemBundleComponent(
                     bundleComponent.component,
                     tx,
                 );
@@ -1090,9 +1208,15 @@ const createDraftSaleInStore = async (
                 }
 
                 for (const addOn of bundleComponent.addOns) {
-                    const createdAddOn = await billingRepository.createSaleItemBundleComponentAddOn(addOn, tx);
+          const createdAddOn =
+            await billingRepository.createSaleItemBundleComponentAddOn(
+              addOn,
+              tx,
+            );
                     if (!createdAddOn) {
-                        throw new Error("Failed to create sale item bundle component add-on");
+            throw new Error(
+              "Failed to create sale item bundle component add-on",
+            );
                     }
                 }
             }
@@ -1148,13 +1272,18 @@ const updateDraftSaleInStore = async (
             ? (existingSale.customerId ?? null)
             : normalizeOptionalUuid(saleData.customerId);
 
-    const customerResult = await validateCustomerAssignment(organizationId, customerId);
+  const customerResult = await validateCustomerAssignment(
+    organizationId,
+    customerId,
+  );
     if ("status" in customerResult) {
         return customerResult;
     }
 
     const nextNotes =
-        saleData.notes === undefined ? (existingSale.notes ?? null) : normalizeOptionalText(saleData.notes);
+    saleData.notes === undefined
+      ? (existingSale.notes ?? null)
+      : normalizeOptionalText(saleData.notes);
     const nextOrderDiscountAmount =
         saleData.orderDiscountAmount === undefined
             ? moneyFrom(existingSale.orderDiscountAmount)
@@ -1213,7 +1342,8 @@ const updateDraftSaleInStore = async (
                                   lineSubtotal: Number(addOn.lineSubtotal),
                                   lineTotal: Number(addOn.lineTotal),
                               })),
-                              bundleComponents: (item.bundleComponents ?? []).map((component) => ({
+                bundleComponents: (item.bundleComponents ?? []).map(
+                  (component) => ({
                                   component: {
                                       id: component.id,
                                       organizationId: component.organizationId,
@@ -1225,7 +1355,9 @@ const updateDraftSaleInStore = async (
                                       totalQuantity: Number(component.totalQuantity),
                                       productNameSnapshot: component.productNameSnapshot,
                                       unitPriceSnapshot: Number(component.unitPriceSnapshot),
-                                      unitDiscountSnapshot: Number(component.unitDiscountSnapshot),
+                      unitDiscountSnapshot: Number(
+                        component.unitDiscountSnapshot,
+                      ),
                                   },
                                   addOns: (component.addOns ?? []).map((addOn) => ({
                                       id: addOn.id,
@@ -1233,7 +1365,8 @@ const updateDraftSaleInStore = async (
                                       storeId: addOn.storeId,
                                       saleId: addOn.saleId,
                                       saleItemId: addOn.saleItemId,
-                                      saleItemBundleComponentId: addOn.saleItemBundleComponentId,
+                      saleItemBundleComponentId:
+                        addOn.saleItemBundleComponentId,
                                       addOnId: addOn.addOnId,
                                       quantityPerComponent: Number(addOn.quantityPerComponent),
                                       totalQuantity: Number(addOn.totalQuantity),
@@ -1241,7 +1374,8 @@ const updateDraftSaleInStore = async (
                                       unitPriceSnapshot: Number(addOn.unitPriceSnapshot),
                                       unitDiscountSnapshot: Number(addOn.unitDiscountSnapshot),
                                   })),
-                              })),
+                  }),
+                ),
                           }),
                       ),
                       totals: pricingTotals.totals,
@@ -1283,23 +1417,35 @@ const updateDraftSaleInStore = async (
         }
 
         if (saleData.items !== undefined) {
-            await billingRepository.deleteSaleItemsBySaleId(organizationId, storeId, saleId, tx);
+      await billingRepository.deleteSaleItemsBySaleId(
+        organizationId,
+        storeId,
+        saleId,
+        tx,
+      );
 
             for (const line of preparedItems.lines) {
-                const createdItem = await billingRepository.createSaleItem(line.item, tx);
+        const createdItem = await billingRepository.createSaleItem(
+          line.item,
+          tx,
+        );
                 if (!createdItem) {
                     throw new Error("Failed to recreate sale item");
                 }
 
                 for (const addOn of line.addOns) {
-                    const createdAddOn = await billingRepository.createSaleItemAddOn(addOn, tx);
+          const createdAddOn = await billingRepository.createSaleItemAddOn(
+            addOn,
+            tx,
+          );
                     if (!createdAddOn) {
                         throw new Error("Failed to recreate sale item add-on");
                     }
                 }
 
                 for (const bundleComponent of line.bundleComponents) {
-                    const createdComponent = await billingRepository.createSaleItemBundleComponent(
+          const createdComponent =
+            await billingRepository.createSaleItemBundleComponent(
                         bundleComponent.component,
                         tx,
                     );
@@ -1308,9 +1454,15 @@ const updateDraftSaleInStore = async (
                     }
 
                     for (const addOn of bundleComponent.addOns) {
-                        const createdAddOn = await billingRepository.createSaleItemBundleComponentAddOn(addOn, tx);
+            const createdAddOn =
+              await billingRepository.createSaleItemBundleComponentAddOn(
+                addOn,
+                tx,
+              );
                         if (!createdAddOn) {
-                            throw new Error("Failed to recreate sale item bundle component add-on");
+              throw new Error(
+                "Failed to recreate sale item bundle component add-on",
+              );
                         }
                     }
                 }
@@ -1362,10 +1514,14 @@ const commitSaleInStore = async (
         };
     }
 
-    if (existingSale.items.length === 0 || moneyFrom(existingSale.grandTotal) <= 0) {
+  if (
+    existingSale.items.length === 0 ||
+    moneyFrom(existingSale.grandTotal) <= 0
+  ) {
         return {
             status: "error",
-            message: "A sale must have at least one billable item before it can be committed",
+      message:
+        "A sale must have at least one billable item before it can be committed",
             data: null,
             code: STATUS_CODES.BAD_REQUEST,
         };
@@ -1376,7 +1532,10 @@ const commitSaleInStore = async (
             ? (existingSale.customerId ?? null)
             : normalizeOptionalUuid(commitData.customerId);
 
-    const customerResult = await validateCustomerAssignment(organizationId, customerId);
+  const customerResult = await validateCustomerAssignment(
+    organizationId,
+    customerId,
+  );
     if ("status" in customerResult) {
         return customerResult;
     }
@@ -1416,23 +1575,25 @@ const commitSaleInStore = async (
         };
     }
 
-    if (!customerId && totalPayment < grandTotal) {
-        return {
-            status: "error",
-            message: "Unpaid or partially paid sales must be assigned to a customer",
-            data: null,
-            code: STATUS_CODES.BAD_REQUEST,
-        };
-    }
-
-    const paymentStatus = totalPayment === 0 ? "pending" : totalPayment === grandTotal ? "paid" : "partial";
+  const paymentStatus =
+    totalPayment === 0
+      ? "pending"
+      : totalPayment === grandTotal
+        ? "paid"
+        : "partial";
 
     const committedAt = new Date();
     const nextNotes =
-        commitData.notes === undefined ? (existingSale.notes ?? null) : normalizeOptionalText(commitData.notes);
+    commitData.notes === undefined
+      ? (existingSale.notes ?? null)
+      : normalizeOptionalText(commitData.notes);
 
     await pg.begin(async (tx) => {
-        const saleNumber = await billingRepository.incrementStoreSaleCounter(organizationId, storeId, tx);
+    const saleNumber = await billingRepository.incrementStoreSaleCounter(
+      organizationId,
+      storeId,
+      tx,
+    );
 
         const updatedSale = await billingRepository.updateSale(
             {
@@ -1572,13 +1733,17 @@ const collectPaymentInStore = async (
     if (!existingSale.customerId) {
         return {
             status: "error",
-            message: "Payments after commit require the sale to be attached to a customer",
+      message:
+        "Payments after commit require the sale to be attached to a customer",
             data: null,
             code: STATUS_CODES.CONFLICT,
         };
     }
 
-    const customer = await getCustomerForOrganization(organizationId, existingSale.customerId);
+  const customer = await getCustomerForOrganization(
+    organizationId,
+    existingSale.customerId,
+  );
     if (!customer) {
         return {
             status: "error",
@@ -1588,7 +1753,9 @@ const collectPaymentInStore = async (
         };
     }
 
-    let createdPayment: Awaited<ReturnType<typeof billingRepository.createPayment>> = null;
+  let createdPayment: Awaited<
+    ReturnType<typeof billingRepository.createPayment>
+  > = null;
 
     await pg.begin(async (tx) => {
         createdPayment = await billingRepository.createPayment(
@@ -1621,8 +1788,11 @@ const collectPaymentInStore = async (
             notes: normalizeOptionalText(paymentData.notes),
         });
 
-        const nextPaidTotal = roundMoney(moneyFrom(existingSale.paidTotal) + amount);
-        const nextPaymentStatus = nextPaidTotal === moneyFrom(existingSale.grandTotal) ? "paid" : "partial";
+    const nextPaidTotal = roundMoney(
+      moneyFrom(existingSale.paidTotal) + amount,
+    );
+    const nextPaymentStatus =
+      nextPaidTotal === moneyFrom(existingSale.grandTotal) ? "paid" : "partial";
 
         const updatedSale = await billingRepository.updateSale(
             {
@@ -1694,7 +1864,10 @@ const voidSaleInStore = async (
         };
     }
 
-    if (moneyFrom(existingSale.paidTotal) > 0 || existingSale.payments.length > 0) {
+  if (
+    moneyFrom(existingSale.paidTotal) > 0 ||
+    existingSale.payments.length > 0
+  ) {
         return {
             status: "error",
             message: "Sales with collected payments cannot be voided",
@@ -1837,7 +2010,10 @@ export const updateCustomer = async (
         return scopeError;
     }
 
-    const existingCustomer = await getCustomerForOrganization(organizationId, customerId);
+  const existingCustomer = await getCustomerForOrganization(
+    organizationId,
+    customerId,
+  );
     if (!existingCustomer) {
         return {
             status: "error",
@@ -1848,10 +2024,13 @@ export const updateCustomer = async (
     }
 
     const phone =
-        customerData.phone === undefined ? (existingCustomer.phone ?? null) : normalizeOptionalText(customerData.phone);
+    customerData.phone === undefined
+      ? (existingCustomer.phone ?? null)
+      : normalizeOptionalText(customerData.phone);
 
     if (phone) {
-        const alreadyExists = await billingRepository.customerPhoneExistsInOrganization(
+    const alreadyExists =
+      await billingRepository.customerPhoneExistsInOrganization(
             organizationId,
             phone,
             customerId,
@@ -1859,7 +2038,8 @@ export const updateCustomer = async (
         if (alreadyExists) {
             return {
                 status: "error",
-                message: "Customer with the same phone already exists in this organization",
+        message:
+          "Customer with the same phone already exists in this organization",
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };
@@ -1912,7 +2092,10 @@ export const getCustomerLedger = async (
         };
     }
 
-    const ledger = await billingRepository.getCustomerLedgerByCustomerId(organizationId, customerId);
+  const ledger = await billingRepository.getCustomerLedgerByCustomerId(
+    organizationId,
+    customerId,
+  );
     return {
         status: "success",
         data: { customer, ledger },
@@ -1927,7 +2110,11 @@ export const getSales = async (
     storeId: string,
     query: SalesListQuery,
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
@@ -1941,7 +2128,11 @@ export const createDraftSale = async (
     storeId: string,
     saleData: CreateDraftSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
@@ -1955,7 +2146,11 @@ export const getSaleDetails = async (
     storeId: string,
     saleId: string,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
@@ -1970,12 +2165,22 @@ export const updateDraftSale = async (
     saleId: string,
     saleData: UpdateDraftSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
 
-    return updateDraftSaleInStore({ userId }, organizationId, storeId, saleId, saleData);
+  return updateDraftSaleInStore(
+    { userId },
+    organizationId,
+    storeId,
+    saleId,
+    saleData,
+  );
 };
 
 export const commitSale = async (
@@ -1985,12 +2190,22 @@ export const commitSale = async (
     saleId: string,
     commitData: CommitSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
 
-    return commitSaleInStore({ userId }, organizationId, storeId, saleId, commitData);
+  return commitSaleInStore(
+    { userId },
+    organizationId,
+    storeId,
+    saleId,
+    commitData,
+  );
 };
 
 export const collectPayment = async (
@@ -2000,12 +2215,22 @@ export const collectPayment = async (
     saleId: string,
     paymentData: CreatePaymentSVC,
 ): Promise<ServiceResponse<PaymentResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
 
-    return collectPaymentInStore({ userId }, organizationId, storeId, saleId, paymentData);
+  return collectPaymentInStore(
+    { userId },
+    organizationId,
+    storeId,
+    saleId,
+    paymentData,
+  );
 };
 
 export const voidSale = async (
@@ -2015,7 +2240,11 @@ export const voidSale = async (
     saleId: string,
     voidData: VoidSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
@@ -2028,7 +2257,11 @@ export const getAddOnSalesRollups = async (
     organizationId: string,
     storeId: string,
 ): Promise<ServiceResponse<AddOnSalesRollupsListResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
@@ -2056,15 +2289,29 @@ export const getBundleSalesRollups = async (
     organizationId: string,
     storeId: string,
 ): Promise<ServiceResponse<BundleSalesRollupsListResponse | null>> => {
-    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
     if (scopeError) {
         return scopeError;
     }
 
-    const [commercial, componentProductUsage, componentAddOnUsage] = await Promise.all([
-        billingRepository.getBundleCommercialSalesRollups(organizationId, storeId),
-        billingRepository.getBundleComponentProductUsageRollups(organizationId, storeId),
-        billingRepository.getBundleComponentAddOnUsageRollups(organizationId, storeId),
+  const [commercial, componentProductUsage, componentAddOnUsage] =
+    await Promise.all([
+      billingRepository.getBundleCommercialSalesRollups(
+        organizationId,
+        storeId,
+      ),
+      billingRepository.getBundleComponentProductUsageRollups(
+        organizationId,
+        storeId,
+      ),
+      billingRepository.getBundleComponentAddOnUsageRollups(
+        organizationId,
+        storeId,
+      ),
     ]);
 
     return {
@@ -2102,7 +2349,11 @@ export const createCustomerForDevice = async (
         };
     }
 
-    return createCustomerInOrganization(session.organization.id, organization.createdBy, customerData);
+  return createCustomerInOrganization(
+    session.organization.id,
+    organization.createdBy,
+    customerData,
+  );
 };
 
 export const getSalesForDevice = async (
@@ -2116,14 +2367,23 @@ export const getSaleDetailsForDevice = async (
     session: DeviceSessionDTO,
     saleId: string,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    return getSaleDetailsInStore(session.organization.id, session.store.id, saleId);
+  return getSaleDetailsInStore(
+    session.organization.id,
+    session.store.id,
+    saleId,
+  );
 };
 
 export const createDraftSaleForDevice = async (
     session: DeviceSessionDTO,
     saleData: CreateDraftSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    return createDraftSaleInStore({ deviceId: session.device.id }, session.organization.id, session.store.id, saleData);
+  return createDraftSaleInStore(
+    { deviceId: session.device.id },
+    session.organization.id,
+    session.store.id,
+    saleData,
+  );
 };
 
 export const updateDraftSaleForDevice = async (

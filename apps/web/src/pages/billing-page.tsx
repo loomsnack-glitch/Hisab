@@ -1,4 +1,10 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSwipeable } from "react-swipeable";
@@ -31,28 +37,38 @@ import type {
     UpdateDraftSaleJSON,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@repo/ui/components/dialog";
 import { Input } from "@repo/ui/components/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
     ArrowUpDown,
-    Banknote,
     Calendar,
-    CreditCard,
     Filter,
     Grid,
     LayoutGrid,
     List,
     Minus,
     Plus,
-    Receipt,
     ReceiptText,
     Search,
     ShoppingCart,
     SlidersHorizontal,
-    Smartphone,
     Store,
     Trash2,
     User,
@@ -61,10 +77,11 @@ import {
 import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
-import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
+import CustomizeProductDialog, {
+  type CustomizeAddOnSelection,
+} from "@/components/billing/customize-product-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
-import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
@@ -118,97 +135,92 @@ const isSameComposerConfiguration = (
     },
 ) =>
     left.productId === right.productId &&
-    buildComposerConfigurationSignature(left.addOns) === buildComposerConfigurationSignature(right.addOns);
+  buildComposerConfigurationSignature(left.addOns) ===
+    buildComposerConfigurationSignature(right.addOns);
 
 type SettlementMode = "full" | "partial" | "due";
-
-/* ---------- emoji map for product categories ---------- */
-const categoryEmojis: Record<string, string> = {
-    burger: "🍔",
-    burgers: "🍔",
-    pizza: "🍕",
-    pizzas: "🍕",
-    drink: "🥤",
-    drinks: "🥤",
-    beverage: "🥤",
-    beverages: "🥤",
-    dessert: "🍰",
-    desserts: "🍰",
-    sides: "🍟",
-    side: "🍟",
-    fries: "🍟",
-    shake: "🥛",
-    shakes: "🥛",
-    coffee: "☕",
-    tea: "🍵",
-    ice: "🧊",
-    icecream: "🍦",
-    sandwich: "🥪",
-    wrap: "🌯",
-    salad: "🥗",
-    chicken: "🍗",
-    noodles: "🍜",
-    pasta: "🍝",
-    snack: "🍿",
-    snacks: "🍿",
-};
-
-const getProductEmoji = (categoryName: string) => {
-    const key = categoryName.toLowerCase().trim();
-    if (categoryEmojis[key]) return categoryEmojis[key];
-    // partial match
-    for (const [k, v] of Object.entries(categoryEmojis)) {
-        if (key.includes(k) || k.includes(key)) return v;
-    }
-    return "🛒";
-};
 
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
+  productSearch?: string;
 };
 
-const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
+const BillingPage = ({
+  mode = "admin",
+  session = null,
+  productSearch: productSearchProp,
+}: BillingPageProps) => {
     const queryClient = useQueryClient();
     const { organizationId: organizationIdParam = "" } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const isDeviceMode = mode === "device";
     const canMutate = isDeviceMode;
-    const organizationId = isDeviceMode ? (session?.organization.id ?? "") : organizationIdParam;
+  const organizationId = isDeviceMode
+    ? (session?.organization.id ?? "")
+    : organizationIdParam;
 
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
     const [customerSearch, setCustomerSearch] = useState("");
     const [notes, setNotes] = useState("");
     const [items, setItems] = useState<ComposerItem[]>([]);
-    const [productSearch, setProductSearch] = useState("");
     const [salesSearch, setSalesSearch] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("all");
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
     const [settlementMode, setSettlementMode] = useState<SettlementMode>("full");
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("cash");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] =
+    useState<PaymentMethod>("cash");
     const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
     const [discountInput, setDiscountInput] = useState("");
-    const [historyFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
-    const [leftPanelTab, setLeftPanelTab] = useState<"products" | "bills" | "customers">(
-        isDeviceMode ? "products" : "bills",
+  const [discountMode, setDiscountMode] = useState<"amount" | "percent">(
+    "amount",
     );
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+  const [historyFilter] = useState<
+    "all" | "draft" | "open" | "paid" | "voided"
+  >("all");
+  const [leftPanelTab, setLeftPanelTab] = useState<
+    "products" | "bills" | "customers"
+  >(isDeviceMode ? "products" : "bills");
     const [customerDirectorySearch, setCustomerDirectorySearch] = useState("");
 
-    const [sortBy, setSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
-    const [viewLayout, setViewLayout] = useState<"large" | "small" | "list">("large");
-    const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "cash" | "upi" | "card">("all");
-    const [dateFilter, setDateFilter] = useState<"all" | "today" | "yesterday" | "this-week">("all");
-    const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<
+    "newest" | "oldest" | "highest" | "lowest"
+  >("newest");
+  const [viewLayout, setViewLayout] = useState<"large" | "small" | "list">(
+    "large",
+  );
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<
+    "all" | "cash" | "upi" | "card"
+  >("all");
+  const [dateFilter, setDateFilter] = useState<
+    "all" | "today" | "yesterday" | "this-week"
+  >("all");
+  const [customizeProductId, setCustomizeProductId] = useState<string | null>(
+    null,
+  );
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
-    const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
-    const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
-    const deferredCustomerDirectorySearch = useDeferredValue(customerDirectorySearch.trim().toLowerCase());
-    const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
+  const productSearch = productSearchProp ?? "";
+  const deferredProductSearch = useDeferredValue(
+    productSearch.trim().toLowerCase(),
+  );
+  const deferredCustomerSearch = useDeferredValue(
+    customerSearch.trim().toLowerCase(),
+  );
+  const deferredCustomerDirectorySearch = useDeferredValue(
+    customerDirectorySearch.trim().toLowerCase(),
+  );
+  const deferredSalesSearch = useDeferredValue(
+    salesSearch.trim().toLowerCase(),
+  );
 
-    const selectedStoreId = isDeviceMode ? (session?.store.id ?? "") : searchParams.get("storeId") || "";
+  const selectedStoreId = isDeviceMode
+    ? (session?.store.id ?? "")
+    : searchParams.get("storeId") || "";
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -218,13 +230,15 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
-        queryFn: () => (isDeviceMode ? getPosCategories() : getCategories(organizationId)),
+    queryFn: () =>
+      isDeviceMode ? getPosCategories() : getCategories(organizationId),
         enabled: Boolean(organizationId),
     });
 
     const productsQuery = useQuery({
         queryKey: catalogKeys.products(organizationId),
-        queryFn: () => (isDeviceMode ? getPosProducts() : getProducts(organizationId)),
+    queryFn: () =>
+      isDeviceMode ? getPosProducts() : getProducts(organizationId),
         enabled: Boolean(organizationId),
     });
 
@@ -236,14 +250,19 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
     const customersQuery = useQuery({
         queryKey: billingKeys.customers(organizationId),
-        queryFn: () => (isDeviceMode ? getPosCustomers({ limit: 100 }) : getCustomers(organizationId, { limit: 100 })),
+    queryFn: () =>
+      isDeviceMode
+        ? getPosCustomers({ limit: 100 })
+        : getCustomers(organizationId, { limit: 100 }),
         enabled: Boolean(organizationId),
     });
 
     const salesQuery = useQuery({
         queryKey: billingKeys.sales(organizationId, selectedStoreId),
         queryFn: () =>
-            isDeviceMode ? getPosSales({ limit: 40 }) : getSales(organizationId, selectedStoreId, { limit: 40 }),
+      isDeviceMode
+        ? getPosSales({ limit: 40 })
+        : getSales(organizationId, selectedStoreId, { limit: 40 }),
         enabled: Boolean(organizationId && selectedStoreId),
     });
 
@@ -252,27 +271,45 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         : organizationQuery.data?.status === "success"
           ? (organizationQuery.data.data?.organization ?? null)
           : null;
-    const categories = categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : [];
-    const products = productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : [];
+  const categories =
+    categoriesQuery.data?.status === "success"
+      ? (categoriesQuery.data.data?.categories ?? [])
+      : [];
+  const products =
+    productsQuery.data?.status === "success"
+      ? (productsQuery.data.data?.products ?? [])
+      : [];
     const selectableAttachments =
         selectableAttachmentsQuery.data?.status === "success"
             ? (selectableAttachmentsQuery.data.data?.attachments ?? [])
             : [];
-    const customers = customersQuery.data?.status === "success" ? (customersQuery.data.data?.customers ?? []) : [];
-    const sales = salesQuery.data?.status === "success" ? (salesQuery.data.data?.sales ?? []) : [];
+  const customers =
+    customersQuery.data?.status === "success"
+      ? (customersQuery.data.data?.customers ?? [])
+      : [];
+  const sales =
+    salesQuery.data?.status === "success"
+      ? (salesQuery.data.data?.sales ?? [])
+      : [];
 
     const categoryOptions = [{ id: "all", name: "All" }, ...categories];
     const activeCategoryFilter =
-        categoryFilter !== "all" && !categories.some((category) => category.id === categoryFilter)
+    categoryFilter !== "all" &&
+    !categories.some((category) => category.id === categoryFilter)
             ? "all"
             : categoryFilter;
 
     const selectAdjacentCategory = (direction: -1 | 1) => {
         const currentIndex = Math.max(
             0,
-            categoryOptions.findIndex((category) => category.id === activeCategoryFilter),
+      categoryOptions.findIndex(
+        (category) => category.id === activeCategoryFilter,
+      ),
+    );
+    const nextIndex = Math.min(
+      Math.max(currentIndex + direction, 0),
+      categoryOptions.length - 1,
         );
-        const nextIndex = Math.min(Math.max(currentIndex + direction, 0), categoryOptions.length - 1);
         const nextCategory = categoryOptions[nextIndex];
 
         if (nextCategory && nextCategory.id !== activeCategoryFilter) {
@@ -283,8 +320,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const categorySwipeHandlers = useSwipeable({
         onSwipedLeft: () => selectAdjacentCategory(1),
         onSwipedRight: () => selectAdjacentCategory(-1),
-        delta: 50,
-        preventScrollOnSwipe: false,
+    delta: 30,
+    preventScrollOnSwipe: true,
         trackMouse: false,
         trackTouch: true,
     });
@@ -299,13 +336,18 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         return grouped;
     }, [selectableAttachments]);
 
-    const customizeProduct = products.find((product) => product.id === customizeProductId) ?? null;
-    const customizeAttachments = customizeProduct ? (attachmentsByProductId.get(customizeProduct.id) ?? []) : [];
+  const customizeProduct =
+    products.find((product) => product.id === customizeProductId) ?? null;
+  const customizeAttachments = customizeProduct
+    ? (attachmentsByProductId.get(customizeProduct.id) ?? [])
+    : [];
 
-    const organizationStores = isDeviceMode && session ? [session.store] : (organization?.stores ?? []);
+  const organizationStores =
+    isDeviceMode && session ? [session.store] : (organization?.stores ?? []);
     const selectedStore = isDeviceMode
         ? (session?.store ?? null)
-        : (organizationStores.find((store) => store.id === selectedStoreId) ?? null);
+    : (organizationStores.find((store) => store.id === selectedStoreId) ??
+      null);
 
     useEffect(() => {
         if (isDeviceMode) {
@@ -316,7 +358,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
             return;
         }
 
-        const hasSelectedStore = organization.stores.some((store) => store.id === selectedStoreId);
+    const hasSelectedStore = organization.stores.some(
+      (store) => store.id === selectedStoreId,
+    );
         if (hasSelectedStore) {
             return;
         }
@@ -331,12 +375,19 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         });
     }, [isDeviceMode, organization, selectedStoreId, setSearchParams]);
 
-    const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) ?? null;
+  const selectedCustomer =
+    customers.find((customer) => customer.id === selectedCustomerId) ?? null;
 
-    const activeProducts = products.filter((product) => product.status === "active");
+  const activeProducts = products.filter(
+    (product) => product.status === "active",
+  );
     const filteredProducts = activeProducts.filter((product) => {
-        const matchesCategory = activeCategoryFilter === "all" || product.categoryId === activeCategoryFilter;
-        const matchesSearch = !deferredProductSearch || product.name.toLowerCase().includes(deferredProductSearch);
+    const matchesCategory =
+      activeCategoryFilter === "all" ||
+      product.categoryId === activeCategoryFilter;
+    const matchesSearch =
+      !deferredProductSearch ||
+      product.name.toLowerCase().includes(deferredProductSearch);
         return matchesCategory && matchesSearch;
     });
     const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
@@ -361,7 +412,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
         return (
             customer.name.toLowerCase().includes(deferredCustomerDirectorySearch) ||
-            (customer.phone ?? "").toLowerCase().includes(deferredCustomerDirectorySearch)
+      (customer.phone ?? "")
+        .toLowerCase()
+        .includes(deferredCustomerDirectorySearch)
         );
     });
 
@@ -391,33 +444,49 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
             const matchesPaymentMethod = (() => {
                 if (paymentMethodFilter === "all") return true;
-                return (sale.paymentMethods ?? "").toLowerCase().includes(paymentMethodFilter);
+        return (sale.paymentMethods ?? "")
+          .toLowerCase()
+          .includes(paymentMethodFilter);
             })();
 
             const matchesDate = (() => {
                 if (dateFilter === "all") return true;
                 const created = new Date(sale.createdAt);
                 const now = new Date();
-                const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfToday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+        );
                 const startOfYesterday = new Date(startOfToday);
                 startOfYesterday.setDate(startOfYesterday.getDate() - 1);
                 const startOfThisWeek = new Date(startOfToday);
                 startOfThisWeek.setDate(startOfThisWeek.getDate() - 7);
 
                 if (dateFilter === "today") return created >= startOfToday;
-                if (dateFilter === "yesterday") return created >= startOfYesterday && created < startOfToday;
+        if (dateFilter === "yesterday")
+          return created >= startOfYesterday && created < startOfToday;
                 if (dateFilter === "this-week") return created >= startOfThisWeek;
                 return true;
             })();
 
-            return matchesHistoryFilter && matchesSearch && matchesPaymentMethod && matchesDate;
+      return (
+        matchesHistoryFilter &&
+        matchesSearch &&
+        matchesPaymentMethod &&
+        matchesDate
+      );
         })
         .sort((a, b) => {
             if (sortBy === "newest") {
-                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
             }
             if (sortBy === "oldest") {
-                return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        return (
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
             }
             if (sortBy === "highest") {
                 return b.grandTotal - a.grandTotal;
@@ -431,7 +500,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const subtotal = items.reduce((total, item) => {
         const parentSubtotal = item.unitPrice * item.quantity;
         const addOnSubtotal = item.addOns.reduce(
-            (addOnTotal, addOn) => addOnTotal + addOn.unitPrice * addOn.quantity * item.quantity,
+      (addOnTotal, addOn) =>
+        addOnTotal + addOn.unitPrice * addOn.quantity * item.quantity,
             0,
         );
         return total + parentSubtotal + addOnSubtotal;
@@ -439,22 +509,82 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const lineDiscountTotal = items.reduce((total, item) => {
         const parentDiscount = item.unitDiscount * item.quantity;
         const addOnDiscount = item.addOns.reduce(
-            (addOnTotal, addOn) => addOnTotal + addOn.unitDiscount * addOn.quantity * item.quantity,
+      (addOnTotal, addOn) =>
+        addOnTotal + addOn.unitDiscount * addOn.quantity * item.quantity,
             0,
         );
         return total + parentDiscount + addOnDiscount;
     }, 0);
-    const orderDiscountAmount = Math.max(Number(discountInput || 0), 0);
+  const discountBase = Math.max(subtotal - lineDiscountTotal, 0);
+  const parsedDiscountValue =
+    discountInput.trim() === "" ? 0 : Number(discountInput);
+  const normalizedDiscountValue =
+    Number.isFinite(parsedDiscountValue) && parsedDiscountValue >= 0
+      ? parsedDiscountValue
+      : 0;
+  const roundCurrency = (value: number) =>
+    Math.round((value + Number.EPSILON) * 100) / 100;
+  const orderDiscountAmount =
+    discountMode === "percent"
+      ? roundCurrency((discountBase * normalizedDiscountValue) / 100)
+      : roundCurrency(normalizedDiscountValue);
+  const discountExceedsBase = orderDiscountAmount > discountBase + 0.005;
+  const discountValidationMessage =
+    discountInput.trim() !== "" && !Number.isFinite(parsedDiscountValue)
+      ? "Enter a valid discount"
+      : parsedDiscountValue < 0
+        ? "Discount cannot be negative"
+        : discountMode === "percent" && parsedDiscountValue > 100
+          ? "Percentage must be between 0 and 100"
+          : discountExceedsBase
+            ? `Discount cannot exceed ${formatCurrency(discountBase)}`
+            : null;
+  const hasInvalidDiscount = Boolean(discountValidationMessage);
     const totalDiscount = lineDiscountTotal + orderDiscountAmount;
     const grandTotal = Math.max(subtotal - totalDiscount, 0);
-    const rawPartialPaymentAmount = Math.max(Number(partialPaymentAmount || 0), 0);
+  const rawPartialPaymentAmount = Math.max(
+    Number(partialPaymentAmount || 0),
+    0,
+  );
     const collectedTotal =
-        settlementMode === "due" ? 0 : settlementMode === "full" ? grandTotal : rawPartialPaymentAmount;
+    settlementMode === "due"
+      ? 0
+      : settlementMode === "full"
+        ? grandTotal
+        : rawPartialPaymentAmount;
     const dueTotal = Math.max(grandTotal - collectedTotal, 0);
-    const isOverpaid = settlementMode === "partial" && rawPartialPaymentAmount > grandTotal;
-    const isPartialAmountMissing = settlementMode === "partial" && rawPartialPaymentAmount <= 0;
-    const matchesFullPayment = settlementMode === "partial" && grandTotal > 0 && rawPartialPaymentAmount === grandTotal;
-    const hasInvalidPartialPayment = isOverpaid || isPartialAmountMissing || matchesFullPayment;
+  const isOverpaid =
+    settlementMode === "partial" && rawPartialPaymentAmount > grandTotal;
+  const isPartialAmountMissing =
+    settlementMode === "partial" && rawPartialPaymentAmount <= 0;
+  const matchesFullPayment =
+    settlementMode === "partial" &&
+    grandTotal > 0 &&
+    rawPartialPaymentAmount === grandTotal;
+  const hasInvalidPartialPayment =
+    isOverpaid || isPartialAmountMissing || matchesFullPayment;
+
+  const changeDiscountMode = (nextMode: "amount" | "percent") => {
+    if (nextMode === discountMode) {
+      return;
+    }
+
+    if (
+      discountInput.trim() !== "" &&
+      Number.isFinite(parsedDiscountValue) &&
+      parsedDiscountValue >= 0
+    ) {
+      const convertedValue =
+        nextMode === "percent"
+          ? discountBase > 0
+            ? roundCurrency((parsedDiscountValue / discountBase) * 100)
+            : 0
+          : roundCurrency((parsedDiscountValue * discountBase) / 100);
+      setDiscountInput(String(convertedValue));
+    }
+
+    setDiscountMode(nextMode);
+  };
 
     const invalidateBillingQueries = () => {
         queryClient.invalidateQueries({
@@ -472,6 +602,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         setSelectedPaymentMethod("cash");
         setPartialPaymentAmount("");
         setDiscountInput("");
+    setDiscountMode("amount");
+    setCustomerDialogOpen(false);
+    setCustomerPickerOpen(false);
     };
 
     const addProductToBill = (product: ProductResponseDTO) => {
@@ -484,7 +617,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
             );
             if (existingPlainItem) {
                 return current.map((item) =>
-                    item.key === existingPlainItem.key ? { ...item, quantity: item.quantity + 1 } : item,
+          item.key === existingPlainItem.key
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
                 );
             }
 
@@ -505,7 +640,10 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         });
     };
 
-    const addConfiguredProductToBill = (product: ProductResponseDTO, addOns: CustomizeAddOnSelection[]) => {
+  const addConfiguredProductToBill = (
+    product: ProductResponseDTO,
+    addOns: CustomizeAddOnSelection[],
+  ) => {
         if (addOns.length === 0) {
             addProductToBill(product);
             return;
@@ -518,7 +656,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
             if (existingConfiguredItem) {
                 return current.map((item) =>
-                    item.key === existingConfiguredItem.key ? { ...item, quantity: item.quantity + 1 } : item,
+          item.key === existingConfiguredItem.key
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
                 );
             }
 
@@ -555,15 +695,6 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         );
     };
 
-    const ensureCustomerForDue = () => {
-        if (dueTotal <= 0 || selectedCustomerId) {
-            return true;
-        }
-
-        toast.error("Attach a customer before leaving any balance unpaid");
-        return false;
-    };
-
     const buildDraftPayload = (): CreateDraftSaleJSON => ({
         customerId: selectedCustomerId || null,
         orderDiscountAmount,
@@ -587,7 +718,10 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                 ? []
                 : [
                       {
-                          amount: settlementMode === "full" ? grandTotal : rawPartialPaymentAmount,
+              amount:
+                settlementMode === "full"
+                  ? grandTotal
+                  : rawPartialPaymentAmount,
                           method: selectedPaymentMethod,
                           referenceNumber: null,
                           notes: null,
@@ -598,17 +732,26 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const saveDraftMutation = useMutation({
         mutationFn: async () => {
             if (!selectedStoreId) {
-                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
+        throw new Error(
+          isDeviceMode ? "Store session is missing" : "Select a store first",
+        );
             }
 
             if (items.length === 0) {
                 throw new Error("Add at least one product before saving a draft");
             }
 
+      if (hasInvalidDiscount) {
+        throw new Error(discountValidationMessage || "Enter a valid discount");
+      }
+
             const payload = buildDraftPayload();
             const response = activeDraftId
                 ? isDeviceMode
-                    ? await updatePosDraftSale(activeDraftId, payload as UpdateDraftSaleJSON)
+          ? await updatePosDraftSale(
+              activeDraftId,
+              payload as UpdateDraftSaleJSON,
+            )
                     : await updateDraftSale(
                           organizationId,
                           selectedStoreId,
@@ -632,9 +775,14 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                     key: item.id,
                     productId: item.productId,
                     name: item.productNameSnapshot,
-                    categoryId: products.find((product) => product.id === item.productId)?.categoryId ?? "",
+          categoryId:
+            products.find((product) => product.id === item.productId)
+              ?.categoryId ?? "",
                     unitPrice: Number(item.unitPriceSnapshot),
-                    unitDiscount: Number(item.quantity) > 0 ? Number(item.discountAmount) / Number(item.quantity) : 0,
+          unitDiscount:
+            Number(item.quantity) > 0
+              ? Number(item.discountAmount) / Number(item.quantity)
+              : 0,
                     quantity: Number(item.quantity),
                     addOns: (item.addOns ?? []).map((addOn) => ({
                         addOnId: addOn.addOnId,
@@ -667,12 +815,18 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const completeSaleMutation = useMutation({
         mutationFn: async () => {
             if (!selectedStoreId) {
-                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
+        throw new Error(
+          isDeviceMode ? "Store session is missing" : "Select a store first",
+        );
             }
 
             if (items.length === 0) {
                 throw new Error("Add at least one product before completing the bill");
             }
+
+      if (hasInvalidDiscount) {
+        throw new Error(discountValidationMessage || "Enter a valid discount");
+      }
 
             if (isOverpaid) {
                 throw new Error("Collected amount cannot exceed the bill total");
@@ -683,17 +837,18 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
             }
 
             if (matchesFullPayment) {
-                throw new Error("Use 'Pay full now' when the customer is paying the full bill amount");
-            }
-
-            if (!ensureCustomerForDue()) {
-                throw new Error("A customer is required for unpaid or partially paid bills");
+        throw new Error(
+          "Select 'Paid' when the customer is paying the full bill amount",
+        );
             }
 
             const draftPayload = buildDraftPayload();
             const draftResponse = activeDraftId
                 ? isDeviceMode
-                    ? await updatePosDraftSale(activeDraftId, draftPayload as UpdateDraftSaleJSON)
+          ? await updatePosDraftSale(
+              activeDraftId,
+              draftPayload as UpdateDraftSaleJSON,
+            )
                     : await updateDraftSale(
                           organizationId,
                           selectedStoreId,
@@ -702,7 +857,11 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                       )
                 : isDeviceMode
                   ? await createPosDraftSale(draftPayload)
-                  : await createDraftSale(organizationId, selectedStoreId, draftPayload);
+          : await createDraftSale(
+              organizationId,
+              selectedStoreId,
+              draftPayload,
+            );
 
             if (draftResponse.status !== "success" || !draftResponse.data?.sale) {
                 throw new Error(draftResponse.message || "Failed to prepare bill");
@@ -710,7 +869,12 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
             const commitResponse = isDeviceMode
                 ? await commitPosSale(draftResponse.data.sale.id, buildCommitPayload())
-                : await commitSale(organizationId, selectedStoreId, draftResponse.data.sale.id, buildCommitPayload());
+        : await commitSale(
+            organizationId,
+            selectedStoreId,
+            draftResponse.data.sale.id,
+            buildCommitPayload(),
+          );
 
             if (commitResponse.status !== "success" || !commitResponse.data?.sale) {
                 throw new Error(commitResponse.message || "Failed to complete bill");
@@ -720,6 +884,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         },
         onSuccess: (sale) => {
             invalidateBillingQueries();
+      setCustomerDialogOpen(false);
+      setCustomerPickerOpen(false);
             resetComposer();
             toast.success(`Bill #${sale.saleNumber ?? ""} completed`);
         },
@@ -731,7 +897,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
     const resumeDraftMutation = useMutation({
         mutationFn: async (saleId: string) => {
             if (!selectedStoreId) {
-                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
+        throw new Error(
+          isDeviceMode ? "Store session is missing" : "Select a store first",
+        );
             }
 
             const response = isDeviceMode
@@ -756,7 +924,10 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                     name: item.productNameSnapshot,
                     categoryId: "",
                     unitPrice: Number(item.unitPriceSnapshot),
-                    unitDiscount: Number(item.quantity) > 0 ? Number(item.discountAmount) / Number(item.quantity) : 0,
+          unitDiscount:
+            Number(item.quantity) > 0
+              ? Number(item.discountAmount) / Number(item.quantity)
+              : 0,
                     quantity: Number(item.quantity),
                     addOns: (item.addOns ?? []).map((addOn) => ({
                         addOnId: addOn.addOnId,
@@ -781,7 +952,10 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
             setSettlementMode("full");
             setSelectedPaymentMethod("cash");
             setPartialPaymentAmount("");
-            setDiscountInput(sale.orderDiscountAmount > 0 ? String(sale.orderDiscountAmount) : "");
+      setDiscountInput(
+        sale.orderDiscountAmount > 0 ? String(sale.orderDiscountAmount) : "",
+      );
+      setDiscountMode("amount");
             setLeftPanelTab("products");
             window.scrollTo({ top: 0, behavior: "smooth" });
             toast.success("Draft loaded into the composer");
@@ -826,16 +1000,27 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         );
     }
 
-    if (!isDeviceMode && (organizationQuery.isError || organizationQuery.data?.status === "error" || !organization)) {
+  if (
+    !isDeviceMode &&
+    (organizationQuery.isError ||
+      organizationQuery.data?.status === "error" ||
+      !organization)
+  ) {
         return (
             <div className="rounded-2xl border border-border/60 bg-card/80 p-8 shadow-xl shadow-black/5">
-                <p className="font-display text-2xl font-semibold text-foreground">Billing workspace unavailable</p>
+        <p className="font-display text-2xl font-semibold text-foreground">
+          Billing workspace unavailable
+        </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                     {organizationQuery.data?.message ||
                         (organizationQuery.error as { message?: string })?.message ||
                         "This organization could not be loaded."}
                 </p>
-                <Button variant="outline" className="mt-4 rounded-full" render={<Link to="/organizations" />}>
+        <Button
+          variant="outline"
+          className="mt-4 rounded-full"
+          render={<Link to="/organizations" />}
+        >
                     Back to organizations
                 </Button>
             </div>
@@ -859,7 +1044,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                         Add a store before starting billing.
                     </h1>
                     <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                        Billing is store-scoped. Once a store exists, this screen becomes the POS billing surface.
+            Billing is store-scoped. Once a store exists, this screen becomes
+            the POS billing surface.
                     </p>
                     <Button
                         className="mt-4 rounded-full"
@@ -872,10 +1058,12 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
         );
     }
 
-    const panelMaxHeight = isDeviceMode ? "calc(100vh - 3.5rem)" : "calc(100vh - 3.5rem - 57px)";
+  const panelMaxHeight = isDeviceMode
+    ? "calc(100vh - var(--pos-header-height, 3.5rem))"
+    : "calc(100vh - 3.5rem - 57px)";
 
     return (
-        <div className="billing-pos-layout flex min-h-[calc(100vh-3.5rem)] flex-col gap-0 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:overflow-hidden">
+    <div className="billing-pos-layout flex min-h-[calc(100vh-var(--pos-header-height,3.5rem))] flex-col gap-0 lg:h-[calc(100vh-var(--pos-header-height,3.5rem))] lg:min-h-0 lg:overflow-hidden">
             {!isDeviceMode ? (
                 <header className="flex flex-col gap-3 border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-4">
@@ -883,9 +1071,13 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                             <h1 className="font-display text-xl font-bold tracking-tight text-foreground">
                                 Billing history
                             </h1>
-                            <p className="text-xs text-muted-foreground">Admin read-only mode</p>
+              <p className="text-xs text-muted-foreground">
+                Admin read-only mode
+              </p>
                         </div>
-                        <span className="text-sm text-muted-foreground hidden sm:inline">{formatLongDate()}</span>
+            <span className="text-sm text-muted-foreground hidden sm:inline">
+              {formatLongDate()}
+            </span>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -917,11 +1109,94 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
             {/* ─── Main Two-Panel Layout ─── */}
             <div className="flex flex-1 flex-col lg:flex-row">
+        <nav
+          aria-label="Billing workspace navigation"
+          className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-border/40 bg-card/40 py-3 lg:flex"
+        >
+          {canMutate ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("products")}
+                className={cn(
+                  "relative flex size-10 items-center justify-center rounded-xl transition-all",
+                  leftPanelTab === "products"
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                aria-label="Products shelf"
+                title="Products shelf"
+              >
+                <LayoutGrid className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("bills")}
+                className={cn(
+                  "relative flex size-10 items-center justify-center rounded-xl transition-all",
+                  leftPanelTab === "bills"
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                aria-label="Recent bills and drafts"
+                title="Recent bills and drafts"
+              >
+                <ReceiptText className="size-4" />
+                {sales.length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-foreground px-1 text-[9px] font-bold text-background">
+                    {sales.length > 9 ? "9+" : sales.length}
+                  </span>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("bills")}
+                className={cn(
+                  "flex size-10 items-center justify-center rounded-xl transition-all",
+                  leftPanelTab === "bills"
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                aria-label="Store bills"
+                title="Store bills"
+              >
+                <ReceiptText className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("customers")}
+                className={cn(
+                  "relative flex size-10 items-center justify-center rounded-xl transition-all",
+                  leftPanelTab === "customers"
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                aria-label="All customers"
+                title="All customers"
+              >
+                <User className="size-4" />
+                {customers.length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-foreground px-1 text-[9px] font-bold text-background">
+                    {customers.length > 9 ? "9+" : customers.length}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
+        </nav>
+
                 {/* ─── LEFT PANEL: Product Grid ─── */}
-                <div className="flex-1 overflow-y-auto p-5 pb-28 lg:min-w-0 lg:pb-5" style={{ maxHeight: panelMaxHeight }}>
+        <div
+          {...(canMutate && leftPanelTab === "products" ? categorySwipeHandlers : {})}
+          className="flex-1 overflow-y-auto p-4 pb-24 touch-pan-y lg:min-w-0 lg:pb-4"
+          style={{ maxHeight: panelMaxHeight, touchAction: "pan-y" }}
+        >
                     {/* Tab Switcher */}
                     {canMutate ? (
-                        <div className="mb-5 flex gap-2 border-b border-border/40 pb-3">
+            <div className="mb-5 flex gap-2 border-b border-border/40 pb-3 lg:hidden">
                             <button
                                 type="button"
                                 onClick={() => setLeftPanelTab("products")}
@@ -955,7 +1230,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                             </button>
                         </div>
                     ) : (
-                        <div className="mb-5 flex gap-2 border-b border-border/40 pb-3">
+            <div className="mb-5 flex gap-2 border-b border-border/40 pb-3 lg:hidden">
                             <button
                                 type="button"
                                 onClick={() => setLeftPanelTab("bills")}
@@ -992,38 +1267,17 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
                     {canMutate && leftPanelTab === "products" ? (
                         <>
-                            <div {...categorySwipeHandlers} className="touch-pan-y">
-                                {/* Search Bar */}
-                                <div className="relative mb-4">
-                                    <Search className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        className="h-12 rounded-xl bg-background/80 pl-11 pr-11 text-base"
-                                        placeholder="Search products..."
-                                        value={productSearch}
-                                        onChange={(event) => setProductSearch(event.target.value)}
-                                        aria-label="Search products"
-                                    />
-                                    {productSearch ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => setProductSearch("")}
-                                            className="absolute top-1/2 right-2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                                            aria-label="Clear product search"
+              <div
+                className="flex min-h-full flex-col"
                                         >
-                                            <X className="size-4" />
-                                        </button>
-                                    ) : null}
-                                </div>
-
                                 {/* Category Filter Pills */}
-                                <div className="mb-5">
+                <div className="mb-4">
                                     <div className="mb-2 flex items-center justify-between gap-3">
                                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                             Categories
                                         </p>
-                                        <p className="text-[11px] text-muted-foreground sm:hidden">Swipe to change</p>
                                     </div>
-                                    <div className="scrollbar-none flex min-h-11 gap-2 overflow-x-auto pb-1">
+                  <div className="scrollbar-none flex min-h-9 gap-1.5 overflow-x-auto pb-1">
                                         {categoryOptions.map((category) => (
                                             <button
                                                 key={category.id}
@@ -1031,7 +1285,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                 onClick={() => setCategoryFilter(category.id)}
                                                 aria-pressed={activeCategoryFilter === category.id}
                                                 className={cn(
-                                                    "min-h-11 shrink-0 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-200",
+                          "min-h-9 shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200",
                                                     activeCategoryFilter === category.id
                                                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                                                         : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -1051,39 +1305,41 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                 ) : filteredProducts.length === 0 ? (
                                     <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-6 text-center">
                                         <ShoppingCart className="size-10 text-muted-foreground/50" />
-                                        <p className="mt-3 font-medium text-foreground">No products found</p>
+                    <p className="mt-3 font-medium text-foreground">
+                      No products found
+                    </p>
                                         <p className="mt-1 text-sm text-muted-foreground">
                                             Try a different search or category.
                                         </p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  <div className="touch-pan-y grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                                     {filteredProducts.map((product) => {
-                                        const catName =
-                                            categories.find((c) => c.id === product.categoryId)?.name || "Item";
-                                        const emoji = getProductEmoji(catName);
                                         const cartQuantity = items
                                             .filter((item) => item.productId === product.id)
                                             .reduce((total, item) => total + item.quantity, 0);
                                         const isInCart = cartQuantity > 0;
-                                        const productAttachments = attachmentsByProductId.get(product.id) ?? [];
-                                        const canCustomize = canMutate && productAttachments.length > 0;
+                      const productAttachments =
+                        attachmentsByProductId.get(product.id) ?? [];
+                      const canCustomize =
+                        canMutate && productAttachments.length > 0;
 
                                         const canSellProduct =
-                                            product.productType === "single" || product.productType === "bundle";
+                        product.productType === "single" ||
+                        product.productType === "bundle";
 
                                         return (
                                             <div
                                                 key={product.id}
                                                 className={cn(
-                                                    "group relative flex min-h-[218px] flex-col items-center rounded-2xl border p-4 text-center transition-all duration-200",
+                            "group relative flex min-h-[76px] touch-pan-y items-center gap-2 rounded-xl border px-2 py-3 transition-all duration-200",
                                                     isInCart
                                                         ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
                                                         : "border-border/50 bg-card/80",
                                                 )}
                                             >
                                                 {isInCart && (
-                                                    <div className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm">
+                            <div className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground shadow-sm">
                                                         {cartQuantity}
                                                     </div>
                                                 )}
@@ -1097,38 +1353,48 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                         addProductToBill(product);
                                                     }}
                                                     disabled={!canSellProduct}
-                                                    className={`flex w-full flex-col items-center transition-transform ${
+                            className={`flex min-w-0 flex-1 items-center gap-2 text-left transition-opacity ${
                                                         canSellProduct
-                                                            ? "hover:-translate-y-0.5"
+                                ? "hover:opacity-80"
                                                             : "cursor-not-allowed opacity-70"
                                                     }`}
                                                 >
-                                                    <div className="relative mb-2.5 flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner transition-transform duration-300 group-hover:scale-105">
+                            <div className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/40 shadow-inner">
                                                         {product.imageSignedUrl ? (
                                                             <img
                                                                 src={product.imageSignedUrl}
                                                                 alt={product.name}
-                                                                className="h-full w-full rounded-full object-cover border border-border/40"
+                                  className="h-full w-full rounded-lg border border-border/40 object-cover"
                                                             />
                                                         ) : (
-                                                            <span className="text-4xl select-none select-none-emoji">
-                                                                {emoji}
-                                                            </span>
+                                <ShoppingCart className="size-5 text-muted-foreground/50" />
                                                         )}
                                                     </div>
-                                                    <p className="mt-2.5 text-sm font-semibold leading-tight text-foreground">
+                            <div className="min-w-0 flex-1">
+                              <p className="whitespace-normal break-words text-base font-semibold leading-snug text-foreground">
                                                         {product.name}
                                                     </p>
-                                                    <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5">
-                                                        <p className="text-xs text-muted-foreground">{catName}</p>
-                                                        <ProductTypeBadge productType={product.productType} />
-                                                    </div>
                                                     <ProductPriceDisplay
-                                                        className="mt-2"
+                                className="mt-0.5"
                                                         price={product.price}
                                                         discount={product.discount}
-                                                        size="md"
+                                size="sm"
+                                align="left"
                                                     />
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (canSellProduct) {
+                                addProductToBill(product);
+                              }
+                            }}
+                            disabled={!canSellProduct}
+                            className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label={`Add ${product.name} to order`}
+                          >
+                            <Plus className="size-4" />
                                                 </button>
                                                 {canCustomize && product.productType === "single" ? (
                                                     <button
@@ -1137,10 +1403,11 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                             event.stopPropagation();
                                                             setCustomizeProductId(product.id);
                                                         }}
-                                                        className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                              className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background/80 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                              aria-label={`Customize ${product.name}`}
+                              title="Customize"
                                                     >
                                                         <SlidersHorizontal className="size-3" />
-                                                        Customize
                                                     </button>
                                                 ) : null}
                                             </div>
@@ -1154,7 +1421,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                         <>
                             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <p className="text-sm font-semibold text-foreground">Organization customers</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    Organization customers
+                  </p>
                                     <p className="text-xs text-muted-foreground">
                                         Shared across all stores in this organization.
                                     </p>
@@ -1170,7 +1439,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                     className="h-10 rounded-xl bg-background/80 pl-10 text-sm"
                                     placeholder="Search by name or phone..."
                                     value={customerDirectorySearch}
-                                    onChange={(event) => setCustomerDirectorySearch(event.target.value)}
+                  onChange={(event) =>
+                    setCustomerDirectorySearch(event.target.value)
+                  }
                                 />
                             </div>
 
@@ -1181,7 +1452,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                             ) : directoryCustomers.length === 0 ? (
                                 <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40">
                                     <User className="size-8 text-muted-foreground/50" />
-                                    <p className="mt-3 font-medium text-foreground">No customers found</p>
+                  <p className="mt-3 font-medium text-foreground">
+                    No customers found
+                  </p>
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         {customerDirectorySearch
                                             ? "Try a different search term."
@@ -1293,7 +1566,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             })}
                                         </div>
                                         <span className="text-xs font-medium text-muted-foreground shrink-0">
-                                            {filteredSales.length} {filteredSales.length === 1 ? "order" : "orders"}
+                      {filteredSales.length}{" "}
+                      {filteredSales.length === 1 ? "order" : "orders"}
                                         </span>
                                     </div>
                                 </div>
@@ -1367,7 +1641,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                             ) : salesQuery.isError || salesQuery.data?.status === "error" ? (
                                 <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/20 bg-destructive/5 p-5 text-center">
                                     <ReceiptText className="size-8 text-destructive/70" />
-                                    <p className="mt-3 font-medium text-foreground">Recent bills failed to load</p>
+                  <p className="mt-3 font-medium text-foreground">
+                    Recent bills failed to load
+                  </p>
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         {salesQuery.data?.message || "Please refresh the page."}
                                     </p>
@@ -1375,8 +1651,12 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                             ) : filteredSales.length === 0 ? (
                                 <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
                                     <ReceiptText className="size-8 text-muted-foreground/50" />
-                                    <p className="mt-3 font-medium text-foreground">No bills found</p>
-                                    <p className="mt-1 text-sm text-muted-foreground">No bills in this view yet.</p>
+                  <p className="mt-3 font-medium text-foreground">
+                    No bills found
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    No bills in this view yet.
+                  </p>
                                 </div>
                             ) : (
                                 <>
@@ -1667,7 +1947,9 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                         <div className="flex items-center gap-4 min-w-0 flex-1">
                                                             <div className="w-14 shrink-0">
                                                                 <p className="font-bold text-amber-500 dark:text-amber-400 text-sm">
-                                                                    {sale.saleNumber ? `#${sale.saleNumber}` : "Draft"}
+                                  {sale.saleNumber
+                                    ? `#${sale.saleNumber}`
+                                    : "Draft"}
                                                                 </p>
                                                             </div>
 
@@ -1699,7 +1981,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                                 <p className="text-sm font-bold text-foreground">
                                                                     {formatCurrency(sale.grandTotal)}
                                                                 </p>
-                                                                {sale.status !== "draft" && sale.status !== "voided" ? (
+                                {sale.status !== "draft" &&
+                                sale.status !== "voided" ? (
                                                                     <p
                                                                         className={cn(
                                                                             "mt-0.5 text-[9px] font-bold",
@@ -1776,21 +2059,24 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                         </span>
                                         <span>
                                             <span className="block text-sm font-bold">
-                                                {cartItemCount} item{cartItemCount === 1 ? "" : "s"} in cart
+                        {cartItemCount} item{cartItemCount === 1 ? "" : "s"} in
+                        cart
                                             </span>
                                             <span className="block text-xs text-primary-foreground/75">
                                                 Tap to review order
                                             </span>
                                         </span>
                                     </span>
-                                    <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
+                  <span className="text-lg font-bold">
+                    {formatCurrency(grandTotal)}
+                  </span>
                                 </button>
                             </div>
                         ) : null}
 
                         <aside
                             className={cn(
-                                "flex w-full flex-col border-t border-border/50 bg-card/95 backdrop-blur-sm lg:static lg:w-[380px] lg:border-t-0 lg:border-l",
+                "flex w-full flex-col border-t border-border/50 bg-card/95 backdrop-blur-sm lg:static lg:w-[320px] lg:border-t-0 lg:border-l",
                                 mobileCartOpen
                                     ? "fixed inset-x-0 bottom-0 z-40 max-h-[calc(100vh-4rem)]"
                                     : "hidden lg:flex",
@@ -1798,33 +2084,35 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                         style={{ maxHeight: panelMaxHeight }}
                         >
                         {/* Order Header */}
-                        <div className="border-b border-border/40 px-5 py-4">
+              <div className="border-b border-border/40 px-2.5 py-1.5">
                             <div className="flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-lg font-bold text-foreground">Current Order</h2>
-                                    <p className="text-sm text-muted-foreground">
+                  <div className="flex min-w-0 items-baseline gap-1.5">
+                    <h2 className="text-sm font-bold text-foreground">
+                      Current Order
+                    </h2>
+                    <span className="truncate text-[10px] text-muted-foreground">
                                         {cartItemCount === 0
                                             ? "0 items in cart"
                                             : `${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} in cart`}
-                                    </p>
+                    </span>
                                 </div>
-                                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                                     {items.length > 0 && (
                                         <button
                                             type="button"
                                             onClick={resetComposer}
-                                            className="min-h-10 rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
+                        className="min-h-7 rounded-lg px-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-destructive"
                                         >
-                                            Clear all
+                        Clear
                                         </button>
                                     )}
                                     <button
                                         type="button"
                                         onClick={() => setMobileCartOpen(false)}
-                                        className="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+                      className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
                                         aria-label="Close current order"
                                     >
-                                        <X className="size-5" />
+                      <X className="size-4" />
                                     </button>
                                 </div>
                             </div>
@@ -1832,115 +2120,23 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
                         {/* Scrollable content area */}
                         <div className="flex flex-1 flex-col overflow-y-auto">
-                            {/* Phone Number / Customer Search */}
-                            <div className="border-b border-border/40 px-5 py-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="relative flex-1">
-                                        <User className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                                        <Input
-                                            className="h-12 rounded-xl bg-background/70 pl-9 text-base"
-                                            placeholder="Customer phone"
-                                            value={customerSearch}
-                                            onChange={(event) => {
-                                                setCustomerSearch(event.target.value);
-                                                if (!event.target.value) setSelectedCustomerId("");
-                                            }}
-                                            onKeyDown={(e) => e.key === "Enter" && handleFindCustomer()}
-                                        />
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        className="h-12 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
-                                        onClick={handleFindCustomer}
-                                    >
-                                        Find
-                                    </Button>
-                                </div>
-
-                                {selectedCustomer && (
-                                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs">
-                                        <span className="font-medium text-emerald-700 dark:text-emerald-300">
-                                            {selectedCustomer.name}
-                                        </span>
-                                        <span className="text-emerald-600/70 dark:text-emerald-300/70">
-                                            {selectedCustomer.phone || "No phone"}
-                                        </span>
-                                        <button
-                                            type="button"
-                                            className="ml-auto text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-200"
-                                            onClick={() => {
-                                                setSelectedCustomerId("");
-                                                setCustomerSearch("");
-                                            }}
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                )}
-
-                                {/* Customer quick-create (hidden trigger, accessible from phone search) */}
-                                {customerSearch && !selectedCustomer && filteredCustomers.length === 0 && (
-                                    <div className="mt-2">
-                                        <CustomerQuickCreateDialog
-                                            organizationId={organizationId}
-                                            mode={mode}
-                                            suggestedName={/^[+\d\s()-]+$/.test(customerSearch) ? "" : customerSearch}
-                                            suggestedPhone={/^[+\d\s()-]+$/.test(customerSearch) ? customerSearch : ""}
-                                            onCreated={(customer) => {
-                                                setSelectedCustomerId(customer.id);
-                                                setCustomerSearch(customer.phone || customer.name);
-                                            }}
-                                            trigger={
-                                                <button
-                                                    type="button"
-                                                    className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                                                >
-                                                    <Plus className="size-3.5" />
-                                                    <span>Create new customer "{customerSearch}"</span>
-                                                </button>
-                                            }
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Customer search dropdown results */}
-                                {customerSearch && !selectedCustomer && filteredCustomers.length > 0 && (
-                                    <div className="mt-2 space-y-1">
-                                        {filteredCustomers.slice(0, 4).map((c) => (
-                                            <button
-                                                key={c.id}
-                                                type="button"
-                                                className="flex w-full items-center gap-2 rounded-lg bg-background/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
-                                                onClick={() => {
-                                                    setSelectedCustomerId(c.id);
-                                                    setCustomerSearch(c.phone || c.name);
-                                                }}
-                                            >
-                                                <User className="size-3 shrink-0" />
-                                                <span className="font-medium">{c.name}</span>
-                                                <span className="ml-auto text-[10px] opacity-60">{c.phone || ""}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
                             {/* Cart Items */}
-                            <div className="flex-1 px-5 py-3">
+                <div className="flex-1 px-2 py-1.5">
                                 {items.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
                                         <ShoppingCart className="size-10 text-muted-foreground/30" />
-                                        <p className="mt-3 text-sm font-medium text-muted-foreground">Cart is empty</p>
-                                        <p className="mt-1 text-xs text-muted-foreground/60">Click products to add</p>
+                      <p className="mt-3 text-sm font-medium text-muted-foreground">
+                        Cart is empty
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground/60">
+                        Click products to add
+                      </p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                                         {items.map((item) => {
-                                            const associatedProduct = products.find((p) => p.id === item.productId);
-                                            const catName =
-                                                categories.find((c) => c.id === item.categoryId)?.name || "Item";
-                                            const emoji = getProductEmoji(catName);
-                                            const parentTotal = (item.unitPrice - item.unitDiscount) * item.quantity;
+                        const parentTotal =
+                          (item.unitPrice - item.unitDiscount) * item.quantity;
                                             const addOnTotal = item.addOns.reduce(
                                                 (total, addOn) =>
                                                     total +
@@ -1954,67 +2150,58 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             return (
                                                 <div
                                                     key={item.key}
-                                                    className="rounded-xl border border-border/40 bg-background/60 px-3 py-2.5"
+                            className="rounded-xl border border-border/40 bg-background/60 px-3 py-3"
                                                 >
-                                                    <div className="flex items-center gap-3">
-                                                        {/* Image/Emoji */}
-                                                        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/40 shadow-inner">
-                                                            {associatedProduct?.imageSignedUrl ? (
-                                                                <img
-                                                                    src={associatedProduct.imageSignedUrl}
-                                                                    alt={item.name}
-                                                                    className="h-full w-full rounded-full object-cover border border-border/40"
-                                                                />
-                                                            ) : (
-                                                                <span className="text-lg select-none select-none-emoji">
-                                                                    {emoji}
-                                                                </span>
-                                                            )}
-                                                        </div>
-
+                            <div className="flex min-w-0 items-center gap-3">
                                                         {/* Name & Price */}
                                                         <div className="min-w-0 flex-1">
-                                                            <p className="truncate text-sm font-semibold text-foreground">
+                                <p className="whitespace-normal break-words text-sm font-semibold leading-snug text-foreground">
                                                                 {item.name}
                                                             </p>
                                                             <ProductPriceDisplay
                                                                 price={item.unitPrice}
                                                                 discount={item.unitDiscount}
-                                                                size="sm"
+                                  size="xs"
                                                                 align="left"
                                                                 singleTone="foreground"
                                                             />
                                                         </div>
 
                                                         {/* Quantity Controls */}
-                                                        <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="flex shrink-0 items-center gap-0.5">
                                                             <button
                                                                 type="button"
                                                                 onClick={() =>
-                                                                    updateItemQuantity(item.key, item.quantity - 1)
+                                    updateItemQuantity(
+                                      item.key,
+                                      item.quantity - 1,
+                                    )
                                                                 }
-                                                                className="flex size-10 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                  className="flex size-8 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                                                 aria-label={`Decrease ${item.name} quantity`}
                                                             >
-                                                                <Minus className="size-4" />
+                                  <Minus className="size-3.5" />
                                                             </button>
-                                                            <span className="w-6 text-center text-sm font-bold text-foreground">
+                                <span className="flex size-8 items-center justify-center text-sm font-bold text-foreground">
                                                                 {item.quantity}
                                                             </span>
                                                             <button
                                                                 type="button"
                                                                 onClick={() =>
-                                                                    updateItemQuantity(item.key, item.quantity + 1)
+                                    updateItemQuantity(
+                                      item.key,
+                                      item.quantity + 1,
+                                    )
                                                                 }
-                                                                className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                                  className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
                                                                 aria-label={`Increase ${item.name} quantity`}
                                                             >
-                                                                <Plus className="size-4" />
+                                  <Plus className="size-3.5" />
                                                             </button>
                                                         </div>
 
                                                         {/* Line Total */}
-                                                        <p className="w-16 text-right text-sm font-bold text-foreground shrink-0">
+                              <p className="w-14 shrink-0 text-right text-xs font-bold text-foreground">
                                                             {formatCurrency(lineTotal)}
                                                         </p>
 
@@ -2022,7 +2209,7 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                         <button
                                                             type="button"
                                                             onClick={() => updateItemQuantity(item.key, 0)}
-                                                            className="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
                                                             aria-label={`Remove ${item.name} from order`}
                                                         >
                                                             <Trash2 className="size-4" />
@@ -2059,7 +2246,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                                                     className="space-y-0.5 text-xs text-muted-foreground"
                                                                 >
                                                                     <span className="truncate block">
-                                                                        {component.name} × {component.quantityPerBundle}
+                                      {component.name} ×{" "}
+                                      {component.quantityPerBundle}
                                                                     </span>
                                                                     {component.addOns.map((addOn) => (
                                                                         <span
@@ -2082,32 +2270,78 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                         </div>
 
                         {/* ─── Bottom Checkout Area (always visible) ─── */}
-                        <div className="border-t border-border/40 bg-card px-5 py-4">
+              <div className="border-t border-border/40 bg-card px-2.5 py-2">
                             {/* Discount Input */}
-                            <div className="mb-3 space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                        Pricing
-                                    </span>
-                                    {orderDiscountAmount > 0 ? (
-                                        <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                                            Order discount applied
+                <div className="mb-2 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Discount
                                         </span>
-                                    ) : null}
-                                </div>
+                    <div className="relative min-w-0 flex-1">
                                 <Input
                                     type="number"
                                     min="0"
-                                    step="1"
-                                    className="h-12 rounded-xl bg-background/60 text-base"
-                                    placeholder="Discount ₹"
+                        max={discountMode === "percent" ? 100 : undefined}
+                        step="0.01"
+                        inputMode="decimal"
+                        className={cn(
+                          "h-8 rounded-lg bg-background/60 pr-2 text-[10px]",
+                          discountValidationMessage &&
+                            "border-destructive focus-visible:ring-destructive",
+                        )}
+                        placeholder={discountMode === "percent" ? "0" : "0.00"}
                                     value={discountInput}
-                                    onChange={(e) => setDiscountInput(e.target.value)}
+                        onChange={(event) =>
+                          setDiscountInput(event.target.value)
+                        }
+                        aria-label={
+                          discountMode === "percent"
+                            ? "Discount percentage"
+                            : "Discount amount"
+                        }
+                        aria-invalid={hasInvalidDiscount}
                                 />
                             </div>
+                    <div className="flex h-8 shrink-0 items-center rounded-lg border border-border/60 bg-background/50 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => changeDiscountMode("amount")}
+                        aria-label="Discount amount"
+                        aria-pressed={discountMode === "amount"}
+                        className={cn(
+                          "flex size-6 items-center justify-center rounded-sm text-[10px] font-semibold transition-colors",
+                          discountMode === "amount"
+                            ? "bg-foreground text-background"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        ₹
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => changeDiscountMode("percent")}
+                        aria-label="Discount percentage"
+                        aria-pressed={discountMode === "percent"}
+                        className={cn(
+                          "flex size-6 items-center justify-center rounded-sm text-[10px] font-semibold transition-colors",
+                          discountMode === "percent"
+                            ? "bg-foreground text-background"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        %
+                      </button>
+                    </div>
+                  </div>
+                  {discountValidationMessage ? (
+                    <p className="text-[10px] text-destructive">
+                      {discountValidationMessage}
+                    </p>
+                  ) : null}
+                </div>
 
                             {/* Summary */}
-                            <div className="mb-3 space-y-1.5 text-sm">
+                <div className="mb-2 space-y-0.5 rounded-lg bg-background/40 px-2 py-1.5 text-[11px]">
                                 <div className="flex justify-between text-muted-foreground">
                                     <span>Subtotal</span>
                                     <span>{formatCurrency(subtotal)}</span>
@@ -2124,114 +2358,102 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                         <span>-{formatCurrency(orderDiscountAmount)}</span>
                                     </div>
                                 )}
-                                {collectedTotal > 0 && (
-                                    <div className="flex justify-between text-sky-600 dark:text-sky-400">
-                                        <span>Collected now</span>
-                                        <span>{formatCurrency(collectedTotal)}</span>
-                                    </div>
-                                )}
                                 {dueTotal > 0 && items.length > 0 && (
                                     <div className="flex justify-between text-amber-600 dark:text-amber-400">
                                         <span>Due after bill</span>
                                         <span>{formatCurrency(dueTotal)}</span>
                                     </div>
                                 )}
-                                <div className="flex justify-between pt-1.5 text-lg font-bold text-foreground">
+                  <div className="flex justify-between pt-1 text-sm font-bold text-foreground">
                                     <span>Total</span>
                                     <span>{formatCurrency(grandTotal)}</span>
                                 </div>
                             </div>
 
-                            <div className="mb-3">
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                <div className="mb-2">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                     Settlement
                                 </p>
-                                <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1">
                                     <button
                                         type="button"
                                         onClick={() => setSettlementMode("full")}
                                         className={cn(
-                                            "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
+                        "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
                                             settlementMode === "full"
                                                 ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
                                         )}
                                     >
-                                        <ReceiptText className="size-3.5" />
-                                        Pay full
+                      Paid
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setSettlementMode("partial")}
                                         className={cn(
-                                            "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
+                        "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
                                             settlementMode === "partial"
                                                 ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
                                         )}
                                     >
-                                        <CreditCard className="size-3.5" />
-                                        Pay partial
+                      Partial
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setSettlementMode("due")}
                                         className={cn(
-                                            "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
+                        "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
                                             settlementMode === "due"
                                                 ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
                                         )}
                                     >
-                                        <Receipt className="size-3.5" />
-                                        Mark due
+                      Due
                                     </button>
                                 </div>
                             </div>
 
                             {settlementMode !== "due" && (
-                                <div className="mb-3">
-                                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                        Payment Method
+                  <div className="mb-2">
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Payment
                                     </p>
-                                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-1">
                                         <button
                                             type="button"
                                             onClick={() => setSelectedPaymentMethod("cash")}
                                             className={cn(
-                                                "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
+                          "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
                                                 selectedPaymentMethod === "cash"
                                                     ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
                                                     : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
                                             )}
                                         >
-                                            <Banknote className="size-3.5" />
                                             Cash
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setSelectedPaymentMethod("upi")}
                                             className={cn(
-                                                "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
+                          "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
                                                 selectedPaymentMethod === "upi"
                                                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                                                     : "border border-border/60 bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground",
                                             )}
                                         >
-                                            <Smartphone className="size-3.5" />
                                             UPI
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setSelectedPaymentMethod("card")}
                                             className={cn(
-                                                "flex min-h-12 items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-all duration-200",
+                          "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
                                                 selectedPaymentMethod === "card"
                                                     ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
                                                     : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
                                             )}
                                         >
-                                            <CreditCard className="size-3.5" />
                                             Card
                                         </button>
                                     </div>
@@ -2239,13 +2461,13 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                             )}
 
                             {settlementMode === "partial" && (
-                                <div className="mb-3">
+                  <div className="mb-2">
                                     <Input
                                         type="number"
                                         min="0"
                                         step="0.01"
-                                        className="h-12 rounded-xl bg-background/60 text-base"
-                                        placeholder="Collected Amount INR"
+                      className="h-8 rounded-lg bg-background/60 text-[11px]"
+                      placeholder="Amount received"
                                         value={partialPaymentAmount}
                                         onChange={(e) => setPartialPaymentAmount(e.target.value)}
                                     />
@@ -2254,38 +2476,38 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
 
                             {/* Warnings */}
                             {isOverpaid && (
-                                <div className="mb-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  <div className="mb-2 rounded-lg border border-destructive/20 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
                                     Collected amount exceeds the bill total.
                                 </div>
                             )}
 
-                            {settlementMode === "partial" && isPartialAmountMissing && !isOverpaid && (
-                                <div className="mb-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
+                {settlementMode === "partial" &&
+                  isPartialAmountMissing &&
+                  !isOverpaid && (
+                    <div className="mb-2 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1.5 text-[11px] text-sky-700 dark:text-sky-300">
                                     Enter the amount the customer is paying now.
                                 </div>
                             )}
 
-                            {settlementMode === "partial" && matchesFullPayment && !isOverpaid && (
-                                <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                                    Use &quot;Pay full&quot; when the customer is settling the entire bill amount.
+                {settlementMode === "partial" &&
+                  matchesFullPayment &&
+                  !isOverpaid && (
+                    <div className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+                      Select &quot;Paid&quot; when the customer is settling the
+                      entire bill amount.
                                 </div>
                             )}
 
-                            {!selectedCustomerId && dueTotal > 0 && items.length > 0 && (
-                                <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                                    Attach a customer for partial or due bills.
-                                </div>
-                            )}
-
-                            <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="mt-2 grid grid-cols-2 gap-1">
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    className="h-14 rounded-xl text-sm font-semibold"
+                    className="h-8 rounded-lg text-[10px] font-semibold"
                                     disabled={
                                         saveDraftMutation.isPending ||
                                         completeSaleMutation.isPending ||
-                                        items.length === 0
+                      items.length === 0 ||
+                      hasInvalidDiscount
                                     }
                                     onClick={() => saveDraftMutation.mutate()}
                                 >
@@ -2297,18 +2519,19 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                 </Button>
                                 <Button
                                     type="button"
-                                    className="h-14 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+                    className="h-8 rounded-lg bg-primary text-[10px] font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
                                     disabled={
                                         completeSaleMutation.isPending ||
                                         saveDraftMutation.isPending ||
                                         items.length === 0 ||
+                      hasInvalidDiscount ||
                                         hasInvalidPartialPayment
                                     }
-                                    onClick={() => completeSaleMutation.mutate()}
+                    onClick={() => setCustomerDialogOpen(true)}
                                 >
                                     {completeSaleMutation.isPending
                                         ? "Completing..."
-                                        : `Place Order — ${formatCurrency(grandTotal)}`}
+                      : "Place Order"}
                                 </Button>
                             </div>
                         </div>
@@ -2324,13 +2547,19 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                 Admin read-only
                             </span>
                             <div>
-                                <h2 className="text-lg font-bold text-foreground">Inspect store billing safely</h2>
+                <h2 className="text-lg font-bold text-foreground">
+                  Inspect store billing safely
+                </h2>
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                    This workspace is now inspection-only for admin users. Open the POS login to create
-                                    drafts, complete bills, or collect money.
+                  This workspace is now inspection-only for admin users. Open
+                  the POS login to create drafts, complete bills, or collect
+                  money.
                                 </p>
                             </div>
-                            <Button className="w-full rounded-xl" render={<Link to="/pos/login" />}>
+              <Button
+                className="w-full rounded-xl"
+                render={<Link to="/pos/login" />}
+              >
                                 Open POS login
                             </Button>
                         </div>
@@ -2365,7 +2594,10 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             With balance due
                                         </p>
                                         <p className="mt-2 text-2xl font-semibold text-foreground">
-                                            {customers.filter((customer) => customer.balance > 0).length}
+                      {
+                        customers.filter((customer) => customer.balance > 0)
+                          .length
+                      }
                                         </p>
                                     </div>
                                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
@@ -2387,7 +2619,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             {filteredSales.length}
                                         </p>
                                         <p className="mt-1 text-xs text-muted-foreground">
-                                            Drafts, paid bills, open dues, and voided bills for this store.
+                      Drafts, paid bills, open dues, and voided bills for this
+                      store.
                                         </p>
                                     </div>
                                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
@@ -2406,7 +2639,8 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                                             {
                                                 sales.filter(
                                                     (sale) =>
-                                                        sale.status === "completed" && sale.paymentStatus !== "paid",
+                            sale.status === "completed" &&
+                            sale.paymentStatus !== "paid",
                                                 ).length
                                             }
                                         </p>
@@ -2417,6 +2651,212 @@ const BillingPage = ({ mode = "admin", session = null }: BillingPageProps) => {
                     </aside>
                 )}
             </div>
+
+      <Dialog
+        open={customerDialogOpen}
+        onOpenChange={(open) => {
+          setCustomerDialogOpen(open);
+          if (!open) {
+            setCustomerPickerOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md rounded-2xl border-border/70 bg-background/95 p-5 shadow-2xl backdrop-blur-xl">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-lg font-semibold">
+              Confirm order
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Review the bill details before placing the order.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-xs">
+              <div className="flex items-center justify-between text-base font-bold text-foreground">
+                <span>Total</span>
+                <span>{formatCurrency(grandTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Settlement</span>
+                <span className="font-medium text-foreground">
+                  {settlementMode === "full"
+                    ? "Paid"
+                    : settlementMode === "partial"
+                      ? "Partial"
+                      : "Due"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Payment</span>
+                <span className="font-medium text-foreground">
+                  {settlementMode === "due"
+                    ? "No payment collected"
+                    : selectedPaymentMethod === "cash"
+                      ? "Cash"
+                      : selectedPaymentMethod === "upi"
+                        ? "UPI"
+                        : "Card"}
+                </span>
+              </div>
+              {dueTotal > 0 ? (
+                <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
+                  <span>Due after bill</span>
+                  <span className="font-semibold">
+                    {formatCurrency(dueTotal)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <User className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Customer
+                    </p>
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {selectedCustomer?.name || "Walk-in"}
+                    </p>
+                    {selectedCustomer?.phone ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        {selectedCustomer.phone}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 shrink-0 rounded-lg px-2.5 text-[11px]"
+                  onClick={() => setCustomerPickerOpen((open) => !open)}
+                >
+                  {customerPickerOpen ? "Done" : "Change"}
+                </Button>
+              </div>
+
+              {customerPickerOpen ? (
+                <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
+                  <div className="relative">
+                    <Input
+                      className="h-9 rounded-xl bg-background/70 pr-9 text-xs"
+                      placeholder="Search by name or phone"
+                      value={customerSearch}
+                      onChange={(event) => {
+                        setCustomerSearch(event.target.value);
+                        if (!event.target.value) {
+                          setSelectedCustomerId("");
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          handleFindCustomer();
+                        }
+                      }}
+                      aria-label="Search customer"
+                    />
+                    {customerSearch ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerSearch("");
+                          setSelectedCustomerId("");
+                        }}
+                        className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Clear customer"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {customerSearch &&
+                  !selectedCustomer &&
+                  filteredCustomers.length > 0 ? (
+                    <div className="space-y-1">
+                      {filteredCustomers.slice(0, 5).map((customer) => (
+                        <button
+                          key={customer.id}
+                          type="button"
+                          className="flex min-h-9 w-full items-center gap-2 rounded-lg bg-background/60 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
+                          onClick={() => {
+                            setSelectedCustomerId(customer.id);
+                            setCustomerSearch(customer.phone || customer.name);
+                            setCustomerPickerOpen(false);
+                          }}
+                        >
+                          <User className="size-3.5 shrink-0" />
+                          <span className="font-medium">{customer.name}</span>
+                          <span className="ml-auto text-[10px] opacity-60">
+                            {customer.phone || ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {customerSearch &&
+                  !selectedCustomer &&
+                  filteredCustomers.length === 0 ? (
+                    <CustomerQuickCreateDialog
+                      organizationId={organizationId}
+                      mode={mode}
+                      suggestedName={
+                        /^[+\d\s()-]+$/.test(customerSearch)
+                          ? ""
+                          : customerSearch
+                      }
+                      suggestedPhone={
+                        /^[+\d\s()-]+$/.test(customerSearch)
+                          ? customerSearch
+                          : ""
+                      }
+                      onCreated={(customer) => {
+                        setSelectedCustomerId(customer.id);
+                        setCustomerSearch(customer.phone || customer.name);
+                        setCustomerPickerOpen(false);
+                      }}
+                      trigger={
+                        <button
+                          type="button"
+                          className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                        >
+                          <Plus className="size-3.5" />
+                          <span>Create new customer</span>
+                        </button>
+                      }
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 pt-2 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl text-xs"
+              onClick={() => {
+                setCustomerDialogOpen(false);
+                setCustomerPickerOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="h-10 rounded-xl text-xs font-semibold"
+              disabled={completeSaleMutation.isPending}
+              onClick={() => completeSaleMutation.mutate()}
+            >
+              {completeSaleMutation.isPending ? "Placing..." : "Place Order"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
             <CustomizeProductDialog
                 open={Boolean(customizeProductId)}

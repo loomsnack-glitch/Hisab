@@ -5,7 +5,7 @@ import { formatCurrency } from "@/lib/format";
 type ProductPriceDisplayProps = {
     price: number | string;
     discount?: number | string | null;
-    size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
     align?: "left" | "center" | "right";
     /** Color for the price when there is no discount */
     singleTone?: "foreground" | "primary";
@@ -13,6 +13,11 @@ type ProductPriceDisplayProps = {
 };
 
 const sizeStyles = {
+  xs: {
+    original: "text-[9px]",
+    discounted: "text-[11px] font-extrabold",
+    single: "text-[11px] font-bold",
+  },
     sm: {
         original: "text-[11px]",
         discounted: "text-sm font-extrabold",
@@ -54,7 +59,11 @@ const ProductPriceDisplay = ({
     const finalPrice = getDiscountedPrice(originalPrice, discountAmount);
     const styles = sizeStyles[size];
     const alignClass =
-        align === "center" ? "text-center items-center" : align === "right" ? "text-right items-end" : "text-left items-start";
+    align === "center"
+      ? "text-center items-center"
+      : align === "right"
+        ? "text-right items-end"
+        : "text-left items-start";
 
     if (!hasDiscount) {
         return (
@@ -73,13 +82,7 @@ const ProductPriceDisplay = ({
     }
 
     return (
-        <div
-            className={cn(
-                "flex flex-col gap-0.5",
-                alignClass,
-                className,
-            )}
-        >
+    <div className={cn("flex flex-col gap-0.5", alignClass, className)}>
             <span
                 className={cn(
                     styles.original,
