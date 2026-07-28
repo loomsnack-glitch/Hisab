@@ -9,6 +9,7 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { toast } from "sonner";
 
@@ -154,23 +155,21 @@ const PosLoginPage = () => {
                             <Field data-invalid={!!form.formState.errors.deviceSecret} className="space-y-1">
                                 <FieldLabel required className="text-xs">Device secret</FieldLabel>
                                 <FieldContent>
-                                    <div className="relative">
-                                        <Input
-                                            type="password"
-                                            className="h-10 rounded-xl transition-colors duration-200 text-sm pr-16"
-                                            placeholder="Enter the device secret"
-                                            {...form.register("deviceSecret")}
-                                        />
-                                        {copiedDeviceSecret && (
+                                    <PasswordInput
+                                        className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                        placeholder="Enter the device secret"
+                                        visibilityLabel={{ show: "Show device secret", hide: "Hide device secret" }}
+                                        trailingContent={copiedDeviceSecret ? (
                                             <button
                                                 type="button"
                                                 onClick={handlePasteDeviceSecret}
-                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95 border border-emerald-500/20 shadow-xs cursor-pointer flex items-center"
+                                                className="rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95 border border-emerald-500/20 shadow-xs cursor-pointer flex items-center"
                                             >
                                                 Paste
                                             </button>
-                                        )}
-                                    </div>
+                                        ) : undefined}
+                                        {...form.register("deviceSecret")}
+                                    />
                                     <FieldError errors={[form.formState.errors.deviceSecret]} className="text-[10px]" />
                                 </FieldContent>
                             </Field>

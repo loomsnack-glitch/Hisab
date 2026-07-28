@@ -14,7 +14,8 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Eye, EyeOff, MonitorSmartphone, Plus, ShieldCheck } from "lucide-react";
+import { PasswordInput } from "@repo/ui/components/password-input";
+import { MonitorSmartphone, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
@@ -33,7 +34,6 @@ const defaultValues: CreateStoreDeviceJSON = { name: "", loginUsername: "", devi
 
 const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, storeName, trigger }: CreateDeviceDialogProps) => {
     const [open, setOpen] = useState(false);
-    const [showDeviceSecret, setShowDeviceSecret] = useState(false);
     const [setupOpen, setSetupOpen] = useState(false);
     const [setupDevice, setSetupDevice] = useState<StoreDeviceDTO | null>(null);
     const queryClient = useQueryClient();
@@ -52,7 +52,6 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
             if (response.status === "success" && response.data) {
                 queryClient.invalidateQueries({ queryKey: organizationKeys.detail(organizationId) });
                 form.reset(defaultValues);
-                setShowDeviceSecret(false);
                 setOpen(false);
                 setSetupDevice(response.data.device);
                 setSetupOpen(true);
@@ -97,7 +96,6 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
             interceptClose(() => {
                 setOpen(false);
                 form.reset(defaultValues);
-                setShowDeviceSecret(false);
             });
         } else {
             setOpen(true);
@@ -187,29 +185,18 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
                                     Device secret
                                 </FieldLabel>
                                 <FieldContent>
-                                    <div className="relative">
-                                        <Input
-                                            type={showDeviceSecret ? "text" : "password"}
-                                            variant="ringShadow"
-                                            className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 pr-16 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
-                                            placeholder="Choose a secure secret"
-                                            value={field.value ?? ""}
-                                            onChange={field.onChange}
-                                            onBlur={field.onBlur}
-                                            name={field.name}
-                                            ref={field.ref}
-                                            autoComplete="new-password"
-                                        />
-                                        <button
-                                            type="button"
-                                            aria-label={showDeviceSecret ? "Hide device secret" : "Show device secret"}
-                                            title={showDeviceSecret ? "Hide device secret" : "Show device secret"}
-                                            className="absolute right-2 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                                            onClick={() => setShowDeviceSecret((visible) => !visible)}
-                                        >
-                                            {showDeviceSecret ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                                        </button>
-                                    </div>
+                                    <PasswordInput
+                                        variant="ringShadow"
+                                        className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
+                                        placeholder="Choose a secure secret"
+                                        visibilityLabel={{ show: "Show device secret", hide: "Hide device secret" }}
+                                        value={field.value ?? ""}
+                                        onChange={field.onChange}
+                                        onBlur={field.onBlur}
+                                        name={field.name}
+                                        ref={field.ref}
+                                        autoComplete="new-password"
+                                    />
                                     <FieldError errors={[fieldState.error]} />
                                 </FieldContent>
                             </Field>

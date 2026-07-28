@@ -20,6 +20,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import {
     AlertDialog,
@@ -30,7 +31,7 @@ import {
     AlertDialogMedia,
     AlertDialogTitle,
 } from "@repo/ui/components/alert-dialog";
-import { Eye, EyeOff, MonitorSmartphone, Pencil, ShieldCheck, TriangleAlert } from "lucide-react";
+import { MonitorSmartphone, Pencil, ShieldCheck, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
@@ -56,7 +57,6 @@ const EditDeviceDialog = ({ organizationId, storeId, device, trigger, open: cont
     const isControlled = controlledOpen !== undefined;
     const open = controlledOpen ?? internalOpen;
     const queryClient = useQueryClient();
-    const [showDeviceSecret, setShowDeviceSecret] = useState(false);
     const [showSecretConfirm, setShowSecretConfirm] = useState(false);
     const [pendingValues, setPendingValues] = useState<UpdateStoreDeviceJSON | null>(null);
 
@@ -83,7 +83,6 @@ const EditDeviceDialog = ({ organizationId, storeId, device, trigger, open: cont
 
     useEffect(() => {
         if (open) {
-            setShowDeviceSecret(false);
             form.reset({
                 name: device.name,
                 loginUsername: device.loginUsername,
@@ -100,7 +99,6 @@ const EditDeviceDialog = ({ organizationId, storeId, device, trigger, open: cont
             if (response.status === "success") {
                 toast.success(response.message);
                 queryClient.invalidateQueries({ queryKey: organizationKeys.detail(organizationId) });
-                setShowDeviceSecret(false);
                 setOpen(false);
                 return;
             }
@@ -134,7 +132,6 @@ const EditDeviceDialog = ({ organizationId, storeId, device, trigger, open: cont
             return result;
         },
         onDiscard: () => {
-            setShowDeviceSecret(false);
             form.reset({
                 name: device.name,
                 loginUsername: device.loginUsername,
@@ -148,7 +145,6 @@ const EditDeviceDialog = ({ organizationId, storeId, device, trigger, open: cont
         if (!nextOpen) {
             interceptClose(() => {
                 setOpen(false);
-                setShowDeviceSecret(false);
                 form.reset({
                     name: device.name,
                     loginUsername: device.loginUsername,
@@ -293,29 +289,18 @@ const EditDeviceDialog = ({ organizationId, storeId, device, trigger, open: cont
                                     New device secret <span className="font-normal text-muted-foreground/60 lowercase normal-case">(optional)</span>
                                 </FieldLabel>
                                 <FieldContent>
-                                    <div className="relative">
-                                        <Input
-                                            type={showDeviceSecret ? "text" : "password"}
-                                            variant="ringShadow"
-                                            className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 pr-16 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
-                                            placeholder="Leave blank to keep current secret"
-                                            value={field.value ?? ""}
-                                            onChange={field.onChange}
-                                            onBlur={field.onBlur}
-                                            name={field.name}
-                                            ref={field.ref}
-                                            autoComplete="new-password"
-                                        />
-                                        <button
-                                            type="button"
-                                            aria-label={showDeviceSecret ? "Hide device secret" : "Show device secret"}
-                                            title={showDeviceSecret ? "Hide device secret" : "Show device secret"}
-                                            className="absolute right-2 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                                            onClick={() => setShowDeviceSecret((visible) => !visible)}
-                                        >
-                                            {showDeviceSecret ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                                        </button>
-                                    </div>
+                                    <PasswordInput
+                                        variant="ringShadow"
+                                        className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
+                                        placeholder="Leave blank to keep current secret"
+                                        visibilityLabel={{ show: "Show device secret", hide: "Hide device secret" }}
+                                        value={field.value ?? ""}
+                                        onChange={field.onChange}
+                                        onBlur={field.onBlur}
+                                        name={field.name}
+                                        ref={field.ref}
+                                        autoComplete="new-password"
+                                    />
                                     <FieldError errors={[fieldState.error]} />
                                 </FieldContent>
                             </Field>
