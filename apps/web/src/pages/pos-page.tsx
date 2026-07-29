@@ -9,7 +9,10 @@ import { deviceAuthKeys } from "@/lib/query-keys";
 import BillingPage from "@/pages/billing-page";
 
 const PosPage = () => {
-  const [productSearch, setProductSearch] = useState("");
+  const [headerSearch, setHeaderSearch] = useState("");
+  const [activePanelTab, setActivePanelTab] = useState<"products" | "bills">(
+    "products",
+  );
     const deviceAuthQuery = useQuery({
         queryKey: deviceAuthKeys.me,
         queryFn: deviceAuthenticate,
@@ -40,13 +43,23 @@ const PosPage = () => {
     return (
     <PosLayout
       session={session}
-      productSearch={productSearch}
-      onProductSearchChange={setProductSearch}
+      searchValue={headerSearch}
+      searchPlaceholder={
+        activePanelTab === "products"
+          ? "Search products..."
+          : "Search bills or customers..."
+      }
+      onSearchChange={setHeaderSearch}
     >
       <BillingPage
         mode="device"
         session={session}
-        productSearch={productSearch}
+        productSearch={activePanelTab === "products" ? headerSearch : ""}
+        salesSearch={activePanelTab === "bills" ? headerSearch : ""}
+        onPanelTabChange={(tab) => {
+          setActivePanelTab(tab);
+          setHeaderSearch("");
+        }}
       />
         </PosLayout>
     );

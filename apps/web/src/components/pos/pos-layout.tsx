@@ -16,15 +16,17 @@ import { deviceAuthKeys } from "@/lib/query-keys";
 type PosLayoutProps = {
     children: ReactNode;
     session: DeviceSessionDTO;
-  productSearch: string;
-  onProductSearchChange: (value: string) => void;
+  searchValue: string;
+  searchPlaceholder: string;
+  onSearchChange: (value: string) => void;
 };
 
 const PosLayout = ({
   children,
   session,
-  productSearch,
-  onProductSearchChange,
+  searchValue,
+  searchPlaceholder,
+  onSearchChange,
 }: PosLayoutProps) => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -80,15 +82,15 @@ const PosLayout = ({
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               className="h-9 rounded-xl bg-background/80 pl-10 pr-10 text-sm"
-              placeholder="Search products..."
-              value={productSearch}
-              onChange={(event) => onProductSearchChange(event.target.value)}
-              aria-label="Search products"
+              placeholder={searchPlaceholder}
+              value={searchValue}
+              onChange={(event) => onSearchChange(event.target.value)}
+              aria-label={searchPlaceholder}
             />
-            {productSearch ? (
+            {searchValue ? (
               <button
                 type="button"
-                onClick={() => onProductSearchChange("")}
+                onClick={() => onSearchChange("")}
                 className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="Clear product search"
               >

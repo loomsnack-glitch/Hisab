@@ -61,9 +61,7 @@ import {
     ArrowUpDown,
     Calendar,
     Filter,
-    Grid,
     LayoutGrid,
-    List,
     Minus,
     Plus,
     ReceiptText,
@@ -145,12 +143,16 @@ type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
   productSearch?: string;
+  salesSearch?: string;
+  onPanelTabChange?: (tab: "products" | "bills") => void;
 };
 
 const BillingPage = ({
   mode = "admin",
   session = null,
   productSearch: productSearchProp,
+  salesSearch: salesSearchProp,
+  onPanelTabChange,
 }: BillingPageProps) => {
     const queryClient = useQueryClient();
     const { organizationId: organizationIdParam = "" } = useParams();
@@ -166,7 +168,6 @@ const BillingPage = ({
     const [customerSearch, setCustomerSearch] = useState("");
     const [notes, setNotes] = useState("");
     const [items, setItems] = useState<ComposerItem[]>([]);
-    const [salesSearch, setSalesSearch] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("all");
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
@@ -191,9 +192,6 @@ const BillingPage = ({
   const [sortBy, setSortBy] = useState<
     "newest" | "oldest" | "highest" | "lowest"
   >("newest");
-  const [viewLayout, setViewLayout] = useState<"large" | "small" | "list">(
-    "large",
-  );
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<
     "all" | "cash" | "upi" | "card"
   >("all");
@@ -206,6 +204,7 @@ const BillingPage = ({
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   const productSearch = productSearchProp ?? "";
+  const salesSearch = salesSearchProp ?? "";
   const deferredProductSearch = useDeferredValue(
     productSearch.trim().toLowerCase(),
   );
@@ -332,6 +331,16 @@ const BillingPage = ({
         };
     }, [mobileCartOpen]);
 
+    useEffect(() => {
+        if (!isDeviceMode || !onPanelTabChange) {
+            return;
+        }
+
+        if (leftPanelTab === "products" || leftPanelTab === "bills") {
+            onPanelTabChange(leftPanelTab);
+        }
+    }, [isDeviceMode, leftPanelTab, onPanelTabChange]);
+
     const categorySwipeHandlers = useSwipeable({
         onSwipedLeft: () => selectAdjacentCategory(1),
         onSwipedRight: () => selectAdjacentCategory(-1),
@@ -451,10 +460,12 @@ const BillingPage = ({
             })();
 
             const customerName = sale.customer?.name?.toLowerCase() ?? "";
+            const customerPhone = sale.customer?.phone?.toLowerCase() ?? "";
             const saleNumberText = sale.saleNumber ? String(sale.saleNumber) : "";
             const matchesSearch =
                 !deferredSalesSearch ||
                 customerName.includes(deferredSalesSearch) ||
+                customerPhone.includes(deferredSalesSearch) ||
                 saleNumberText.includes(deferredSalesSearch);
 
             const matchesPaymentMethod = (() => {
@@ -1522,16 +1533,6 @@ const BillingPage = ({
                             <div className="mb-6 space-y-4">
                                 {/* First Row: Search, Sort, View, Count */}
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                    {/* Search input */}
-                                    <div className="relative flex-1 max-w-md">
-                                        <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                                        <Input
-                                            className="h-10 rounded-xl bg-background/80 pl-10 text-sm"
-                                            placeholder="Search by ID or customer..."
-                                            value={salesSearch}
-                                            onChange={(event) => setSalesSearch(event.target.value)}
-                                        />
-                                    </div>
 
                                     {/* Sort Controls */}
                                     <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
@@ -1560,33 +1561,8 @@ const BillingPage = ({
                                         ))}
                                     </div>
 
-                                    {/* Layout controls & count */}
-                                    <div className="flex items-center gap-3 self-end lg:self-auto shrink-0">
-                                        <div className="flex items-center rounded-xl bg-muted/30 p-1 border border-border/10">
-                                            {[
-                                                { value: "large", label: "Large", icon: LayoutGrid },
-                                                { value: "small", label: "Small", icon: Grid },
-                                                { value: "list", label: "List", icon: List },
-                                            ].map((layout) => {
-                                                const IconComponent = layout.icon;
-                                                return (
-                                                    <button
-                                                        key={layout.value}
-                                                        type="button"
-                                                        onClick={() => setViewLayout(layout.value as any)}
-                                                        className={cn(
-                                                            "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer",
-                                                            viewLayout === layout.value
-                                                                ? "bg-primary text-primary-foreground shadow-sm"
-                                                                : "text-muted-foreground hover:text-foreground",
-                                                        )}
-                                                    >
-                                                        <IconComponent className="size-3.5" />
-                                                        <span>{layout.label}</span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
+                                    {/* Result count */}
+                                    <div className="flex items-center self-end lg:self-auto shrink-0">
                                         <span className="text-xs font-medium text-muted-foreground shrink-0">
                       {filteredSales.length}{" "}
                       {filteredSales.length === 1 ? "order" : "orders"}
@@ -1774,199 +1750,15 @@ const BillingPage = ({
                                             return <div className="flex gap-1">{badges}</div>;
                                         };
 
-                                        if (viewLayout === "large") {
-                                            return (
-                                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                                    {filteredSales.map((sale) => (
-                                                        <div
-                                                            key={sale.id}
-                                                            className="group flex flex-col justify-between rounded-2xl border border-border/50 bg-card/85 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-                                                        >
-                                                            <div>
-                                                                <div className="flex items-center justify-between gap-2 mb-2.5">
-                                                                    <p className="font-bold text-amber-500 dark:text-amber-400 text-sm">
-                                                                        {sale.saleNumber
-                                                                            ? `#${sale.saleNumber}`
-                                                                            : "Draft Bill"}
-                                                                    </p>
-                                                                    <div className="flex flex-col items-end gap-1">
-                                                                        {renderPaymentStatusBadge(sale)}
-                                                                        {renderPaymentMethodBadges(sale)}
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                                    <Calendar className="size-3.5 text-muted-foreground/70" />
-                                                                    <span>{formatDateTime(sale.createdAt)}</span>
-                                                                </div>
-
-                                                                <p className="text-sm font-semibold text-foreground/90 line-clamp-2 mt-3.5 leading-relaxed min-h-[40px]">
-                                                                    {sale.itemsSummary || "No items"}
-                                                                </p>
-
-                                                                <div className="flex items-center justify-between mt-4 pt-3.5 border-t border-border/40">
-                                                                    <span className="text-xs text-muted-foreground truncate max-w-[160px]">
-                                                                        {sale.customer?.name || "Walk-in"} •{" "}
-                                                                        {sale.itemCount} item
-                                                                        {sale.itemCount !== 1 ? "s" : ""}
-                                                                    </span>
-                                                                    <div className="text-right">
-                                                                        <span className="text-lg font-bold text-foreground">
-                                                                            {formatCurrency(sale.grandTotal)}
-                                                                        </span>
-                                                                        {sale.status !== "draft" &&
-                                                                            sale.status !== "voided" && (
-                                                                                <p
-                                                                                    className={cn(
-                                                                                        "mt-1 text-[10px] font-semibold",
-                                                                                        Number(sale.dueTotal) > 0
-                                                                                            ? "text-amber-600 dark:text-amber-400"
-                                                                                            : "text-emerald-600 dark:text-emerald-400",
-                                                                                    )}
-                                                                                >
-                                                                                    {Number(sale.dueTotal) > 0
-                                                                                        ? `Due ${formatCurrency(sale.dueTotal)}`
-                                                                                        : "Paid in full"}
-                                                                                </p>
-                                                                            )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="flex items-center justify-between mt-5 pt-3 border-t border-border/40">
-                                                                <div className="text-[11px] font-bold text-emerald-500 dark:text-emerald-400">
-                                                                    {sale.grandTotal > 0
-                                                                        ? `+${Math.round(sale.grandTotal / 10)} pts`
-                                                                        : ""}
-                                                                </div>
-                                                                <div>
-                                                                    {canMutate && sale.status === "draft" ? (
-                                                                        <Button
-                                                                            size="sm"
-                                                                            className="rounded-xl text-xs h-8 px-4 bg-primary text-primary-foreground hover:bg-primary/90"
-                                                                            disabled={resumeDraftMutation.isPending}
-                                                                            onClick={() =>
-                                                                                resumeDraftMutation.mutate(sale.id)
-                                                                            }
-                                                                        >
-                                                                            {resumeDraftMutation.isPending
-                                                                                ? "Loading..."
-                                                                                : "Resume draft"}
-                                                                        </Button>
-                                                                    ) : (
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                            className="rounded-xl text-xs h-8 px-4"
-                                                                            onClick={() => {
-                                                                                setSelectedSaleId(sale.id);
-                                                                                setSaleDialogOpen(true);
-                                                                            }}
-                                                                        >
-                                                                            Open details
-                                                                        </Button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            );
-                                        }
-
-                                        if (viewLayout === "small") {
-                                            return (
-                                                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                                                    {filteredSales.map((sale) => (
-                                                        <div
-                                                            key={sale.id}
-                                                            className="flex flex-col justify-between rounded-xl border border-border/40 bg-card/75 p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
-                                                        >
-                                                            <div className="space-y-2">
-                                                                <div className="flex items-center justify-between gap-1">
-                                                                    <p className="font-bold text-amber-500 dark:text-amber-400 text-xs">
-                                                                        {sale.saleNumber
-                                                                            ? `#${sale.saleNumber}`
-                                                                            : "Draft"}
-                                                                    </p>
-                                                                    <div className="flex flex-col items-end gap-1">
-                                                                        {renderPaymentStatusBadge(sale)}
-                                                                        {renderPaymentMethodBadges(sale)}
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="text-[10px] text-muted-foreground truncate">
-                                                                    {formatDateTime(sale.createdAt)}
-                                                                </div>
-
-                                                                <div className="flex items-center justify-between border-t border-border/30 pt-2">
-                                                                    <span className="text-[11px] text-muted-foreground truncate max-w-[90px]">
-                                                                        {sale.customer?.name || "Walk-in"}
-                                                                    </span>
-                                                                    <div className="text-right">
-                                                                        <span className="text-sm font-bold text-foreground">
-                                                                            {formatCurrency(sale.grandTotal)}
-                                                                        </span>
-                                                                        {sale.status !== "draft" &&
-                                                                            sale.status !== "voided" && (
-                                                                                <p
-                                                                                    className={cn(
-                                                                                        "mt-0.5 text-[9px] font-semibold",
-                                                                                        Number(sale.dueTotal) > 0
-                                                                                            ? "text-amber-600 dark:text-amber-400"
-                                                                                            : "text-emerald-600 dark:text-emerald-400",
-                                                                                    )}
-                                                                                >
-                                                                                    {Number(sale.dueTotal) > 0
-                                                                                        ? `Due ${formatCurrency(sale.dueTotal)}`
-                                                                                        : "Paid"}
-                                                                                </p>
-                                                                            )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="mt-3.5">
-                                                                {canMutate && sale.status === "draft" ? (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        className="w-full rounded-lg text-[11px] h-7 bg-primary text-primary-foreground hover:bg-primary/90"
-                                                                        disabled={resumeDraftMutation.isPending}
-                                                                        onClick={() =>
-                                                                            resumeDraftMutation.mutate(sale.id)
-                                                                        }
-                                                                    >
-                                                                        Resume
-                                                                    </Button>
-                                                                ) : (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        className="w-full rounded-lg text-[11px] h-7"
-                                                                        onClick={() => {
-                                                                            setSelectedSaleId(sale.id);
-                                                                            setSaleDialogOpen(true);
-                                                                        }}
-                                                                    >
-                                                                        Details
-                                                                    </Button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            );
-                                        }
-
                                         // list view
                                         return (
-                                            <div className="flex flex-col gap-2">
+                                            <div className="grid gap-1.5 lg:grid-cols-2 2xl:grid-cols-3">
                                                 {filteredSales.map((sale) => (
                                                     <div
                                                         key={sale.id}
-                                                        className="flex items-center justify-between border border-border/40 bg-card/70 px-4 py-3 rounded-xl transition-all hover:bg-card/90 hover:border-primary/20 hover:shadow-xs"
+                                                        className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border/40 bg-card/70 px-3 py-2 transition-all hover:border-primary/20 hover:bg-card/90 hover:shadow-xs"
                                                     >
-                                                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                        <div className="flex min-w-0 flex-1 items-center gap-2">
                                                             <div className="w-14 shrink-0">
                                                                 <p className="font-bold text-amber-500 dark:text-amber-400 text-sm">
                                   {sale.saleNumber
@@ -1979,19 +1771,18 @@ const BillingPage = ({
                                                                 {formatDateTime(sale.createdAt)}
                                                             </div>
 
-                                                            <div className="min-w-0 flex-1 pr-4">
-                                                                <p className="text-xs font-semibold text-foreground/80 truncate">
-                                                                    {sale.customer?.name || "Walk-in"} •{" "}
+                                                            <div className="min-w-0 flex-1 pr-2">
+                                                                <p className="truncate text-xs font-semibold text-foreground/80">
+                                                                    {sale.customer?.name || "Walk-in"}
+                                                                </p>
+                                                                <p className="text-[11px] text-muted-foreground">
                                                                     {sale.itemCount} item
                                                                     {sale.itemCount !== 1 ? "s" : ""}
-                                                                </p>
-                                                                <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                                                                    {sale.itemsSummary || "No items"}
                                                                 </p>
                                                             </div>
                                                         </div>
 
-                                                        <div className="flex items-center gap-4 shrink-0">
+                                                        <div className="flex shrink-0 items-center gap-2">
                                                             <div className="hidden sm:block">
                                                                 <div className="flex flex-col items-end gap-1">
                                                                     {renderPaymentStatusBadge(sale)}
@@ -2066,6 +1857,7 @@ const BillingPage = ({
 
                 {/* ─── RIGHT PANEL: Current Order ─── */}
                 {canMutate ? (
+                    leftPanelTab === "products" ? (
                     <>
                         {!mobileCartOpen ? (
                             <div className="fixed inset-x-3 z-30 lg:hidden bottom-3 max-lg:bottom-[calc(0.75rem+env(safe-area-inset-bottom))]">
@@ -2569,6 +2361,7 @@ const BillingPage = ({
                         </div>
                     </aside>
                     </>
+                    ) : null
                 ) : (
                     <aside
                         className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm lg:w-[380px] lg:border-t-0 lg:border-l"
