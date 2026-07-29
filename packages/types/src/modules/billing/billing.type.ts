@@ -7,6 +7,7 @@ import type {
     BundleComponentProductUsageRollupDTOSchema,
     BundleSalesRollupsResponseSchema,
     CommitSaleSchema,
+    CompleteSaleSchema,
     CreateCustomerSchema,
     CreateDraftSaleSchema,
     CreatePaymentSchema,
@@ -83,6 +84,8 @@ export type UpdateDraftSaleJSON = z.infer<typeof UpdateDraftSaleSchema>;
 export type UpdateDraftSaleSVC = UpdateDraftSaleJSON;
 export type CommitSaleJSON = z.infer<typeof CommitSaleSchema>;
 export type CommitSaleSVC = CommitSaleJSON;
+export type CompleteSaleJSON = z.infer<typeof CompleteSaleSchema>;
+export type CompleteSaleSVC = CompleteSaleJSON;
 export type CreatePaymentJSON = z.infer<typeof CreatePaymentSchema>;
 export type CreatePaymentSVC = CreatePaymentJSON;
 export type VoidSaleJSON = z.infer<typeof VoidSaleSchema>;
@@ -99,6 +102,7 @@ export type CreateSaleREPO = Pick<
     | "discountTotal"
     | "grandTotal"
 > & {
+    completionRequestId?: string | null;
     userId?: string | null;
     createdByDeviceId?: string | null;
     updatedByDeviceId?: string | null;

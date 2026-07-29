@@ -12,6 +12,7 @@ import { useSwipeable } from "react-swipeable";
 import {
     commitSale,
     commitPosSale,
+    completePosSale,
     createDraftSale,
     createPosDraftSale,
     getCategories,
@@ -31,10 +32,12 @@ import {
 } from "@repo/services";
 import type {
     CommitSaleJSON,
+    CompleteSaleJSON,
     CreateDraftSaleJSON,
     DeviceSessionDTO,
     PaymentMethod,
     ProductResponseDTO,
+    SaleDetailDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
@@ -84,6 +87,7 @@ import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
+import { buildReceiptText } from "@/lib/receipt-text";
 import { safeRandomUUID } from "@/lib/uuid";
 
 type ComposerAddOn = CustomizeAddOnSelection;
@@ -171,6 +175,8 @@ const BillingPage = ({
     const [categoryFilter, setCategoryFilter] = useState("all");
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
+    const [receiptToPrint, setReceiptToPrint] = useState<SaleDetailDTO | null>(null);
+    const completionRequestRef = useRef<{ requestId: string; fingerprint: string } | null>(null);
     const [settlementMode, setSettlementMode] = useState<SettlementMode>("full");
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod>("cash");
@@ -633,6 +639,23 @@ const BillingPage = ({
     setCustomerPickerOpen(false);
     };
 
+    useEffect(() => {
+        if (!receiptToPrint) {
+            return;
+        }
+
+        const clearReceipt = () => setReceiptToPrint(null);
+        window.addEventListener("afterprint", clearReceipt, { once: true });
+        const printTimer = window.setTimeout(() => {
+            window.print();
+        }, 150);
+
+        return () => {
+            window.clearTimeout(printTimer);
+            window.removeEventListener("afterprint", clearReceipt);
+        };
+    }, [receiptToPrint]);
+
     const addProductToBill = (product: ProductResponseDTO) => {
         setItems((current) => {
             const existingPlainItem = current.find((item) =>
@@ -839,7 +862,7 @@ const BillingPage = ({
     });
 
     const completeSaleMutation = useMutation({
-        mutationFn: async () => {
+        mutationFn: async ({ requestId }: { requestId: string }) => {
             if (!selectedStoreId) {
         throw new Error(
           isDeviceMode ? "Store session is missing" : "Select a store first",
@@ -866,6 +889,21 @@ const BillingPage = ({
         throw new Error(
           "Select 'Paid' when the customer is paying the full bill amount",
         );
+            }
+
+            if (isDeviceMode && !activeDraftId) {
+                const payload: CompleteSaleJSON = {
+                    requestId,
+                    ...buildDraftPayload(),
+                    payments: buildCommitPayload().payments,
+                };
+                const response = await completePosSale(payload);
+
+                if (response.status !== "success" || !response.data?.sale) {
+                    throw new Error(response.message || "Failed to complete bill");
+                }
+
+                return response.data.sale;
             }
 
             const draftPayload = buildDraftPayload();
@@ -909,16 +947,32 @@ const BillingPage = ({
             return commitResponse.data.sale;
         },
         onSuccess: (sale) => {
+            completionRequestRef.current = null;
             invalidateBillingQueries();
-      setCustomerDialogOpen(false);
-      setCustomerPickerOpen(false);
+            setCustomerDialogOpen(false);
+            setCustomerPickerOpen(false);
+            setMobileCartOpen(false);
             resetComposer();
+            setReceiptToPrint(sale);
             toast.success(`Bill #${sale.saleNumber ?? ""} completed`);
         },
         onError: (error: { message?: string }) => {
             toast.error(error?.message || "Failed to complete bill");
         },
     });
+
+    const handleCompleteSale = () => {
+        const fingerprint = JSON.stringify({
+            ...buildDraftPayload(),
+            payments: buildCommitPayload().payments,
+        });
+        const existingRequest = completionRequestRef.current;
+        const requestId = existingRequest?.fingerprint === fingerprint
+            ? existingRequest.requestId
+            : safeRandomUUID();
+        completionRequestRef.current = { requestId, fingerprint };
+        completeSaleMutation.mutate({ requestId });
+    };
 
     const resumeDraftMutation = useMutation({
         mutationFn: async (saleId: string) => {
@@ -1090,6 +1144,36 @@ const BillingPage = ({
 
     return (
     <div className="billing-pos-layout flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] flex-col gap-0 lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden">
+            <style>{`
+                @media print {
+                    body * {
+                        visibility: hidden !important;
+                    }
+                    #pos-auto-receipt,
+                    #pos-auto-receipt * {
+                        visibility: visible !important;
+                    }
+                    #pos-auto-receipt {
+                        display: block !important;
+                        position: absolute !important;
+                        inset: 0 !important;
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        color: #000 !important;
+                        background: #fff !important;
+                        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+                        font-size: 11px !important;
+                        line-height: 1.35 !important;
+                        white-space: pre !important;
+                    }
+                }
+            `}</style>
+            {receiptToPrint ? (
+                <pre id="pos-auto-receipt" className="hidden">
+                    {buildReceiptText(receiptToPrint)}
+                </pre>
+            ) : null}
             {!isDeviceMode ? (
                 <header className="flex flex-col gap-3 border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-4">
@@ -2322,11 +2406,11 @@ const BillingPage = ({
                                 </div>
                             )}
 
-                <div className="mt-1 grid grid-cols-2 gap-1">
+                <div className="mt-3 grid grid-cols-2 gap-1">
                                 <Button
                                     type="button"
                                     variant="outline"
-                    className="h-8 rounded-lg text-[10px] font-semibold max-lg:h-7 max-lg:text-[10px]"
+                    className="h-8 rounded-lg text-[10px] font-semibold max-lg:h-9 max-lg:text-xs"
                                     disabled={
                                         saveDraftMutation.isPending ||
                                         completeSaleMutation.isPending ||
@@ -2343,7 +2427,7 @@ const BillingPage = ({
                                 </Button>
                                 <Button
                                     type="button"
-                    className="h-8 rounded-lg bg-primary text-[10px] font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 max-lg:h-7 max-lg:text-[10px]"
+                    className="h-8 rounded-lg bg-primary text-[10px] font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 max-lg:h-9 max-lg:text-xs"
                                     disabled={
                                         completeSaleMutation.isPending ||
                                         saveDraftMutation.isPending ||
@@ -2486,7 +2570,7 @@ const BillingPage = ({
           }
         }}
       >
-        <DialogContent className="max-w-md rounded-2xl border-border/70 bg-background/95 p-5 shadow-2xl backdrop-blur-xl max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:m-0 max-sm:max-w-full max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:max-h-[85dvh] max-sm:overflow-y-auto max-sm:pb-[env(safe-area-inset-bottom)]">
+        <DialogContent className="max-w-md rounded-2xl border-border/70 bg-background/95 p-5 shadow-2xl backdrop-blur-xl max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <DialogHeader className="space-y-1">
             <DialogTitle className="text-lg font-semibold">
               Confirm order
@@ -2659,7 +2743,7 @@ const BillingPage = ({
             </div>
           </div>
 
-          <DialogFooter className="gap-2 pt-2 sm:justify-between">
+          <DialogFooter className="gap-2 pt-2 max-sm:flex-row max-sm:[&>button]:flex-1 sm:justify-between">
             <Button
               type="button"
               variant="outline"
@@ -2675,7 +2759,7 @@ const BillingPage = ({
               type="button"
               className="h-10 rounded-xl text-xs font-semibold"
               disabled={completeSaleMutation.isPending}
-              onClick={() => completeSaleMutation.mutate()}
+              onClick={handleCompleteSale}
             >
               {completeSaleMutation.isPending ? "Placing..." : "Place Order"}
             </Button>

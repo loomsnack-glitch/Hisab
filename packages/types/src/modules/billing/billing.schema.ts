@@ -281,6 +281,15 @@ export const CommitSaleSchema = z.object({
     payments: z.array(CreatePaymentSchema).optional().default([]),
 });
 
+export const CompleteSaleSchema = z.object({
+    requestId: z.uuid("Invalid completion request id"),
+    customerId: z.union([z.literal(""), z.uuid("Invalid customer id")]).nullable().optional(),
+    orderDiscountAmount: moneySchema.optional(),
+    notes: optionalNotesSchema,
+    items: z.array(SaleItemInputSchema).min(1, "At least one item is required"),
+    payments: z.array(CreatePaymentSchema).optional().default([]),
+});
+
 export const VoidSaleSchema = z.object({
     reason: z.string().trim().min(1, "Reason is required").max(1000, "Reason must be at most 1000 characters"),
 });

@@ -2,6 +2,7 @@ import type {
     AddOnsListResponse,
     CategoriesListResponse,
     CommitSaleJSON,
+    CompleteSaleJSON,
     CreateCustomerJSON,
     CreateDraftSaleJSON,
     CreatePaymentJSON,
@@ -130,6 +131,17 @@ export const commitPosSale = async (
 ): Promise<ServiceResponse<SaleResponse | null>> => {
     try {
         const response = await api.post(`/pos/sales/${saleId}/commit`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const completePosSale = async (
+    data: CompleteSaleJSON,
+): Promise<ServiceResponse<SaleResponse | null>> => {
+    try {
+        const response = await api.post("/pos/sales/complete", data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

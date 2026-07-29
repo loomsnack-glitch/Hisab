@@ -165,6 +165,10 @@ const getSaleItemsBySaleId = mock(async (saleId: string) => {
 });
 
 const getPaymentsBySaleId = mock(async () => []);
+const getSaleIdByCompletionRequestId = mock(
+  async (_organizationId: string, _storeId: string, requestId: string) =>
+    (createdSales.find((sale) => sale.completionRequestId === requestId)?.id as string | undefined) ?? null,
+);
 
 const deleteSaleItemsBySaleId = mock(
   async (_organizationId: string, _storeId: string, saleId: string) => {
@@ -230,6 +234,7 @@ mock.module("./billing.repository", () => ({
     getSaleById,
     getSaleItemsBySaleId,
     getPaymentsBySaleId,
+    getSaleIdByCompletionRequestId,
     deleteSaleItemsBySaleId,
     updateSale,
     getCustomerById,
@@ -274,6 +279,7 @@ describe("Configured product billing with trusted snapshots", () => {
         createSaleItem.mockClear();
         createSaleItemAddOn.mockClear();
         getSaleById.mockClear();
+        getSaleIdByCompletionRequestId.mockClear();
         getSaleItemsBySaleId.mockClear();
         deleteSaleItemsBySaleId.mockClear();
         updateSale.mockClear();
@@ -327,6 +333,34 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(response.data?.sale.discountTotal).toBe(20);
         expect(response.data?.sale.grandTotal).toBe(180);
         expect(response.data?.sale.items[0]?.addOns).toEqual([]);
+    });
+
+    test("completes a POS sale atomically and is safe to retry", async () => {
+        const requestId = "77777777-7777-4777-8777-777777777777";
+        const payload = {
+            requestId,
+            items: [{ productId, quantity: 1, addOns: [] }],
+            payments: [{ amount: 90, method: "cash" as const, notes: null }],
+        };
+
+        const firstResponse = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            payload,
+        );
+        const secondResponse = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            payload,
+        );
+
+        expect(firstResponse.status).toBe("success");
+        expect(secondResponse.status).toBe("success");
+        expect(firstResponse.data?.sale.id).toBe(secondResponse.data?.sale.id);
+        expect(createdSales).toHaveLength(1);
+        expect(createPayment).toHaveBeenCalledTimes(1);
     });
 
     test("creates a configured product line with trusted add-on snapshots from the database", async () => {

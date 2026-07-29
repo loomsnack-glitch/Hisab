@@ -79,6 +79,7 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
     delete summary.customerIsActive;
     delete summary.createdByDeviceName;
     delete summary.updatedByDeviceName;
+    delete summary.completionRequestId;
 
     return {
         ...(summary as Omit<SaleSummaryDTO, "customer">),
@@ -376,6 +377,23 @@ export const getSaleById = async (
     `;
 
     return result ? mapSaleSummaryRow(result as SaleSummaryRow) : null;
+};
+
+export const getSaleIdByCompletionRequestId = async (
+    organizationId: string,
+    storeId: string,
+    completionRequestId: string,
+): Promise<string | null> => {
+    const [result] = await pg`
+        SELECT id
+        FROM sales
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND completion_request_id = ${completionRequestId}
+        LIMIT 1
+    `;
+
+    return result ? String(result.id) : null;
 };
 
 export const createSaleItem = async (

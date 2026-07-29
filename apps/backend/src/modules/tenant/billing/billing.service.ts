@@ -6,6 +6,7 @@ import {
     type AddOnSalesRollupsListResponse,
     type BundleSalesRollupsListResponse,
     type CommitSaleSVC,
+    type CompleteSaleSVC,
     type CreateCustomerSVC,
     type CreateDraftSaleSVC,
     type CreatePaymentSVC,
@@ -962,6 +963,45 @@ const validateCustomerAssignment = async (
     return { customer };
 };
 
+const persistPreparedSaleLines = async (
+    tx: Bun.TransactionSQL,
+    lines: PreparedSaleLine[],
+) => {
+    for (const line of lines) {
+        const createdItem = await billingRepository.createSaleItem(line.item, tx);
+        if (!createdItem) {
+            throw new Error("Failed to create sale item");
+        }
+
+        for (const addOn of line.addOns) {
+            const createdAddOn = await billingRepository.createSaleItemAddOn(addOn, tx);
+            if (!createdAddOn) {
+                throw new Error("Failed to create sale item add-on");
+            }
+        }
+
+        for (const bundleComponent of line.bundleComponents) {
+            const createdComponent = await billingRepository.createSaleItemBundleComponent(
+                bundleComponent.component,
+                tx,
+            );
+            if (!createdComponent) {
+                throw new Error("Failed to create sale item bundle component");
+            }
+
+            for (const addOn of bundleComponent.addOns) {
+                const createdAddOn = await billingRepository.createSaleItemBundleComponentAddOn(
+                    addOn,
+                    tx,
+                );
+                if (!createdAddOn) {
+                    throw new Error("Failed to create sale item bundle component add-on");
+                }
+            }
+        }
+    }
+};
+
 const appendCustomerLedgerEntry = async (
     tx: Bun.TransactionSQL,
     params: {
@@ -1684,6 +1724,182 @@ const commitSaleInStore = async (
     };
 };
 
+const isUniqueViolation = (error: unknown): boolean =>
+    typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { code?: unknown }).code === "23505";
+
+const completeSaleInStore = async (
+    actor: SaleWriteActor,
+    organizationId: string,
+    storeId: string,
+    saleData: CompleteSaleSVC,
+): Promise<ServiceResponse<SaleResponse | null>> => {
+    const existingSaleId = await billingRepository.getSaleIdByCompletionRequestId(
+        organizationId,
+        storeId,
+        saleData.requestId,
+    );
+    if (existingSaleId) {
+        return getSaleDetailsInStore(organizationId, storeId, existingSaleId);
+    }
+
+    const customerId = normalizeOptionalUuid(saleData.customerId);
+    const customerResult = await validateCustomerAssignment(organizationId, customerId);
+    if ("status" in customerResult) {
+        return customerResult;
+    }
+
+    const saleId = crypto.randomUUID();
+    const prepared = await prepareSaleItems(
+        organizationId,
+        storeId,
+        saleId,
+        saleData.items,
+        saleData.orderDiscountAmount,
+    );
+    if (prepared.error) {
+        return prepared.error;
+    }
+
+    if (prepared.lines.length === 0 || prepared.totals.grandTotal <= 0) {
+        return {
+            status: "error",
+            message: "A sale must have at least one billable item before it can be completed",
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+        };
+    }
+
+    const payments = saleData.payments ?? [];
+    const totalPayment = sumMoney(payments.map((payment) => payment.amount));
+    const grandTotal = prepared.totals.grandTotal;
+    if (totalPayment > grandTotal) {
+        return {
+            status: "error",
+            message: "Collected payment cannot exceed the sale total",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    const paymentStatus =
+        totalPayment === 0
+            ? "pending"
+            : totalPayment === grandTotal
+                ? "paid"
+                : "partial";
+
+    if (!customerId && paymentStatus !== "paid") {
+        return {
+            status: "error",
+            message: "A customer is required when the full bill is not paid",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    const committedAt = new Date();
+    const notes = normalizeOptionalText(saleData.notes);
+
+    try {
+        await pg.begin(async (tx) => {
+            const saleNumber = await billingRepository.incrementStoreSaleCounter(
+                organizationId,
+                storeId,
+                tx,
+            );
+            const sale = await billingRepository.createSale(
+                {
+                    id: saleId,
+                    organizationId,
+                    storeId,
+                    customerId,
+                    status: "completed",
+                    paymentStatus,
+                    subtotal: prepared.totals.subtotal,
+                    discountTotal: prepared.totals.discountTotal,
+                    grandTotal,
+                    notes,
+                    committedAt,
+                    saleNumber,
+                    createdByDeviceId: actor.deviceId ?? null,
+                    updatedByDeviceId: actor.deviceId ?? null,
+                    userId: actor.userId ?? null,
+                    completionRequestId: saleData.requestId,
+                },
+                tx,
+            );
+            if (!sale) {
+                throw new Error("Failed to create completed sale");
+            }
+
+            await persistPreparedSaleLines(tx, prepared.lines);
+
+            let customer = customerResult.customer;
+            if (customer) {
+                customer = await appendCustomerLedgerEntry(tx, {
+                    customer,
+                    organizationId,
+                    amount: grandTotal,
+                    entryType: "sale",
+                    saleId,
+                    notes,
+                });
+            }
+
+            for (const paymentInput of payments) {
+                const createdPayment = await billingRepository.createPayment(
+                    {
+                        id: crypto.randomUUID(),
+                        organizationId,
+                        storeId,
+                        saleId,
+                        collectedBy: actor.userId ?? null,
+                        amount: roundMoney(paymentInput.amount),
+                        method: paymentInput.method,
+                        referenceNumber: normalizeOptionalText(paymentInput.referenceNumber),
+                        notes: normalizeOptionalText(paymentInput.notes),
+                        collectedAt: committedAt,
+                    },
+                    tx,
+                );
+                if (!createdPayment) {
+                    throw new Error("Failed to create payment");
+                }
+
+                if (customer) {
+                    customer = await appendCustomerLedgerEntry(tx, {
+                        customer,
+                        organizationId,
+                        amount: -roundMoney(paymentInput.amount),
+                        entryType: "payment",
+                        saleId,
+                        paymentId: createdPayment.id,
+                        notes: normalizeOptionalText(paymentInput.notes),
+                    });
+                }
+            }
+        });
+    } catch (error) {
+        if (isUniqueViolation(error)) {
+            const completedSaleId = await billingRepository.getSaleIdByCompletionRequestId(
+                organizationId,
+                storeId,
+                saleData.requestId,
+            );
+            if (completedSaleId) {
+                return getSaleDetailsInStore(organizationId, storeId, completedSaleId);
+            }
+        }
+
+        throw error;
+    }
+
+    return getSaleDetailsInStore(organizationId, storeId, saleId);
+};
+
 const collectPaymentInStore = async (
     actor: SaleWriteActor,
     organizationId: string,
@@ -2208,6 +2424,25 @@ export const commitSale = async (
   );
 };
 
+export const completeSale = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    saleData: CompleteSaleSVC,
+): Promise<ServiceResponse<SaleResponse | null>> => {
+    const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+    if (scopeError) {
+        return scopeError;
+    }
+
+    return completeSaleInStore(
+        { userId },
+        organizationId,
+        storeId,
+        saleData,
+    );
+};
+
 export const collectPayment = async (
     userId: string,
     organizationId: string,
@@ -2411,6 +2646,18 @@ export const commitSaleForDevice = async (
         session.store.id,
         saleId,
         commitData,
+  );
+};
+
+export const completeSaleForDevice = async (
+    session: DeviceSessionDTO,
+    saleData: CompleteSaleSVC,
+): Promise<ServiceResponse<SaleResponse | null>> => {
+    return completeSaleInStore(
+        { deviceId: session.device.id },
+        session.organization.id,
+        session.store.id,
+        saleData,
     );
 };
 

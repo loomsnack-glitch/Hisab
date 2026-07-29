@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import {
     CommitSaleSchema,
+    CompleteSaleSchema,
     CreateCustomerSchema,
     CreateDraftSaleSchema,
     CreatePaymentSchema,
@@ -119,6 +120,17 @@ router.post("/sales", validateSchema("json", CreateDraftSaleSchema), async (c) =
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "createDraftSaleForDevice", c, error);
+    }
+});
+
+router.post("/sales/complete", validateSchema("json", CompleteSaleSchema), async (c) => {
+    try {
+        const authDevice = c.get("authDevice");
+        const body = c.req.valid("json");
+        const serviceResponse = await billingService.completeSaleForDevice(authDevice, body);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "completeSaleForDevice", c, error);
     }
 });
 

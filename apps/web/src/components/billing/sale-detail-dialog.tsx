@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { buildReceiptText } from "@/lib/receipt-text";
 
 type SaleDetailDialogProps = {
     open: boolean;
@@ -170,63 +171,7 @@ const SaleDetailDialog = ({
     const handleDownloadTxt = () => {
         if (!sale) return;
 
-        const separator = "------------------------------------------";
-        const doubleSeparator = "==========================================";
-
-        let text = "";
-        text += `${doubleSeparator}\n`;
-        text += `             INVOICE / RECEIPT\n`;
-        text += `${doubleSeparator}\n`;
-        text += `Bill #: ${sale.saleNumber ? sale.saleNumber : "Draft"}\n`;
-        text += `Date: ${formatDateTime(sale.createdAt)}\n`;
-        text += `Status: ${sale.status.toUpperCase()} (${sale.paymentStatus.toUpperCase()})\n`;
-        text += `Customer: ${sale.customer?.name || "Walk-in Customer"}\n`;
-        text += `${separator}\n`;
-        text += `ITEM                    QTY    PRICE    TOTAL\n`;
-        text += `${separator}\n`;
-
-        sale.items.forEach((item) => {
-            const name = item.productNameSnapshot.padEnd(20).substring(0, 20);
-            const qty = String(Number(item.quantity)).padStart(5);
-            const price = String(item.unitPriceSnapshot).padStart(8);
-            const total = String(item.lineTotal).padStart(8);
-            text += `${name}${qty}${price}${total}\n`;
-            if (Number(item.discountAmount) > 0) {
-                text += `  * Disc: -${item.discountAmount}\n`;
-            }
-            (item.addOns ?? []).forEach((addOn) => {
-                const addOnName = `+ ${addOn.addOnNameSnapshot}`.padEnd(20).substring(0, 20);
-                const addOnQty = String(Number(addOn.totalQuantity)).padStart(5);
-                const addOnPrice = String(addOn.unitPriceSnapshot).padStart(8);
-                const addOnTotal = String(addOn.lineTotal).padStart(8);
-                text += `${addOnName}${addOnQty}${addOnPrice}${addOnTotal}\n`;
-            });
-            (item.bundleComponents ?? []).forEach((component) => {
-                const componentName = `* ${component.productNameSnapshot}`.padEnd(20).substring(0, 20);
-                const componentQty = String(Number(component.totalQuantity)).padStart(5);
-                text += `${componentName}${componentQty}${" ".repeat(16)}\n`;
-                (component.addOns ?? []).forEach((addOn) => {
-                    const addOnName = `  + ${addOn.addOnNameSnapshot}`.padEnd(20).substring(0, 20);
-                    const addOnQty = String(Number(addOn.totalQuantity)).padStart(5);
-                    text += `${addOnName}${addOnQty}${" ".repeat(16)}\n`;
-                });
-            });
-        });
-
-        text += `${separator}\n`;
-        text += `Items Subtotal:`.padEnd(30) + String(discountedItemsSubtotal).padStart(12) + "\n";
-        if (itemDiscountTotal > 0) {
-            text += `Item Discount Included:`.padEnd(30) + String(itemDiscountTotal).padStart(12) + "\n";
-        }
-        if (Number(sale.orderDiscountAmount) > 0) {
-            text += `Order Discount:`.padEnd(30) + String(sale.orderDiscountAmount).padStart(12) + "\n";
-        }
-        text += `Settlement Total:`.padEnd(30) + String(sale.grandTotal).padStart(12) + "\n";
-        text += `Collected:`.padEnd(30) + String(sale.paidTotal).padStart(12) + "\n";
-        text += `Due:`.padEnd(30) + String(sale.dueTotal).padStart(12) + "\n";
-        text += `${doubleSeparator}\n`;
-        text += `           Thank you for shopping!\n`;
-        text += `${doubleSeparator}\n`;
+        const text = buildReceiptText(sale);
 
         const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
         const url = URL.createObjectURL(blob);

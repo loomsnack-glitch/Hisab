@@ -516,6 +516,7 @@ CREATE TABLE public.sales (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     created_by_device_id uuid,
     updated_by_device_id uuid,
+    completion_request_id uuid,
     CONSTRAINT sales_discount_total_check CHECK (((discount_total >= (0)::numeric) AND (discount_total <= subtotal))),
     CONSTRAINT sales_draft_commit_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (committed_at IS NULL) AND (payment_status = 'pending'::public.payment_status_enum)) OR ((status <> 'draft'::public.sale_status_enum) AND (committed_at IS NOT NULL)))),
     CONSTRAINT sales_draft_sale_number_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL)))),
@@ -1251,6 +1252,8 @@ CREATE INDEX idx_sales_organization_created_at ON public.sales USING btree (orga
 
 CREATE INDEX idx_sales_status ON public.sales USING btree (organization_id, status, payment_status);
 
+CREATE UNIQUE INDEX sales_store_completion_request_id_key ON public.sales USING btree (store_id, completion_request_id) WHERE (completion_request_id IS NOT NULL);
+
 
 --
 -- Name: idx_sales_store_sale_number; Type: INDEX; Schema: public; Owner: -
@@ -1888,4 +1891,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260712051500'),
     ('20260712060000'),
     ('20260727120000'),
-    ('20260728100000');
+    ('20260728100000'),
+    ('20260729100000');
