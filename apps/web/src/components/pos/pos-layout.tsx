@@ -48,12 +48,12 @@ const PosLayout = ({
     };
 
     return (
-    <div className="min-h-screen bg-background text-foreground [--pos-header-height:6.5rem] sm:[--pos-header-height:3.5rem]">
+    <div className="min-h-dvh bg-background text-foreground [--pos-header-height:6.5rem] sm:[--pos-header-height:3.5rem]">
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.14),_transparent_28%)]" />
             </div>
 
-      <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-2 border-b border-border/50 bg-background/90 px-4 py-2 backdrop-blur-xl sm:flex-nowrap sm:px-6">
+      <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-2 border-b border-border/50 bg-background/90 px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-2 backdrop-blur-xl sm:flex-nowrap sm:px-6">
                 <Link
                     to="/pos"
                     className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90"

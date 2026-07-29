@@ -3,6 +3,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -316,6 +317,20 @@ const BillingPage = ({
             setCategoryFilter(nextCategory.id);
         }
     };
+
+    const bodyOverflowRef = useRef("");
+    useEffect(() => {
+        if (mobileCartOpen) {
+            bodyOverflowRef.current = document.body.style.overflow;
+            document.body.style.overflow = "hidden";
+        } else {
+            document.body.style.overflow = bodyOverflowRef.current;
+            bodyOverflowRef.current = "";
+        }
+        return () => {
+            document.body.style.overflow = bodyOverflowRef.current;
+        };
+    }, [mobileCartOpen]);
 
     const categorySwipeHandlers = useSwipeable({
         onSwipedLeft: () => selectAdjacentCategory(1),
@@ -1059,11 +1074,11 @@ const BillingPage = ({
     }
 
   const panelMaxHeight = isDeviceMode
-    ? "calc(100vh - var(--pos-header-height, 3.5rem))"
-    : "calc(100vh - 3.5rem - 57px)";
+    ? "calc(100dvh - var(--pos-header-height, 3.5rem) - env(safe-area-inset-top, 0px))"
+    : "calc(100dvh - 3.5rem - 57px)";
 
     return (
-    <div className="billing-pos-layout flex min-h-[calc(100vh-var(--pos-header-height,3.5rem))] flex-col gap-0 lg:h-[calc(100vh-var(--pos-header-height,3.5rem))] lg:min-h-0 lg:overflow-hidden">
+    <div className="billing-pos-layout flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] flex-col gap-0 lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden">
             {!isDeviceMode ? (
                 <header className="flex flex-col gap-3 border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-4">
@@ -1196,34 +1211,41 @@ const BillingPage = ({
         >
                     {/* Tab Switcher */}
                     {canMutate ? (
-            <div className="mb-5 flex gap-2 border-b border-border/40 pb-3 lg:hidden">
+            <div className="mb-3 flex gap-1 rounded-lg border border-border/40 bg-muted/30 p-1 lg:hidden">
                             <button
                                 type="button"
                                 onClick={() => setLeftPanelTab("products")}
                                 className={cn(
-                                    "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
+                                    "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-all duration-200",
                                     leftPanelTab === "products"
                                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                                         : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
                                 )}
                             >
-                                <LayoutGrid className="size-4" />
-                                Products Shelf
+                                <LayoutGrid className="size-3.5" />
+                                Products
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setLeftPanelTab("bills")}
                                 className={cn(
-                                    "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
+                                    "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-all duration-200",
                                     leftPanelTab === "bills"
                                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                                         : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
                                 )}
                             >
-                                <ReceiptText className="size-4" />
-                                Recent Bills & Drafts
+                                <ReceiptText className="size-3.5" />
+                                Bills
                                 {sales.length > 0 && (
-                                    <span className="flex h-5 items-center justify-center rounded-full bg-background/25 px-1.5 text-[10px] font-bold text-foreground">
+                                    <span
+                                        className={cn(
+                                            "flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold",
+                                            leftPanelTab === "bills"
+                                                ? "bg-primary-foreground/20 text-primary-foreground"
+                                                : "bg-foreground/10 text-foreground",
+                                        )}
+                                    >
                                         {sales.length}
                                     </span>
                                 )}
@@ -1313,7 +1335,7 @@ const BillingPage = ({
                                         </p>
                                     </div>
                                 ) : (
-                  <div className="touch-pan-y grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  <div className="touch-pan-y grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                                     {filteredProducts.map((product) => {
                                         const cartQuantity = items
                                             .filter((item) => item.productId === product.id)
@@ -1339,7 +1361,7 @@ const BillingPage = ({
                                                 )}
                                             >
                                                 {isInCart && (
-                            <div className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground shadow-sm">
+                            <div className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary p-0 text-center text-[9px] font-bold leading-none text-primary-foreground shadow-sm">
                                                         {cartQuantity}
                                                     </div>
                                                 )}
@@ -1391,7 +1413,7 @@ const BillingPage = ({
                               }
                             }}
                             disabled={!canSellProduct}
-                            className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                             aria-label={`Add ${product.name} to order`}
                           >
                             <Plus className="size-4" />
@@ -1403,7 +1425,7 @@ const BillingPage = ({
                                                             event.stopPropagation();
                                                             setCustomizeProductId(product.id);
                                                         }}
-                              className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background/80 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                              className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background/80 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
                               aria-label={`Customize ${product.name}`}
                               title="Customize"
                                                     >
@@ -2046,7 +2068,7 @@ const BillingPage = ({
                 {canMutate ? (
                     <>
                         {!mobileCartOpen ? (
-                            <div className="fixed inset-x-3 bottom-3 z-30 lg:hidden">
+                            <div className="fixed inset-x-3 z-30 lg:hidden bottom-3 max-lg:bottom-[calc(0.75rem+env(safe-area-inset-bottom))]">
                                 <button
                                     type="button"
                                     onClick={() => setMobileCartOpen(true)}
@@ -2074,17 +2096,30 @@ const BillingPage = ({
                             </div>
                         ) : null}
 
+                        {mobileCartOpen ? (
+                            <div
+                                className="fixed inset-0 z-30 bg-black/40 touch-none lg:hidden"
+                                onClick={() => setMobileCartOpen(false)}
+                                aria-hidden="true"
+                            />
+                        ) : null}
+
                         <aside
                             className={cn(
                 "flex w-full flex-col border-t border-border/50 bg-card/95 backdrop-blur-sm lg:static lg:w-[320px] lg:border-t-0 lg:border-l",
                                 mobileCartOpen
-                                    ? "fixed inset-x-0 bottom-0 z-40 max-h-[calc(100vh-4rem)]"
+                                    ? "max-lg:fixed max-lg:inset-x-0 max-lg:top-[calc(var(--pos-header-height)+env(safe-area-inset-top,0px))] max-lg:bottom-0 max-lg:z-40 max-lg:max-h-none max-lg:overflow-hidden max-lg:overscroll-contain"
                                     : "hidden lg:flex",
                             )}
-                        style={{ maxHeight: panelMaxHeight }}
+                            style={mobileCartOpen ? undefined : { maxHeight: panelMaxHeight }}
                         >
+                        {/* Drag handle (mobile only) */}
+                        <div className="flex justify-center pt-1.5 pb-0 lg:hidden">
+                            <div className="h-1.5 w-10 rounded-full bg-border/60" />
+                        </div>
+
                         {/* Order Header */}
-              <div className="border-b border-border/40 px-2.5 py-1.5">
+              <div className="border-b border-border/40 px-2 py-1">
                             <div className="flex items-center justify-between">
                   <div className="flex min-w-0 items-baseline gap-1.5">
                     <h2 className="text-sm font-bold text-foreground">
@@ -2118,10 +2153,8 @@ const BillingPage = ({
                             </div>
                         </div>
 
-                        {/* Scrollable content area */}
-                        <div className="flex flex-1 flex-col overflow-y-auto">
-                            {/* Cart Items */}
-                <div className="flex-1 px-2 py-1.5">
+                        {/* Cart Items - Scrollable */}
+                        <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-1.5">
                                 {items.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                                         <ShoppingCart className="size-10 text-muted-foreground/30" />
@@ -2150,9 +2183,9 @@ const BillingPage = ({
                                             return (
                                                 <div
                                                     key={item.key}
-                            className="rounded-xl border border-border/40 bg-background/60 px-3 py-3"
+                            className="rounded-xl border border-border/40 bg-background/60 px-2 py-2"
                                                 >
-                            <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex min-w-0 items-center gap-2">
                                                         {/* Name & Price */}
                                                         <div className="min-w-0 flex-1">
                                 <p className="whitespace-normal break-words text-sm font-semibold leading-snug text-foreground">
@@ -2177,12 +2210,12 @@ const BillingPage = ({
                                       item.quantity - 1,
                                     )
                                                                 }
-                                  className="flex size-8 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                  className="flex size-7 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                                                 aria-label={`Decrease ${item.name} quantity`}
                                                             >
                                   <Minus className="size-3.5" />
                                                             </button>
-                                <span className="flex size-8 items-center justify-center text-sm font-bold text-foreground">
+                                <span className="flex size-7 items-center justify-center text-sm font-bold text-foreground">
                                                                 {item.quantity}
                                                             </span>
                                                             <button
@@ -2193,7 +2226,7 @@ const BillingPage = ({
                                       item.quantity + 1,
                                     )
                                                                 }
-                                  className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                                  className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
                                                                 aria-label={`Increase ${item.name} quantity`}
                                                             >
                                   <Plus className="size-3.5" />
@@ -2209,7 +2242,7 @@ const BillingPage = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => updateItemQuantity(item.key, 0)}
-                                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
                                                             aria-label={`Remove ${item.name} from order`}
                                                         >
                                                             <Trash2 className="size-4" />
@@ -2217,7 +2250,7 @@ const BillingPage = ({
                                                     </div>
 
                                                     {item.addOns.length > 0 ? (
-                                                        <div className="mt-2 space-y-1 border-l border-border/50 pl-4 ml-4">
+                                                        <div className="mt-1 ml-3 space-y-0.5 border-l border-border/50 pl-3">
                                                             {item.addOns.map((addOn) => (
                                                                 <div
                                                                     key={`${item.key}-${addOn.addOnId}`}
@@ -2239,7 +2272,7 @@ const BillingPage = ({
                                                     ) : null}
 
                                                     {item.bundleComponents.length > 0 ? (
-                                                        <div className="mt-2 space-y-1 border-l border-border/50 pl-4 ml-4">
+                                                        <div className="mt-1 ml-3 space-y-0.5 border-l border-border/50 pl-3">
                                                             {item.bundleComponents.map((component) => (
                                                                 <div
                                                                     key={`${item.key}-${component.id}`}
@@ -2267,13 +2300,12 @@ const BillingPage = ({
                                     </div>
                                 )}
                             </div>
-                        </div>
 
-                        {/* ─── Bottom Checkout Area (always visible) ─── */}
-              <div className="border-t border-border/40 bg-card px-2.5 py-2">
+                        {/* ─── Bottom Checkout Area (sticky on mobile) ─── */}
+              <div className="border-t border-border/40 bg-card px-2 py-1.5 max-lg:pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
                             {/* Discount Input */}
-                <div className="mb-2 space-y-1">
-                  <div className="flex items-center gap-1.5">
+                <div className="mb-1 space-y-0.5">
+                  <div className="flex items-center gap-1">
                     <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                       Discount
                                         </span>
@@ -2341,7 +2373,7 @@ const BillingPage = ({
                 </div>
 
                             {/* Summary */}
-                <div className="mb-2 space-y-0.5 rounded-lg bg-background/40 px-2 py-1.5 text-[11px]">
+                <div className="mb-1 space-y-0.5 rounded-lg bg-background/40 px-2 py-1 text-[11px]">
                                 <div className="flex justify-between text-muted-foreground">
                                     <span>Subtotal</span>
                                     <span>{formatCurrency(subtotal)}</span>
@@ -2370,8 +2402,8 @@ const BillingPage = ({
                                 </div>
                             </div>
 
-                <div className="mb-2">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <div className="mb-1">
+                  <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                     Settlement
                                 </p>
                   <div className="grid grid-cols-3 gap-1">
@@ -2415,8 +2447,8 @@ const BillingPage = ({
                             </div>
 
                             {settlementMode !== "due" && (
-                  <div className="mb-2">
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  <div className="mb-1">
+                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                       Payment
                                     </p>
                     <div className="grid grid-cols-3 gap-1">
@@ -2461,7 +2493,7 @@ const BillingPage = ({
                             )}
 
                             {settlementMode === "partial" && (
-                  <div className="mb-2">
+                  <div className="mb-1">
                                     <Input
                                         type="number"
                                         min="0"
@@ -2476,7 +2508,7 @@ const BillingPage = ({
 
                             {/* Warnings */}
                             {isOverpaid && (
-                  <div className="mb-2 rounded-lg border border-destructive/20 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+                  <div className="mb-1 rounded-lg border border-destructive/20 bg-destructive/10 px-2 py-1 text-[11px] text-destructive">
                                     Collected amount exceeds the bill total.
                                 </div>
                             )}
@@ -2484,7 +2516,7 @@ const BillingPage = ({
                 {settlementMode === "partial" &&
                   isPartialAmountMissing &&
                   !isOverpaid && (
-                    <div className="mb-2 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1.5 text-[11px] text-sky-700 dark:text-sky-300">
+                    <div className="mb-1 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2 py-1 text-[11px] text-sky-700 dark:text-sky-300">
                                     Enter the amount the customer is paying now.
                                 </div>
                             )}
@@ -2492,17 +2524,17 @@ const BillingPage = ({
                 {settlementMode === "partial" &&
                   matchesFullPayment &&
                   !isOverpaid && (
-                    <div className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+                    <div className="mb-1 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-300">
                       Select &quot;Paid&quot; when the customer is settling the
                       entire bill amount.
                                 </div>
                             )}
 
-                <div className="mt-2 grid grid-cols-2 gap-1">
+                <div className="mt-1 grid grid-cols-2 gap-1">
                                 <Button
                                     type="button"
                                     variant="outline"
-                    className="h-8 rounded-lg text-[10px] font-semibold"
+                    className="h-8 rounded-lg text-[10px] font-semibold max-lg:h-7 max-lg:text-[10px]"
                                     disabled={
                                         saveDraftMutation.isPending ||
                                         completeSaleMutation.isPending ||
@@ -2519,7 +2551,7 @@ const BillingPage = ({
                                 </Button>
                                 <Button
                                     type="button"
-                    className="h-8 rounded-lg bg-primary text-[10px] font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+                    className="h-8 rounded-lg bg-primary text-[10px] font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 max-lg:h-7 max-lg:text-[10px]"
                                     disabled={
                                         completeSaleMutation.isPending ||
                                         saveDraftMutation.isPending ||
@@ -2661,7 +2693,7 @@ const BillingPage = ({
           }
         }}
       >
-        <DialogContent className="max-w-md rounded-2xl border-border/70 bg-background/95 p-5 shadow-2xl backdrop-blur-xl">
+        <DialogContent className="max-w-md rounded-2xl border-border/70 bg-background/95 p-5 shadow-2xl backdrop-blur-xl max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:m-0 max-sm:max-w-full max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:max-h-[85dvh] max-sm:overflow-y-auto max-sm:pb-[env(safe-area-inset-bottom)]">
           <DialogHeader className="space-y-1">
             <DialogTitle className="text-lg font-semibold">
               Confirm order
