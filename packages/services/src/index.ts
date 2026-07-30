@@ -7,6 +7,7 @@ export * from "./modules/pos";
 export {
     collectPosPayment,
     commitPosSale,
+    completePosSale,
     createPosCustomer,
     createPosDraftSale,
     getPosAddOns,
