@@ -79,6 +79,30 @@ router.get("/product-add-on-attachments", async (c) => {
     }
 });
 
+router.get("/combos", async (c) => {
+    try {
+        const serviceResponse = await catalogService.getComboProductDetailsForDeviceBulk(c.get("authDevice"));
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getComboProductDetailsForDeviceBulk", c, error);
+    }
+});
+
+router.get("/combos/:productId", async (c) => {
+    try {
+        const productId = c.req.param("productId");
+        const invalidProductId = validateUuidParam(productId, "Invalid product id");
+        if (invalidProductId) return c.json(invalidProductId, invalidProductId.code);
+        const serviceResponse = await catalogService.getComboProductDetailsForDevice(
+            c.get("authDevice"),
+            productId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getComboProductDetailsForDevice", c, error);
+    }
+});
+
 router.get("/customers", validateSchema("query", CustomerListQuerySchema), async (c) => {
     try {
         const authDevice = c.get("authDevice");

@@ -25,7 +25,7 @@ const optionalImagePathSchema = z
 
 export const CategoryStatusSchema = z.enum(["active", "inactive"]);
 export const ProductStatusSchema = z.enum(["active", "inactive"]);
-export const ProductTypeSchema = z.enum(["single", "bundle"]);
+export const ProductTypeSchema = z.enum(["single", "bundle", "combo"]);
 export const AddOnStatusSchema = z.enum(["active", "inactive"]);
 export const ProductAddOnAttachmentStatusSchema = z.enum(["active", "inactive"]);
 
@@ -107,6 +107,76 @@ export const BundleProductComponentInputSchema = z.object({
 
 export const BundleProductComponentResponseDTOSchema = BundleProductComponentDTOSchema.extend({
     addOns: z.array(BundleProductComponentAddOnDTOSchema),
+});
+
+const comboSelectionLimitSchema = z
+    .number({ error: "Selection limit is required" })
+    .int("Selection limit must be a whole number")
+    .min(0, "Selection limit must be 0 or more")
+    .max(100, "Selection limit must be at most 100");
+
+const comboOptionMaxQuantitySchema = z
+    .number({ error: "Option maximum quantity is required" })
+    .int("Option maximum quantity must be a whole number")
+    .min(1, "Option maximum quantity must be at least 1")
+    .max(100, "Option maximum quantity must be at most 100");
+
+const comboPriceAdjustmentSchema = z
+    .number({ error: "Price adjustment is required" })
+    .finite("Price adjustment must be a valid number");
+
+export const ComboChoiceOptionDTOSchema = z.object({
+    id: z.uuid("Invalid combo option id"),
+    organizationId: z.uuid("Invalid organization id"),
+    choiceGroupId: z.uuid("Invalid choice group id"),
+    optionProductId: z.uuid("Invalid option product id"),
+    maxQuantity: comboOptionMaxQuantitySchema,
+    priceAdjustment: comboPriceAdjustmentSchema,
+    sortOrder: z.number().int().min(0),
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const ComboChoiceGroupDTOSchema = z.object({
+    id: z.uuid("Invalid combo choice group id"),
+    organizationId: z.uuid("Invalid organization id"),
+    comboProductId: z.uuid("Invalid combo product id"),
+    name: nameSchema,
+    minSelections: comboSelectionLimitSchema,
+    maxSelections: comboSelectionLimitSchema,
+    sortOrder: z.number().int().min(0),
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const ComboChoiceOptionInputSchema = z.object({
+    productId: z.uuid("Invalid option product id"),
+    maxQuantity: comboOptionMaxQuantitySchema,
+    priceAdjustment: comboPriceAdjustmentSchema,
+});
+
+export const ComboChoiceGroupInputSchema = z
+    .object({
+        name: nameSchema,
+        minSelections: comboSelectionLimitSchema,
+        maxSelections: comboSelectionLimitSchema,
+        options: z.array(ComboChoiceOptionInputSchema).min(1, "Each choice group needs at least one option"),
+    })
+    .refine((value) => value.minSelections <= value.maxSelections, {
+        message: "Minimum selections cannot exceed maximum selections",
+        path: ["maxSelections"],
+    });
+
+export const ComboChoiceOptionResponseDTOSchema = ComboChoiceOptionDTOSchema.extend({
+    product: ProductResponseDTOSchema,
+});
+
+export const ComboChoiceGroupResponseDTOSchema = ComboChoiceGroupDTOSchema.extend({
+    options: z.array(ComboChoiceOptionResponseDTOSchema),
 });
 
 export const AddOnDTOSchema = z.object({
@@ -223,12 +293,49 @@ export const UpdateBundleProductSchema = z
         },
     );
 
-export const CreateAddOnSchema = z.object({
+export const CreateComboProductSchema = z.object({
+    categoryId: z.uuid("Invalid category id"),
     name: nameSchema,
     price: priceSchema,
     discount: discountSchema.optional(),
-    status: AddOnStatusSchema.optional(),
+    imagePath: optionalImagePathSchema,
+    status: ProductStatusSchema.optional(),
+    choiceGroups: z.array(ComboChoiceGroupInputSchema).min(1, "A Combo needs at least one choice group"),
 });
+
+export const UpdateComboProductSchema = z
+    .object({
+        categoryId: z.uuid("Invalid category id").optional(),
+        name: nameSchema.optional(),
+        price: priceSchema.optional(),
+        discount: discountSchema.optional(),
+        imagePath: optionalImagePathSchema,
+        status: ProductStatusSchema.optional(),
+        choiceGroups: z.array(ComboChoiceGroupInputSchema).min(1, "A Combo needs at least one choice group").optional(),
+    })
+    .refine(
+        (value) =>
+            value.categoryId !== undefined
+            || value.name !== undefined
+            || value.price !== undefined
+            || value.discount !== undefined
+            || value.imagePath !== undefined
+            || value.status !== undefined
+            || value.choiceGroups !== undefined,
+        { message: "At least one field is required" },
+    );
+
+export const CreateAddOnSchema = z
+    .object({
+        name: nameSchema,
+        price: priceSchema,
+        discount: discountSchema.optional(),
+        status: AddOnStatusSchema.optional(),
+    })
+    .refine((value) => (value.discount ?? 0) <= value.price, {
+        message: "Discount cannot exceed price",
+        path: ["discount"],
+    });
 
 export const UpdateAddOnSchema = z
     .object({

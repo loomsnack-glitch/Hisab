@@ -1,6 +1,8 @@
 import type {
     AddOnsListResponse,
     CategoriesListResponse,
+    ComboProductResponse,
+    ComboProductsListResponse,
     CommitSaleJSON,
     CompleteSaleJSON,
     CreateCustomerJSON,
@@ -52,6 +54,26 @@ export const getPosProductAddOnAttachments = async (): Promise<
 > => {
     try {
         const response = await api.get("/pos/product-add-on-attachments");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPosComboProduct = async (
+    productId: string,
+): Promise<ServiceResponse<ComboProductResponse | null>> => {
+    try {
+        const response = await api.get(`/pos/combos/${productId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPosComboProducts = async (): Promise<ServiceResponse<ComboProductsListResponse | null>> => {
+    try {
+        const response = await api.get("/pos/combos");
         return response.data;
     } catch (error) {
         return handleApiError(error);

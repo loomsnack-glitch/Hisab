@@ -12,6 +12,8 @@ export {
     createPosDraftSale,
     getPosAddOns,
     getPosCategories,
+    getPosComboProduct,
+    getPosComboProducts,
     getPosCustomers,
     getPosProductAddOnAttachments,
     getPosProducts,

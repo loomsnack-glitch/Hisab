@@ -2,10 +2,13 @@ import type {
     AddOnResponse,
     AddOnsListResponse,
     BundleProductResponse,
+    ComboProductResponse,
+    ComboProductsListResponse,
     CategoriesListResponse,
     CategoryResponse,
     CreateAddOnJSON,
     CreateBundleProductJSON,
+    CreateComboProductJSON,
     CreateCategoryJSON,
     CreateProductAddOnAttachmentJSON,
     CreateProductJSON,
@@ -16,6 +19,7 @@ import type {
     ServiceResponse,
     UpdateAddOnJSON,
     UpdateBundleProductJSON,
+    UpdateComboProductJSON,
     UpdateCategoryJSON,
     UpdateProductAddOnAttachmentJSON,
     UpdateProductJSON,
@@ -188,6 +192,54 @@ export const updateBundleProduct = async (
             `/organizations/${organizationId}/bundle-products/${productId}`,
             data,
         );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createComboProduct = async (
+    organizationId: string,
+    data: CreateComboProductJSON,
+): Promise<ServiceResponse<ComboProductResponse | null>> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/combo-products`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getComboProduct = async (
+    organizationId: string,
+    productId: string,
+): Promise<ServiceResponse<ComboProductResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/combo-products/${productId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getComboProducts = async (
+    organizationId: string,
+): Promise<ServiceResponse<ComboProductsListResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/combo-products`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateComboProduct = async (
+    organizationId: string,
+    productId: string,
+    data: UpdateComboProductJSON,
+): Promise<ServiceResponse<ComboProductResponse | null>> => {
+    try {
+        const response = await api.patch(`/organizations/${organizationId}/combo-products/${productId}`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

@@ -3,12 +3,14 @@ import { z } from "zod";
 import {
     CreateAddOnSchema,
     CreateBundleProductSchema,
+    CreateComboProductSchema,
     CreateCategorySchema,
     CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
     STATUS_CODES,
     UpdateAddOnSchema,
     UpdateBundleProductSchema,
+    UpdateComboProductSchema,
     UpdateCategorySchema,
     UpdateProductAddOnAttachmentSchema,
     UpdateProductSchema,
@@ -332,6 +334,80 @@ router.patch(
             return handleServiceResponse(c, serviceResponse);
         } catch (error) {
             return handleError(FILE_NAME, "updateBundleProduct", c, error);
+        }
+    },
+);
+
+router.post("/:organizationId/combo-products", validateSchema("json", CreateComboProductSchema), async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        const serviceResponse = await catalogService.createComboProduct(
+            c.get("authUser").id,
+            organizationId,
+            c.req.valid("json"),
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "createComboProduct", c, error);
+    }
+});
+
+router.get("/:organizationId/combo-products", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        const serviceResponse = await catalogService.getComboProductDetailsForOrganization(
+            c.get("authUser").id,
+            organizationId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getComboProductDetailsForOrganization", c, error);
+    }
+});
+
+router.get("/:organizationId/combo-products/:productId", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const productId = c.req.param("productId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        const invalidProductId = validateUuidParam(productId, "Invalid product id");
+        if (invalidProductId) return c.json(invalidProductId, invalidProductId.code);
+        const serviceResponse = await catalogService.getComboProductDetails(
+            c.get("authUser").id,
+            organizationId,
+            productId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getComboProductDetails", c, error);
+    }
+});
+
+router.patch(
+    "/:organizationId/combo-products/:productId",
+    validateSchema("json", UpdateComboProductSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const productId = c.req.param("productId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            const invalidProductId = validateUuidParam(productId, "Invalid product id");
+            if (invalidProductId) return c.json(invalidProductId, invalidProductId.code);
+            const serviceResponse = await catalogService.updateComboProduct(
+                c.get("authUser").id,
+                organizationId,
+                productId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateComboProduct", c, error);
         }
     },
 );

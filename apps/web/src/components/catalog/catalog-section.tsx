@@ -14,7 +14,7 @@ import CategoryStatusBadge from "@/components/catalog/category-status-badge";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
-import UpsertBundleProductDialog from "@/components/catalog/upsert-bundle-product-dialog";
+import UpsertComboProductDialog from "@/components/catalog/upsert-combo-product-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageAddOnsDialog from "@/components/catalog/manage-add-ons-dialog";
 import ManageCategoriesDialog from "@/components/catalog/manage-categories-dialog";
@@ -192,7 +192,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                             }
                         />
 
-                        <UpsertBundleProductDialog
+                        <UpsertComboProductDialog
                             organizationId={organizationId}
                             categories={categories}
                             products={products}
@@ -204,7 +204,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                     disabled={categories.length === 0}
                                 >
                                     <Boxes className="mr-2 size-4" />
-                                    Add bundle
+                                    Add Combo
                                 </Button>
                             }
                         />
@@ -357,8 +357,8 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                                             }
                                                         />
                                                     ) : null}
-                                                    {product.productType === "bundle" ? (
-                                                        <UpsertBundleProductDialog
+                                                    {product.productType === "combo" ? (
+                                                        <UpsertComboProductDialog
                                                             organizationId={organizationId}
                                                             categories={categories}
                                                             products={products}
@@ -374,7 +374,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                                                 </Button>
                                                             }
                                                         />
-                                                    ) : (
+                                                    ) : product.productType === "single" ? (
                                                         <UpsertProductDialog
                                                             organizationId={organizationId}
                                                             categories={categories}
@@ -390,7 +390,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                                                 </Button>
                                                             }
                                                         />
-                                                    )}
+                                                    ) : null}
                                                     <DeleteProductButton
                                                         organizationId={organizationId}
                                                         product={product}

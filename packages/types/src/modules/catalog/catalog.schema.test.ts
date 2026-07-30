@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
     CreateAddOnSchema,
     CreateBundleProductSchema,
+    CreateComboProductSchema,
     CreateProductAddOnAttachmentSchema,
     UpdateAddOnSchema,
     UpdateBundleProductSchema,
@@ -29,6 +30,12 @@ describe("Add-On catalog contracts", () => {
         const result = UpdateAddOnSchema.safeParse({ status: "inactive" });
 
         expect(result.success).toBe(true);
+    });
+
+    test("rejects an add-on discount greater than its price", () => {
+        const result = CreateAddOnSchema.safeParse({ name: "Extra cheese", price: 10, discount: 11 });
+
+        expect(result.success).toBe(false);
     });
 
     test("attachment create defaults selection cap as optional", () => {
@@ -169,5 +176,47 @@ describe("Bundle Product catalog contracts", () => {
         const result = UpdateBundleProductSchema.safeParse({ status: "inactive" });
 
         expect(result.success).toBe(true);
+    });
+});
+
+describe("Combo Product catalog contracts", () => {
+    test("accepts choice groups with option limits and price adjustments", () => {
+        const result = CreateComboProductSchema.safeParse({
+            categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            name: "Lunch Combo",
+            price: 150,
+            choiceGroups: [{
+                name: "Choose a drink",
+                minSelections: 1,
+                maxSelections: 2,
+                options: [{
+                    productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    maxQuantity: 2,
+                    priceAdjustment: 10,
+                }],
+            }],
+        });
+
+        expect(result.success).toBe(true);
+    });
+
+    test("rejects a choice group where minimum exceeds maximum", () => {
+        const result = CreateComboProductSchema.safeParse({
+            categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            name: "Invalid Combo",
+            price: 150,
+            choiceGroups: [{
+                name: "Choose",
+                minSelections: 2,
+                maxSelections: 1,
+                options: [{
+                    productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    maxQuantity: 1,
+                    priceAdjustment: 0,
+                }],
+            }],
+        });
+
+        expect(result.success).toBe(false);
     });
 });

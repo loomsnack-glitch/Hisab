@@ -251,15 +251,25 @@ export const updateProductAddOnAttachmentRepo = mock(
 export const getSelectableProductAddOnAttachmentsByOrganizationId = mock(async () => [attachmentResponse]);
 export const getActiveAddOnsByOrganizationId = mock(async () => [addOn]);
 export const getActiveProductsByOrganizationId = mock(async () => [product]);
+export const getProductsByOrganizationId = mock(async () => [product]);
+export const getProductsByIds = mock(async () => [product]);
 export const getAddOnsByOrganizationId = mock(async () => [addOn]);
 export const getProductAddOnAttachmentsByProductId = mock(async () => [attachmentResponse]);
 export const countAttachmentsByAddOnId = mock(async () => 0);
 export const countSaleItemAddOnsByAddOnId = mock(async () => 0);
 export const countBundleProductComponentsByComponentProductId = mock(async () => 0);
+export const countActiveCombosByOptionProductId = mock(async () => 0);
+export const countComboChoiceOptionsByProductId = mock(async () => 0);
 export const countSaleItemsByProductId = mock(async () => 0);
 export const countSaleItemBundleComponentsByComponentProductId = mock(async () => 0);
 export const countBundleProductComponentAddOnsByAddOnId = mock(async () => 0);
 export const countSaleItemBundleComponentAddOnsByAddOnId = mock(async () => 0);
+export const createComboChoiceGroupRepo = mock(async (data: unknown) => data);
+export const createComboChoiceOptionRepo = mock(async (data: unknown) => data);
+export const getComboChoiceGroupsByProductId = mock(async () => []);
+export const getComboChoiceGroupsByProductIds = mock(async () => []);
+export const getComboChoiceOptionsByGroupIds = mock(async () => []);
+export const deleteComboChoiceGroupsByProductId = mock(async () => undefined);
 export const deleteAddOnRepo = mock(async () => addOn);
 export const deleteProductAddOnAttachmentRepo = mock(async () => attachmentResponse);
 export const begin = mock(async (callback: (tx: unknown) => Promise<void>) => callback({}));
@@ -291,6 +301,7 @@ mock.module("./catalog.repository", () => ({
     deleteBundleProductComponentsByBundleProductId,
     getSelectableProductAddOnAttachmentByProductAndAddOn,
     countActiveBundlesByComponentProductId,
+    countActiveCombosByOptionProductId,
     countActiveBundlesByComponentAddOnId,
     countActiveBundlesByProductAddOnPair,
     countActiveBundlesByProductAddOnPairAboveQuantity,
@@ -305,15 +316,24 @@ mock.module("./catalog.repository", () => ({
     getSelectableProductAddOnAttachmentsByOrganizationId,
     getActiveAddOnsByOrganizationId,
     getActiveProductsByOrganizationId,
+    getProductsByOrganizationId,
+    getProductsByIds,
     getAddOnsByOrganizationId,
     getProductAddOnAttachmentsByProductId,
     countAttachmentsByAddOnId,
     countSaleItemAddOnsByAddOnId,
     countBundleProductComponentsByComponentProductId,
+    countComboChoiceOptionsByProductId,
     countSaleItemsByProductId,
     countSaleItemBundleComponentsByComponentProductId,
     countBundleProductComponentAddOnsByAddOnId,
     countSaleItemBundleComponentAddOnsByAddOnId,
+    createComboChoiceGroup: createComboChoiceGroupRepo,
+    createComboChoiceOption: createComboChoiceOptionRepo,
+    getComboChoiceGroupsByProductId,
+    getComboChoiceGroupsByProductIds,
+    getComboChoiceOptionsByGroupIds,
+    deleteComboChoiceGroupsByProductId,
     deleteAddOn: deleteAddOnRepo,
     deleteProductAddOnAttachment: deleteProductAddOnAttachmentRepo,
 }));

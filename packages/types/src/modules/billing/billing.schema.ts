@@ -114,12 +114,14 @@ export const SaleItemBundleComponentDTOSchema = z.object({
     storeId: z.uuid("Invalid store id"),
     saleId: z.uuid("Invalid sale id"),
     saleItemId: z.uuid("Invalid sale item id"),
+    choiceGroupId: z.uuid("Invalid combo choice group id").nullable().optional().default(null),
     componentProductId: z.uuid("Invalid component product id"),
     quantityPerBundle: quantitySchema,
     totalQuantity: quantitySchema,
     productNameSnapshot: nameSchema,
     unitPriceSnapshot: moneySchema,
     unitDiscountSnapshot: moneySchema,
+    priceAdjustmentSnapshot: z.number().finite().default(0),
     addOns: z.array(SaleItemBundleComponentAddOnDTOSchema).default([]),
     createdAt: dtoDateSchema,
     updatedAt: dtoDateSchema,
@@ -235,10 +237,18 @@ export const SaleItemAddOnInputSchema = z.object({
     quantity: quantitySchema,
 });
 
+export const ComboSelectionInputSchema = z.object({
+    groupId: z.uuid("Invalid combo choice group id"),
+    optionProductId: z.uuid("Invalid combo option product id"),
+    quantity: quantitySchema,
+    addOns: z.array(SaleItemAddOnInputSchema).optional().default([]),
+});
+
 export const SaleItemInputSchema = z.object({
     productId: z.uuid("Invalid product id"),
     quantity: quantitySchema,
     addOns: z.array(SaleItemAddOnInputSchema).optional().default([]),
+    comboSelections: z.array(ComboSelectionInputSchema).optional(),
 });
 
 export const CreateDraftSaleSchema = z.object({

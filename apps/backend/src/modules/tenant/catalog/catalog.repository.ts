@@ -5,6 +5,10 @@ import type {
     AddOnDTO,
     BundleProductComponentAddOnDTO,
     BundleProductComponentDTO,
+    ComboChoiceGroupDTO,
+    ComboChoiceOptionDTO,
+    CreateComboChoiceGroupREPO,
+    CreateComboChoiceOptionREPO,
     CategoryDTO,
     CreateAddOnREPO,
     CreateBundleProductComponentAddOnREPO,
@@ -36,6 +40,26 @@ const mapBundleComponentAddOn = (row: Record<string, unknown>): BundleProductCom
     return {
         ...mapped,
         quantity: Number(mapped.quantity),
+    };
+};
+
+const mapComboChoiceGroup = (row: Record<string, unknown>): ComboChoiceGroupDTO => {
+    const mapped = mapRow<ComboChoiceGroupDTO>(row);
+    return {
+        ...mapped,
+        minSelections: Number(mapped.minSelections),
+        maxSelections: Number(mapped.maxSelections),
+        sortOrder: Number(mapped.sortOrder),
+    };
+};
+
+const mapComboChoiceOption = (row: Record<string, unknown>): ComboChoiceOptionDTO => {
+    const mapped = mapRow<ComboChoiceOptionDTO>(row);
+    return {
+        ...mapped,
+        maxQuantity: Number(mapped.maxQuantity),
+        priceAdjustment: Number(mapped.priceAdjustment),
+        sortOrder: Number(mapped.sortOrder),
     };
 };
 
@@ -195,6 +219,21 @@ export const getProductsByOrganizationId = async (organizationId: string): Promi
         ORDER BY created_at ASC
     `;
 
+    return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
+};
+
+export const getProductsByIds = async (
+    organizationId: string,
+    productIds: string[],
+): Promise<ProductDTO[]> => {
+    if (productIds.length === 0) return [];
+
+    const results = await pg`
+        SELECT *
+        FROM products
+        WHERE organization_id = ${organizationId}
+          AND id IN ${pg(productIds)}
+    `;
     return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
 };
 
@@ -770,6 +809,93 @@ export const getBundleProductComponentAddOnsByComponentIds = async (
     return results.map((result: Record<string, unknown>) => mapBundleComponentAddOn(result));
 };
 
+export const createComboChoiceGroup = async (
+    groupData: CreateComboChoiceGroupREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<ComboChoiceGroupDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO combo_choice_groups ${camelToSnakeSql(groupData)}
+        RETURNING *
+    `;
+    return result ? mapComboChoiceGroup(result) : null;
+};
+
+export const createComboChoiceOption = async (
+    optionData: CreateComboChoiceOptionREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<ComboChoiceOptionDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO combo_choice_options ${camelToSnakeSql(optionData)}
+        RETURNING *
+    `;
+    return result ? mapComboChoiceOption(result) : null;
+};
+
+export const getComboChoiceGroupsByProductId = async (
+    organizationId: string,
+    comboProductId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<ComboChoiceGroupDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM combo_choice_groups
+        WHERE organization_id = ${organizationId}
+          AND combo_product_id = ${comboProductId}
+        ORDER BY sort_order ASC, created_at ASC
+    `;
+    return results.map((result: Record<string, unknown>) => mapComboChoiceGroup(result));
+};
+
+export const getComboChoiceGroupsByProductIds = async (
+    organizationId: string,
+    comboProductIds: string[],
+): Promise<ComboChoiceGroupDTO[]> => {
+    if (comboProductIds.length === 0) return [];
+
+    const results = await pg`
+        SELECT *
+        FROM combo_choice_groups
+        WHERE organization_id = ${organizationId}
+          AND combo_product_id IN ${pg(comboProductIds)}
+        ORDER BY combo_product_id ASC, sort_order ASC, created_at ASC
+    `;
+    return results.map((result: Record<string, unknown>) => mapComboChoiceGroup(result));
+};
+
+export const getComboChoiceOptionsByGroupIds = async (
+    organizationId: string,
+    groupIds: string[],
+    tx?: Bun.TransactionSQL,
+): Promise<ComboChoiceOptionDTO[]> => {
+    if (groupIds.length === 0) return [];
+
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM combo_choice_options
+        WHERE organization_id = ${organizationId}
+          AND choice_group_id IN ${db(groupIds)}
+        ORDER BY sort_order ASC, created_at ASC
+    `;
+    return results.map((result: Record<string, unknown>) => mapComboChoiceOption(result));
+};
+
+export const deleteComboChoiceGroupsByProductId = async (
+    organizationId: string,
+    comboProductId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<void> => {
+    const db = tx || pg;
+    await db`
+        DELETE FROM combo_choice_groups
+        WHERE organization_id = ${organizationId}
+          AND combo_product_id = ${comboProductId}
+    `;
+};
+
 export const countActiveBundlesByComponentProductId = async (
     organizationId: string,
     componentProductId: string,
@@ -786,6 +912,40 @@ export const countActiveBundlesByComponentProductId = async (
           AND bp.status = 'active'
     `;
 
+    return Number(result?.total ?? 0);
+};
+
+export const countActiveCombosByOptionProductId = async (
+    organizationId: string,
+    optionProductId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM combo_choice_options cco
+        INNER JOIN combo_choice_groups ccg
+            ON ccg.id = cco.choice_group_id
+           AND ccg.organization_id = cco.organization_id
+        INNER JOIN products cp
+            ON cp.id = ccg.combo_product_id
+           AND cp.organization_id = ccg.organization_id
+        WHERE cco.organization_id = ${organizationId}
+          AND cco.option_product_id = ${optionProductId}
+          AND cp.product_type = 'combo'
+          AND cp.status = 'active'
+    `;
+    return Number(result?.total ?? 0);
+};
+
+export const countComboChoiceOptionsByProductId = async (
+    organizationId: string,
+    optionProductId: string,
+): Promise<number> => {
+    const [result] = await pg`
+        SELECT COUNT(*)::int AS total
+        FROM combo_choice_options
+        WHERE organization_id = ${organizationId}
+          AND option_product_id = ${optionProductId}
+    `;
     return Number(result?.total ?? 0);
 };
 

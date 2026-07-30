@@ -21,6 +21,9 @@ import {
     getPosCategories,
     getPosCustomers,
     getPosProductAddOnAttachments,
+    getPosComboProducts,
+    getComboProducts,
+    getProductAddOnAttachments,
     getPosProducts,
     getPosSale,
     getPosSales,
@@ -37,6 +40,7 @@ import type {
     DeviceSessionDTO,
     PaymentMethod,
     ProductResponseDTO,
+    ComboProductResponse,
     SaleDetailDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
@@ -81,6 +85,7 @@ import { toast } from "sonner";
 import CustomizeProductDialog, {
   type CustomizeAddOnSelection,
 } from "@/components/billing/customize-product-dialog";
+import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
@@ -106,6 +111,8 @@ type ComposerBundleComponent = {
     addOns: ComposerBundleComponentAddOn[];
 };
 
+type ComposerComboSelection = ComboDialogSelection;
+
 type ComposerItem = {
     key: string;
     productId: string;
@@ -116,6 +123,7 @@ type ComposerItem = {
     quantity: number;
     addOns: ComposerAddOn[];
     bundleComponents: ComposerBundleComponent[];
+    comboSelections: ComposerComboSelection[];
 };
 
 const buildComposerConfigurationSignature = (addOns: ComposerAddOn[]) => {
@@ -130,16 +138,22 @@ const buildComposerConfigurationSignature = (addOns: ComposerAddOn[]) => {
         .join("|");
 };
 
+const buildComboConfigurationSignature = (selections: ComposerComboSelection[]) => [...selections]
+  .sort((left, right) => `${left.groupId}:${left.optionProductId}`.localeCompare(`${right.groupId}:${right.optionProductId}`))
+  .map((selection) => `${selection.groupId}:${selection.optionProductId}:${selection.quantity}:${buildComposerConfigurationSignature(selection.addOns)}`)
+  .join("|");
+
 const isSameComposerConfiguration = (
     left: ComposerItem,
     right: {
         productId: string;
         addOns: ComposerAddOn[];
+        comboSelections?: ComposerComboSelection[];
     },
 ) =>
     left.productId === right.productId &&
-  buildComposerConfigurationSignature(left.addOns) ===
-    buildComposerConfigurationSignature(right.addOns);
+  buildComposerConfigurationSignature(left.addOns) === buildComposerConfigurationSignature(right.addOns) &&
+  buildComboConfigurationSignature(left.comboSelections ?? []) === buildComboConfigurationSignature(right.comboSelections ?? []);
 
 type SettlementMode = "full" | "partial" | "due";
 
@@ -205,6 +219,7 @@ const BillingPage = ({
   const [customizeProductId, setCustomizeProductId] = useState<string | null>(
     null,
   );
+  const [configureComboProductId, setConfigureComboProductId] = useState<string | null>(null);
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   const productSearch = productSearchProp ?? "";
@@ -243,7 +258,7 @@ const BillingPage = ({
         enabled: Boolean(organizationId),
     });
 
-    const selectableAttachmentsQuery = useQuery({
+  const selectableAttachmentsQuery = useQuery({
         queryKey: catalogKeys.selectableProductAttachments(organizationId),
         queryFn: () => getPosProductAddOnAttachments(),
         enabled: isDeviceMode && Boolean(organizationId),
@@ -280,10 +295,57 @@ const BillingPage = ({
     productsQuery.data?.status === "success"
       ? (productsQuery.data.data?.products ?? [])
       : [];
+  const comboProductsQuery = useQuery({
+    queryKey: catalogKeys.combos(organizationId),
+    queryFn: () => isDeviceMode ? getPosComboProducts() : getComboProducts(organizationId),
+    enabled: Boolean(organizationId),
+    staleTime: 5 * 60 * 1000,
+  });
+  const preloadedCombos = comboProductsQuery.data?.status === "success"
+    ? (comboProductsQuery.data.data?.combos ?? [])
+    : [];
+  const configureCombo = configureComboProductId
+    ? (preloadedCombos.find((combo) => combo.product.id === configureComboProductId) ?? null)
+    : null;
+  const adminAttachmentProductIds = useMemo(() => {
+    const productIds = new Set<string>();
+
+    if (customizeProductId) {
+      productIds.add(customizeProductId);
+    }
+
+    for (const combo of [...preloadedCombos, ...(configureCombo ? [configureCombo] : [])]) {
+      for (const group of combo.choiceGroups) {
+        for (const option of group.options) {
+          productIds.add(option.optionProductId);
+        }
+      }
+    }
+
+    return [...productIds];
+  }, [configureCombo, customizeProductId, preloadedCombos]);
+  const adminAttachmentQueries = useQueries({
+    queries: isDeviceMode
+      ? []
+      : adminAttachmentProductIds.map((productId) => ({
+          queryKey: catalogKeys.productAttachments(organizationId, productId),
+          queryFn: () => getProductAddOnAttachments(organizationId, productId),
+          enabled: Boolean(organizationId),
+        })),
+  });
     const selectableAttachments =
-        selectableAttachmentsQuery.data?.status === "success"
-            ? (selectableAttachmentsQuery.data.data?.attachments ?? [])
-            : [];
+        isDeviceMode
+            ? selectableAttachmentsQuery.data?.status === "success"
+                ? (selectableAttachmentsQuery.data.data?.attachments ?? [])
+                : []
+            : adminAttachmentQueries.flatMap((query) =>
+                  query.data?.status === "success"
+                      ? (query.data.data?.attachments ?? []).filter(
+                            (attachment) =>
+                                attachment.status === "active" && attachment.addOn.status === "active",
+                        )
+                      : [],
+              );
   const customers =
     customersQuery.data?.status === "success"
       ? (customersQuery.data.data?.customers ?? [])
@@ -345,8 +407,8 @@ const BillingPage = ({
     const categorySwipeHandlers = useSwipeable({
         onSwipedLeft: () => selectAdjacentCategory(1),
         onSwipedRight: () => selectAdjacentCategory(-1),
-    delta: 30,
-    preventScrollOnSwipe: true,
+        delta: 30,
+        preventScrollOnSwipe: false,
         trackMouse: false,
         trackTouch: true,
     });
@@ -366,6 +428,13 @@ const BillingPage = ({
   const customizeAttachments = customizeProduct
     ? (attachmentsByProductId.get(customizeProduct.id) ?? [])
     : [];
+  useEffect(() => {
+    if (!configureComboProductId) return;
+    if (comboProductsQuery.data?.status === "success" && !configureCombo) {
+      toast.error("This Combo is no longer available");
+      setConfigureComboProductId(null);
+    }
+  }, [comboProductsQuery.data, configureCombo, configureComboProductId]);
 
   const organizationStores =
     isDeviceMode && session ? [session.store] : (organization?.stores ?? []);
@@ -637,6 +706,24 @@ const BillingPage = ({
     }, [receiptToPrint]);
 
     const addProductToBill = (product: ProductResponseDTO) => {
+        if (product.productType === "combo") {
+            if (comboProductsQuery.isPending) {
+                toast.info("Combo options are still loading");
+                return;
+            }
+            if (comboProductsQuery.isError || comboProductsQuery.data?.status === "error") {
+                toast.error("Unable to load Combo options. Retrying now.");
+                void comboProductsQuery.refetch();
+                return;
+            }
+            if (!preloadedCombos.some((combo) => combo.product.id === product.id)) {
+                toast.error("This Combo is no longer available");
+                return;
+            }
+            setConfigureComboProductId(product.id);
+            return;
+        }
+
         setItems((current) => {
             const existingPlainItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
@@ -664,6 +751,7 @@ const BillingPage = ({
                     quantity: 1,
                     addOns: [],
                     bundleComponents: [],
+                    comboSelections: [],
                 },
             ];
         });
@@ -703,9 +791,36 @@ const BillingPage = ({
                     quantity: 1,
                     addOns,
                     bundleComponents: [],
+                    comboSelections: [],
                 },
             ];
         });
+    };
+
+    const addConfiguredComboToBill = (combo: ComboProductResponse, selections: ComboDialogSelection[]) => {
+        setItems((current) => {
+            const existing = current.find((item) => isSameComposerConfiguration(item, {
+                productId: combo.product.id,
+                addOns: [],
+                comboSelections: selections,
+            }));
+            if (existing) {
+                return current.map((item) => item.key === existing.key ? { ...item, quantity: item.quantity + 1 } : item);
+            }
+            return [...current, {
+                key: safeRandomUUID(),
+                productId: combo.product.id,
+                name: combo.product.name,
+                categoryId: combo.product.categoryId,
+                unitPrice: Number(combo.product.price),
+                unitDiscount: Number(combo.product.discount ?? 0),
+                quantity: 1,
+                addOns: [],
+                bundleComponents: [],
+                comboSelections: selections,
+            }];
+        });
+        setConfigureComboProductId(null);
     };
 
     const updateItemQuantity = (itemKey: string, nextQuantity: number) => {
@@ -734,6 +849,12 @@ const BillingPage = ({
             addOns: item.addOns.map((addOn) => ({
                 addOnId: addOn.addOnId,
                 quantity: addOn.quantity,
+            })),
+            comboSelections: item.comboSelections.map((selection) => ({
+                groupId: selection.groupId,
+                optionProductId: selection.optionProductId,
+                quantity: selection.quantity,
+                addOns: selection.addOns.map((addOn) => ({ addOnId: addOn.addOnId, quantity: addOn.quantity })),
             })),
         })),
     });
@@ -828,6 +949,18 @@ const BillingPage = ({
                         addOns: (component.addOns ?? []).map((addOn) => ({
                             addOnId: addOn.addOnId,
                             name: addOn.addOnNameSnapshot,
+                            quantity: Number(addOn.quantityPerComponent),
+                        })),
+                    })),
+                    comboSelections: (item.bundleComponents ?? []).filter((component) => Boolean(component.choiceGroupId)).map((component) => ({
+                        groupId: component.choiceGroupId!,
+                        optionProductId: component.componentProductId,
+                        quantity: Number(component.quantityPerBundle),
+                        addOns: (component.addOns ?? []).map((addOn) => ({
+                            addOnId: addOn.addOnId,
+                            name: addOn.addOnNameSnapshot,
+                            unitPrice: Number(addOn.unitPriceSnapshot),
+                            unitDiscount: Number(addOn.unitDiscountSnapshot),
                             quantity: Number(addOn.quantityPerComponent),
                         })),
                     })),
@@ -1002,6 +1135,18 @@ const BillingPage = ({
                         addOns: (component.addOns ?? []).map((addOn) => ({
                             addOnId: addOn.addOnId,
                             name: addOn.addOnNameSnapshot,
+                            quantity: Number(addOn.quantityPerComponent),
+                        })),
+                    })),
+                    comboSelections: (item.bundleComponents ?? []).filter((component) => Boolean(component.choiceGroupId)).map((component) => ({
+                        groupId: component.choiceGroupId!,
+                        optionProductId: component.componentProductId,
+                        quantity: Number(component.quantityPerBundle),
+                        addOns: (component.addOns ?? []).map((addOn) => ({
+                            addOnId: addOn.addOnId,
+                            name: addOn.addOnNameSnapshot,
+                            unitPrice: Number(addOn.unitPriceSnapshot),
+                            unitDiscount: Number(addOn.unitDiscountSnapshot),
                             quantity: Number(addOn.quantityPerComponent),
                         })),
                     })),
@@ -1237,9 +1382,8 @@ const BillingPage = ({
 
                 {/* ─── LEFT PANEL: Product Grid ─── */}
         <div
-          {...(canMutate && leftPanelTab === "products" ? categorySwipeHandlers : {})}
-          className="flex-1 overflow-y-auto p-4 pb-24 touch-pan-y lg:min-w-0 lg:pb-4"
-          style={{ maxHeight: panelMaxHeight, touchAction: "pan-y" }}
+          className="flex-1 overflow-y-auto p-4 pb-24 lg:min-w-0 lg:pb-4"
+          style={{ maxHeight: panelMaxHeight }}
         >
                     {/* Tab Switcher */}
                     {canMutate ? (
@@ -1331,7 +1475,7 @@ const BillingPage = ({
                                             Categories
                                         </p>
                                     </div>
-                  <div className="scrollbar-none flex min-h-9 gap-1.5 overflow-x-auto pb-1">
+                  <div className="scrollbar-none flex min-h-9 touch-pan-x gap-1.5 overflow-x-auto pb-1">
                                         {categoryOptions.map((category) => (
                                             <button
                                                 key={category.id}
@@ -1352,6 +1496,10 @@ const BillingPage = ({
                                 </div>
 
                                 {/* Product Grid */}
+                                <div
+                  {...(canMutate ? categorySwipeHandlers : {})}
+                  className="min-h-[320px] flex-1 touch-pan-y"
+                >
                                 {productsQuery.isPending ? (
                                     <div className="flex min-h-[320px] items-center justify-center">
                                         <Spinner className="size-8 text-primary" />
@@ -1367,7 +1515,9 @@ const BillingPage = ({
                                         </p>
                                     </div>
                                 ) : (
-                  <div className="touch-pan-y grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  <div
+                    className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                  >
                                     {filteredProducts.map((product) => {
                                         const cartQuantity = items
                                             .filter((item) => item.productId === product.id)
@@ -1378,9 +1528,11 @@ const BillingPage = ({
                       const canCustomize =
                         canMutate && productAttachments.length > 0;
 
-                                        const canSellProduct =
+                      const canSellProduct =
                         product.productType === "single" ||
-                        product.productType === "bundle";
+                        product.productType === "combo";
+                      const comboLoading = product.productType === "combo" && comboProductsQuery.isPending;
+                      const canAddProduct = canSellProduct && !comboLoading;
 
                                         return (
                                             <div
@@ -1400,15 +1552,15 @@ const BillingPage = ({
                                                 <button
                                                     type="button"
                                                     onClick={() => {
-                                                        if (!canSellProduct) {
+                                                        if (!canAddProduct) {
                                                             return;
                                                         }
 
                                                         addProductToBill(product);
                                                     }}
-                                                    disabled={!canSellProduct}
+                                                    disabled={!canAddProduct}
                             className={`flex min-w-0 flex-1 items-center gap-2 text-left transition-opacity ${
-                                                        canSellProduct
+                                                        canAddProduct
                                 ? "hover:opacity-80"
                                                             : "cursor-not-allowed opacity-70"
                                                     }`}
@@ -1440,15 +1592,17 @@ const BillingPage = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (canSellProduct) {
+                              if (canAddProduct) {
                                 addProductToBill(product);
                               }
                             }}
-                            disabled={!canSellProduct}
+                            disabled={!canAddProduct}
                             className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                             aria-label={`Add ${product.name} to order`}
                           >
-                            <Plus className="size-4" />
+                            {comboLoading
+                              ? <Spinner className="size-3.5" />
+                              : <Plus className="size-4" />}
                                                 </button>
                                                 {canCustomize && product.productType === "single" ? (
                                                     <button
@@ -1469,6 +1623,7 @@ const BillingPage = ({
                                     })}
                                     </div>
                                 )}
+                                </div>
                             </div>
                         </>
                     ) : !canMutate && leftPanelTab === "customers" ? (
@@ -2086,6 +2241,7 @@ const BillingPage = ({
 
                                                     {item.bundleComponents.length > 0 ? (
                                                         <div className="mt-1 ml-3 space-y-0.5 border-l border-border/50 pl-3">
+                                                            {item.comboSelections.length > 0 ? <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Combo options</p> : null}
                                                             {item.bundleComponents.map((component) => (
                                                                 <div
                                                                     key={`${item.key}-${component.id}`}
@@ -2536,6 +2692,16 @@ const BillingPage = ({
                 product={customizeProduct}
                 attachments={customizeAttachments}
                 onConfirm={addConfiguredProductToBill}
+            />
+
+            <ConfigureComboDialog
+                open={Boolean(configureComboProductId)}
+                onOpenChange={(open) => {
+                    if (!open) setConfigureComboProductId(null);
+                }}
+                combo={configureCombo}
+                attachmentsByProductId={attachmentsByProductId}
+                onConfirm={addConfiguredComboToBill}
             />
 
             <SaleDetailDialog

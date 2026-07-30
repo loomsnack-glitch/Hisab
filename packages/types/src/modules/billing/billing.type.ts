@@ -168,12 +168,14 @@ export type CreateSaleItemBundleComponentREPO = Pick<
     | "storeId"
     | "saleId"
     | "saleItemId"
+    | "choiceGroupId"
     | "componentProductId"
     | "quantityPerBundle"
     | "totalQuantity"
     | "productNameSnapshot"
     | "unitPriceSnapshot"
     | "unitDiscountSnapshot"
+    | "priceAdjustmentSnapshot"
 >;
 
 export type CreateSaleItemBundleComponentAddOnREPO = Pick<

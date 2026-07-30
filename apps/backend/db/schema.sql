@@ -97,7 +97,8 @@ CREATE TYPE public.product_status_enum AS ENUM (
 
 CREATE TYPE public.product_type_enum AS ENUM (
     'single',
-    'bundle'
+    'bundle',
+    'combo'
 );
 
 
@@ -207,6 +208,7 @@ CREATE TABLE public.add_ons (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT add_ons_discount_check CHECK ((discount >= (0)::numeric)),
+    CONSTRAINT add_ons_discount_not_above_price_check CHECK ((discount <= price)),
     CONSTRAINT add_ons_price_check CHECK ((price >= (0)::numeric))
 );
 
@@ -245,6 +247,49 @@ CREATE TABLE public.bundle_product_components (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT bundle_product_components_not_self CHECK ((bundle_product_id <> component_product_id)),
     CONSTRAINT bundle_product_components_quantity_check CHECK ((quantity >= 1))
+);
+
+
+--
+-- Name: combo_choice_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.combo_choice_groups (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    combo_product_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    min_selections integer DEFAULT 0 NOT NULL,
+    max_selections integer DEFAULT 1 NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT combo_choice_groups_limits_check CHECK (((min_selections >= 0) AND (max_selections >= min_selections) AND (max_selections <= 100))),
+    CONSTRAINT combo_choice_groups_name_check CHECK ((length(TRIM(BOTH FROM name)) > 0)),
+    CONSTRAINT combo_choice_groups_sort_order_check CHECK ((sort_order >= 0))
+);
+
+
+--
+-- Name: combo_choice_options; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.combo_choice_options (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    choice_group_id uuid NOT NULL,
+    option_product_id uuid NOT NULL,
+    max_quantity integer DEFAULT 1 NOT NULL,
+    price_adjustment numeric(10,2) DEFAULT 0 NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT combo_choice_options_quantity_check CHECK (((max_quantity >= 1) AND (max_quantity <= 100))),
+    CONSTRAINT combo_choice_options_sort_order_check CHECK ((sort_order >= 0))
 );
 
 
@@ -450,18 +495,21 @@ CREATE TABLE public.sale_item_bundle_components (
     store_id uuid NOT NULL,
     sale_id uuid NOT NULL,
     sale_item_id uuid NOT NULL,
+    choice_group_id uuid,
     component_product_id uuid NOT NULL,
     quantity_per_bundle integer NOT NULL,
     total_quantity integer NOT NULL,
     product_name_snapshot character varying(255) NOT NULL,
     unit_price_snapshot numeric(10,2) NOT NULL,
     unit_discount_snapshot numeric(10,2) DEFAULT 0 NOT NULL,
+    price_adjustment_snapshot numeric(10,2) DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT sale_item_bundle_components_quantity_per_bundle_check CHECK ((quantity_per_bundle >= 1)),
     CONSTRAINT sale_item_bundle_components_total_quantity_check CHECK ((total_quantity >= 1)),
     CONSTRAINT sale_item_bundle_components_unit_discount_snapshot_check CHECK ((unit_discount_snapshot >= (0)::numeric)),
-    CONSTRAINT sale_item_bundle_components_unit_price_snapshot_check CHECK ((unit_price_snapshot >= (0)::numeric))
+    CONSTRAINT sale_item_bundle_components_unit_price_snapshot_check CHECK ((unit_price_snapshot >= (0)::numeric)),
+    CONSTRAINT sale_item_bundle_components_price_adjustment_snapshot_check CHECK ((price_adjustment_snapshot IS NOT NULL))
 );
 
 
@@ -667,6 +715,46 @@ ALTER TABLE ONLY public.bundle_product_components
 
 ALTER TABLE ONLY public.bundle_product_components
     ADD CONSTRAINT bundle_product_components_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: combo_choice_groups combo_choice_groups_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_groups
+    ADD CONSTRAINT combo_choice_groups_id_organization_id_key UNIQUE (id, organization_id);
+
+
+--
+-- Name: combo_choice_groups combo_choice_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_groups
+    ADD CONSTRAINT combo_choice_groups_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: combo_choice_options combo_choice_options_choice_group_id_option_product_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_options
+    ADD CONSTRAINT combo_choice_options_choice_group_id_option_product_id_key UNIQUE (choice_group_id, option_product_id);
+
+
+--
+-- Name: combo_choice_options combo_choice_options_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_options
+    ADD CONSTRAINT combo_choice_options_id_organization_id_key UNIQUE (id, organization_id);
+
+
+--
+-- Name: combo_choice_options combo_choice_options_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_options
+    ADD CONSTRAINT combo_choice_options_pkey PRIMARY KEY (id);
 
 
 --
@@ -1027,6 +1115,41 @@ CREATE INDEX idx_bundle_product_components_component_product_id ON public.bundle
 --
 
 CREATE INDEX idx_bundle_product_components_organization_id ON public.bundle_product_components USING btree (organization_id);
+
+
+--
+-- Name: idx_combo_choice_groups_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_combo_choice_groups_organization_id ON public.combo_choice_groups USING btree (organization_id);
+
+
+--
+-- Name: idx_combo_choice_groups_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_combo_choice_groups_product_id ON public.combo_choice_groups USING btree (combo_product_id);
+
+
+--
+-- Name: idx_combo_choice_options_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_combo_choice_options_group_id ON public.combo_choice_options USING btree (choice_group_id);
+
+
+--
+-- Name: idx_combo_choice_options_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_combo_choice_options_organization_id ON public.combo_choice_options USING btree (organization_id);
+
+
+--
+-- Name: idx_combo_choice_options_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_combo_choice_options_product_id ON public.combo_choice_options USING btree (option_product_id);
 
 
 --
@@ -1399,6 +1522,78 @@ ALTER TABLE ONLY public.bundle_product_components
 
 ALTER TABLE ONLY public.bundle_product_components
     ADD CONSTRAINT bundle_product_components_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: combo_choice_groups combo_choice_groups_combo_product_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_groups
+    ADD CONSTRAINT combo_choice_groups_combo_product_fkey FOREIGN KEY (combo_product_id, organization_id) REFERENCES public.products(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: combo_choice_groups combo_choice_groups_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_groups
+    ADD CONSTRAINT combo_choice_groups_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: combo_choice_groups combo_choice_groups_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_groups
+    ADD CONSTRAINT combo_choice_groups_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: combo_choice_groups combo_choice_groups_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_groups
+    ADD CONSTRAINT combo_choice_groups_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: combo_choice_options combo_choice_options_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_options
+    ADD CONSTRAINT combo_choice_options_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: combo_choice_options combo_choice_options_group_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_options
+    ADD CONSTRAINT combo_choice_options_group_fkey FOREIGN KEY (choice_group_id, organization_id) REFERENCES public.combo_choice_groups(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: combo_choice_options combo_choice_options_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_options
+    ADD CONSTRAINT combo_choice_options_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: combo_choice_options combo_choice_options_product_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_options
+    ADD CONSTRAINT combo_choice_options_product_fkey FOREIGN KEY (option_product_id, organization_id) REFERENCES public.products(id, organization_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: combo_choice_options combo_choice_options_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combo_choice_options
+    ADD CONSTRAINT combo_choice_options_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -1892,4 +2087,8 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260712060000'),
     ('20260727120000'),
     ('20260728100000'),
-    ('20260729100000');
+    ('20260729100000'),
+    ('20260731120000'),
+    ('20260731123000'),
+    ('20260731124000'),
+    ('20260731130000');

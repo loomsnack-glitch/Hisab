@@ -6,7 +6,7 @@ type ProductTypeBadgeProps = {
 };
 
 const ProductTypeBadge = ({ productType }: ProductTypeBadgeProps) => {
-    if (productType !== "bundle") {
+    if (productType === "single") {
         return null;
     }
 
@@ -15,7 +15,7 @@ const ProductTypeBadge = ({ productType }: ProductTypeBadgeProps) => {
             variant="outline"
             className="rounded-full border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300"
         >
-            Bundle
+            {productType === "combo" ? "Combo" : "Legacy Bundle"}
         </Badge>
     );
 };

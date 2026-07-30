@@ -103,6 +103,22 @@ const buildConfigurationSignature = (
         .join("|");
 };
 
+const buildComboConfigurationSignature = (
+    selections: Array<{
+        groupId: string;
+        optionProductId: string;
+        quantity: number;
+        addOns: Array<{ addOnId: string; quantity: number }>;
+    }>,
+) => [...selections]
+    .sort((left, right) =>
+        `${left.groupId}:${left.optionProductId}`.localeCompare(`${right.groupId}:${right.optionProductId}`),
+    )
+    .map((selection) =>
+        `${selection.groupId}:${selection.optionProductId}:${selection.quantity}:${buildConfigurationSignature(selection.addOns)}`,
+    )
+    .join("|");
+
 const normalizeSelectedAddOns = (
     addOns: SaleItemInput["addOns"] | undefined,
 ):
@@ -151,6 +167,73 @@ const normalizeSelectedAddOns = (
     };
 };
 
+const normalizeComboSelections = (
+    selections: SaleItemInput["comboSelections"] | undefined,
+):
+    | { error: ServiceResponse<null>; selections?: undefined }
+    | {
+          error?: undefined;
+          selections: Array<{
+              groupId: string;
+              optionProductId: string;
+              quantity: number;
+              addOns: Array<{ addOnId: string; quantity: number }>;
+          }>;
+      } => {
+    const normalized = [] as Array<{
+        groupId: string;
+        optionProductId: string;
+        quantity: number;
+        addOns: Array<{ addOnId: string; quantity: number }>;
+    }>;
+
+    for (const selection of selections ?? []) {
+        const quantity = Number(selection.quantity);
+        if (!isWholeCount(quantity)) {
+            return {
+                error: {
+                    status: "error",
+                    message: "Combo option quantity must be a whole number greater than 0",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        const addOns = normalizeSelectedAddOns(selection.addOns);
+        if (addOns.error) return { error: addOns.error };
+
+        normalized.push({
+            groupId: selection.groupId,
+            optionProductId: selection.optionProductId,
+            quantity,
+            addOns: addOns.addOns,
+        });
+    }
+
+    const seen = new Set<string>();
+    for (const selection of normalized) {
+        const key = `${selection.groupId}:${selection.optionProductId}`;
+        if (seen.has(key)) {
+            return {
+                error: {
+                    status: "error",
+                    message: "The same Combo option cannot be selected twice in one configuration",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+        seen.add(key);
+    }
+
+    return {
+        selections: normalized.sort((left, right) =>
+            `${left.groupId}:${left.optionProductId}`.localeCompare(`${right.groupId}:${right.optionProductId}`),
+        ),
+    };
+};
+
 const mergeSaleItemInputsByConfiguration = (
     items: SaleItemInput[],
 ):
@@ -176,9 +259,12 @@ const mergeSaleItemInputsByConfiguration = (
             return { error: normalizedAddOns.error };
         }
 
-    const configurationSignature = buildConfigurationSignature(
-      normalizedAddOns.addOns,
-    );
+        const normalizedComboSelections = normalizeComboSelections(item.comboSelections);
+        if (normalizedComboSelections.error) return { error: normalizedComboSelections.error };
+
+        const configurationSignature = normalizedComboSelections.selections.length > 0
+            ? buildComboConfigurationSignature(normalizedComboSelections.selections)
+            : buildConfigurationSignature(normalizedAddOns.addOns);
         const configurationKey = `${item.productId}::${configurationSignature}`;
         const existing = mergedByKey.get(configurationKey);
 
@@ -194,6 +280,7 @@ const mergeSaleItemInputsByConfiguration = (
             productId: item.productId,
             quantity: parentQuantity,
             addOns: normalizedAddOns.addOns,
+            comboSelections: normalizedComboSelections.selections,
         });
     }
 
@@ -397,11 +484,15 @@ const rescaleFrozenConfiguredLine = (
     const saleItemId = crypto.randomUUID();
     const unitPrice = moneyFrom(frozen.unitPriceSnapshot);
     const previousQuantity = Number(frozen.quantity);
-  const unitDiscount =
-    previousQuantity > 0
+    const unitDiscount =
+      previousQuantity > 0
       ? roundMoney(moneyFrom(frozen.discountAmount) / previousQuantity)
       : 0;
-    const lineSubtotal = roundMoney(parentQuantity * unitPrice);
+    const previousLineSubtotal = moneyFrom(frozen.lineSubtotal);
+    const configuredExtraPerUnit = previousQuantity > 0
+        ? roundMoney(previousLineSubtotal / previousQuantity - unitPrice)
+        : 0;
+    const lineSubtotal = roundMoney(parentQuantity * (unitPrice + configuredExtraPerUnit));
     const discountAmount = roundMoney(unitDiscount * parentQuantity);
 
     return {
@@ -456,12 +547,14 @@ const rescaleFrozenConfiguredLine = (
                     storeId,
                     saleId,
                     saleItemId,
+                    choiceGroupId: component.choiceGroupId ?? null,
                     componentProductId: component.componentProductId,
                     quantityPerBundle,
                     totalQuantity,
                     productNameSnapshot: component.productNameSnapshot,
                     unitPriceSnapshot: moneyFrom(component.unitPriceSnapshot),
                     unitDiscountSnapshot: moneyFrom(component.unitDiscountSnapshot),
+                    priceAdjustmentSnapshot: moneyFrom(component.priceAdjustmentSnapshot),
                 },
                 addOns: (component.addOns ?? []).map((addOn) => {
                     const quantityPerComponent = Number(addOn.quantityPerComponent);
@@ -643,13 +736,15 @@ const prepareBundleSaleLine = async (
                 organizationId,
                 storeId,
                 saleId,
-                saleItemId,
-                componentProductId: componentProduct.id,
+                    saleItemId,
+                    choiceGroupId: null,
+                    componentProductId: componentProduct.id,
                 quantityPerBundle,
                 totalQuantity,
                 productNameSnapshot: componentProduct.name,
                 unitPriceSnapshot: moneyFrom(componentProduct.price),
                 unitDiscountSnapshot: moneyFrom(componentProduct.discount),
+                priceAdjustmentSnapshot: 0,
             },
             addOns: preparedAddOns,
         });
@@ -682,6 +777,224 @@ const prepareBundleSaleLine = async (
                 productId: product.id,
                 quantity: parentQuantity,
                 configurationSignature: "",
+                productNameSnapshot: product.name,
+                unitPriceSnapshot: unitPrice,
+                discountAmount,
+                lineSubtotal,
+                lineTotal: roundMoney(lineSubtotal - discountAmount),
+            },
+            addOns: [],
+            bundleComponents: preparedBundleComponents,
+        },
+    };
+};
+
+const prepareComboSaleLine = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+    saleItemId: string,
+    product: {
+        id: string;
+        name: string;
+        price: number | string;
+        discount: number | string;
+    },
+    parentQuantity: number,
+    selections: NonNullable<SaleItemInput["comboSelections"]>,
+): Promise<
+    | { error: ServiceResponse<null>; line?: undefined }
+    | { error?: undefined; line: PreparedSaleLine }
+> => {
+    const groups = await catalogRepository.getComboChoiceGroupsByProductId(organizationId, product.id);
+    if (groups.length === 0) {
+        return {
+            error: {
+                status: "error",
+                message: `Combo product "${product.name}" has no choices and cannot be sold`,
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            },
+        };
+    }
+    const options = await catalogRepository.getComboChoiceOptionsByGroupIds(
+        organizationId,
+        groups.map((group) => group.id),
+    );
+
+    if (options.length === 0) {
+        return {
+            error: {
+                status: "error",
+                message: `Combo product "${product.name}" has no choices and cannot be sold`,
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            },
+        };
+    }
+
+    const optionsByKey = new Map(options.map((option) => [`${option.choiceGroupId}:${option.optionProductId}`, option]));
+    const groupIds = new Set(groups.map((group) => group.id));
+    for (const selection of selections) {
+        if (!groupIds.has(selection.groupId)) {
+            return {
+                error: {
+                    status: "error",
+                    message: `Invalid Combo choice group for "${product.name}"`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+    }
+    const selectionsByGroup = new Map<string, typeof selections>();
+    for (const selection of selections) {
+        const groupSelections = selectionsByGroup.get(selection.groupId) ?? [];
+        groupSelections.push(selection);
+        selectionsByGroup.set(selection.groupId, groupSelections);
+    }
+
+    const preparedBundleComponents: PreparedBundleComponent[] = [];
+    let adjustmentSubtotal = 0;
+    let optionAddOnSubtotal = 0;
+
+    for (const group of groups) {
+        const groupSelections = selectionsByGroup.get(group.id) ?? [];
+        const totalSelections = groupSelections.reduce((total, selection) => total + selection.quantity, 0);
+        if (totalSelections < group.minSelections || totalSelections > group.maxSelections) {
+            return {
+                error: {
+                    status: "error",
+                    message: `Select between ${group.minSelections} and ${group.maxSelections} options for "${group.name}"`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        for (const selection of groupSelections) {
+            const option = optionsByKey.get(`${group.id}:${selection.optionProductId}`);
+            if (!option || selection.quantity > option.maxQuantity) {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Invalid quantity for Combo option in "${group.name}"`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            const optionProduct = await catalogRepository.getProductById(organizationId, option.optionProductId);
+            if (!optionProduct || optionProduct.status !== "active" || optionProduct.productType !== "single") {
+                return {
+                    error: {
+                        status: "error",
+                        message: `Combo option is no longer available for "${product.name}"`,
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    },
+                };
+            }
+
+            const componentId = crypto.randomUUID();
+            const totalQuantity = selection.quantity * parentQuantity;
+            const preparedAddOns: CreateSaleItemBundleComponentAddOnREPO[] = [];
+            for (const selectedAddOn of selection.addOns) {
+                const attachment = await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+                    organizationId,
+                    optionProduct.id,
+                    selectedAddOn.addOnId,
+                );
+                if (!attachment || selectedAddOn.quantity > attachment.selectionCap) {
+                    return {
+                        error: {
+                            status: "error",
+                            message: `Invalid add-on selection for Combo option "${optionProduct.name}"`,
+                            data: null,
+                            code: STATUS_CODES.BAD_REQUEST,
+                        },
+                    };
+                }
+
+                if (moneyFrom(attachment.addOn.discount) > moneyFrom(attachment.addOn.price)) {
+                    return {
+                        error: {
+                            status: "error",
+                            message: `Add-on "${attachment.addOn.name}" has an invalid price configuration`,
+                            data: null,
+                            code: STATUS_CODES.BAD_REQUEST,
+                        },
+                    };
+                }
+
+                const addOnTotalQuantity = selectedAddOn.quantity * totalQuantity;
+                optionAddOnSubtotal += addOnTotalQuantity * Math.max(
+                    moneyFrom(attachment.addOn.price) - moneyFrom(attachment.addOn.discount),
+                    0,
+                );
+                preparedAddOns.push({
+                    id: crypto.randomUUID(),
+                    organizationId,
+                    storeId,
+                    saleId,
+                    saleItemId,
+                    saleItemBundleComponentId: componentId,
+                    addOnId: attachment.addOn.id,
+                    quantityPerComponent: selectedAddOn.quantity,
+                    totalQuantity: addOnTotalQuantity,
+                    addOnNameSnapshot: attachment.addOn.name,
+                    unitPriceSnapshot: moneyFrom(attachment.addOn.price),
+                    unitDiscountSnapshot: moneyFrom(attachment.addOn.discount),
+                });
+            }
+
+            adjustmentSubtotal += totalQuantity * moneyFrom(option.priceAdjustment);
+            preparedBundleComponents.push({
+                component: {
+                    id: componentId,
+                    organizationId,
+                    storeId,
+                    saleId,
+                    saleItemId,
+                    choiceGroupId: group.id,
+                    componentProductId: optionProduct.id,
+                    quantityPerBundle: selection.quantity,
+                    totalQuantity,
+                    productNameSnapshot: optionProduct.name,
+                    unitPriceSnapshot: moneyFrom(optionProduct.price),
+                    unitDiscountSnapshot: moneyFrom(optionProduct.discount),
+                    priceAdjustmentSnapshot: moneyFrom(option.priceAdjustment),
+                },
+                addOns: preparedAddOns,
+            });
+        }
+    }
+
+    const unitPrice = moneyFrom(product.price);
+    const lineSubtotal = roundMoney(parentQuantity * unitPrice + adjustmentSubtotal + optionAddOnSubtotal);
+    const discountAmount = roundMoney(moneyFrom(product.discount) * parentQuantity);
+    if (lineSubtotal < 0 || discountAmount > lineSubtotal) {
+        return {
+            error: {
+                status: "error",
+                message: `Combo price for "${product.name}" is invalid after selected options`,
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            },
+        };
+    }
+
+    return {
+        line: {
+            item: {
+                id: saleItemId,
+                organizationId,
+                storeId,
+                saleId,
+                productId: product.id,
+                quantity: parentQuantity,
+                configurationSignature: buildComboConfigurationSignature(selections),
                 productNameSnapshot: product.name,
                 unitPriceSnapshot: unitPrice,
                 discountAmount,
@@ -729,7 +1042,14 @@ const prepareSaleItems = async (
 
     for (const item of mergedItems.items) {
         const selectedAddOns = item.addOns ?? [];
-        const configurationSignature = buildConfigurationSignature(selectedAddOns);
+        const selectedComboSelections = item.comboSelections ?? [];
+        const configurationSignature = selectedComboSelections.length > 0
+            ? buildComboConfigurationSignature(selectedComboSelections.map((selection) => ({
+                ...selection,
+                quantity: Number(selection.quantity),
+                addOns: (selection.addOns ?? []).map((addOn) => ({ ...addOn, quantity: Number(addOn.quantity) })),
+            })))
+            : buildConfigurationSignature(selectedAddOns);
         const parentQuantity = Number(item.quantity);
     const frozen = frozenByConfiguration.get(
       configurationKeyFor(item.productId, configurationSignature),
@@ -777,31 +1097,51 @@ const prepareSaleItems = async (
         const saleItemId = crypto.randomUUID();
 
         if (product.productType === "bundle") {
+            return {
+                error: {
+                    status: "error",
+                    message: `Legacy Bundle product "${product.name}" cannot be added to new sales. Use a Combo instead`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        if (product.productType === "combo") {
             if (selectedAddOns.length > 0) {
                 return {
                     error: {
                         status: "error",
-                        message: `Bundle product "${product.name}" cannot accept add-on selections`,
+                        message: `Combo product "${product.name}" accepts add-ons through its choice groups`,
                         data: null,
                         code: STATUS_CODES.BAD_REQUEST,
                     },
                 };
             }
 
-            const preparedBundle = await prepareBundleSaleLine(
+            const preparedCombo = await prepareComboSaleLine(
                 organizationId,
                 storeId,
                 saleId,
                 saleItemId,
                 product,
                 parentQuantity,
+                selectedComboSelections,
             );
-            if (preparedBundle.error) {
-                return { error: preparedBundle.error };
-            }
-
-            preparedLines.push(preparedBundle.line);
+            if (preparedCombo.error) return { error: preparedCombo.error };
+            preparedLines.push(preparedCombo.line);
             continue;
+        }
+
+        if (selectedComboSelections.length > 0) {
+            return {
+                error: {
+                    status: "error",
+                    message: `Combo selections are only valid for Combo products`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
         }
 
         const preparedAddOns: CreateSaleItemAddOnREPO[] = [];
@@ -1390,6 +1730,7 @@ const updateDraftSaleInStore = async (
                                       storeId: component.storeId,
                                       saleId: component.saleId,
                                       saleItemId: component.saleItemId,
+                                      choiceGroupId: component.choiceGroupId ?? null,
                                       componentProductId: component.componentProductId,
                                       quantityPerBundle: Number(component.quantityPerBundle),
                                       totalQuantity: Number(component.totalQuantity),
@@ -1398,6 +1739,7 @@ const updateDraftSaleInStore = async (
                       unitDiscountSnapshot: Number(
                         component.unitDiscountSnapshot,
                       ),
+                                      priceAdjustmentSnapshot: Number(component.priceAdjustmentSnapshot ?? 0),
                                   },
                                   addOns: (component.addOns ?? []).map((addOn) => ({
                                       id: addOn.id,

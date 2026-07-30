@@ -16,6 +16,7 @@ export const catalogKeys = {
     all: ["catalog"] as const,
     categories: (organizationId: string) => [...catalogKeys.all, "categories", organizationId] as const,
     products: (organizationId: string) => [...catalogKeys.all, "products", organizationId] as const,
+    combos: (organizationId: string) => [...catalogKeys.products(organizationId), "combos"] as const,
     addOns: (organizationId: string) => [...catalogKeys.all, "add-ons", organizationId] as const,
     productAttachments: (organizationId: string, productId: string) =>
         [...catalogKeys.all, "product-attachments", organizationId, productId] as const,

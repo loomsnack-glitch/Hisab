@@ -372,82 +372,39 @@ describe("Bundle product billing with trusted snapshots", () => {
         getSelectableAttachmentSpy.mockRestore();
     });
 
-    test("creates a priced bundle sale item from bundle id and quantity only", async () => {
+    test("rejects new legacy Bundle selections", async () => {
         const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId: bundleProductId, quantity: 2, addOns: [] }],
         });
 
-        expect(response.status).toBe("success");
-        expect(createSaleItem).toHaveBeenCalledTimes(1);
-        expect(createSaleItemAddOn).not.toHaveBeenCalled();
-        expect(createSaleItemBundleComponent).toHaveBeenCalledTimes(2);
-        expect(createSaleItemBundleComponentAddOn).toHaveBeenCalledTimes(1);
-
-        const parent = createdSaleItems[0];
-        expect(parent?.productNameSnapshot).toBe("Burger Combo");
-        expect(parent?.unitPriceSnapshot).toBe(99);
-        expect(parent?.discountAmount).toBe(18);
-        expect(parent?.lineSubtotal).toBe(198);
-        expect(parent?.lineTotal).toBe(180);
-        expect(parent?.configurationSignature).toBe("");
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("cannot be added to new sales");
+        expect(createSaleItem).not.toHaveBeenCalled();
+        expect(createSaleItemBundleComponent).not.toHaveBeenCalled();
     });
 
-    test("charges only the bundle product price and discount while nesting component snapshots", async () => {
+    test("rejects legacy Bundle selections before expanding components", async () => {
         const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
         });
 
-        expect(response.status).toBe("success");
-
-        // Component catalog sum would be Burger 80 + Cheese 20 + Coffee 40 = 140, but billed total is 90.
-        expect(response.data?.sale.subtotal).toBe(99);
-        expect(response.data?.sale.discountTotal).toBe(9);
-        expect(response.data?.sale.grandTotal).toBe(90);
-
-        const item = response.data?.sale.items[0];
-        expect(item?.lineTotal).toBe(90);
-        expect(item?.addOns).toEqual([]);
-        expect(item?.bundleComponents).toHaveLength(2);
-
-        const burgerComponent = item?.bundleComponents.find(
-            (component) => component.componentProductId === burgerProductId,
-        );
-        expect(burgerComponent?.productNameSnapshot).toBe("Burger");
-        expect(burgerComponent?.quantityPerBundle).toBe(1);
-        expect(burgerComponent?.totalQuantity).toBe(1);
-        expect(burgerComponent?.unitPriceSnapshot).toBe(80);
-        expect(burgerComponent?.addOns).toHaveLength(1);
-        expect(burgerComponent?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
-        expect(burgerComponent?.addOns[0]?.totalQuantity).toBe(1);
-
-        const coffeeComponent = item?.bundleComponents.find(
-            (component) => component.componentProductId === coffeeProductId,
-        );
-        expect(coffeeComponent?.productNameSnapshot).toBe("Cold Coffee");
-        expect(coffeeComponent?.unitDiscountSnapshot).toBe(5);
-        expect(coffeeComponent?.addOns).toEqual([]);
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("cannot be added to new sales");
+        expect(createSaleItem).not.toHaveBeenCalled();
+        expect(createSaleItemBundleComponent).not.toHaveBeenCalled();
     });
 
-    test("scales nested bundle component quantities with bundle quantity", async () => {
+    test("rejects legacy Bundle quantity changes for new sales", async () => {
         const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId: bundleProductId, quantity: 3, addOns: [] }],
         });
 
-        expect(response.status).toBe("success");
-
-        const burgerComponent = response.data?.sale.items[0]?.bundleComponents.find(
-            (component) => component.componentProductId === burgerProductId,
-        );
-        expect(burgerComponent?.quantityPerBundle).toBe(1);
-        expect(burgerComponent?.totalQuantity).toBe(3);
-        expect(burgerComponent?.addOns[0]?.totalQuantity).toBe(3);
-
-        expect(response.data?.sale.subtotal).toBe(297);
-        expect(response.data?.sale.discountTotal).toBe(27);
-        expect(response.data?.sale.grandTotal).toBe(270);
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("cannot be added to new sales");
+        expect(createSaleItem).not.toHaveBeenCalled();
     });
 
-    test("merges repeated bundle additions into one indivisible draft line", async () => {
+    test("rejects repeated legacy Bundle additions", async () => {
         const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 { productId: bundleProductId, quantity: 1, addOns: [] },
@@ -455,154 +412,42 @@ describe("Bundle product billing with trusted snapshots", () => {
             ],
         });
 
-        expect(response.status).toBe("success");
-        expect(createdSaleItems).toHaveLength(1);
-        expect(createdSaleItems[0]?.quantity).toBe(3);
-        expect(createdSaleItemAddOns).toHaveLength(0);
-        expect(createdSaleItemBundleComponents).toHaveLength(2);
-        expect(createdSaleItemBundleComponents.map((component) => component.totalQuantity)).toEqual([3, 3]);
-        expect(createdSaleItemBundleComponentAddOns).toHaveLength(1);
-        expect(createdSaleItemBundleComponentAddOns[0]?.totalQuantity).toBe(3);
-        expect(response.data?.sale.items).toHaveLength(1);
-        expect(response.data?.sale.items[0]?.bundleComponents).toHaveLength(2);
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("cannot be added to new sales");
+        expect(createdSaleItems).toHaveLength(0);
+        expect(createdSaleItemBundleComponents).toHaveLength(0);
     });
 
-    test("changes only the bundle parent quantity and rescales its complete frozen component tree", async () => {
+    test("rejects creating a new draft from a legacy Bundle", async () => {
         const created = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
         });
 
-        expect(created.status).toBe("success");
-        const saleId = created.data?.sale.id;
-        expect(saleId).toBeTruthy();
-
-        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId!, {
-            items: [{ productId: bundleProductId, quantity: 3, addOns: [] }],
-        });
-
-        expect(updated.status).toBe("success");
-        expect(createdSaleItems).toHaveLength(1);
-        expect(createdSaleItems[0]?.quantity).toBe(3);
-        expect(createdSaleItemAddOns).toHaveLength(0);
-        expect(createdSaleItemBundleComponents).toHaveLength(2);
-        expect(createdSaleItemBundleComponents.map((component) => component.totalQuantity)).toEqual([3, 3]);
-        expect(createdSaleItemBundleComponentAddOns).toHaveLength(1);
-        expect(createdSaleItemBundleComponentAddOns[0]?.totalQuantity).toBe(3);
-        expect(updated.data?.sale.items[0]?.bundleComponents).toHaveLength(2);
+        expect(created.status).toBe("error");
+        expect(created.message).toContain("cannot be added to new sales");
+        expect(createdSales).toHaveLength(0);
+        expect(createdSaleItems).toHaveLength(0);
     });
 
-    test("keeps frozen bundle snapshots through catalog edits and commits them safely", async () => {
+    test("rejects legacy Bundle drafts before catalog snapshot expansion", async () => {
         const created = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
         });
 
-        expect(created.status).toBe("success");
-        const saleId = created.data?.sale.id!;
-        const originalGrandTotal = Number(created.data?.sale.grandTotal);
-
-        getProductByIdSpy.mockClear();
-        getBundleComponentsSpy.mockClear();
-        getBundleComponentAddOnsSpy.mockClear();
-        getAddOnByIdSpy.mockClear();
-        getSelectableAttachmentSpy.mockClear();
-        getProductByIdSpy.mockImplementation(async (_organizationId: string, productId: string) => {
-            if (productId === bundleProductId) {
-                return {
-                    ...bundleProduct,
-                    name: "Retired Burger Combo",
-                    price: 999,
-                    status: "inactive" as const,
-                } as never;
-            }
-            return {
-                ...resolveProductById(productId)!,
-                name: "Changed component",
-                price: 777,
-                status: "inactive" as const,
-            } as never;
-        });
-        getBundleComponentsSpy.mockResolvedValue([]);
-        getBundleComponentAddOnsSpy.mockResolvedValue([]);
-        getAddOnByIdSpy.mockResolvedValue({ ...cheeseAddOn, name: "Retired Cheese", price: 555 } as never);
-        getSelectableAttachmentSpy.mockResolvedValue(null);
-
-        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId, {
-            items: [{ productId: bundleProductId, quantity: 2, addOns: [] }],
-        });
-
-        expect(updated.status).toBe("success");
-        expect(getProductByIdSpy).not.toHaveBeenCalled();
+        expect(created.status).toBe("error");
+        expect(created.message).toContain("cannot be added to new sales");
+        expect(createdSales).toHaveLength(0);
         expect(getBundleComponentsSpy).not.toHaveBeenCalled();
-        expect(getBundleComponentAddOnsSpy).not.toHaveBeenCalled();
-        expect(getAddOnByIdSpy).not.toHaveBeenCalled();
-        expect(getSelectableAttachmentSpy).not.toHaveBeenCalled();
-        expect(updated.data?.sale.items[0]).toMatchObject({
-            productNameSnapshot: "Burger Combo",
-            unitPriceSnapshot: 99,
-            quantity: 2,
-        });
-        expect(updated.data?.sale.items[0]?.bundleComponents).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    productNameSnapshot: "Burger",
-                    unitPriceSnapshot: 80,
-                    totalQuantity: 2,
-                    addOns: [
-                        expect.objectContaining({
-                            addOnNameSnapshot: "Extra Cheese",
-                            unitPriceSnapshot: 20,
-                            totalQuantity: 2,
-                        }),
-                    ],
-                }),
-                expect.objectContaining({
-                    productNameSnapshot: "Cold Coffee",
-                    unitPriceSnapshot: 40,
-                    totalQuantity: 2,
-                }),
-            ]),
-        );
-
-        const committed = await billingService.commitSale(userId, organizationId, storeId, saleId, {
-            payments: [{ amount: originalGrandTotal * 2, method: "cash" }],
-        });
-
-        expect(committed.status).toBe("success");
-        expect(committed.data?.sale.status).toBe("completed");
-        expect(committed.data?.sale.items[0]).toMatchObject({
-            productNameSnapshot: "Burger Combo",
-            unitPriceSnapshot: 99,
-            quantity: 2,
-        });
-        expect(committed.data?.sale.items[0]?.bundleComponents[0]?.productNameSnapshot).toBe("Burger");
-        expect(committed.data?.sale.items[0]?.bundleComponents[0]?.addOns[0]?.addOnNameSnapshot).toBe(
-            "Extra Cheese",
-        );
     });
 
-    test("keeps bundle revenue on its priced line while applying a sale-wide order discount", async () => {
+    test("rejects legacy Bundles before applying order discounts", async () => {
         const created = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
         });
 
-        const saleId = created.data?.sale.id!;
-        const committed = await billingService.commitSale(userId, organizationId, storeId, saleId, {
-            orderDiscountAmount: 10,
-            payments: [{ amount: 80, method: "cash" }],
-        });
-
-        expect(committed.status).toBe("success");
-        expect(committed.data?.sale.subtotal).toBe(99);
-        expect(committed.data?.sale.discountTotal).toBe(19);
-        expect(committed.data?.sale.orderDiscountAmount).toBe(10);
-        expect(committed.data?.sale.grandTotal).toBe(80);
-        expect(committed.data?.sale.items[0]).toMatchObject({
-            productNameSnapshot: "Burger Combo",
-            lineSubtotal: 99,
-            discountAmount: 9,
-            lineTotal: 90,
-        });
-        expect(committed.data?.sale.items[0]?.bundleComponents).toHaveLength(2);
+        expect(created.status).toBe("error");
+        expect(created.message).toContain("cannot be added to new sales");
+        expect(createdSales).toHaveLength(0);
     });
 
     test("returns commercial bundle sales alongside usage-only component rollups", async () => {
@@ -676,11 +521,11 @@ describe("Bundle product billing with trusted snapshots", () => {
         });
 
         expect(response.status).toBe("error");
-        expect(response.message).toContain("cannot accept add-on selections");
+        expect(response.message).toContain("cannot be added to new sales");
         expect(createSaleItem).not.toHaveBeenCalled();
     });
 
-    test("rejects selling a bundle with no components", async () => {
+    test("rejects legacy Bundles even when composition is missing", async () => {
         getBundleComponentsSpy.mockResolvedValue([]);
 
         const response = await billingService.createDraftSale(userId, organizationId, storeId, {
@@ -688,12 +533,12 @@ describe("Bundle product billing with trusted snapshots", () => {
         });
 
         expect(response.status).toBe("error");
-        expect(response.message).toContain("has no components");
+        expect(response.message).toContain("cannot be added to new sales");
         expect(createSaleItem).not.toHaveBeenCalled();
     });
 
-    test("rejects selling a bundle whose component product is inactive", async () => {
-        getProductByIdSpy.mockImplementation(async (_organizationId, productId) => {
+    test("rejects legacy Bundles even when a component is inactive", async () => {
+        getProductByIdSpy.mockImplementation(async (_organizationId: string, productId: string) => {
             if (productId === burgerProductId) {
                 return { ...burgerProduct, status: "inactive" as const } as never;
             }
@@ -705,11 +550,11 @@ describe("Bundle product billing with trusted snapshots", () => {
         });
 
         expect(response.status).toBe("error");
-        expect(response.message).toContain("component product is inactive");
+        expect(response.message).toContain("cannot be added to new sales");
         expect(createSaleItem).not.toHaveBeenCalled();
     });
 
-    test("rejects selling a bundle whose component add-on is no longer selectable", async () => {
+    test("rejects legacy Bundles even when a component add-on is unavailable", async () => {
         getSelectableAttachmentSpy.mockResolvedValue(null);
 
         const response = await billingService.createDraftSale(userId, organizationId, storeId, {
@@ -717,7 +562,7 @@ describe("Bundle product billing with trusted snapshots", () => {
         });
 
         expect(response.status).toBe("error");
-        expect(response.message).toContain("not selectable");
+        expect(response.message).toContain("cannot be added to new sales");
         expect(createSaleItem).not.toHaveBeenCalled();
     });
 });

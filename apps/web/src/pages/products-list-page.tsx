@@ -12,7 +12,7 @@ import { Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, RefreshCw, Search,
 import DeleteProductButton from "@/components/catalog/delete-product-button";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
-import UpsertBundleProductDialog from "@/components/catalog/upsert-bundle-product-dialog";
+import UpsertComboProductDialog from "@/components/catalog/upsert-combo-product-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
@@ -142,7 +142,7 @@ const ProductsListPage = () => {
                         }
                     />
 
-                    <UpsertBundleProductDialog
+                    <UpsertComboProductDialog
                         organizationId={organizationId}
                         categories={categories}
                         products={products}
@@ -154,7 +154,7 @@ const ProductsListPage = () => {
                                 disabled={categories.length === 0}
                             >
                                 <Boxes className="mr-2 size-4" />
-                                Add bundle
+                                    Add Combo
                             </Button>
                         }
                     />
@@ -303,8 +303,8 @@ const ProductsListPage = () => {
                                                         }
                                                     />
                                                 ) : null}
-                                                {product.productType === "bundle" ? (
-                                                    <UpsertBundleProductDialog
+                                                {product.productType === "combo" ? (
+                                                    <UpsertComboProductDialog
                                                         organizationId={organizationId}
                                                         categories={categories}
                                                         products={products}
@@ -320,7 +320,7 @@ const ProductsListPage = () => {
                                                             </Button>
                                                         }
                                                     />
-                                                ) : (
+                                                ) : product.productType === "single" ? (
                                                     <UpsertProductDialog
                                                         organizationId={organizationId}
                                                         categories={categories}
@@ -336,7 +336,7 @@ const ProductsListPage = () => {
                                                             </Button>
                                                         }
                                                     />
-                                                )}
+                                                ) : null}
                                                 <DeleteProductButton
                                                     organizationId={organizationId}
                                                     product={product}

@@ -4,9 +4,16 @@ import type {
     BundleProductComponentAddOnDTOSchema,
     BundleProductComponentDTOSchema,
     BundleProductComponentResponseDTOSchema,
+    ComboChoiceGroupDTOSchema,
+    ComboChoiceGroupInputSchema,
+    ComboChoiceGroupResponseDTOSchema,
+    ComboChoiceOptionDTOSchema,
+    ComboChoiceOptionInputSchema,
+    ComboChoiceOptionResponseDTOSchema,
     CategoryDTOSchema,
     CreateAddOnSchema,
     CreateBundleProductSchema,
+    CreateComboProductSchema,
     CreateCategorySchema,
     CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
@@ -16,6 +23,7 @@ import type {
     ProductResponseDTOSchema,
     UpdateAddOnSchema,
     UpdateBundleProductSchema,
+    UpdateComboProductSchema,
     UpdateCategorySchema,
     UpdateProductAddOnAttachmentSchema,
     UpdateProductSchema,
@@ -27,6 +35,12 @@ export type ProductResponseDTO = z.infer<typeof ProductResponseDTOSchema>;
 export type BundleProductComponentDTO = z.infer<typeof BundleProductComponentDTOSchema>;
 export type BundleProductComponentAddOnDTO = z.infer<typeof BundleProductComponentAddOnDTOSchema>;
 export type BundleProductComponentResponseDTO = z.infer<typeof BundleProductComponentResponseDTOSchema>;
+export type ComboChoiceGroupDTO = z.infer<typeof ComboChoiceGroupDTOSchema>;
+export type ComboChoiceOptionDTO = z.infer<typeof ComboChoiceOptionDTOSchema>;
+export type ComboChoiceGroupInput = z.infer<typeof ComboChoiceGroupInputSchema>;
+export type ComboChoiceOptionInput = z.infer<typeof ComboChoiceOptionInputSchema>;
+export type ComboChoiceGroupResponseDTO = z.infer<typeof ComboChoiceGroupResponseDTOSchema>;
+export type ComboChoiceOptionResponseDTO = z.infer<typeof ComboChoiceOptionResponseDTOSchema>;
 export type AddOnDTO = z.infer<typeof AddOnDTOSchema>;
 export type ProductAddOnAttachmentDTO = z.infer<typeof ProductAddOnAttachmentDTOSchema>;
 export type ProductAddOnAttachmentResponseDTO = z.infer<typeof ProductAddOnAttachmentResponseDTOSchema>;
@@ -74,6 +88,11 @@ export type CreateBundleProductSVC = CreateBundleProductJSON;
 export type UpdateBundleProductJSON = z.infer<typeof UpdateBundleProductSchema>;
 export type UpdateBundleProductSVC = UpdateBundleProductJSON;
 
+export type CreateComboProductJSON = z.infer<typeof CreateComboProductSchema>;
+export type CreateComboProductSVC = CreateComboProductJSON;
+export type UpdateComboProductJSON = z.infer<typeof UpdateComboProductSchema>;
+export type UpdateComboProductSVC = UpdateComboProductJSON;
+
 export type CreateBundleProductComponentREPO = Pick<
     BundleProductComponentDTO,
     "id" | "organizationId" | "bundleProductId" | "componentProductId" | "quantity" | "createdBy"
@@ -87,6 +106,16 @@ export type CreateBundleProductComponentAddOnREPO = Pick<
 > & {
     updatedBy?: string | null;
 };
+
+export type CreateComboChoiceGroupREPO = Pick<
+    ComboChoiceGroupDTO,
+    "id" | "organizationId" | "comboProductId" | "name" | "minSelections" | "maxSelections" | "sortOrder" | "createdBy"
+>;
+
+export type CreateComboChoiceOptionREPO = Pick<
+    ComboChoiceOptionDTO,
+    "id" | "organizationId" | "choiceGroupId" | "optionProductId" | "maxQuantity" | "priceAdjustment" | "sortOrder" | "createdBy"
+>;
 
 export type CreateAddOnJSON = z.infer<typeof CreateAddOnSchema>;
 export type CreateAddOnSVC = CreateAddOnJSON;
@@ -139,6 +168,15 @@ export type ProductResponse = {
 export type BundleProductResponse = {
     product: ProductResponseDTO;
     components: BundleProductComponentResponseDTO[];
+};
+
+export type ComboProductResponse = {
+    product: ProductResponseDTO;
+    choiceGroups: ComboChoiceGroupResponseDTO[];
+};
+
+export type ComboProductsListResponse = {
+    combos: ComboProductResponse[];
 };
 
 export type AddOnsListResponse = {

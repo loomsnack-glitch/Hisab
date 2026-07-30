@@ -3,10 +3,13 @@ import {
     type AddOnResponse,
     type AddOnsListResponse,
     type BundleProductResponse,
+    type ComboProductResponse,
     type CategoriesListResponse,
+    type ComboProductsListResponse,
     type CategoryResponse,
     type CreateAddOnSVC,
     type CreateBundleProductSVC,
+    type CreateComboProductSVC,
     type CreateCategorySVC,
     type CreateProductAddOnAttachmentSVC,
     type CreateProductSVC,
@@ -22,6 +25,7 @@ import {
     type UpdateAddOnSVC,
     type UpdateBundleProductSVC,
     type UpdateCategorySVC,
+    type UpdateComboProductSVC,
     type UpdateProductAddOnAttachmentSVC,
     type UpdateProductSVC,
 } from "@repo/types";
@@ -523,10 +527,10 @@ export const updateProduct = async (
         };
     }
 
-    if (existingProduct.productType === "bundle") {
+    if (existingProduct.productType === "bundle" || existingProduct.productType === "combo") {
         return {
             status: "error",
-            message: "Bundle products must use the bundle update workflow",
+            message: "Bundle products must use the bundle update workflow; Combo products must use the Combo update workflow",
             data: null,
             code: STATUS_CODES.BAD_REQUEST,
         };
@@ -572,14 +576,14 @@ export const updateProduct = async (
     }
 
     if (existingProduct.status === "active" && nextStatus === "inactive") {
-        const activeBundleCount = await catalogRepository.countActiveBundlesByComponentProductId(
-            organizationId,
-            productId,
-        );
-        if (activeBundleCount > 0) {
+        const [activeBundleCount, activeComboCount] = await Promise.all([
+            catalogRepository.countActiveBundlesByComponentProductId(organizationId, productId),
+            catalogRepository.countActiveCombosByOptionProductId(organizationId, productId),
+        ]);
+        if (activeBundleCount > 0 || activeComboCount > 0) {
             return {
                 status: "error",
-                message: "Product cannot be inactivated while it is used by an active bundle",
+                message: "Product cannot be inactivated while it is used by an active bundle or Combo",
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };
@@ -653,15 +657,16 @@ export const deleteProduct = async (
         };
     }
 
-    const [bundleComponentCount, saleItemCount, bundleSaleComponentCount] = await Promise.all([
+    const [bundleComponentCount, comboOptionCount, saleItemCount, bundleSaleComponentCount] = await Promise.all([
         catalogRepository.countBundleProductComponentsByComponentProductId(organizationId, productId),
+        catalogRepository.countComboChoiceOptionsByProductId(organizationId, productId),
         catalogRepository.countSaleItemsByProductId(organizationId, productId),
         catalogRepository.countSaleItemBundleComponentsByComponentProductId(organizationId, productId),
     ]);
-    if (bundleComponentCount > 0) {
+    if (bundleComponentCount > 0 || comboOptionCount > 0) {
         return {
             status: "error",
-            message: "Product cannot be deleted while it is used by a bundle. Set it to inactive instead.",
+            message: "Product cannot be deleted while it is used by a bundle or Combo. Set it to inactive instead.",
             data: null,
             code: STATUS_CODES.CONFLICT,
         };
@@ -968,6 +973,419 @@ const persistBundleComponents = async (
     return createdComponents;
 };
 
+const loadComboChoiceGroups = async (organizationId: string, comboProductId: string) => {
+    const groups = await catalogRepository.getComboChoiceGroupsByProductId(organizationId, comboProductId);
+    if (groups.length === 0) return [];
+    const options = await catalogRepository.getComboChoiceOptionsByGroupIds(
+        organizationId,
+        groups.map((group) => group.id),
+    );
+    const products = await Promise.all(
+        [...new Set(options.map((option) => option.optionProductId))].map((productId) =>
+            getProductForOrganization(organizationId, productId),
+        ),
+    );
+    const productsById = new Map(products.filter(Boolean).map((product) => [product!.id, product!]));
+    const optionsByGroupId = new Map<string, typeof options>();
+
+    for (const option of options) {
+        const existing = optionsByGroupId.get(option.choiceGroupId) ?? [];
+        existing.push(option);
+        optionsByGroupId.set(option.choiceGroupId, existing);
+    }
+
+    return Promise.all(groups.map(async (group) => ({
+        ...group,
+        options: await Promise.all((optionsByGroupId.get(group.id) ?? []).map(async (option) => ({
+            ...option,
+            product: await resolveProduct(productsById.get(option.optionProductId)! as ProductDTO),
+        }))),
+    })));
+};
+
+const loadComboChoiceGroupsForProducts = async (
+    organizationId: string,
+    comboProducts: ProductDTO[],
+): Promise<Map<string, ComboProductResponse["choiceGroups"]>> => {
+    const comboProductIds = comboProducts.map((product) => product.id);
+    const groups = await catalogRepository.getComboChoiceGroupsByProductIds(organizationId, comboProductIds);
+    const options = await catalogRepository.getComboChoiceOptionsByGroupIds(
+        organizationId,
+        groups.map((group) => group.id),
+    );
+    const products = await catalogRepository.getProductsByIds(
+        organizationId,
+        [...new Set(options.map((option) => option.optionProductId))],
+    );
+    const resolvedProducts = await resolveProducts(products);
+    const productsById = new Map(resolvedProducts.map((product) => [product.id, product]));
+    const optionsByGroupId = new Map<string, typeof options>();
+    const groupsByComboProductId = new Map<string, typeof groups>();
+
+    for (const option of options) {
+        const groupOptions = optionsByGroupId.get(option.choiceGroupId) ?? [];
+        groupOptions.push(option);
+        optionsByGroupId.set(option.choiceGroupId, groupOptions);
+    }
+    for (const group of groups) {
+        const comboGroups = groupsByComboProductId.get(group.comboProductId) ?? [];
+        comboGroups.push(group);
+        groupsByComboProductId.set(group.comboProductId, comboGroups);
+    }
+
+    return new Map(await Promise.all(comboProducts.map(async (combo) => [
+        combo.id,
+        await Promise.all((groupsByComboProductId.get(combo.id) ?? []).map(async (group) => ({
+            ...group,
+            options: (optionsByGroupId.get(group.id) ?? [])
+                .map((option) => {
+                    const product = productsById.get(option.optionProductId);
+                    return product ? { ...option, product } : null;
+                })
+                .filter((option): option is NonNullable<typeof option> => option !== null),
+        }))),
+    ])));
+};
+
+const validateComboChoiceGroups = async (
+    organizationId: string,
+    comboProductId: string,
+    choiceGroups: CreateComboProductSVC["choiceGroups"],
+): Promise<ServiceResponse<null> | { status: "success"; choiceGroups: CreateComboProductSVC["choiceGroups"] }> => {
+    if (choiceGroups.length === 0) {
+        return {
+            status: "error",
+            message: "A Combo needs at least one choice group",
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+        };
+    }
+
+    const groupNames = new Set<string>();
+    for (const group of choiceGroups) {
+        const normalizedName = group.name.trim().toLowerCase();
+        if (groupNames.has(normalizedName)) {
+            return {
+                status: "error",
+                message: "Combo choice group names must be unique",
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            };
+        }
+        groupNames.add(normalizedName);
+
+        if (group.minSelections > group.maxSelections) {
+            return {
+                status: "error",
+                message: `Choice group "${group.name}" has an invalid selection range`,
+                data: null,
+                code: STATUS_CODES.BAD_REQUEST,
+            };
+        }
+
+        const optionIds = new Set<string>();
+        for (const option of group.options) {
+            if (optionIds.has(option.productId)) {
+                return {
+                    status: "error",
+                    message: `Choice group "${group.name}" cannot repeat the same product option`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                };
+            }
+            optionIds.add(option.productId);
+
+            if (!Number.isFinite(option.priceAdjustment)) {
+                return {
+                    status: "error",
+                    message: `Combo option price adjustment for "${group.name}" is invalid`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                };
+            }
+
+            const product = await getProductForOrganization(organizationId, option.productId);
+            if (!product || product.id === comboProductId) {
+                return {
+                    status: "error",
+                    message: `Combo option product was not found for choice group "${group.name}"`,
+                    data: null,
+                    code: STATUS_CODES.NOT_FOUND,
+                };
+            }
+
+            if (product.productType !== "single") {
+                return {
+                    status: "error",
+                    message: `Combo options must be regular products. "${product.name}" cannot be used here`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                };
+            }
+
+            if (product.status !== "active") {
+                return {
+                    status: "error",
+                    message: `Combo option product "${product.name}" must be active`,
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                };
+            }
+        }
+    }
+
+    return { status: "success", choiceGroups };
+};
+
+const persistComboChoiceGroups = async (
+    organizationId: string,
+    comboProductId: string,
+    userId: string,
+    choiceGroups: CreateComboProductSVC["choiceGroups"],
+    tx: Bun.TransactionSQL,
+) => {
+    const createdGroups = [];
+
+    for (const [groupIndex, group] of choiceGroups.entries()) {
+        const createdGroup = await catalogRepository.createComboChoiceGroup({
+            id: crypto.randomUUID(),
+            organizationId,
+            comboProductId,
+            name: group.name.trim(),
+            minSelections: group.minSelections,
+            maxSelections: group.maxSelections,
+            sortOrder: groupIndex,
+            createdBy: userId,
+        }, tx);
+
+        if (!createdGroup) throw new Error("Failed to create Combo choice group");
+
+        const createdOptions = [];
+        for (const [optionIndex, option] of group.options.entries()) {
+            const createdOption = await catalogRepository.createComboChoiceOption({
+                id: crypto.randomUUID(),
+                organizationId,
+                choiceGroupId: createdGroup.id,
+                optionProductId: option.productId,
+                maxQuantity: option.maxQuantity,
+                priceAdjustment: option.priceAdjustment,
+                sortOrder: optionIndex,
+                createdBy: userId,
+            }, tx);
+
+            if (!createdOption) throw new Error("Failed to create Combo choice option");
+            createdOptions.push(createdOption);
+        }
+
+        createdGroups.push({ ...createdGroup, options: createdOptions });
+    }
+
+    return createdGroups;
+};
+
+export const createComboProduct = async (
+    userId: string,
+    organizationId: string,
+    comboData: CreateComboProductSVC,
+): Promise<ServiceResponse<ComboProductResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+
+    const category = await getCategoryForOrganization(organizationId, comboData.categoryId);
+    if (!category) return { status: "error", message: "Category not found", data: null, code: STATUS_CODES.NOT_FOUND };
+
+    const alreadyExists = await catalogRepository.productNameExistsInCategory(organizationId, comboData.categoryId, comboData.name);
+    if (alreadyExists) return { status: "error", message: "Product with the same name already exists in this category", data: null, code: STATUS_CODES.CONFLICT };
+
+    const comboProductId = crypto.randomUUID();
+    const validated = await validateComboChoiceGroups(organizationId, comboProductId, comboData.choiceGroups);
+    if (!("choiceGroups" in validated)) return validated;
+
+    let createdProduct: ProductDTO | null = null;
+    try {
+        await pg.begin(async (tx) => {
+            createdProduct = await catalogRepository.createProduct({
+                id: comboProductId,
+                organizationId,
+                categoryId: comboData.categoryId,
+                name: comboData.name,
+                price: comboData.price,
+                discount: comboData.discount ?? 0,
+                imagePath: normalizeOptionalText(comboData.imagePath),
+                productType: "combo",
+                status: comboData.status ?? "active",
+                createdBy: userId,
+            }, tx);
+            if (!createdProduct) throw new Error("Failed to create Combo product");
+            await persistComboChoiceGroups(organizationId, comboProductId, userId, validated.choiceGroups, tx);
+        });
+    } catch {
+        return { status: "error", message: "Failed to create Combo product", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+    }
+
+    const finalCreatedProduct = createdProduct;
+    if (!finalCreatedProduct) return { status: "error", message: "Failed to create Combo product", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+    const details = await loadComboChoiceGroups(organizationId, comboProductId);
+    return {
+        status: "success",
+        data: { product: await resolveProduct(finalCreatedProduct), choiceGroups: details },
+        message: "Combo created successfully",
+        code: STATUS_CODES.CREATED,
+    };
+};
+
+export const getComboProductDetails = async (
+    userId: string,
+    organizationId: string,
+    productId: string,
+): Promise<ServiceResponse<ComboProductResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const product = await getProductForOrganization(organizationId, productId);
+    if (!product || product.productType !== "combo") return { status: "error", message: "Combo not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    return {
+        status: "success",
+        data: { product: await resolveProduct(product), choiceGroups: await loadComboChoiceGroups(organizationId, productId) },
+        message: "Combo fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getComboProductDetailsForOrganization = async (
+    userId: string,
+    organizationId: string,
+): Promise<ServiceResponse<ComboProductsListResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+
+    const comboProducts = (await catalogRepository.getProductsByOrganizationId(organizationId))
+        .filter((product) => product.productType === "combo" && product.status === "active");
+    const choiceGroupsByProductId = await loadComboChoiceGroupsForProducts(organizationId, comboProducts);
+    const resolvedProducts = await resolveProducts(comboProducts);
+
+    return {
+        status: "success",
+        data: {
+            combos: resolvedProducts.map((product) => ({
+                product,
+                choiceGroups: choiceGroupsByProductId.get(product.id) ?? [],
+            })),
+        },
+        message: "Combos fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getComboProductDetailsForDevice = async (
+    session: DeviceSessionDTO,
+    productId: string,
+): Promise<ServiceResponse<ComboProductResponse | null>> => {
+    const product = await getProductForOrganization(session.organization.id, productId);
+    if (!product || product.productType !== "combo" || product.status !== "active") {
+        return { status: "error", message: "Combo not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+    return {
+        status: "success",
+        data: { product: await resolveProduct(product), choiceGroups: await loadComboChoiceGroups(session.organization.id, productId) },
+        message: "Combo fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getComboProductDetailsForDeviceBulk = async (
+    session: DeviceSessionDTO,
+): Promise<ServiceResponse<ComboProductsListResponse | null>> => {
+    const comboProducts = (await catalogRepository.getActiveProductsByOrganizationId(session.organization.id))
+        .filter((product) => product.productType === "combo");
+    const choiceGroupsByProductId = await loadComboChoiceGroupsForProducts(session.organization.id, comboProducts);
+    const resolvedProducts = await resolveProducts(comboProducts);
+
+    return {
+        status: "success",
+        data: {
+            combos: resolvedProducts.map((product) => ({
+                product,
+                choiceGroups: choiceGroupsByProductId.get(product.id) ?? [],
+            })),
+        },
+        message: "Combos fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const updateComboProduct = async (
+    userId: string,
+    organizationId: string,
+    productId: string,
+    comboData: UpdateComboProductSVC,
+): Promise<ServiceResponse<ComboProductResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const existingProduct = await getProductForOrganization(organizationId, productId);
+    if (!existingProduct || existingProduct.productType !== "combo") return { status: "error", message: "Combo not found", data: null, code: STATUS_CODES.NOT_FOUND };
+
+    const nextCategoryId = comboData.categoryId ?? existingProduct.categoryId;
+    const nextName = comboData.name ?? existingProduct.name;
+    const category = await getCategoryForOrganization(organizationId, nextCategoryId);
+    if (!category) return { status: "error", message: "Category not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    if (nextCategoryId !== existingProduct.categoryId || nextName.toLowerCase() !== existingProduct.name.toLowerCase()) {
+        if (await catalogRepository.productNameExistsInCategory(organizationId, nextCategoryId, nextName, productId)) {
+            return { status: "error", message: "Product with the same name already exists in this category", data: null, code: STATUS_CODES.CONFLICT };
+        }
+    }
+
+    const currentGroups = await loadComboChoiceGroups(organizationId, productId);
+    const nextGroups = comboData.choiceGroups;
+    if (nextGroups) {
+        const validated = await validateComboChoiceGroups(organizationId, productId, nextGroups);
+        if (!("choiceGroups" in validated)) return validated;
+    } else if (existingProduct.status === "inactive" && comboData.status === "active") {
+        const validationInput = currentGroups.map((group) => ({
+            name: group.name,
+            minSelections: group.minSelections,
+            maxSelections: group.maxSelections,
+            options: group.options.map((option) => ({
+                productId: option.optionProductId,
+                maxQuantity: option.maxQuantity,
+                priceAdjustment: option.priceAdjustment,
+            })),
+        }));
+        const validated = await validateComboChoiceGroups(organizationId, productId, validationInput);
+        if (!("choiceGroups" in validated)) return validated;
+    }
+
+    let updatedProduct: ProductDTO | null = null;
+    try {
+        await pg.begin(async (tx) => {
+            updatedProduct = await catalogRepository.updateProduct({
+                id: productId,
+                organizationId,
+                categoryId: nextCategoryId,
+                name: nextName,
+                price: comboData.price ?? existingProduct.price,
+                discount: comboData.discount ?? existingProduct.discount,
+                imagePath: comboData.imagePath === undefined ? existingProduct.imagePath : normalizeOptionalText(comboData.imagePath),
+                status: comboData.status ?? existingProduct.status,
+                updatedBy: userId,
+            }, tx);
+            if (!updatedProduct) throw new Error("Failed to update Combo product");
+            if (nextGroups) {
+                await catalogRepository.deleteComboChoiceGroupsByProductId(organizationId, productId, tx);
+                await persistComboChoiceGroups(organizationId, productId, userId, nextGroups, tx);
+            }
+        });
+    } catch {
+        return { status: "error", message: "Failed to update Combo product", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+    }
+
+    const previousImagePath = existingProduct.imagePath;
+    const finalUpdatedProduct = updatedProduct as ProductDTO | null;
+    if (!finalUpdatedProduct) return { status: "error", message: "Failed to update Combo product", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+    if (previousImagePath && previousImagePath !== finalUpdatedProduct.imagePath) await deleteProductImageIfPossible(previousImagePath);
+    const choiceGroups = nextGroups ? await loadComboChoiceGroups(organizationId, productId) : currentGroups;
+    return { status: "success", data: { product: await resolveProduct(finalUpdatedProduct), choiceGroups }, message: "Combo updated successfully", code: STATUS_CODES.SUCCESS };
+};
+
 export const createBundleProduct = async (
     userId: string,
     organizationId: string,
@@ -1042,7 +1460,7 @@ export const createBundleProduct = async (
                 organizationId,
                 bundleProductId,
                 userId,
-                validatedComponents.components,
+                "components" in validatedComponents ? validatedComponents.components : [],
                 tx,
             );
         });
@@ -1182,7 +1600,7 @@ export const updateBundleProduct = async (
     let nextComponents: ValidatedBundleComponent[] | null = null;
     if (bundleData.components !== undefined) {
         const validatedComponents = await validateBundleComponents(organizationId, bundleData.components);
-        if (validatedComponents.status === "error") {
+        if ("components" in validatedComponents === false) {
             return validatedComponents;
         }
         nextComponents = validatedComponents.components;
@@ -1249,8 +1667,10 @@ export const updateBundleProduct = async (
         };
     }
 
-    if (existingProduct.imagePath && existingProduct.imagePath !== updatedProduct.imagePath) {
-        await deleteProductImageIfPossible(existingProduct.imagePath);
+    const previousImagePath = existingProduct.imagePath;
+    const updatedImagePath = (updatedProduct as ProductDTO).imagePath;
+    if (previousImagePath && previousImagePath !== updatedImagePath) {
+        await deleteProductImageIfPossible(previousImagePath);
     }
 
     return {
@@ -1334,6 +1754,10 @@ export const createAddOn = async (
             data: null,
             code: STATUS_CODES.CONFLICT,
         };
+    }
+
+    if ((addOnData.discount ?? 0) > addOnData.price) {
+        return { status: "error", message: "Discount cannot exceed price", data: null, code: STATUS_CODES.BAD_REQUEST };
     }
 
     const addOn = await catalogRepository.createAddOn({
@@ -1426,6 +1850,10 @@ export const updateAddOn = async (
     const nextPrice = addOnData.price ?? existingAddOn.price;
     const nextDiscount = addOnData.discount ?? existingAddOn.discount;
     const nextStatus = addOnData.status ?? existingAddOn.status;
+
+    if (nextDiscount > nextPrice) {
+        return { status: "error", message: "Discount cannot exceed price", data: null, code: STATUS_CODES.BAD_REQUEST };
+    }
 
     if (nextName.toLowerCase() !== existingAddOn.name.toLowerCase()) {
         const alreadyExists = await catalogRepository.addOnNameExistsInOrganization(organizationId, nextName, addOnId);
@@ -1637,10 +2065,10 @@ export const createProductAddOnAttachment = async (
         };
     }
 
-    if (product.productType === "bundle") {
+    if (product.productType === "bundle" || product.productType === "combo") {
         return {
             status: "error",
-            message: "Add-ons cannot be attached directly to bundle products",
+            message: "Add-ons cannot be attached directly to Bundle or Combo products",
             data: null,
             code: STATUS_CODES.BAD_REQUEST,
         };

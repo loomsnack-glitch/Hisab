@@ -54,6 +54,10 @@ export const buildReceiptText = (sale: SaleDetailDTO): string => {
             const componentName = `* ${component.productNameSnapshot}`.padEnd(20).substring(0, 20);
             const componentQty = String(Number(component.totalQuantity)).padStart(5);
             text += `${componentName}${componentQty}${" ".repeat(16)}\n`;
+            if (Number(component.priceAdjustmentSnapshot ?? 0) !== 0) {
+                const adjustment = money(component.priceAdjustmentSnapshot);
+                text += `  * Option adjustment: ${adjustment}\n`;
+            }
             (component.addOns ?? []).forEach((addOn) => {
                 const addOnName = `  + ${addOn.addOnNameSnapshot}`.padEnd(20).substring(0, 20);
                 const addOnQty = String(Number(addOn.totalQuantity)).padStart(5);
