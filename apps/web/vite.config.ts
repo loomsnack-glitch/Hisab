@@ -72,8 +72,15 @@ export default defineConfig(({ mode }) => {
             ],
         },
         server: {
+            allowedHosts: [".ngrok-free.dev", ".ngrok.io"],
             host: true,
             port: 5173,
+            proxy: {
+                "/api": {
+                    target: "http://localhost:8000",
+                    changeOrigin: true,
+                },
+            },
             watch: {
                 // Workspace packages are symlinked; pick up new named exports without a full restart.
                 ignored: ["!**/node_modules/@repo/**"],

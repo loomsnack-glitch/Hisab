@@ -37,6 +37,7 @@ import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { buildReceiptText } from "@/lib/receipt-text";
+import { printReceiptText } from "@/lib/print-receipt-text";
 
 type SaleDetailDialogProps = {
     open: boolean;
@@ -165,7 +166,12 @@ const SaleDetailDialog = ({
     });
 
     const handlePrint = () => {
-        window.print();
+        if (!sale) return;
+
+        printReceiptText({
+            text: buildReceiptText(sale),
+            title: sale.saleNumber ? `Bill_${sale.saleNumber}` : "Receipt",
+        });
     };
 
     const handleDownloadTxt = () => {
@@ -187,36 +193,6 @@ const SaleDetailDialog = ({
     return (
         <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
             <DialogContent className="max-h-[92vh] w-[95vw] sm:w-[90vw] md:w-[85vw] max-w-4xl sm:max-w-4xl md:max-w-4xl lg:max-w-4xl overflow-y-auto overflow-x-hidden rounded-[32px] border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">
-                <style>{`
-                    @media print {
-                        body * {
-                            visibility: hidden !important;
-                        }
-                        #printable-bill, #printable-bill * {
-                            visibility: visible !important;
-                        }
-                        #printable-bill {
-                            position: absolute !important;
-                            left: 0 !important;
-                            top: 0 !important;
-                            width: 100% !important;
-                            max-width: 100% !important;
-                            background: white !important;
-                            color: black !important;
-                            padding: 0 !important;
-                            margin: 0 !important;
-                        }
-                        #printable-bill-grid {
-                            display: flex !important;
-                            flex-direction: column !important;
-                            gap: 20px !important;
-                        }
-                        .no-print, .no-print * {
-                            display: none !important;
-                            visibility: hidden !important;
-                        }
-                    }
-                `}</style>
                 {saleQuery.isPending ? (
                     <div className="flex min-h-[420px] items-center justify-center">
                         <Spinner className="size-6 text-primary" />
@@ -238,7 +214,7 @@ const SaleDetailDialog = ({
                 ) : (
                     <div className="space-y-0">
                         {/* Interactive screen header */}
-                        <div className="border-b border-border/60 px-6 py-5 sm:px-8 no-print">
+                        <div className="border-b border-border/60 px-6 py-5 sm:px-8">
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <DialogHeader className="space-y-3">
                                     <div className="flex flex-wrap items-center gap-3">
@@ -291,20 +267,7 @@ const SaleDetailDialog = ({
                             </div>
                         </div>
 
-                        {/* Printable container */}
-                        <div id="printable-bill">
-                            {/* Hidden-by-default Header for printing only */}
-                            <div className="border-b border-border/60 px-6 py-5 print:block hidden">
-                                <h1 className="font-display text-2xl font-bold tracking-tight text-black">
-                                    {sale.saleNumber ? `Bill #${sale.saleNumber}` : "Draft bill"}
-                                </h1>
-                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-slate-700 mt-2">
-                                    <span>Created: {formatDateTime(sale.createdAt)}</span>
-                                    <span>Customer: {sale.customer?.name || "Walk-in Customer"}</span>
-                                </div>
-                            </div>
-
-                            <div id="printable-bill-grid" className="grid gap-6 px-6 py-6 sm:px-8 grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]">
+                        <div className="grid gap-6 px-6 py-6 sm:px-8 grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]">
                             <div className="space-y-5">
                                 <Card className="rounded-[28px] border-border/60 bg-card/70">
                                     <CardContent className="p-5">
@@ -508,7 +471,7 @@ const SaleDetailDialog = ({
                                 ) : null}
 
                                 {canMutate && sale.status === "completed" && Number(sale.dueTotal) > 0 ? (
-                                    <Card className="rounded-[28px] border-border/60 bg-card/70 no-print">
+                                    <Card className="rounded-[28px] border-border/60 bg-card/70">
                                         <CardContent className="space-y-4 p-5">
                                             <div>
                                                 <h3 className="font-semibold text-foreground">Collect payment</h3>
@@ -619,7 +582,7 @@ const SaleDetailDialog = ({
                                 ) : null}
 
                                 {canMutate && sale.status === "completed" && Number(sale.paidTotal) === 0 ? (
-                                    <Card className="rounded-[28px] border-destructive/20 bg-destructive/5 no-print">
+                                    <Card className="rounded-[28px] border-destructive/20 bg-destructive/5">
                                         <CardContent className="space-y-4 p-5">
                                             <div>
                                                 <h3 className="font-semibold text-foreground">Void bill</h3>
@@ -654,7 +617,6 @@ const SaleDetailDialog = ({
                             </div>
                         </div>
                     </div>
-                </div>
                 )}
             </DialogContent>
         </Dialog>

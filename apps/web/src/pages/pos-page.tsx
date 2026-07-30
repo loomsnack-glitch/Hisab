@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { deviceAuthenticate } from "@repo/services";
@@ -13,6 +13,10 @@ const PosPage = () => {
   const [activePanelTab, setActivePanelTab] = useState<"products" | "bills">(
     "products",
   );
+  const handlePanelTabChange = useCallback((tab: "products" | "bills") => {
+    setActivePanelTab(tab);
+    setHeaderSearch("");
+  }, []);
     const deviceAuthQuery = useQuery({
         queryKey: deviceAuthKeys.me,
         queryFn: deviceAuthenticate,
@@ -56,10 +60,7 @@ const PosPage = () => {
         session={session}
         productSearch={activePanelTab === "products" ? headerSearch : ""}
         salesSearch={activePanelTab === "bills" ? headerSearch : ""}
-        onPanelTabChange={(tab) => {
-          setActivePanelTab(tab);
-          setHeaderSearch("");
-        }}
+        onPanelTabChange={handlePanelTabChange}
       />
         </PosLayout>
     );

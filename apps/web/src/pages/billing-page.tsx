@@ -78,7 +78,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
 import CustomizeProductDialog, {
   type CustomizeAddOnSelection,
 } from "@/components/billing/customize-product-dialog";
@@ -88,6 +87,7 @@ import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
 import { buildReceiptText } from "@/lib/receipt-text";
+import { printReceiptText } from "@/lib/print-receipt-text";
 import { safeRandomUUID } from "@/lib/uuid";
 
 type ComposerAddOn = CustomizeAddOnSelection;
@@ -169,7 +169,6 @@ const BillingPage = ({
 
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
-    const [customerSearch, setCustomerSearch] = useState("");
     const [notes, setNotes] = useState("");
     const [items, setItems] = useState<ComposerItem[]>([]);
     const [categoryFilter, setCategoryFilter] = useState("all");
@@ -185,8 +184,7 @@ const BillingPage = ({
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">(
     "amount",
     );
-  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
-  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+  const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
   const [historyFilter] = useState<
     "all" | "draft" | "open" | "paid" | "voided"
   >("all");
@@ -213,9 +211,6 @@ const BillingPage = ({
   const salesSearch = salesSearchProp ?? "";
   const deferredProductSearch = useDeferredValue(
     productSearch.trim().toLowerCase(),
-  );
-  const deferredCustomerSearch = useDeferredValue(
-    customerSearch.trim().toLowerCase(),
   );
   const deferredCustomerDirectorySearch = useDeferredValue(
     customerDirectorySearch.trim().toLowerCase(),
@@ -405,9 +400,6 @@ const BillingPage = ({
         });
     }, [isDeviceMode, organization, selectedStoreId, setSearchParams]);
 
-  const selectedCustomer =
-    customers.find((customer) => customer.id === selectedCustomerId) ?? null;
-
   const activeProducts = products.filter(
     (product) => product.status === "active",
   );
@@ -421,19 +413,6 @@ const BillingPage = ({
         return matchesCategory && matchesSearch;
     });
     const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
-
-    const filteredCustomers = customers
-        .filter((customer) => {
-            if (!deferredCustomerSearch) {
-                return true;
-            }
-
-            return (
-                customer.name.toLowerCase().includes(deferredCustomerSearch) ||
-                (customer.phone ?? "").toLowerCase().includes(deferredCustomerSearch)
-            );
-        })
-        .slice(0, 6);
 
     const directoryCustomers = customers.filter((customer) => {
         if (!deferredCustomerDirectorySearch) {
@@ -627,16 +606,14 @@ const BillingPage = ({
     const resetComposer = () => {
         setActiveDraftId(null);
         setSelectedCustomerId("");
-        setCustomerSearch("");
         setNotes("");
         setItems([]);
         setSettlementMode("full");
         setSelectedPaymentMethod("cash");
         setPartialPaymentAmount("");
-        setDiscountInput("");
+    setDiscountInput("");
     setDiscountMode("amount");
-    setCustomerDialogOpen(false);
-    setCustomerPickerOpen(false);
+    setPlaceOrderDialogOpen(false);
     };
 
     useEffect(() => {
@@ -644,15 +621,18 @@ const BillingPage = ({
             return;
         }
 
-        const clearReceipt = () => setReceiptToPrint(null);
-        window.addEventListener("afterprint", clearReceipt, { once: true });
         const printTimer = window.setTimeout(() => {
-            window.print();
-        }, 150);
+            printReceiptText({
+                text: buildReceiptText(receiptToPrint),
+                title: receiptToPrint.saleNumber
+                    ? `Receipt_${receiptToPrint.saleNumber}`
+                    : "Receipt",
+            });
+            setReceiptToPrint(null);
+        }, 100);
 
         return () => {
             window.clearTimeout(printTimer);
-            window.removeEventListener("afterprint", clearReceipt);
         };
     }, [receiptToPrint]);
 
@@ -854,6 +834,7 @@ const BillingPage = ({
                 })),
             );
             invalidateBillingQueries();
+            setMobileCartOpen(false);
             toast.success(sale.status === "draft" ? "Draft saved" : "Bill updated");
         },
         onError: (error: { message?: string }) => {
@@ -949,8 +930,7 @@ const BillingPage = ({
         onSuccess: (sale) => {
             completionRequestRef.current = null;
             invalidateBillingQueries();
-            setCustomerDialogOpen(false);
-            setCustomerPickerOpen(false);
+            setPlaceOrderDialogOpen(false);
             setMobileCartOpen(false);
             resetComposer();
             setReceiptToPrint(sale);
@@ -994,8 +974,6 @@ const BillingPage = ({
         onSuccess: (sale) => {
             setActiveDraftId(sale.id);
             setSelectedCustomerId(sale.customerId ?? "");
-            const cust = customers.find((c) => c.id === sale.customerId);
-            setCustomerSearch(cust ? cust.phone || cust.name : "");
             setNotes(sale.notes ?? "");
             setItems(
                 sale.items.map((item) => ({
@@ -1054,22 +1032,6 @@ const BillingPage = ({
             setSearchParams({ storeId });
         });
         resetComposer();
-    };
-
-    const handleFindCustomer = () => {
-        if (!customerSearch.trim()) return;
-        const match = customers.find(
-            (c) =>
-                c.phone?.includes(customerSearch.trim()) ||
-                c.name.toLowerCase().includes(customerSearch.trim().toLowerCase()),
-        );
-        if (match) {
-            setSelectedCustomerId(match.id);
-            setCustomerSearch(match.phone || match.name);
-            toast.success(`Customer found: ${match.name}`);
-        } else {
-            toast.error("No customer found");
-        }
     };
 
     if (!isDeviceMode && organizationQuery.isPending) {
@@ -1144,35 +1106,10 @@ const BillingPage = ({
 
     return (
     <div className="billing-pos-layout flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] flex-col gap-0 lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden">
-            <style>{`
-                @media print {
-                    body * {
-                        visibility: hidden !important;
-                    }
-                    #pos-auto-receipt,
-                    #pos-auto-receipt * {
-                        visibility: visible !important;
-                    }
-                    #pos-auto-receipt {
-                        display: block !important;
-                        position: absolute !important;
-                        inset: 0 !important;
-                        width: 100% !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        color: #000 !important;
-                        background: #fff !important;
-                        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
-                        font-size: 11px !important;
-                        line-height: 1.35 !important;
-                        white-space: pre !important;
-                    }
-                }
-            `}</style>
             {receiptToPrint ? (
-                <pre id="pos-auto-receipt" className="hidden">
-                    {buildReceiptText(receiptToPrint)}
-                </pre>
+                <span className="sr-only" aria-live="polite">
+                    Preparing receipt for printing
+                </span>
             ) : null}
             {!isDeviceMode ? (
                 <header className="flex flex-col gap-3 border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
@@ -2177,245 +2114,47 @@ const BillingPage = ({
                                 )}
                             </div>
 
-                        {/* ─── Bottom Checkout Area (sticky on mobile) ─── */}
-              <div className="border-t border-border/40 bg-card px-2 py-1.5 max-lg:pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-                            {/* Discount Input */}
-                <div className="mb-1 space-y-0.5">
-                  <div className="flex items-center gap-1">
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      Discount
-                                        </span>
-                    <div className="relative min-w-0 flex-1">
-                                <Input
-                                    type="number"
-                                    min="0"
-                        max={discountMode === "percent" ? 100 : undefined}
-                        step="0.01"
-                        inputMode="decimal"
-                        className={cn(
-                          "h-8 rounded-lg bg-background/60 pr-2 text-[10px]",
-                          discountValidationMessage &&
-                            "border-destructive focus-visible:ring-destructive",
-                        )}
-                        placeholder={discountMode === "percent" ? "0" : "0.00"}
-                                    value={discountInput}
-                        onChange={(event) =>
-                          setDiscountInput(event.target.value)
-                        }
-                        aria-label={
-                          discountMode === "percent"
-                            ? "Discount percentage"
-                            : "Discount amount"
-                        }
-                        aria-invalid={hasInvalidDiscount}
-                                />
-                            </div>
-                    <div className="flex h-8 shrink-0 items-center rounded-lg border border-border/60 bg-background/50 p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => changeDiscountMode("amount")}
-                        aria-label="Discount amount"
-                        aria-pressed={discountMode === "amount"}
-                        className={cn(
-                          "flex size-6 items-center justify-center rounded-sm text-[10px] font-semibold transition-colors",
-                          discountMode === "amount"
-                            ? "bg-foreground text-background"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        ₹
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => changeDiscountMode("percent")}
-                        aria-label="Discount percentage"
-                        aria-pressed={discountMode === "percent"}
-                        className={cn(
-                          "flex size-6 items-center justify-center rounded-sm text-[10px] font-semibold transition-colors",
-                          discountMode === "percent"
-                            ? "bg-foreground text-background"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        %
-                      </button>
-                    </div>
+                        {/* ─── Compact Checkout Summary ─── */}
+              <div className="border-t border-border/40 bg-card px-3 py-2.5 max-lg:pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+                <div className="mb-2 space-y-0.5 rounded-lg bg-background/40 px-2.5 py-2 text-[11px]">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(subtotal)}</span>
                   </div>
-                  {discountValidationMessage ? (
-                    <p className="text-[10px] text-destructive">
-                      {discountValidationMessage}
-                    </p>
+                  {lineDiscountTotal > 0 ? (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Item discounts</span>
+                      <span>-{formatCurrency(lineDiscountTotal)}</span>
+                    </div>
+                  ) : null}
+                  {orderDiscountAmount > 0 ? (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Order discount</span>
+                      <span>-{formatCurrency(orderDiscountAmount)}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between pt-1 text-sm font-bold text-foreground">
+                    <span>Total</span>
+                    <span>{formatCurrency(grandTotal)}</span>
+                  </div>
+                  {dueTotal > 0 && items.length > 0 ? (
+                    <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                      <span>Due after bill</span>
+                      <span>{formatCurrency(dueTotal)}</span>
+                    </div>
                   ) : null}
                 </div>
 
-                            {/* Summary */}
-                <div className="mb-1 space-y-0.5 rounded-lg bg-background/40 px-2 py-1 text-[11px]">
-                                <div className="flex justify-between text-muted-foreground">
-                                    <span>Subtotal</span>
-                                    <span>{formatCurrency(subtotal)}</span>
-                                </div>
-                                {lineDiscountTotal > 0 && (
-                                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                                        <span>Item discounts</span>
-                                        <span>-{formatCurrency(lineDiscountTotal)}</span>
-                                    </div>
-                                )}
-                                {orderDiscountAmount > 0 && (
-                                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                                        <span>Order discount</span>
-                                        <span>-{formatCurrency(orderDiscountAmount)}</span>
-                                    </div>
-                                )}
-                                {dueTotal > 0 && items.length > 0 && (
-                                    <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                                        <span>Due after bill</span>
-                                        <span>{formatCurrency(dueTotal)}</span>
-                                    </div>
-                                )}
-                  <div className="flex justify-between pt-1 text-sm font-bold text-foreground">
-                                    <span>Total</span>
-                                    <span>{formatCurrency(grandTotal)}</span>
-                                </div>
-                            </div>
-
-                <div className="mb-1">
-                  <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                    Settlement
-                                </p>
-                  <div className="grid grid-cols-3 gap-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setSettlementMode("full")}
-                                        className={cn(
-                        "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
-                                            settlementMode === "full"
-                                                ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
-                                                : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
-                                        )}
-                                    >
-                      Paid
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSettlementMode("partial")}
-                                        className={cn(
-                        "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
-                                            settlementMode === "partial"
-                                                ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
-                                                : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
-                                        )}
-                                    >
-                      Partial
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSettlementMode("due")}
-                                        className={cn(
-                        "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
-                                            settlementMode === "due"
-                                                ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
-                                                : "border border-border/60 bg-background/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
-                                        )}
-                                    >
-                      Due
-                                    </button>
-                                </div>
-                            </div>
-
-                            {settlementMode !== "due" && (
-                  <div className="mb-1">
-                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Payment
-                                    </p>
-                    <div className="grid grid-cols-3 gap-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedPaymentMethod("cash")}
-                                            className={cn(
-                          "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
-                                                selectedPaymentMethod === "cash"
-                                                    ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
-                                                    : "border border-border/60 bg-background/70 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground",
-                                            )}
-                                        >
-                                            Cash
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedPaymentMethod("upi")}
-                                            className={cn(
-                          "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
-                                                selectedPaymentMethod === "upi"
-                                                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                                    : "border border-border/60 bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                                            )}
-                                        >
-                                            UPI
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedPaymentMethod("card")}
-                                            className={cn(
-                          "flex items-center justify-center gap-1 rounded-lg py-1 text-[10px] font-semibold transition-all duration-200",
-                                                selectedPaymentMethod === "card"
-                                                    ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
-                                                    : "border border-border/60 bg-background/70 text-muted-foreground hover:border-sky-500/40 hover:text-foreground",
-                                            )}
-                                        >
-                                            Card
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {settlementMode === "partial" && (
-                  <div className="mb-1">
-                                    <Input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                      className="h-8 rounded-lg bg-background/60 text-[11px]"
-                      placeholder="Amount received"
-                                        value={partialPaymentAmount}
-                                        onChange={(e) => setPartialPaymentAmount(e.target.value)}
-                                    />
-                                </div>
-                            )}
-
-                            {/* Warnings */}
-                            {isOverpaid && (
-                  <div className="mb-1 rounded-lg border border-destructive/20 bg-destructive/10 px-2 py-1 text-[11px] text-destructive">
-                                    Collected amount exceeds the bill total.
-                                </div>
-                            )}
-
-                {settlementMode === "partial" &&
-                  isPartialAmountMissing &&
-                  !isOverpaid && (
-                    <div className="mb-1 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2 py-1 text-[11px] text-sky-700 dark:text-sky-300">
-                                    Enter the amount the customer is paying now.
-                                </div>
-                            )}
-
-                {settlementMode === "partial" &&
-                  matchesFullPayment &&
-                  !isOverpaid && (
-                    <div className="mb-1 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-300">
-                      Select &quot;Paid&quot; when the customer is settling the
-                      entire bill amount.
-                                </div>
-                            )}
-
-                <div className="mt-3 grid grid-cols-2 gap-1">
+                <div className="grid grid-cols-2 gap-2">
                                 <Button
                                     type="button"
                                     variant="outline"
-                    className="h-8 rounded-lg text-[10px] font-semibold max-lg:h-9 max-lg:text-xs"
+                    className="h-9 rounded-lg text-xs font-semibold"
                                     disabled={
                                         saveDraftMutation.isPending ||
                                         completeSaleMutation.isPending ||
-                      items.length === 0 ||
-                      hasInvalidDiscount
+                                        items.length === 0 ||
+                                        hasInvalidDiscount
                                     }
                                     onClick={() => saveDraftMutation.mutate()}
                                 >
@@ -2427,15 +2166,13 @@ const BillingPage = ({
                                 </Button>
                                 <Button
                                     type="button"
-                    className="h-8 rounded-lg bg-primary text-[10px] font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 max-lg:h-9 max-lg:text-xs"
+                    className="h-9 rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
                                     disabled={
                                         completeSaleMutation.isPending ||
                                         saveDraftMutation.isPending ||
-                                        items.length === 0 ||
-                      hasInvalidDiscount ||
-                                        hasInvalidPartialPayment
+                                        items.length === 0
                                     }
-                    onClick={() => setCustomerDialogOpen(true)}
+                    onClick={() => setPlaceOrderDialogOpen(true)}
                                 >
                                     {completeSaleMutation.isPending
                                         ? "Completing..."
@@ -2562,195 +2299,213 @@ const BillingPage = ({
             </div>
 
       <Dialog
-        open={customerDialogOpen}
+        open={placeOrderDialogOpen}
         onOpenChange={(open) => {
-          setCustomerDialogOpen(open);
-          if (!open) {
-            setCustomerPickerOpen(false);
-          }
+          setPlaceOrderDialogOpen(open);
         }}
       >
-        <DialogContent className="max-w-md rounded-2xl border-border/70 bg-background/95 p-5 shadow-2xl backdrop-blur-xl max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-1.5rem)] max-w-6xl overflow-y-auto rounded-2xl border-border/70 bg-background/95 p-4 shadow-2xl backdrop-blur-xl sm:p-5 max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <DialogHeader className="space-y-1">
             <DialogTitle className="text-lg font-semibold">
-              Confirm order
+              Complete order
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Review the bill details before placing the order.
+            <DialogDescription className="sr-only">
+              Review the total, discount, and payment before placing the order.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="grid gap-4 lg:grid-cols-[1.4fr_0.9fr] lg:items-start">
+            <div className="space-y-4 rounded-xl border border-border/60 bg-card/60 p-4">
+            <section className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Discount</p>
+                </div>
+                <div className="flex h-9 shrink-0 items-center rounded-lg border border-border/60 bg-background/50 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => changeDiscountMode("amount")}
+                    aria-label="Discount amount"
+                    aria-pressed={discountMode === "amount"}
+                    className={cn(
+                      "flex size-7 items-center justify-center rounded-md text-xs font-semibold transition-colors",
+                      discountMode === "amount"
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    ₹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeDiscountMode("percent")}
+                    aria-label="Discount percentage"
+                    aria-pressed={discountMode === "percent"}
+                    className={cn(
+                      "flex size-7 items-center justify-center rounded-md text-xs font-semibold transition-colors",
+                      discountMode === "percent"
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    %
+                  </button>
+                </div>
+              </div>
+              <Input
+                type="number"
+                min="0"
+                max={discountMode === "percent" ? 100 : undefined}
+                step="0.01"
+                inputMode="decimal"
+                className={cn(
+                  "h-9 rounded-lg bg-background/60 text-sm",
+                  discountValidationMessage &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
+                placeholder={discountMode === "percent" ? "0%" : "₹0.00"}
+                value={discountInput}
+                onChange={(event) => setDiscountInput(event.target.value)}
+                aria-label={
+                  discountMode === "percent"
+                    ? "Discount percentage"
+                    : "Discount amount"
+                }
+                aria-invalid={hasInvalidDiscount}
+              />
+              {discountValidationMessage ? (
+                <p className="text-xs text-destructive">
+                  {discountValidationMessage}
+                </p>
+              ) : null}
+            </section>
+
+            <div className="space-y-3">
+            <section className="space-y-2 border-t border-border/50 pt-4">
+              <p className="text-xs font-semibold text-foreground">Settlement</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { value: "full" as const, label: "Paid", active: "bg-emerald-500 text-white" },
+                  { value: "partial" as const, label: "Partial", active: "bg-sky-500 text-white" },
+                  { value: "due" as const, label: "Due", active: "bg-amber-500 text-white" },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSettlementMode(option.value)}
+                    className={cn(
+                      "min-h-9 rounded-lg px-2 text-xs font-semibold transition-all duration-200",
+                      settlementMode === option.value
+                        ? `${option.active} shadow-md`
+                        : "border border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              {settlementMode !== "due" ? (
+                <div className="space-y-2 border-t border-border/50 pt-2">
+                  <p className="text-xs font-semibold text-foreground">Payment method</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { value: "cash" as const, label: "Cash" },
+                      { value: "upi" as const, label: "UPI" },
+                      { value: "card" as const, label: "Card" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setSelectedPaymentMethod(option.value)}
+                        className={cn(
+                          "min-h-9 rounded-lg px-2 text-xs font-semibold transition-all duration-200",
+                          selectedPaymentMethod === option.value
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                            : "border border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {settlementMode === "partial" ? (
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  className="h-9 rounded-lg bg-background/60 text-sm"
+                  placeholder="Amount received"
+                  value={partialPaymentAmount}
+                  onChange={(event) => setPartialPaymentAmount(event.target.value)}
+                  aria-label="Amount received"
+                />
+              ) : null}
+
+              {isOverpaid ? (
+                <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+                  Collected amount exceeds the bill total.
+                </p>
+              ) : null}
+              {settlementMode === "partial" && isPartialAmountMissing && !isOverpaid ? (
+                <p className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-2 text-xs text-sky-700 dark:text-sky-300">
+                  Enter the amount the customer is paying now.
+                </p>
+              ) : null}
+              {settlementMode === "partial" && matchesFullPayment && !isOverpaid ? (
+                <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-300">
+                  Select &quot;Paid&quot; when the customer is settling the entire bill amount.
+                </p>
+              ) : null}
+            </section>
+
+            </div>
+            </div>
+
+            <div className="space-y-3 lg:sticky lg:top-0">
             <div className="space-y-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-xs">
-              <div className="flex items-center justify-between text-base font-bold text-foreground">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Subtotal</span>
+                <span>{formatCurrency(subtotal)}</span>
+              </div>
+              {lineDiscountTotal > 0 ? (
+                <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+                  <span>Item discounts</span>
+                  <span>-{formatCurrency(lineDiscountTotal)}</span>
+                </div>
+              ) : null}
+              {orderDiscountAmount > 0 ? (
+                <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+                  <span>Order discount</span>
+                  <span>-{formatCurrency(orderDiscountAmount)}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between border-t border-border/50 pt-1.5 text-base font-bold text-foreground">
                 <span>Total</span>
                 <span>{formatCurrency(grandTotal)}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Settlement</span>
-                <span className="font-medium text-foreground">
-                  {settlementMode === "full"
-                    ? "Paid"
-                    : settlementMode === "partial"
-                      ? "Partial"
-                      : "Due"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Payment</span>
-                <span className="font-medium text-foreground">
-                  {settlementMode === "due"
-                    ? "No payment collected"
-                    : selectedPaymentMethod === "cash"
-                      ? "Cash"
-                      : selectedPaymentMethod === "upi"
-                        ? "UPI"
-                        : "Card"}
-                </span>
               </div>
               {dueTotal > 0 ? (
                 <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
                   <span>Due after bill</span>
-                  <span className="font-semibold">
-                    {formatCurrency(dueTotal)}
-                  </span>
+                  <span className="font-semibold">{formatCurrency(dueTotal)}</span>
                 </div>
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <User className="size-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      Customer
-                    </p>
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {selectedCustomer?.name || "Walk-in"}
-                    </p>
-                    {selectedCustomer?.phone ? (
-                      <p className="text-[10px] text-muted-foreground">
-                        {selectedCustomer.phone}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 shrink-0 rounded-lg px-2.5 text-[11px]"
-                  onClick={() => setCustomerPickerOpen((open) => !open)}
-                >
-                  {customerPickerOpen ? "Done" : "Change"}
-                </Button>
-              </div>
-
-              {customerPickerOpen ? (
-                <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
-                  <div className="relative">
-                    <Input
-                      className="h-9 rounded-xl bg-background/70 pr-9 text-xs"
-                      placeholder="Search by name or phone"
-                      value={customerSearch}
-                      onChange={(event) => {
-                        setCustomerSearch(event.target.value);
-                        if (!event.target.value) {
-                          setSelectedCustomerId("");
-                        }
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          handleFindCustomer();
-                        }
-                      }}
-                      aria-label="Search customer"
-                    />
-                    {customerSearch ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomerSearch("");
-                          setSelectedCustomerId("");
-                        }}
-                        className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                        aria-label="Clear customer"
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {customerSearch &&
-                  !selectedCustomer &&
-                  filteredCustomers.length > 0 ? (
-                    <div className="space-y-1">
-                      {filteredCustomers.slice(0, 5).map((customer) => (
-                        <button
-                          key={customer.id}
-                          type="button"
-                          className="flex min-h-9 w-full items-center gap-2 rounded-lg bg-background/60 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
-                          onClick={() => {
-                            setSelectedCustomerId(customer.id);
-                            setCustomerSearch(customer.phone || customer.name);
-                            setCustomerPickerOpen(false);
-                          }}
-                        >
-                          <User className="size-3.5 shrink-0" />
-                          <span className="font-medium">{customer.name}</span>
-                          <span className="ml-auto text-[10px] opacity-60">
-                            {customer.phone || ""}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {customerSearch &&
-                  !selectedCustomer &&
-                  filteredCustomers.length === 0 ? (
-                    <CustomerQuickCreateDialog
-                      organizationId={organizationId}
-                      mode={mode}
-                      suggestedName={
-                        /^[+\d\s()-]+$/.test(customerSearch)
-                          ? ""
-                          : customerSearch
-                      }
-                      suggestedPhone={
-                        /^[+\d\s()-]+$/.test(customerSearch)
-                          ? customerSearch
-                          : ""
-                      }
-                      onCreated={(customer) => {
-                        setSelectedCustomerId(customer.id);
-                        setCustomerSearch(customer.phone || customer.name);
-                        setCustomerPickerOpen(false);
-                      }}
-                      trigger={
-                        <button
-                          type="button"
-                          className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                        >
-                          <Plus className="size-3.5" />
-                          <span>Create new customer</span>
-                        </button>
-                      }
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
+          </div>
           </div>
 
-          <DialogFooter className="gap-2 pt-2 max-sm:flex-row max-sm:[&>button]:flex-1 sm:justify-between">
+          <DialogFooter className="gap-2 border-t border-border/50 pt-3 max-sm:flex-row max-sm:[&>button]:flex-1 sm:justify-between">
             <Button
               type="button"
               variant="outline"
               className="h-10 rounded-xl text-xs"
               onClick={() => {
-                setCustomerDialogOpen(false);
-                setCustomerPickerOpen(false);
+                setPlaceOrderDialogOpen(false);
               }}
             >
               Cancel
@@ -2758,7 +2513,11 @@ const BillingPage = ({
             <Button
               type="button"
               className="h-10 rounded-xl text-xs font-semibold"
-              disabled={completeSaleMutation.isPending}
+              disabled={
+                completeSaleMutation.isPending ||
+                hasInvalidDiscount ||
+                hasInvalidPartialPayment
+              }
               onClick={handleCompleteSale}
             >
               {completeSaleMutation.isPending ? "Placing..." : "Place Order"}
