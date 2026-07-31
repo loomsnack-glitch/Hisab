@@ -9,6 +9,7 @@ import posRoutes from './modules/pos/pos.routes';
 import billingRoutes from './modules/tenant/billing/billing.routes';
 import catalogRoutes from './modules/tenant/catalog/catalog.routes';
 import organizationRoutes from './modules/tenant/organization/organization.routes';
+import purchaseRoutes from './modules/tenant/purchase/purchase.routes';
 
 const BASE_PATH = process.env.BASE_PATH
 const app = BASE_PATH ? new Hono().basePath(BASE_PATH) : new Hono();
@@ -48,5 +49,6 @@ app.route('/pos', posRoutes);
 app.route('/organizations', organizationRoutes);
 app.route('/organizations', catalogRoutes);
 app.route('/organizations', billingRoutes);
+app.route('/organizations', purchaseRoutes);
 
 export default app

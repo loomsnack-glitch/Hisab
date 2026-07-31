@@ -92,7 +92,7 @@ const PosLayout = ({
                 type="button"
                 onClick={() => onSearchChange("")}
                 className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label="Clear product search"
+                  aria-label="Clear search"
               >
                 <X className="size-4" />
               </button>
@@ -100,7 +100,7 @@ const PosLayout = ({
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
                     <div className="hidden min-w-0 max-w-[min(100vw-12rem,280px)] text-right sm:block">
                         <p className="truncate text-sm font-medium text-foreground">
                             {session.organization.name}

@@ -48,7 +48,7 @@ const sanitizeDecimalInput = (value: string) => {
     return digitsAndDot.slice(0, dotIndex + 1) + digitsAndDot.slice(dotIndex + 1).replace(/\./g, "");
 };
 
-const UpsertAddOnFormSchema = CreateAddOnSchema.extend({
+const UpsertAddOnFormSchema = CreateAddOnSchema.safeExtend({
     price: z
         .string()
         .refine((value) => value.length > 0, "Price is required")

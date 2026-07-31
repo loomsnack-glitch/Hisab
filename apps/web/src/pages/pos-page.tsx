@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { deviceAuthenticate } from "@repo/services";
 import { Spinner } from "@repo/ui/components/spinner";
@@ -9,11 +9,13 @@ import { deviceAuthKeys } from "@/lib/query-keys";
 import BillingPage from "@/pages/billing-page";
 
 const PosPage = () => {
+  const [searchParams] = useSearchParams();
+  const initialPanel = searchParams.get("panel");
   const [headerSearch, setHeaderSearch] = useState("");
-  const [activePanelTab, setActivePanelTab] = useState<"products" | "bills">(
-    "products",
+  const [activePanelTab, setActivePanelTab] = useState<"products" | "bills" | "purchases">(
+    initialPanel === "bills" || initialPanel === "purchases" ? initialPanel : "products",
   );
-  const handlePanelTabChange = useCallback((tab: "products" | "bills") => {
+  const handlePanelTabChange = useCallback((tab: "products" | "bills" | "purchases") => {
     setActivePanelTab(tab);
     setHeaderSearch("");
   }, []);
@@ -51,7 +53,9 @@ const PosPage = () => {
       searchPlaceholder={
         activePanelTab === "products"
           ? "Search products..."
-          : "Search bills or customers..."
+          : activePanelTab === "bills"
+            ? "Search bills or customers..."
+            : "Search purchases..."
       }
       onSearchChange={setHeaderSearch}
     >
@@ -60,6 +64,7 @@ const PosPage = () => {
         session={session}
         productSearch={activePanelTab === "products" ? headerSearch : ""}
         salesSearch={activePanelTab === "bills" ? headerSearch : ""}
+        purchaseSearch={activePanelTab === "purchases" ? headerSearch : ""}
         onPanelTabChange={handlePanelTabChange}
       />
         </PosLayout>

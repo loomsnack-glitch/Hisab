@@ -21,5 +21,11 @@ export {
     getPosSales,
     updatePosDraftSale,
     voidPosSale,
+    createPosPurchase,
+    getPosPurchase,
+    getPosPurchases,
+    getPosPurchaseSummary,
+    updatePosPurchase,
+    voidPosPurchase,
 } from "./modules/pos/pos.service";
 export * from "./modules/tenant";

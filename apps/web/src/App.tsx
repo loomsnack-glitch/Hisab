@@ -6,6 +6,7 @@ import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import BillingPage from "@/pages/billing-page";
+import PurchasesPage from "@/pages/purchases-page";
 import LoginPage from "@/pages/login-page";
 import OrganizationsPage from "@/pages/organizations-page";
 import PosLoginPage from "@/pages/pos-login-page";
@@ -87,6 +88,7 @@ const App = () => {
                 />
                 <Route path="/pos/login" element={<PosLoginPage />} />
                 <Route path="/pos" element={<PosPage />} />
+                <Route path="/pos/purchases" element={<Navigate to="/pos?panel=purchases" replace />} />
                 <Route
                     element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                 >
@@ -101,6 +103,7 @@ const App = () => {
                         <Route path="add-ons" element={<AddOnsPage />} />
                     </Route>
                     <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
+                    <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

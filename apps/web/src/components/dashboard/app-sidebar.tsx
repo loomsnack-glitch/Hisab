@@ -11,6 +11,7 @@ import {
     Settings2,
     Store,
     Package2,
+    ShoppingBag,
 } from "lucide-react";
 import logo from "@repo/assets/logo.png";
 import { getOrganizations } from "@repo/services";
@@ -113,6 +114,12 @@ const AppSidebar = ({
                     label: "Billing",
                     icon: ReceiptText,
                     isActive: /\/organizations\/[^/]+\/billing/.test(location.pathname),
+                },
+                {
+                    to: `/organizations/${effectiveOrgId}/purchases`,
+                    label: "Purchases",
+                    icon: ShoppingBag,
+                    isActive: /\/organizations\/[^/]+\/purchases/.test(location.pathname),
                 },
             );
         }

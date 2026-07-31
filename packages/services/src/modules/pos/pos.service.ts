@@ -19,6 +19,10 @@ import type {
     ServiceResponse,
     UpdateDraftSaleJSON,
     VoidSaleJSON,
+    CreatePurchaseJSON,
+    PurchaseListQuery,
+    UpdatePurchaseJSON,
+    VoidPurchaseJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -192,4 +196,46 @@ export const voidPosSale = async (
     } catch (error) {
         return handleApiError(error);
     }
+};
+
+export const getPosPurchases = async (params?: PurchaseListQuery) => {
+    try {
+        const response = await api.get("/pos/purchases", { params });
+        return response.data;
+    } catch (error) { return handleApiError(error); }
+};
+
+export const getPosPurchaseSummary = async () => {
+    try {
+        const response = await api.get("/pos/purchases/summary");
+        return response.data;
+    } catch (error) { return handleApiError(error); }
+};
+
+export const getPosPurchase = async (purchaseId: string) => {
+    try {
+        const response = await api.get(`/pos/purchases/${purchaseId}`);
+        return response.data;
+    } catch (error) { return handleApiError(error); }
+};
+
+export const createPosPurchase = async (data: CreatePurchaseJSON) => {
+    try {
+        const response = await api.post("/pos/purchases", data);
+        return response.data;
+    } catch (error) { return handleApiError(error); }
+};
+
+export const updatePosPurchase = async (purchaseId: string, data: UpdatePurchaseJSON) => {
+    try {
+        const response = await api.patch(`/pos/purchases/${purchaseId}`, data);
+        return response.data;
+    } catch (error) { return handleApiError(error); }
+};
+
+export const voidPosPurchase = async (purchaseId: string, data: VoidPurchaseJSON) => {
+    try {
+        const response = await api.post(`/pos/purchases/${purchaseId}/void`, data);
+        return response.data;
+    } catch (error) { return handleApiError(error); }
 };

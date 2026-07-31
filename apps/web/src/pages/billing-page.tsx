@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSwipeable } from "react-swipeable";
 import {
     commitSale,
@@ -73,6 +73,7 @@ import {
     Plus,
     ReceiptText,
     Search,
+    ShoppingBag,
     ShoppingCart,
     SlidersHorizontal,
     Store,
@@ -88,6 +89,7 @@ import CustomizeProductDialog, {
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
@@ -162,7 +164,8 @@ type BillingPageProps = {
     session?: DeviceSessionDTO | null;
   productSearch?: string;
   salesSearch?: string;
-  onPanelTabChange?: (tab: "products" | "bills") => void;
+  purchaseSearch?: string;
+  onPanelTabChange?: (tab: "products" | "bills" | "purchases") => void;
 };
 
 const BillingPage = ({
@@ -170,6 +173,7 @@ const BillingPage = ({
   session = null,
   productSearch: productSearchProp,
   salesSearch: salesSearchProp,
+  purchaseSearch: purchaseSearchProp,
   onPanelTabChange,
 }: BillingPageProps) => {
     const queryClient = useQueryClient();
@@ -203,7 +207,7 @@ const BillingPage = ({
     "all" | "draft" | "open" | "paid" | "voided"
   >("all");
   const [leftPanelTab, setLeftPanelTab] = useState<
-    "products" | "bills" | "customers"
+    "products" | "bills" | "purchases" | "customers"
   >(isDeviceMode ? "products" : "bills");
     const [customerDirectorySearch, setCustomerDirectorySearch] = useState("");
 
@@ -224,6 +228,7 @@ const BillingPage = ({
 
   const productSearch = productSearchProp ?? "";
   const salesSearch = salesSearchProp ?? "";
+  const purchaseSearch = purchaseSearchProp ?? "";
   const deferredProductSearch = useDeferredValue(
     productSearch.trim().toLowerCase(),
   );
@@ -399,7 +404,7 @@ const BillingPage = ({
             return;
         }
 
-        if (leftPanelTab === "products" || leftPanelTab === "bills") {
+        if (leftPanelTab === "products" || leftPanelTab === "bills" || leftPanelTab === "purchases") {
             onPanelTabChange(leftPanelTab);
         }
     }, [isDeviceMode, leftPanelTab, onPanelTabChange]);
@@ -1340,6 +1345,20 @@ const BillingPage = ({
                   </span>
                 )}
               </button>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("purchases")}
+                className={cn(
+                  "relative flex size-10 items-center justify-center rounded-xl transition-all",
+                  leftPanelTab === "purchases"
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                aria-label="Purchases"
+                title="Purchases"
+              >
+                <ShoppingBag className="size-4" />
+              </button>
             </>
           ) : (
             <>
@@ -1426,6 +1445,19 @@ const BillingPage = ({
                                     </span>
                                 )}
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setLeftPanelTab("purchases")}
+                                className={cn(
+                                    "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-all duration-200",
+                                    leftPanelTab === "purchases"
+                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                            >
+                                <ShoppingBag className="size-3.5" />
+                                Purchases
+                            </button>
                         </div>
                     ) : (
             <div className="mb-5 flex gap-2 border-b border-border/40 pb-3 lg:hidden">
@@ -1463,7 +1495,9 @@ const BillingPage = ({
                         </div>
                     )}
 
-                    {canMutate && leftPanelTab === "products" ? (
+                    {canMutate && leftPanelTab === "purchases" ? (
+                        session ? <PosPurchasesPanel session={session} search={purchaseSearch} /> : null
+                    ) : canMutate && leftPanelTab === "products" ? (
                         <>
               <div
                 className="flex min-h-full flex-col"
@@ -1928,7 +1962,7 @@ const BillingPage = ({
 
                                         // list view
                                         return (
-                                            <div className="grid gap-1.5 lg:grid-cols-2 2xl:grid-cols-3">
+                                            <div className="grid gap-1.5 xl:grid-cols-2">
                                                 {filteredSales.map((sale) => (
                                                     <div
                                                         key={sale.id}
@@ -1943,17 +1977,17 @@ const BillingPage = ({
                                                                 </p>
                                                             </div>
 
-                                                            <div className="w-32 shrink-0 hidden md:block text-xs text-muted-foreground">
-                                                                {formatDateTime(sale.createdAt)}
-                                                            </div>
-
                                                             <div className="min-w-0 flex-1 pr-2">
                                                                 <p className="truncate text-xs font-semibold text-foreground/80">
-                                                                    {sale.customer?.name || "Walk-in"}
+                                                                    {sale.customer?.name || "Walk-in customer"}
                                                                 </p>
-                                                                <p className="text-[11px] text-muted-foreground">
-                                                                    {sale.itemCount} item
-                                                                    {sale.itemCount !== 1 ? "s" : ""}
+                                                                {sale.customer?.phone ? (
+                                                                    <p className="truncate text-[10px] text-muted-foreground">
+                                                                        {sale.customer.phone}
+                                                                    </p>
+                                                                ) : null}
+                                                                <p className="truncate text-[10px] text-muted-foreground/80">
+                                                                    {sale.itemCount} item{sale.itemCount !== 1 ? "s" : ""} · {formatDateTime(sale.createdAt)}
                                                                 </p>
                                                             </div>
                                                         </div>
