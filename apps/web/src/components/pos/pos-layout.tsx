@@ -6,12 +6,13 @@ import type { DeviceSessionDTO } from "@repo/types";
 import logo from "@repo/assets/logo.png";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
-import { LogOut, Search, X } from "lucide-react";
+import { Expand, LogOut, Minimize, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ThemeToggle from "@/components/dashboard/theme-toggle";
 import { formatLongDate } from "@/lib/format";
 import { deviceAuthKeys } from "@/lib/query-keys";
+import { useFullscreen } from "@/hooks/use-fullscreen";
 
 type PosLayoutProps = {
     children: ReactNode;
@@ -30,6 +31,15 @@ const PosLayout = ({
 }: PosLayoutProps) => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
+
+    const handleFullscreenToggle = async () => {
+        try {
+            await toggleFullscreen();
+        } catch {
+            toast.error("Fullscreen could not be enabled");
+        }
+    };
 
     const handleLogout = async () => {
         try {
@@ -111,6 +121,21 @@ const PosLayout = ({
                     </div>
 
                     <ThemeToggle />
+
+                    {isSupported ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-9 rounded-full"
+                            aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+                            aria-pressed={isFullscreen}
+                            title={isFullscreen ? "Exit full screen" : "Full screen"}
+                            onClick={handleFullscreenToggle}
+                        >
+                            {isFullscreen ? <Minimize className="size-4" /> : <Expand className="size-4" />}
+                        </Button>
+                    ) : null}
 
           <Button
             variant="outline"
