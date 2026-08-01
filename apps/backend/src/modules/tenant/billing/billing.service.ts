@@ -1871,6 +1871,51 @@ const updateDraftSaleInStore = async (
     };
 };
 
+const deleteDraftSaleInStore = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<ServiceResponse<null>> => {
+    const existingSale = await billingRepository.getSaleById(organizationId, storeId, saleId);
+    if (!existingSale) {
+        return {
+            status: "error",
+            message: "Sale not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    if (existingSale.status !== "draft") {
+        return {
+            status: "error",
+            message: "Only draft sales can be deleted",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    const deleted = await pg.begin(async (tx) =>
+        billingRepository.deleteDraftSale(organizationId, storeId, saleId, tx),
+    );
+
+    if (!deleted) {
+        return {
+            status: "error",
+            message: "Draft sale was not found or has already been removed",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    return {
+        status: "success",
+        data: null,
+        message: "Draft sale deleted successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
 const commitSaleInStore = async (
     actor: SaleWriteActor,
     organizationId: string,
@@ -2976,6 +3021,13 @@ export const updateDraftSaleForDevice = async (
         saleId,
         saleData,
     );
+};
+
+export const deleteDraftSaleForDevice = async (
+    session: DeviceSessionDTO,
+    saleId: string,
+): Promise<ServiceResponse<null>> => {
+    return deleteDraftSaleInStore(session.organization.id, session.store.id, saleId);
 };
 
 export const commitSaleForDevice = async (

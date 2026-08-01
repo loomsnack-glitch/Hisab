@@ -10,6 +10,7 @@ export {
     completePosSale,
     createPosCustomer,
     createPosDraftSale,
+    deletePosDraftSale,
     getPosAddOns,
     getPosCategories,
     getPosComboProduct,

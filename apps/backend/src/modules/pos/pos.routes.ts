@@ -241,6 +241,22 @@ router.patch("/sales/:saleId", validateSchema("json", UpdateDraftSaleSchema), as
     }
 });
 
+router.delete("/sales/:saleId", async (c) => {
+    try {
+        const saleId = c.req.param("saleId");
+        const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+        if (invalidSaleId) {
+            return c.json(invalidSaleId, invalidSaleId.code);
+        }
+
+        const authDevice = c.get("authDevice");
+        const serviceResponse = await billingService.deleteDraftSaleForDevice(authDevice, saleId);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "deleteDraftSaleForDevice", c, error);
+    }
+});
+
 router.post("/sales/:saleId/commit", validateSchema("json", CommitSaleSchema), async (c) => {
     try {
         const saleId = c.req.param("saleId");

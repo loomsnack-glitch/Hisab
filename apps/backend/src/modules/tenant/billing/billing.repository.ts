@@ -248,6 +248,25 @@ export const updateSale = async (
     return result ? mapSaleSummaryRow(result as SaleSummaryRow) : null;
 };
 
+export const deleteDraftSale = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<boolean> => {
+    const db = tx || pg;
+    const [result] = await db`
+        DELETE FROM sales
+        WHERE id = ${saleId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND status = 'draft'
+        RETURNING id
+    `;
+
+    return Boolean(result);
+};
+
 export const getSalesByStore = async (
     organizationId: string,
     storeId: string,

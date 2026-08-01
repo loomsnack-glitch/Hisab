@@ -151,6 +151,17 @@ export const updatePosDraftSale = async (
     }
 };
 
+export const deletePosDraftSale = async (
+    saleId: string,
+): Promise<ServiceResponse<null>> => {
+    try {
+        const response = await api.delete(`/pos/sales/${saleId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const commitPosSale = async (
     saleId: string,
     data: CommitSaleJSON,

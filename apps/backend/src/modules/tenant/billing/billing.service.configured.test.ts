@@ -274,6 +274,16 @@ const updateSale = mock(async (data: Record<string, unknown>) => {
     return createdSales[index];
 });
 
+const deleteDraftSale = mock(async (_organizationId: string, _storeId: string, saleId: string) => {
+    const index = createdSales.findIndex((row) => row.id === saleId && row.status === "draft");
+    if (index < 0) {
+        return false;
+    }
+
+    createdSales.splice(index, 1);
+    return true;
+});
+
 const getCustomerById = mock(async () => null);
 const createPayment = mock(async (data: Record<string, unknown>) => ({
     ...data,
@@ -306,6 +316,7 @@ mock.module("./billing.repository", () => ({
     getPaymentsBySaleId,
     getSaleIdByCompletionRequestId,
     deleteSaleItemsBySaleId,
+    deleteDraftSale,
     updateSale,
     getCustomerById,
     getCustomersByOrganizationId: mock(async () => []),
@@ -358,6 +369,7 @@ describe("Configured product billing with trusted snapshots", () => {
         getSaleIdByCompletionRequestId.mockClear();
         getSaleItemsBySaleId.mockClear();
         deleteSaleItemsBySaleId.mockClear();
+        deleteDraftSale.mockClear();
         updateSale.mockClear();
         createPayment.mockClear();
         getParentScopedAddOnSalesRollups.mockClear();
@@ -638,6 +650,31 @@ describe("Configuration-aware Draft Sale behavior", () => {
     afterEach(() => {
         getProductByIdSpy.mockRestore();
         getSelectableAttachmentSpy.mockRestore();
+    });
+
+    test("deletes a draft sale and rejects a second deletion", async () => {
+        const created = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+        const saleId = created.data?.sale.id;
+        expect(created.status).toBe("success");
+        expect(saleId).toBeDefined();
+
+        const session = {
+            organization: { id: organizationId },
+            store: { id: storeId },
+            device: { id: "66666666-6666-4666-8666-666666666666" },
+        } as Parameters<typeof billingService.deleteDraftSaleForDevice>[0];
+
+        const deleted = await billingService.deleteDraftSaleForDevice(session, saleId!);
+        expect(deleted).toMatchObject({ status: "success", data: null });
+        expect(createdSales).toHaveLength(0);
+
+        const missing = await billingService.deleteDraftSaleForDevice(session, saleId!);
+        expect(missing).toMatchObject({ status: "error", code: 404 });
     });
 
     test("merges identical configurations by quantity", async () => {

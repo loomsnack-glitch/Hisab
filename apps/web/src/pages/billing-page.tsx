@@ -23,6 +23,7 @@ import {
     getPosProductAddOnAttachments,
     getPosComboProducts,
     getComboProducts,
+    deletePosDraftSale,
     getProductAddOnAttachments,
     getPosProducts,
     getPosSale,
@@ -47,6 +48,16 @@ import type {
   UpdateDraftSaleJSON,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@repo/ui/components/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -226,6 +237,7 @@ const BillingPage = ({
     const [categoryFilter, setCategoryFilter] = useState("all");
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
+    const [draftToDeleteId, setDraftToDeleteId] = useState<string | null>(null);
     const [receiptToPrint, setReceiptToPrint] = useState<SaleDetailDTO | null>(null);
     const completionRequestRef = useRef<{ requestId: string; fingerprint: string } | null>(null);
     const [settlementMode, setSettlementMode] = useState<SettlementMode>("full");
@@ -768,6 +780,7 @@ const BillingPage = ({
     setDiscountEditorOpen(false);
     setPlaceOrderDialogOpen(false);
     setCustomerPickerOpen(false);
+    setMobileCartOpen(false);
     };
 
     useEffect(() => {
@@ -1004,57 +1017,8 @@ const BillingPage = ({
             return response.data.sale;
         },
         onSuccess: (sale) => {
-            setActiveDraftId(sale.id);
-            setItems(
-                sale.items.map((item) => ({
-                    key: item.id,
-                    productId: item.productId,
-                    name: item.productNameSnapshot,
-          categoryId:
-            products.find((product) => product.id === item.productId)
-              ?.categoryId ?? "",
-                    unitPrice: Number(item.unitPriceSnapshot),
-                    unitDiscount: getComposerUnitDiscountFromSaleItem(item),
-                    quantity: Number(item.quantity),
-                    addOns: (item.addOns ?? []).map((addOn) => ({
-                        addOnId: addOn.addOnId,
-                        name: addOn.addOnNameSnapshot,
-                        unitPrice: Number(addOn.unitPriceSnapshot),
-                        unitDiscount: Number(addOn.unitDiscountSnapshot),
-                        quantity: Number(addOn.quantityPerParent),
-                    })),
-                    bundleComponents: (item.bundleComponents ?? []).map((component) => ({
-                        id: component.id,
-                        componentProductId: component.componentProductId,
-                        name: component.productNameSnapshot,
-                        quantityPerBundle: Number(component.quantityPerBundle),
-                        priceAdjustment: Number(component.priceAdjustmentSnapshot ?? 0),
-                        addOns: (component.addOns ?? []).map((addOn) => ({
-                            addOnId: addOn.addOnId,
-                            name: addOn.addOnNameSnapshot,
-                            quantity: Number(addOn.quantityPerComponent),
-                            unitPrice: Number(addOn.unitPriceSnapshot),
-                            unitDiscount: Number(addOn.unitDiscountSnapshot),
-                        })),
-                    })),
-                    comboSelections: (item.bundleComponents ?? []).filter((component) => Boolean(component.choiceGroupId)).map((component) => ({
-                        groupId: component.choiceGroupId!,
-                        optionProductId: component.componentProductId,
-                        optionName: component.productNameSnapshot,
-                        quantity: Number(component.quantityPerBundle),
-                        priceAdjustment: Number(component.priceAdjustmentSnapshot ?? 0),
-                        addOns: (component.addOns ?? []).map((addOn) => ({
-                            addOnId: addOn.addOnId,
-                            name: addOn.addOnNameSnapshot,
-                            unitPrice: Number(addOn.unitPriceSnapshot),
-                            unitDiscount: Number(addOn.unitDiscountSnapshot),
-                            quantity: Number(addOn.quantityPerComponent),
-                        })),
-                    })),
-                })),
-            );
             invalidateBillingQueries();
-            setMobileCartOpen(false);
+            resetComposer();
             toast.success(sale.status === "draft" ? "Draft saved" : "Bill updated");
         },
         onError: (error: { message?: string }) => {
@@ -1259,6 +1223,32 @@ const BillingPage = ({
         },
         onError: (error: { message?: string }) => {
             toast.error(error?.message || "Failed to load draft");
+        },
+    });
+
+    const deleteDraftMutation = useMutation({
+        mutationFn: async (saleId: string) => {
+            if (!isDeviceMode) {
+                throw new Error("Draft deletion is available only in POS mode");
+            }
+
+            const response = await deletePosDraftSale(saleId);
+            if (response.status !== "success") {
+                throw new Error(response.message || "Failed to delete draft");
+            }
+
+            return saleId;
+        },
+        onSuccess: (saleId) => {
+            invalidateBillingQueries();
+            if (activeDraftId === saleId) {
+                resetComposer();
+            }
+            setDraftToDeleteId(null);
+            toast.success("Draft deleted");
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error?.message || "Failed to delete draft");
         },
     });
 
@@ -2101,18 +2091,29 @@ const BillingPage = ({
                                                                 )}
                                                             </div>
 
-                                                            <div className="w-24 text-right">
+                                                            <div className="flex w-28 items-center justify-end gap-1">
                                                                 {canMutate && sale.status === "draft" ? (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        className="rounded-lg text-[11px] h-7 px-2.5 bg-primary text-primary-foreground hover:bg-primary/90"
-                                                                        disabled={resumeDraftMutation.isPending}
-                                                                        onClick={() =>
-                                                                            resumeDraftMutation.mutate(sale.id)
-                                                                        }
-                                                                    >
-                                                                        Resume
-                                                                    </Button>
+                                                                    <>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            className="rounded-lg text-[11px] h-7 px-2.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                                                                            disabled={resumeDraftMutation.isPending || deleteDraftMutation.isPending}
+                                                                            onClick={() => resumeDraftMutation.mutate(sale.id)}
+                                                                        >
+                                                                            Resume
+                                                                        </Button>
+                                                                        <Button
+                                                                            type="button"
+                                                                            size="icon"
+                                                                            variant="ghost"
+                                                                            className="size-7 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                                                            aria-label={`Delete draft ${sale.saleNumber ?? sale.id}`}
+                                                                            disabled={resumeDraftMutation.isPending || deleteDraftMutation.isPending}
+                                                                            onClick={() => setDraftToDeleteId(sale.id)}
+                                                                        >
+                                                                            <Trash2 className="size-3.5" />
+                                                                        </Button>
+                                                                    </>
                                                                 ) : (
                                                                     <Button
                                                                         size="sm"
@@ -3023,6 +3024,45 @@ const BillingPage = ({
                 attachmentsByProductId={attachmentsByProductId}
                 onConfirm={addConfiguredComboToBill}
             />
+
+            <AlertDialog
+                open={Boolean(draftToDeleteId)}
+                onOpenChange={(open) => {
+                    if (!open && !deleteDraftMutation.isPending) {
+                        setDraftToDeleteId(null);
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this draft?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This draft and its saved items will be permanently removed. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel
+                            disabled={deleteDraftMutation.isPending}
+                            className="rounded-xl"
+                        >
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            isLoading={deleteDraftMutation.isPending}
+                            loadingText="Deleting..."
+                            className="rounded-xl"
+                            onClick={() => {
+                                if (draftToDeleteId) {
+                                    deleteDraftMutation.mutate(draftToDeleteId);
+                                }
+                            }}
+                        >
+                            Delete draft
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <SaleDetailDialog
                 key={selectedSaleId ?? "sale-detail-dialog"}
