@@ -88,7 +88,6 @@ import {
     Search,
     ShoppingBag,
     ShoppingCart,
-    SlidersHorizontal,
     Store,
     Trash2,
     User,
@@ -110,6 +109,11 @@ import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
+import {
+  getProductCardAction,
+  getProductCardActionLabel,
+  type ProductCardAction,
+} from "@/lib/product-card-interaction";
 import { safeRandomUUID } from "@/lib/uuid";
 
 type ComposerAddOn = CustomizeAddOnSelection;
@@ -803,25 +807,7 @@ const BillingPage = ({
         };
     }, [receiptToPrint]);
 
-    const addProductToBill = (product: ProductResponseDTO) => {
-        if (product.productType === "combo") {
-            if (comboProductsQuery.isPending) {
-                toast.info("Combo options are still loading");
-                return;
-            }
-            if (comboProductsQuery.isError || comboProductsQuery.data?.status === "error") {
-                toast.error("Unable to load Combo options. Retrying now.");
-                void comboProductsQuery.refetch();
-                return;
-            }
-            if (!preloadedCombos.some((combo) => combo.product.id === product.id)) {
-                toast.error("This Combo is no longer available");
-                return;
-            }
-            setConfigureComboProductId(product.id);
-            return;
-        }
-
+    const addPlainProductToBill = (product: ProductResponseDTO) => {
         setItems((current) => {
             const existingPlainItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
@@ -853,6 +839,48 @@ const BillingPage = ({
                 },
             ];
         });
+    };
+
+    const addProductToBill = (product: ProductResponseDTO) => {
+        if (product.productType !== "combo") {
+            addPlainProductToBill(product);
+            return;
+        }
+
+        const combo = preloadedCombos.find((item) => item.product.id === product.id);
+        if (comboProductsQuery.isError || comboProductsQuery.data?.status === "error") {
+            toast.error("Unable to load Combo options. Retrying now.");
+            void comboProductsQuery.refetch();
+            return;
+        }
+
+        if (!combo) {
+            toast.error("This Combo is no longer available");
+            return;
+        }
+
+        if (combo?.choiceGroups.length) {
+            setConfigureComboProductId(product.id);
+            return;
+        }
+
+        addPlainProductToBill(product);
+    };
+
+    const handleProductCardClick = (product: ProductResponseDTO, action: ProductCardAction) => {
+        if (action === "customize") {
+            setCustomizeProductId(product.id);
+            return;
+        }
+
+        if (action === "configure") {
+            setConfigureComboProductId(product.id);
+            return;
+        }
+
+        if (action === "add") {
+            addProductToBill(product);
+        }
     };
 
   const addConfiguredProductToBill = (
@@ -1638,48 +1666,48 @@ const BillingPage = ({
                                         const isInCart = cartQuantity > 0;
                       const productAttachments =
                         attachmentsByProductId.get(product.id) ?? [];
-                      const canCustomize =
-                        canMutate && productAttachments.length > 0;
-
-                      const canSellProduct =
-                        product.productType === "single" ||
-                        product.productType === "combo";
+                      const combo = preloadedCombos.find((item) => item.product.id === product.id);
                       const comboLoading = product.productType === "combo" && comboProductsQuery.isPending;
-                      const canAddProduct = canSellProduct && !comboLoading;
+                      const cardAction = getProductCardAction(product, {
+                        hasAddOns: productAttachments.length > 0,
+                        comboAvailable: Boolean(combo),
+                        comboHasSettings: Boolean(combo?.choiceGroups.length),
+                        comboLoading,
+                        comboHasError: comboProductsQuery.isError || comboProductsQuery.data?.status === "error",
+                      });
+                      const cardActionLabel = getProductCardActionLabel(cardAction);
+                      const cardDisabled = cardAction === "disabled" || cardAction === "loading";
 
                                         return (
-                                            <div
+                                            <button
+                                                type="button"
                                                 key={product.id}
+                                                disabled={cardDisabled}
+                                                onClick={() => {
+                                                    if (cardAction === "retry") {
+                                                        addProductToBill(product);
+                                                        return;
+                                                    }
+
+                                                    handleProductCardClick(product, cardAction);
+                                                }}
+                                                aria-label={`${cardActionLabel} ${product.name}`}
                                                 className={cn(
-                            "group relative flex min-h-[76px] touch-pan-y items-center gap-2 rounded-xl border px-2 py-3 transition-all duration-200",
+                            "group relative flex min-h-[76px] w-full touch-pan-y items-center gap-2 rounded-xl border px-2 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
                                                     isInCart
                                                         ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
-                                                        : "border-border/50 bg-card/80",
+                                                        : "border-border/50 bg-card/80 hover:border-primary/30 hover:bg-card",
                                                 )}
                                             >
                                                 {isInCart && (
-                            <div className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary p-0 text-center text-[9px] font-bold leading-none text-primary-foreground shadow-sm">
+                            <span className="absolute -top-2 -right-2 z-10 flex min-h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-center text-xs font-bold leading-none text-primary-foreground shadow-md shadow-primary/25">
                                                         {cartQuantity}
-                                                    </div>
+                                                    </span>
                                                 )}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (!canAddProduct) {
-                                                            return;
-                                                        }
-
-                                                        addProductToBill(product);
-                                                    }}
-                                                    disabled={!canAddProduct}
-                            className={`flex min-w-0 flex-1 items-center gap-2 text-left transition-opacity ${
-                                                        canAddProduct
-                                ? "hover:opacity-80"
-                                                            : "cursor-not-allowed opacity-70"
-                                                    }`}
-                                                >
                             <div className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/40 shadow-inner">
-                                                        {product.imageSignedUrl ? (
+                                                        {cardAction === "loading" ? (
+                                                            <Spinner className="size-4 text-primary" />
+                                                        ) : product.imageSignedUrl ? (
                                                             <img
                                                                 src={product.imageSignedUrl}
                                                                 alt={product.name}
@@ -1701,37 +1729,7 @@ const BillingPage = ({
                                 align="left"
                                                     />
                             </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (canAddProduct) {
-                                addProductToBill(product);
-                              }
-                            }}
-                            disabled={!canAddProduct}
-                            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                            aria-label={`Add ${product.name} to order`}
-                          >
-                            {comboLoading
-                              ? <Spinner className="size-3.5" />
-                              : <Plus className="size-4" />}
-                                                </button>
-                                                {canCustomize && product.productType === "single" ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={(event) => {
-                                                            event.stopPropagation();
-                                                            setCustomizeProductId(product.id);
-                                                        }}
-                              className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background/80 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                              aria-label={`Customize ${product.name}`}
-                              title="Customize"
-                                                    >
-                                                        <SlidersHorizontal className="size-3" />
-                                                    </button>
-                                                ) : null}
-                                            </div>
+                                            </button>
                                         );
                                     })}
                                     </div>
@@ -2262,9 +2260,10 @@ const BillingPage = ({
                                                             <ProductPriceDisplay
                                                                 price={item.unitPrice}
                                                                 discount={item.unitDiscount}
-                                  size="xs"
+                                                                size="xs"
                                                                 align="left"
                                                                 singleTone="foreground"
+                                                                className="text-muted-foreground"
                                                             />
                                                         </div>
 
@@ -3003,6 +3002,7 @@ const BillingPage = ({
       </Dialog>
 
             <CustomizeProductDialog
+                key={`${customizeProductId ?? "customize-dialog"}-${customizeProductId ? "open" : "closed"}`}
                 open={Boolean(customizeProductId)}
                 onOpenChange={(open) => {
                     if (!open) {
