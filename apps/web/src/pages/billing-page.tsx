@@ -209,6 +209,7 @@ const BillingPage = ({
     );
   const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+  const [discountEditorOpen, setDiscountEditorOpen] = useState(false);
   const [historyFilter] = useState<
     "all" | "draft" | "open" | "paid" | "voided"
   >("all");
@@ -673,6 +674,7 @@ const BillingPage = ({
     rawPartialPaymentAmount === grandTotal;
   const hasInvalidPartialPayment =
     isOverpaid || isPartialAmountMissing || matchesFullPayment;
+  const requiresCustomerForReceivable = dueTotal > 0 && !selectedCustomerId;
 
   const changeDiscountMode = (nextMode: "amount" | "percent") => {
     if (nextMode === discountMode) {
@@ -714,6 +716,7 @@ const BillingPage = ({
         setPartialPaymentAmount("");
     setDiscountInput("");
     setDiscountMode("amount");
+    setDiscountEditorOpen(false);
     setPlaceOrderDialogOpen(false);
     setCustomerPickerOpen(false);
     };
@@ -1036,6 +1039,10 @@ const BillingPage = ({
         throw new Error(
           "Select 'Paid' when the customer is paying the full bill amount",
         );
+            }
+
+            if (requiresCustomerForReceivable) {
+                throw new Error("Select a customer before creating a bill with a due balance");
             }
 
             if (isDeviceMode && !activeDraftId) {
@@ -2523,19 +2530,22 @@ const BillingPage = ({
           setPlaceOrderDialogOpen(open);
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-1.5rem)] max-w-6xl overflow-y-auto rounded-2xl border-border/70 bg-background/95 p-4 shadow-2xl backdrop-blur-xl sm:p-5 max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          <DialogHeader className="space-y-1">
-            <DialogTitle className="text-lg font-semibold">
-              Complete order
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              Review the total, discount, and payment before placing the order.
-            </DialogDescription>
+        <DialogContent className="grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-2xl border-border/70 bg-background/95 p-2 shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:p-3">
+          <DialogHeader className="space-y-1 border-b border-border/50 pb-2">
+            <div className="flex items-start justify-between gap-3 pr-6">
+              <div>
+                <DialogTitle className="text-xl font-semibold tracking-tight">
+                  Complete order
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs">
+                  {cartItemCount} {cartItemCount === 1 ? "item" : "items"} in this order
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="grid gap-4 lg:grid-cols-[1.4fr_0.9fr] lg:items-start">
-            <div className="space-y-4 rounded-xl border border-border/60 bg-card/60 p-4">
-            <section className="space-y-3">
+          <div className="min-h-0 space-y-3 overflow-y-auto pt-1 pb-0 pr-1">
+            <section className="space-y-3 rounded-2xl border border-border/60 bg-card/60 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <User className="size-4 shrink-0 text-muted-foreground" />
@@ -2553,7 +2563,13 @@ const BillingPage = ({
                     ) : null}
                   </div>
                 </div>
-                <Button
+                <div className="flex shrink-0 items-center gap-2">
+                  {!selectedCustomer ? (
+                    <span className="hidden text-[11px] font-medium text-muted-foreground sm:block">
+                      Cash sale
+                    </span>
+                  ) : null}
+                  <Button
                   type="button"
                   variant="outline"
                   className="h-8 shrink-0 rounded-lg px-2.5 text-[11px]"
@@ -2564,10 +2580,26 @@ const BillingPage = ({
                 >
                   {customerPickerOpen ? "Done" : "Change"}
                 </Button>
+                </div>
               </div>
 
               {customerPickerOpen ? (
                 <div className="space-y-2 border-t border-border/50 pt-3">
+                  {selectedCustomer ? (
+                    <button
+                      type="button"
+                      className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 text-left text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                      onClick={() => {
+                        setSelectedCustomerId("");
+                        setSelectedCustomerFallback(null);
+                        setCustomerSearch("");
+                        setCustomerPickerOpen(false);
+                      }}
+                    >
+                      <User className="size-3.5" />
+                      <span>Continue as Walk-in</span>
+                    </button>
+                  ) : null}
                   <div className="relative">
                     <Input
                       className="h-9 rounded-xl bg-background/70 pr-9 text-xs"
@@ -2622,7 +2654,7 @@ const BillingPage = ({
                     </div>
                   ) : null}
 
-                  {customerSearch && !selectedCustomer && filteredCustomers.length === 0 ? (
+                  {customerSearch && !selectedCustomer ? (
                     <CustomerQuickCreateDialog
                       organizationId={organizationId}
                       mode={mode}
@@ -2644,7 +2676,11 @@ const BillingPage = ({
                           className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
                         >
                           <Plus className="size-3.5" />
-                          <span>Create new customer</span>
+                          <span>
+                            {filteredCustomers.length > 0
+                              ? "Create a different customer"
+                              : "Create new customer"}
+                          </span>
                         </button>
                       }
                     />
@@ -2653,12 +2689,21 @@ const BillingPage = ({
               ) : null}
             </section>
 
-            <section className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">Discount</p>
-                </div>
-                <div className="flex h-9 shrink-0 items-center rounded-lg border border-border/60 bg-background/50 p-0.5">
+            <section className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between text-left text-xs font-semibold text-foreground"
+                onClick={() => setDiscountEditorOpen((open) => !open)}
+                aria-expanded={discountEditorOpen}
+              >
+                <span>{orderDiscountAmount > 0 ? "Order discount" : "Add discount"}</span>
+                <span className={orderDiscountAmount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
+                  {orderDiscountAmount > 0 ? `-${formatCurrency(orderDiscountAmount)}` : discountEditorOpen ? "Hide" : "Optional"}
+                </span>
+              </button>
+              {discountEditorOpen ? (
+                <div className="mt-3 grid gap-2 border-t border-border/50 pt-3 sm:grid-cols-[1fr_auto]">
+                  <div className="flex h-10 shrink-0 items-center rounded-xl border border-border/60 bg-background/50 p-0.5 sm:order-2">
                   <button
                     type="button"
                     onClick={() => changeDiscountMode("amount")}
@@ -2688,7 +2733,6 @@ const BillingPage = ({
                     %
                   </button>
                 </div>
-              </div>
               <Input
                 type="number"
                 min="0"
@@ -2696,7 +2740,7 @@ const BillingPage = ({
                 step="0.01"
                 inputMode="decimal"
                 className={cn(
-                  "h-9 rounded-lg bg-background/60 text-sm",
+                  "h-10 rounded-xl bg-background/70 text-sm sm:order-1",
                   discountValidationMessage &&
                     "border-destructive focus-visible:ring-destructive",
                 )}
@@ -2711,15 +2755,21 @@ const BillingPage = ({
                 aria-invalid={hasInvalidDiscount}
               />
               {discountValidationMessage ? (
-                <p className="text-xs text-destructive">
+                <p className="text-xs text-destructive sm:col-span-2">
                   {discountValidationMessage}
                 </p>
               ) : null}
+                </div>
+              ) : null}
             </section>
 
-            <div className="space-y-3">
-            <section className="space-y-2 border-t border-border/50 pt-4">
-              <p className="text-xs font-semibold text-foreground">Settlement</p>
+            <section className="space-y-3 rounded-2xl border border-border/60 bg-card/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-foreground">Settlement</p>
+                <p className="text-xs text-muted-foreground">
+                  {settlementMode === "full" ? "Paid in full" : settlementMode === "partial" ? "Balance remains" : "Pay later"}
+                </p>
+              </div>
               <div className="grid grid-cols-3 gap-1.5">
                 {[
                   { value: "full" as const, label: "Paid", active: "bg-emerald-500 text-white" },
@@ -2783,6 +2833,12 @@ const BillingPage = ({
                 />
               ) : null}
 
+              {requiresCustomerForReceivable ? (
+                <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                  Select a customer to save a bill with a due balance.
+                </p>
+              ) : null}
+
               {isOverpaid ? (
                 <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
                   Collected amount exceeds the bill total.
@@ -2800,11 +2856,12 @@ const BillingPage = ({
               ) : null}
             </section>
 
-            </div>
-            </div>
-
-            <div className="space-y-3 lg:sticky lg:top-0">
-            <div className="space-y-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-xs">
+            <aside className="space-y-3">
+            <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/30 p-4">
+              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <span>Order total</span>
+                <span>{cartItemCount} {cartItemCount === 1 ? "item" : "items"}</span>
+              </div>
               <div className="flex items-center justify-between text-muted-foreground">
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal)}</span>
@@ -2821,9 +2878,9 @@ const BillingPage = ({
                   <span>-{formatCurrency(orderDiscountAmount)}</span>
                 </div>
               ) : null}
-              <div className="flex items-center justify-between border-t border-border/50 pt-1.5 text-base font-bold text-foreground">
+              <div className="flex items-end justify-between border-t border-border/50 pt-3 text-foreground">
                 <span>Total</span>
-                <span>{formatCurrency(grandTotal)}</span>
+                <span className="text-2xl font-bold tracking-tight">{formatCurrency(grandTotal)}</span>
               </div>
               {dueTotal > 0 ? (
                 <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
@@ -2833,14 +2890,22 @@ const BillingPage = ({
               ) : null}
             </div>
 
-          </div>
+          </aside>
           </div>
 
-          <DialogFooter className="gap-2 border-t border-border/50 pt-3 max-sm:flex-row max-sm:[&>button]:flex-1 sm:justify-between">
+          <DialogFooter className="flex-row items-center gap-2 border-t border-border/50 bg-background/95 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+            <div className="mr-auto min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Total
+              </p>
+              <p className="text-base font-bold text-foreground">
+                {formatCurrency(grandTotal)}
+              </p>
+            </div>
             <Button
               type="button"
               variant="outline"
-              className="h-10 rounded-xl text-xs"
+              className="h-10 shrink-0 rounded-xl px-3 text-xs"
               onClick={() => {
                 setPlaceOrderDialogOpen(false);
               }}
@@ -2849,15 +2914,16 @@ const BillingPage = ({
             </Button>
             <Button
               type="button"
-              className="h-10 rounded-xl text-xs font-semibold"
+              className="h-10 shrink-0 rounded-xl px-3 text-xs font-semibold sm:px-5"
               disabled={
                 completeSaleMutation.isPending ||
                 hasInvalidDiscount ||
-                hasInvalidPartialPayment
+                hasInvalidPartialPayment ||
+                requiresCustomerForReceivable
               }
               onClick={handleCompleteSale}
             >
-              {completeSaleMutation.isPending ? "Placing..." : "Place Order"}
+              {completeSaleMutation.isPending ? "Placing..." : "Place order"}
             </Button>
           </DialogFooter>
         </DialogContent>
