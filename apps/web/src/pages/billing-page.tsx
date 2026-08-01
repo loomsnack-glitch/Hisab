@@ -205,6 +205,22 @@ const salesDateFilterOptions: Array<{ value: SalesDateFilter; label: string }> =
   { value: "this-week", label: "This Week" },
 ];
 
+const settlementOptions: Array<{
+  value: SettlementMode;
+  label: string;
+  activeClassName: string;
+}> = [
+  { value: "full", label: "Paid", activeClassName: "bg-emerald-500 text-white" },
+  { value: "partial", label: "Partial", activeClassName: "bg-sky-500 text-white" },
+  { value: "due", label: "Due", activeClassName: "bg-amber-500 text-white" },
+];
+
+const paymentMethodOptions: Array<{ value: PaymentMethod; label: string }> = [
+  { value: "cash", label: "Cash" },
+  { value: "upi", label: "UPI" },
+  { value: "card", label: "Card" },
+];
+
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
@@ -1610,7 +1626,7 @@ const BillingPage = ({
                 className="flex min-h-full flex-col"
                                         >
                                 {/* Category Filter Pills */}
-                <div className="mb-4">
+                <div className="sticky top-0 z-10 -mx-4 mb-4 bg-background/95 px-4 pt-1 pb-2 backdrop-blur-md sm:-mx-4 sm:px-4">
                                     <div className="mb-2 flex items-center justify-between gap-3">
                                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                             Categories
@@ -2843,19 +2859,16 @@ const BillingPage = ({
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-1.5">
-                {[
-                  { value: "full" as const, label: "Paid", active: "bg-emerald-500 text-white" },
-                  { value: "partial" as const, label: "Partial", active: "bg-sky-500 text-white" },
-                  { value: "due" as const, label: "Due", active: "bg-amber-500 text-white" },
-                ].map((option) => (
+                {settlementOptions.map((option) => (
                   <button
                     key={option.value}
                     type="button"
                     onClick={() => setSettlementMode(option.value)}
+                    aria-pressed={settlementMode === option.value}
                     className={cn(
-                      "min-h-9 rounded-lg px-2 text-xs font-semibold transition-all duration-200",
+                      "min-h-9 rounded-lg px-2 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                       settlementMode === option.value
-                        ? `${option.active} shadow-md`
+                        ? `${option.activeClassName} shadow-md`
                         : "border border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -2868,17 +2881,14 @@ const BillingPage = ({
                 <div className="space-y-2 border-t border-border/50 pt-2">
                   <p className="text-xs font-semibold text-foreground">Payment method</p>
                   <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { value: "cash" as const, label: "Cash" },
-                      { value: "upi" as const, label: "UPI" },
-                      { value: "card" as const, label: "Card" },
-                    ].map((option) => (
+                    {paymentMethodOptions.map((option) => (
                       <button
                         key={option.value}
                         type="button"
                         onClick={() => setSelectedPaymentMethod(option.value)}
+                        aria-pressed={selectedPaymentMethod === option.value}
                         className={cn(
-                          "min-h-9 rounded-lg px-2 text-xs font-semibold transition-all duration-200",
+                          "min-h-9 rounded-lg px-2 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                           selectedPaymentMethod === option.value
                             ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
                             : "border border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
@@ -2965,38 +2975,32 @@ const BillingPage = ({
           </aside>
           </div>
 
-          <DialogFooter className="flex-row items-center gap-2 border-t border-border/50 bg-background/95 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-            <div className="mr-auto min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Total
-              </p>
-              <p className="text-base font-bold text-foreground">
-                {formatCurrency(grandTotal)}
-              </p>
+          <DialogFooter className="border-t border-border/50 bg-background/95 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
+                onClick={() => {
+                  setPlaceOrderDialogOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-10 w-full rounded-xl px-3 text-xs font-semibold sm:w-auto sm:px-5"
+                disabled={
+                  completeSaleMutation.isPending ||
+                  hasInvalidDiscount ||
+                  hasInvalidPartialPayment ||
+                  requiresCustomerForReceivable
+                }
+                onClick={handleCompleteSale}
+              >
+                {completeSaleMutation.isPending ? "Placing..." : "Place order"}
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 shrink-0 rounded-xl px-3 text-xs"
-              onClick={() => {
-                setPlaceOrderDialogOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="h-10 shrink-0 rounded-xl px-3 text-xs font-semibold sm:px-5"
-              disabled={
-                completeSaleMutation.isPending ||
-                hasInvalidDiscount ||
-                hasInvalidPartialPayment ||
-                requiresCustomerForReceivable
-              }
-              onClick={handleCompleteSale}
-            >
-              {completeSaleMutation.isPending ? "Placing..." : "Place order"}
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
