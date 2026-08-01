@@ -41,6 +41,7 @@ import type {
     PaymentMethod,
     ProductResponseDTO,
     ComboProductResponse,
+    CustomerDTO,
     SaleDetailDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
@@ -83,6 +84,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
 import CustomizeProductDialog, {
   type CustomizeAddOnSelection,
 } from "@/components/billing/customize-product-dialog";
@@ -187,6 +189,9 @@ const BillingPage = ({
 
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+    const [selectedCustomerFallback, setSelectedCustomerFallback] =
+      useState<CustomerDTO | null>(null);
+    const [customerSearch, setCustomerSearch] = useState("");
     const [notes, setNotes] = useState("");
     const [items, setItems] = useState<ComposerItem[]>([]);
     const [categoryFilter, setCategoryFilter] = useState("all");
@@ -203,6 +208,7 @@ const BillingPage = ({
     "amount",
     );
   const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [historyFilter] = useState<
     "all" | "draft" | "open" | "paid" | "voided"
   >("all");
@@ -231,6 +237,9 @@ const BillingPage = ({
   const purchaseSearch = purchaseSearchProp ?? "";
   const deferredProductSearch = useDeferredValue(
     productSearch.trim().toLowerCase(),
+  );
+  const deferredCustomerSearch = useDeferredValue(
+    customerSearch.trim().toLowerCase(),
   );
   const deferredCustomerDirectorySearch = useDeferredValue(
     customerDirectorySearch.trim().toLowerCase(),
@@ -359,6 +368,10 @@ const BillingPage = ({
     salesQuery.data?.status === "success"
       ? (salesQuery.data.data?.sales ?? [])
       : [];
+  const selectedCustomer =
+    customers.find((customer) => customer.id === selectedCustomerId) ??
+    selectedCustomerFallback;
+  const customerSearchLooksLikePhone = /^[+\d\s()-]+$/.test(customerSearch);
 
     const categoryOptions = [{ id: "all", name: "All" }, ...categories];
     const activeCategoryFilter =
@@ -366,6 +379,18 @@ const BillingPage = ({
     !categories.some((category) => category.id === categoryFilter)
             ? "all"
             : categoryFilter;
+  const filteredCustomers = customers
+    .filter((customer) => {
+      if (!deferredCustomerSearch) {
+        return true;
+      }
+
+      return (
+        customer.name.toLowerCase().includes(deferredCustomerSearch) ||
+        (customer.phone ?? "").toLowerCase().includes(deferredCustomerSearch)
+      );
+    })
+    .slice(0, 6);
 
     const selectAdjacentCategory = (direction: -1 | 1) => {
         const currentIndex = Math.max(
@@ -680,6 +705,8 @@ const BillingPage = ({
     const resetComposer = () => {
         setActiveDraftId(null);
         setSelectedCustomerId("");
+        setSelectedCustomerFallback(null);
+        setCustomerSearch("");
         setNotes("");
         setItems([]);
         setSettlementMode("full");
@@ -688,6 +715,7 @@ const BillingPage = ({
     setDiscountInput("");
     setDiscountMode("amount");
     setPlaceOrderDialogOpen(false);
+    setCustomerPickerOpen(false);
     };
 
     useEffect(() => {
@@ -1112,6 +1140,7 @@ const BillingPage = ({
         onSuccess: (sale) => {
             setActiveDraftId(sale.id);
             setSelectedCustomerId(sale.customerId ?? "");
+            setSelectedCustomerFallback(null);
             setNotes(sale.notes ?? "");
             setItems(
                 sale.items.map((item) => ({
@@ -2506,6 +2535,124 @@ const BillingPage = ({
 
           <div className="grid gap-4 lg:grid-cols-[1.4fr_0.9fr] lg:items-start">
             <div className="space-y-4 rounded-xl border border-border/60 bg-card/60 p-4">
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <User className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Customer
+                    </p>
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {selectedCustomer?.name || "Walk-in"}
+                    </p>
+                    {selectedCustomer?.phone ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        {selectedCustomer.phone}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 shrink-0 rounded-lg px-2.5 text-[11px]"
+                  onClick={() => {
+                    setCustomerSearch("");
+                    setCustomerPickerOpen((open) => !open);
+                  }}
+                >
+                  {customerPickerOpen ? "Done" : "Change"}
+                </Button>
+              </div>
+
+              {customerPickerOpen ? (
+                <div className="space-y-2 border-t border-border/50 pt-3">
+                  <div className="relative">
+                    <Input
+                      className="h-9 rounded-xl bg-background/70 pr-9 text-xs"
+                      placeholder="Search by name or phone"
+                      value={customerSearch}
+                      onChange={(event) => {
+                        setCustomerSearch(event.target.value);
+                        if (selectedCustomerId) {
+                          setSelectedCustomerId("");
+                          setSelectedCustomerFallback(null);
+                        }
+                      }}
+                      aria-label="Search customer"
+                    />
+                    {customerSearch ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerSearch("");
+                          setSelectedCustomerId("");
+                          setSelectedCustomerFallback(null);
+                        }}
+                        className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Clear customer"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {customerSearch && !selectedCustomer && filteredCustomers.length > 0 ? (
+                    <div className="space-y-1">
+                      {filteredCustomers.map((customer) => (
+                        <button
+                          key={customer.id}
+                          type="button"
+                          className="flex min-h-9 w-full items-center gap-2 rounded-lg bg-background/60 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
+                          onClick={() => {
+                            setSelectedCustomerId(customer.id);
+                            setSelectedCustomerFallback(null);
+                            setCustomerSearch(customer.phone || customer.name);
+                            setCustomerPickerOpen(false);
+                          }}
+                        >
+                          <User className="size-3.5 shrink-0" />
+                          <span className="font-medium">{customer.name}</span>
+                          <span className="ml-auto text-[10px] opacity-60">
+                            {customer.phone || ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {customerSearch && !selectedCustomer && filteredCustomers.length === 0 ? (
+                    <CustomerQuickCreateDialog
+                      organizationId={organizationId}
+                      mode={mode}
+                      suggestedName={
+                        customerSearchLooksLikePhone ? "" : customerSearch
+                      }
+                      suggestedPhone={
+                        customerSearchLooksLikePhone ? customerSearch : ""
+                      }
+                      onCreated={(customer) => {
+                        setSelectedCustomerId(customer.id);
+                        setSelectedCustomerFallback(customer);
+                        setCustomerSearch(customer.phone || customer.name);
+                        setCustomerPickerOpen(false);
+                      }}
+                      trigger={
+                        <button
+                          type="button"
+                          className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                        >
+                          <Plus className="size-3.5" />
+                          <span>Create new customer</span>
+                        </button>
+                      }
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+
             <section className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <div>
