@@ -262,7 +262,7 @@ const ProductsListPage = () => {
 
                                     <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
                                         <div className="min-w-0 space-y-1">
-                                            <h4 className="truncate font-display text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+                                            <h4 className="whitespace-normal break-words font-display text-[15px] font-semibold leading-tight tracking-tight text-foreground">
                                                 {product.name}
                                             </h4>
                                             <div className="flex flex-wrap items-center gap-2">
