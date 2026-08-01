@@ -41,9 +41,10 @@ import type {
     PaymentMethod,
     ProductResponseDTO,
     ComboProductResponse,
-    CustomerDTO,
-    SaleDetailDTO,
-    UpdateDraftSaleJSON,
+  CustomerDTO,
+  SaleDetailDTO,
+  SaleSummaryDTO,
+  UpdateDraftSaleJSON,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -95,6 +96,7 @@ import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
+import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
 import { safeRandomUUID } from "@/lib/uuid";
@@ -105,6 +107,8 @@ type ComposerBundleComponentAddOn = {
     addOnId: string;
     name: string;
     quantity: number;
+    unitPrice: number;
+    unitDiscount: number;
 };
 
 type ComposerBundleComponent = {
@@ -112,6 +116,7 @@ type ComposerBundleComponent = {
     componentProductId: string;
     name: string;
     quantityPerBundle: number;
+    priceAdjustment: number;
     addOns: ComposerBundleComponentAddOn[];
 };
 
@@ -160,6 +165,30 @@ const isSameComposerConfiguration = (
   buildComboConfigurationSignature(left.comboSelections ?? []) === buildComboConfigurationSignature(right.comboSelections ?? []);
 
 type SettlementMode = "full" | "partial" | "due";
+type SaleSort = "newest" | "oldest" | "highest" | "lowest";
+type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
+type SalesDateFilter = "all" | "today" | "yesterday" | "this-week";
+
+const salesSortOptions: Array<{ value: SaleSort; label: string }> = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "highest", label: "Highest \u20B9" },
+  { value: "lowest", label: "Lowest \u20B9" },
+];
+
+const salesPaymentMethodOptions: Array<{ value: SalesPaymentMethodFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "cash", label: "Cash" },
+  { value: "upi", label: "UPI" },
+  { value: "card", label: "Card" },
+];
+
+const salesDateFilterOptions: Array<{ value: SalesDateFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "this-week", label: "This Week" },
+];
 
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
@@ -218,15 +247,9 @@ const BillingPage = ({
   >(isDeviceMode ? "products" : "bills");
     const [customerDirectorySearch, setCustomerDirectorySearch] = useState("");
 
-  const [sortBy, setSortBy] = useState<
-    "newest" | "oldest" | "highest" | "lowest"
-  >("newest");
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState<
-    "all" | "cash" | "upi" | "card"
-  >("all");
-  const [dateFilter, setDateFilter] = useState<
-    "all" | "today" | "yesterday" | "this-week"
-  >("all");
+  const [sortBy, setSortBy] = useState<SaleSort>("newest");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<SalesPaymentMethodFilter>("all");
+  const [dateFilter, setDateFilter] = useState<SalesDateFilter>("all");
   const [customizeProductId, setCustomizeProductId] = useState<string | null>(
     null,
   );
@@ -310,15 +333,48 @@ const BillingPage = ({
     productsQuery.data?.status === "success"
       ? (productsQuery.data.data?.products ?? [])
       : [];
+  const getComposerUnitDiscountFromSaleItem = (
+    item: SaleDetailDTO["items"][number],
+  ) => {
+    const catalogProduct = products.find((product) => product.id === item.productId);
+    if (catalogProduct) {
+      return Number(catalogProduct.discount ?? 0);
+    }
+
+    const quantity = Number(item.quantity);
+    if (quantity <= 0) return 0;
+
+    const comboAddOnDiscount = (item.bundleComponents ?? []).reduce(
+      (total, component) =>
+        total +
+        (component.addOns ?? []).reduce(
+          (componentTotal, addOn) =>
+            componentTotal +
+            Number(addOn.unitDiscountSnapshot) *
+                Number(addOn.quantityPerComponent) *
+                Number(component.quantityPerBundle),
+          0,
+        ),
+      0,
+    );
+
+    return Math.max(
+      (Number(item.discountAmount) / quantity) - comboAddOnDiscount / quantity,
+      0,
+    );
+  };
   const comboProductsQuery = useQuery({
     queryKey: catalogKeys.combos(organizationId),
     queryFn: () => isDeviceMode ? getPosComboProducts() : getComboProducts(organizationId),
     enabled: Boolean(organizationId),
     staleTime: 5 * 60 * 1000,
   });
-  const preloadedCombos = comboProductsQuery.data?.status === "success"
-    ? (comboProductsQuery.data.data?.combos ?? [])
-    : [];
+  const preloadedCombos = useMemo(
+    () => comboProductsQuery.data?.status === "success"
+      ? (comboProductsQuery.data.data?.combos ?? [])
+      : [],
+    [comboProductsQuery.data],
+  );
   const configureCombo = configureComboProductId
     ? (preloadedCombos.find((combo) => combo.product.id === configureComboProductId) ?? null)
     : null;
@@ -348,19 +404,20 @@ const BillingPage = ({
           enabled: Boolean(organizationId),
         })),
   });
-    const selectableAttachments =
-        isDeviceMode
-            ? selectableAttachmentsQuery.data?.status === "success"
-                ? (selectableAttachmentsQuery.data.data?.attachments ?? [])
-                : []
-            : adminAttachmentQueries.flatMap((query) =>
-                  query.data?.status === "success"
-                      ? (query.data.data?.attachments ?? []).filter(
-                            (attachment) =>
-                                attachment.status === "active" && attachment.addOn.status === "active",
-                        )
-                      : [],
-              );
+  const selectableAttachments = useMemo(
+    () => isDeviceMode
+      ? selectableAttachmentsQuery.data?.status === "success"
+        ? (selectableAttachmentsQuery.data.data?.attachments ?? [])
+        : []
+      : adminAttachmentQueries.flatMap((query) =>
+        query.data?.status === "success"
+          ? (query.data.data?.attachments ?? []).filter(
+            (attachment) => attachment.status === "active" && attachment.addOn.status === "active",
+          )
+          : [],
+      ),
+    [adminAttachmentQueries, isDeviceMode, selectableAttachmentsQuery.data],
+  );
   const customers =
     customersQuery.data?.status === "success"
       ? (customersQuery.data.data?.customers ?? [])
@@ -459,13 +516,17 @@ const BillingPage = ({
   const customizeAttachments = customizeProduct
     ? (attachmentsByProductId.get(customizeProduct.id) ?? [])
     : [];
+  const comboUnavailable = Boolean(
+    configureComboProductId &&
+      comboProductsQuery.data?.status === "success" &&
+      !configureCombo,
+  );
+
   useEffect(() => {
-    if (!configureComboProductId) return;
-    if (comboProductsQuery.data?.status === "success" && !configureCombo) {
+    if (comboUnavailable) {
       toast.error("This Combo is no longer available");
-      setConfigureComboProductId(null);
     }
-  }, [comboProductsQuery.data, configureCombo, configureComboProductId]);
+  }, [comboUnavailable]);
 
   const organizationStores =
     isDeviceMode && session ? [session.store] : (organization?.stores ?? []);
@@ -609,22 +670,10 @@ const BillingPage = ({
         });
 
     const subtotal = items.reduce((total, item) => {
-        const parentSubtotal = item.unitPrice * item.quantity;
-        const addOnSubtotal = item.addOns.reduce(
-      (addOnTotal, addOn) =>
-        addOnTotal + addOn.unitPrice * addOn.quantity * item.quantity,
-            0,
-        );
-        return total + parentSubtotal + addOnSubtotal;
+        return total + getComposerItemPricing(item).subtotal;
     }, 0);
     const lineDiscountTotal = items.reduce((total, item) => {
-        const parentDiscount = item.unitDiscount * item.quantity;
-        const addOnDiscount = item.addOns.reduce(
-      (addOnTotal, addOn) =>
-        addOnTotal + addOn.unitDiscount * addOn.quantity * item.quantity,
-            0,
-        );
-        return total + parentDiscount + addOnDiscount;
+        return total + getComposerItemPricing(item).lineDiscountTotal;
     }, 0);
   const discountBase = Math.max(subtotal - lineDiscountTotal, 0);
   const parsedDiscountValue =
@@ -965,10 +1014,7 @@ const BillingPage = ({
             products.find((product) => product.id === item.productId)
               ?.categoryId ?? "",
                     unitPrice: Number(item.unitPriceSnapshot),
-          unitDiscount:
-            Number(item.quantity) > 0
-              ? Number(item.discountAmount) / Number(item.quantity)
-              : 0,
+                    unitDiscount: getComposerUnitDiscountFromSaleItem(item),
                     quantity: Number(item.quantity),
                     addOns: (item.addOns ?? []).map((addOn) => ({
                         addOnId: addOn.addOnId,
@@ -982,16 +1028,21 @@ const BillingPage = ({
                         componentProductId: component.componentProductId,
                         name: component.productNameSnapshot,
                         quantityPerBundle: Number(component.quantityPerBundle),
+                        priceAdjustment: Number(component.priceAdjustmentSnapshot ?? 0),
                         addOns: (component.addOns ?? []).map((addOn) => ({
                             addOnId: addOn.addOnId,
                             name: addOn.addOnNameSnapshot,
                             quantity: Number(addOn.quantityPerComponent),
+                            unitPrice: Number(addOn.unitPriceSnapshot),
+                            unitDiscount: Number(addOn.unitDiscountSnapshot),
                         })),
                     })),
                     comboSelections: (item.bundleComponents ?? []).filter((component) => Boolean(component.choiceGroupId)).map((component) => ({
                         groupId: component.choiceGroupId!,
                         optionProductId: component.componentProductId,
+                        optionName: component.productNameSnapshot,
                         quantity: Number(component.quantityPerBundle),
+                        priceAdjustment: Number(component.priceAdjustmentSnapshot ?? 0),
                         addOns: (component.addOns ?? []).map((addOn) => ({
                             addOnId: addOn.addOnId,
                             name: addOn.addOnNameSnapshot,
@@ -1156,10 +1207,7 @@ const BillingPage = ({
                     name: item.productNameSnapshot,
                     categoryId: "",
                     unitPrice: Number(item.unitPriceSnapshot),
-          unitDiscount:
-            Number(item.quantity) > 0
-              ? Number(item.discountAmount) / Number(item.quantity)
-              : 0,
+                    unitDiscount: getComposerUnitDiscountFromSaleItem(item),
                     quantity: Number(item.quantity),
                     addOns: (item.addOns ?? []).map((addOn) => ({
                         addOnId: addOn.addOnId,
@@ -1173,16 +1221,21 @@ const BillingPage = ({
                         componentProductId: component.componentProductId,
                         name: component.productNameSnapshot,
                         quantityPerBundle: Number(component.quantityPerBundle),
+                        priceAdjustment: Number(component.priceAdjustmentSnapshot ?? 0),
                         addOns: (component.addOns ?? []).map((addOn) => ({
                             addOnId: addOn.addOnId,
                             name: addOn.addOnNameSnapshot,
                             quantity: Number(addOn.quantityPerComponent),
+                            unitPrice: Number(addOn.unitPriceSnapshot),
+                            unitDiscount: Number(addOn.unitDiscountSnapshot),
                         })),
                     })),
                     comboSelections: (item.bundleComponents ?? []).filter((component) => Boolean(component.choiceGroupId)).map((component) => ({
                         groupId: component.choiceGroupId!,
                         optionProductId: component.componentProductId,
+                        optionName: component.productNameSnapshot,
                         quantity: Number(component.quantityPerBundle),
+                        priceAdjustment: Number(component.priceAdjustmentSnapshot ?? 0),
                         addOns: (component.addOns ?? []).map((addOn) => ({
                             addOnId: addOn.addOnId,
                             name: addOn.addOnNameSnapshot,
@@ -1785,16 +1838,11 @@ const BillingPage = ({
                                         <div className="flex items-center gap-1 shrink-0 text-muted-foreground text-xs font-semibold uppercase tracking-wider mr-1">
                                             <ArrowUpDown className="size-3.5" />
                                         </div>
-                                        {[
-                                            { value: "newest", label: "Newest" },
-                                            { value: "oldest", label: "Oldest" },
-                                            { value: "highest", label: "Highest \u20B9" },
-                                            { value: "lowest", label: "Lowest \u20B9" },
-                                        ].map((opt) => (
+                                        {salesSortOptions.map((opt) => (
                                             <button
                                                 key={opt.value}
                                                 type="button"
-                                                onClick={() => setSortBy(opt.value as any)}
+                                                onClick={() => setSortBy(opt.value)}
                                                 className={cn(
                                                     "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
                                                     sortBy === opt.value
@@ -1823,16 +1871,11 @@ const BillingPage = ({
                                         <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
                                             <Filter className="size-3.5" />
                                         </div>
-                                        {[
-                                            { value: "all", label: "All" },
-                                            { value: "cash", label: "Cash" },
-                                            { value: "upi", label: "UPI" },
-                                            { value: "card", label: "Card" },
-                                        ].map((opt) => (
+                                        {salesPaymentMethodOptions.map((opt) => (
                                             <button
                                                 key={opt.value}
                                                 type="button"
-                                                onClick={() => setPaymentMethodFilter(opt.value as any)}
+                                                onClick={() => setPaymentMethodFilter(opt.value)}
                                                 className={cn(
                                                     "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
                                                     paymentMethodFilter === opt.value
@@ -1853,16 +1896,11 @@ const BillingPage = ({
                                         <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
                                             <Calendar className="size-3.5" />
                                         </div>
-                                        {[
-                                            { value: "all", label: "All" },
-                                            { value: "today", label: "Today" },
-                                            { value: "yesterday", label: "Yesterday" },
-                                            { value: "this-week", label: "This Week" },
-                                        ].map((opt) => (
+                                        {salesDateFilterOptions.map((opt) => (
                                             <button
                                                 key={opt.value}
                                                 type="button"
-                                                onClick={() => setDateFilter(opt.value as any)}
+                                                onClick={() => setDateFilter(opt.value)}
                                                 className={cn(
                                                     "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
                                                     dateFilter === opt.value
@@ -1906,7 +1944,7 @@ const BillingPage = ({
                                 <>
                                     {/* Render payment badges helper function */}
                                     {(() => {
-                                        const renderPaymentStatusBadge = (sale: any) => {
+                                        const renderPaymentStatusBadge = (sale: SaleSummaryDTO) => {
                                             if (sale.status === "draft") {
                                                 return (
                                                     <span className="rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-500 border border-amber-500/20">
@@ -1946,7 +1984,7 @@ const BillingPage = ({
                                             );
                                         };
 
-                                        const renderPaymentMethodBadges = (sale: any) => {
+                                        const renderPaymentMethodBadges = (sale: SaleSummaryDTO) => {
                                             if (sale.status === "draft" || sale.status === "voided") {
                                                 return (
                                                     <span className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
@@ -2206,17 +2244,8 @@ const BillingPage = ({
                                 ) : (
                     <div className="space-y-1.5">
                                         {items.map((item) => {
-                        const parentTotal =
-                          (item.unitPrice - item.unitDiscount) * item.quantity;
-                                            const addOnTotal = item.addOns.reduce(
-                                                (total, addOn) =>
-                                                    total +
-                                                    (addOn.unitPrice - addOn.unitDiscount) *
-                                                        addOn.quantity *
-                                                        item.quantity,
-                                                0,
-                                            );
-                                            const lineTotal = parentTotal + addOnTotal;
+                                            const pricing = getComposerItemPricing(item);
+                                            const lineTotal = pricing.lineTotal;
 
                                             return (
                                                 <div
@@ -2309,9 +2338,47 @@ const BillingPage = ({
                                                         </div>
                                                     ) : null}
 
-                                                    {item.bundleComponents.length > 0 ? (
+                                                    {item.comboSelections.length > 0 ? (
                                                         <div className="mt-1 ml-3 space-y-0.5 border-l border-border/50 pl-3">
-                                                            {item.comboSelections.length > 0 ? <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Combo options</p> : null}
+                                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Combo options</p>
+                                                            {item.comboSelections.map((selection) => (
+                                                                <div
+                                                                    key={`${item.key}-${selection.groupId}-${selection.optionProductId}`}
+                                                                    className="space-y-0.5 text-xs text-muted-foreground"
+                                                                >
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <span className="min-w-0 truncate">
+                                                                            {selection.optionName} × {selection.quantity}
+                                                                        </span>
+                                                                        {selection.priceAdjustment !== 0 ? (
+                                                                            <span className="shrink-0 font-medium text-foreground/80">
+                                                                                {formatCurrency(selection.priceAdjustment * selection.quantity * item.quantity)}
+                                                                            </span>
+                                                                        ) : null}
+                                                                    </div>
+                                                                    {selection.addOns.map((addOn) => (
+                                                                        <div
+                                                                            key={`${item.key}-${selection.groupId}-${selection.optionProductId}-${addOn.addOnId}`}
+                                                                            className="flex items-center justify-between gap-3 pl-3"
+                                                                        >
+                                                                            <span className="min-w-0 truncate">
+                                                                                + {addOn.name} × {addOn.quantity}
+                                                                            </span>
+                                                                            <span className="shrink-0 font-medium text-foreground/80">
+                                                                                {formatCurrency(
+                                                                                    (addOn.unitPrice - addOn.unitDiscount) *
+                                                                                        addOn.quantity *
+                                                                                        selection.quantity *
+                                                                                        item.quantity,
+                                                                                )}
+                                                                            </span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : item.bundleComponents.length > 0 ? (
+                                                        <div className="mt-1 ml-3 space-y-0.5 border-l border-border/50 pl-3">
                                                             {item.bundleComponents.map((component) => (
                                                                 <div
                                                                     key={`${item.key}-${component.id}`}
@@ -2321,12 +2388,17 @@ const BillingPage = ({
                                       {component.name} ×{" "}
                                       {component.quantityPerBundle}
                                                                     </span>
+                                                                    {component.priceAdjustment !== 0 ? (
+                                                                        <span className="truncate block">
+                                                                            Option adjustment: {formatCurrency(component.priceAdjustment * component.quantityPerBundle * item.quantity)}
+                                                                        </span>
+                                                                    ) : null}
                                                                     {component.addOns.map((addOn) => (
                                                                         <span
                                                                             key={`${item.key}-${component.id}-${addOn.addOnId}`}
                                                                             className="truncate block pl-3"
                                                                         >
-                                                                            + {addOn.name} × {addOn.quantity}
+                                                                            + {addOn.name} × {addOn.quantity} ({formatCurrency((addOn.unitPrice - addOn.unitDiscount) * addOn.quantity * component.quantityPerBundle * item.quantity)})
                                                                         </span>
                                                                     ))}
                                                                 </div>
@@ -2942,7 +3014,8 @@ const BillingPage = ({
             />
 
             <ConfigureComboDialog
-                open={Boolean(configureComboProductId)}
+                key={configureComboProductId ?? "combo-dialog"}
+                open={Boolean(configureComboProductId && !comboUnavailable)}
                 onOpenChange={(open) => {
                     if (!open) setConfigureComboProductId(null);
                 }}
@@ -2952,6 +3025,7 @@ const BillingPage = ({
             />
 
             <SaleDetailDialog
+                key={selectedSaleId ?? "sale-detail-dialog"}
                 open={saleDialogOpen}
                 onOpenChange={setSaleDialogOpen}
                 mode={mode}

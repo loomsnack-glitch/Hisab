@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { collectPayment, collectPosPayment, getPosSale, getSale, voidPosSale, voidSale } from "@repo/services";
 import type { CreatePaymentJSON, PaymentMethod, VoidSaleJSON } from "@repo/types";
@@ -78,12 +78,7 @@ const SaleDetailDialog = ({
 }: SaleDetailDialogProps) => {
     const queryClient = useQueryClient();
     const canMutate = mode === "device";
-    const [paymentDraft, setPaymentDraft] = useState<CreatePaymentJSON>({
-        amount: 0,
-        method: "cash",
-        referenceNumber: "",
-        notes: "",
-    });
+    const [paymentDraft, setPaymentDraft] = useState<CreatePaymentJSON | null>(null);
     const [voidDraft, setVoidDraft] = useState<VoidSaleJSON>({ reason: "" });
     const [formError, setFormError] = useState<string | null>(null);
 
@@ -108,18 +103,19 @@ const SaleDetailDialog = ({
         ? Math.max(Number(sale.subtotal ?? 0) - itemDiscountTotal, 0)
         : 0;
 
-    useEffect(() => {
-        if (sale) {
-            setPaymentDraft({
-                amount: Number(sale.dueTotal ?? 0),
-                method: "cash",
-                referenceNumber: "",
-                notes: "",
-            });
-            setVoidDraft({ reason: "" });
-            setFormError(null);
-        }
-    }, [sale]);
+    const defaultPaymentDraft: CreatePaymentJSON = {
+        amount: Number(sale?.dueTotal ?? 0),
+        method: "cash",
+        referenceNumber: "",
+        notes: "",
+    };
+    const paymentValues = paymentDraft ?? defaultPaymentDraft;
+    const updatePaymentDraft = (patch: Partial<CreatePaymentJSON>) => {
+        setPaymentDraft((current) => ({
+            ...(current ?? defaultPaymentDraft),
+            ...patch,
+        }));
+    };
 
     const invalidateBilling = () => {
         queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
@@ -128,8 +124,8 @@ const SaleDetailDialog = ({
     const collectPaymentMutation = useMutation({
         mutationFn: () =>
             mode === "device"
-                ? collectPosPayment(saleId as string, paymentDraft)
-                : collectPayment(organizationId, storeId, saleId as string, paymentDraft),
+                ? collectPosPayment(saleId as string, paymentValues)
+                : collectPayment(organizationId, storeId, saleId as string, paymentValues),
         onSuccess: (response) => {
             if (response.status !== "success") {
                 setFormError(response.message || "Failed to collect payment");
@@ -339,8 +335,8 @@ const SaleDetailDialog = ({
 
                                                         {bundleComponents.length > 0 ? (
                                                             <div className="mt-3 space-y-2 border-l border-border/60 ml-3.5 pl-4">
-                                                                {bundleComponents.map((component) => (
-                                                                    <div key={component.id} className="space-y-1.5">
+                                                        {bundleComponents.map((component) => (
+                                                            <div key={component.id} className="space-y-1.5">
                                                                         <div className="flex items-center justify-between gap-3">
                                                                             <div>
                                                                                 <p className="text-sm text-foreground/85">
@@ -348,6 +344,9 @@ const SaleDetailDialog = ({
                                                                                 </p>
                                                                                 <p className="text-xs text-muted-foreground mt-0.5">
                                                                                     Qty {Number(component.totalQuantity)}
+                                                                                    {Number(component.priceAdjustmentSnapshot ?? 0) !== 0
+                                                                                        ? ` • Adjustment ${Number(component.priceAdjustmentSnapshot) > 0 ? "+" : ""}${formatCurrency(component.priceAdjustmentSnapshot)}`
+                                                                                        : ""}
                                                                                 </p>
                                                                             </div>
                                                                         </div>
@@ -360,7 +359,12 @@ const SaleDetailDialog = ({
                                                                                     >
                                                                                         + {addOn.addOnNameSnapshot}
                                                                                         {" "}
-                                                                                        × {Number(addOn.totalQuantity)}
+                                                                                        × {Number(addOn.totalQuantity)} • {formatCurrency(
+                                                                                            (Number(addOn.unitPriceSnapshot) - Number(addOn.unitDiscountSnapshot)) * Number(addOn.totalQuantity),
+                                                                                        )}
+                                                                                        {Number(addOn.unitDiscountSnapshot) > 0
+                                                                                            ? ` (Disc. -${formatCurrency(Number(addOn.unitDiscountSnapshot) * Number(addOn.totalQuantity))})`
+                                                                                            : ""}
                                                                                     </p>
                                                                                 ))}
                                                                             </div>
@@ -484,13 +488,8 @@ const SaleDetailDialog = ({
                                                 <FieldLabel>Method</FieldLabel>
                                                 <FieldContent>
                                                     <Select
-                                                        value={paymentDraft.method}
-                                                        onValueChange={(value) =>
-                                                            setPaymentDraft((current) => ({
-                                                                ...current,
-                                                                method: value as PaymentMethod,
-                                                            }))
-                                                        }
+                                                        value={paymentValues.method}
+                                                        onValueChange={(value) => updatePaymentDraft({ method: value as PaymentMethod })}
                                                     >
                                                         <SelectTrigger className="h-11 w-full rounded-2xl">
                                                             <SelectValue placeholder="Select payment method" />
@@ -514,17 +513,12 @@ const SaleDetailDialog = ({
                                                         min="0"
                                                         step="0.01"
                                                         className="h-11 rounded-2xl"
-                                                        value={paymentDraft.amount}
-                                                        onChange={(event) =>
-                                                            setPaymentDraft((current) => ({
-                                                                ...current,
-                                                                amount: Number(event.target.value || 0),
-                                                            }))
-                                                        }
+                                                        value={paymentValues.amount}
+                                                        onChange={(event) => updatePaymentDraft({ amount: Number(event.target.value || 0) })}
                                                     />
                                                     <FieldError
                                                         errors={
-                                                            paymentDraft.amount > Number(sale.dueTotal)
+                                                            paymentValues.amount > Number(sale.dueTotal)
                                                                 ? [{ message: "Amount cannot exceed the remaining due total" }]
                                                                 : undefined
                                                         }
@@ -538,13 +532,8 @@ const SaleDetailDialog = ({
                                                     <Input
                                                         className="h-11 rounded-2xl"
                                                         placeholder="Optional reference number"
-                                                        value={paymentDraft.referenceNumber ?? ""}
-                                                        onChange={(event) =>
-                                                            setPaymentDraft((current) => ({
-                                                                ...current,
-                                                                referenceNumber: event.target.value,
-                                                            }))
-                                                        }
+                                                        value={paymentValues.referenceNumber ?? ""}
+                                                        onChange={(event) => updatePaymentDraft({ referenceNumber: event.target.value })}
                                                     />
                                                 </FieldContent>
                                             </Field>
@@ -555,13 +544,8 @@ const SaleDetailDialog = ({
                                                     <Textarea
                                                         className="min-h-24 rounded-2xl"
                                                         placeholder="Optional payment note"
-                                                        value={paymentDraft.notes ?? ""}
-                                                        onChange={(event) =>
-                                                            setPaymentDraft((current) => ({
-                                                                ...current,
-                                                                notes: event.target.value,
-                                                            }))
-                                                        }
+                                                        value={paymentValues.notes ?? ""}
+                                                        onChange={(event) => updatePaymentDraft({ notes: event.target.value })}
                                                     />
                                                 </FieldContent>
                                             </Field>
@@ -570,8 +554,8 @@ const SaleDetailDialog = ({
                                                 className="w-full rounded-2xl"
                                                 disabled={
                                                     collectPaymentMutation.isPending
-                                                    || paymentDraft.amount <= 0
-                                                    || paymentDraft.amount > Number(sale.dueTotal)
+                                                    || paymentValues.amount <= 0
+                                                    || paymentValues.amount > Number(sale.dueTotal)
                                                 }
                                                 onClick={() => collectPaymentMutation.mutate()}
                                             >

@@ -16,6 +16,10 @@ const addOnId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const addOnId2 = "99999999-9999-4999-8999-999999999999";
 const attachmentId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const attachmentId2 = "88888888-8888-4888-8888-888888888888";
+const comboProductId = "12121212-1212-4121-8121-121212121212";
+const comboOptionProductId = "13131313-1313-4131-8131-131313131313";
+const comboChoiceGroupId = "14141414-1414-4141-8141-141414141414";
+const comboChoiceOptionId = "15151515-1515-4151-8151-151515151515";
 
 const now = new Date("2026-07-11T12:00:00.000Z");
 
@@ -32,6 +36,51 @@ const product = {
     imagePath: null,
     productType: "single" as const,
     status: "active" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+const comboProduct = {
+    ...product,
+    id: comboProductId,
+    name: "Burger Meal",
+    price: 100,
+    discount: 0,
+    productType: "combo" as const,
+};
+
+const comboOptionProduct = {
+    ...product,
+    id: comboOptionProductId,
+    name: "Peri-peri Fries",
+    price: 40,
+    discount: 0,
+};
+
+const comboChoiceGroup = {
+    id: comboChoiceGroupId,
+    organizationId,
+    comboProductId,
+    name: "Fries",
+    minSelections: 1,
+    maxSelections: 1,
+    sortOrder: 0,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+const comboChoiceOption = {
+    id: comboChoiceOptionId,
+    organizationId,
+    choiceGroupId: comboChoiceGroupId,
+    optionProductId: comboOptionProductId,
+    maxQuantity: 1,
+    priceAdjustment: 10,
+    sortOrder: 0,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -95,6 +144,8 @@ const selectableAttachment2 = {
 const createdSales: Array<Record<string, unknown>> = [];
 const createdSaleItems: Array<Record<string, unknown>> = [];
 const createdSaleItemAddOns: Array<Record<string, unknown>> = [];
+const createdSaleItemBundleComponents: Array<Record<string, unknown>> = [];
+const createdSaleItemBundleComponentAddOns: Array<Record<string, unknown>> = [];
 
 const createSale = mock(async (data: Record<string, unknown>) => {
     const sale = {
@@ -130,6 +181,18 @@ const createSaleItem = mock(async (data: Record<string, unknown>) => {
     return item;
 });
 
+const createSaleItemBundleComponent = mock(async (data: Record<string, unknown>) => {
+    const component = { ...data, createdAt: now, updatedAt: now };
+    createdSaleItemBundleComponents.push(component);
+    return component;
+});
+
+const createSaleItemBundleComponentAddOn = mock(async (data: Record<string, unknown>) => {
+    const addOnRow = { ...data, createdAt: now, updatedAt: now };
+    createdSaleItemBundleComponentAddOns.push(addOnRow);
+    return addOnRow;
+});
+
 const createSaleItemAddOn = mock(async (data: Record<string, unknown>) => {
     const addOnRow = { ...data, createdAt: now, updatedAt: now };
     createdSaleItemAddOns.push(addOnRow);
@@ -155,12 +218,19 @@ const getSaleById = mock(
 const getSaleItemsBySaleId = mock(async (saleId: string) => {
     return createdSaleItems
         .filter((item) => item.saleId === saleId)
-        .map((item) => ({
+            .map((item) => ({
             ...item,
       addOns: createdSaleItemAddOns.filter(
         (addOnRow) => addOnRow.saleItemId === item.id,
-      ),
-            bundleComponents: [],
+            ),
+            bundleComponents: createdSaleItemBundleComponents
+                .filter((component) => component.saleItemId === item.id)
+                .map((component) => ({
+                    ...component,
+                    addOns: createdSaleItemBundleComponentAddOns.filter(
+                        (addOn) => addOn.saleItemBundleComponentId === component.id,
+                    ),
+                })),
         }));
 });
 
@@ -229,8 +299,8 @@ mock.module("./billing.repository", () => ({
     createSale,
     createSaleItem,
     createSaleItemAddOn,
-    createSaleItemBundleComponent: mock(async () => null),
-    createSaleItemBundleComponentAddOn: mock(async () => null),
+    createSaleItemBundleComponent,
+    createSaleItemBundleComponentAddOn,
     getSaleById,
     getSaleItemsBySaleId,
     getPaymentsBySaleId,
@@ -269,15 +339,21 @@ const resolveSelectableAttachment = (requestedAddOnId: string) => {
 describe("Configured product billing with trusted snapshots", () => {
     let getProductByIdSpy: ReturnType<typeof spyOn>;
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
+    let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
+    let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
         createdSaleItems.length = 0;
         createdSaleItemAddOns.length = 0;
+        createdSaleItemBundleComponents.length = 0;
+        createdSaleItemBundleComponentAddOns.length = 0;
 
         createSale.mockClear();
         createSaleItem.mockClear();
         createSaleItemAddOn.mockClear();
+        createSaleItemBundleComponent.mockClear();
+        createSaleItemBundleComponentAddOn.mockClear();
         getSaleById.mockClear();
         getSaleIdByCompletionRequestId.mockClear();
         getSaleItemsBySaleId.mockClear();
@@ -293,18 +369,28 @@ describe("Configured product billing with trusted snapshots", () => {
       catalogRepository,
       "getProductById",
     ).mockResolvedValue(product as never);
-        getSelectableAttachmentSpy = spyOn(
+    getSelectableAttachmentSpy = spyOn(
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
     ).mockImplementation(
       async (_organizationId, _productId, requestedAddOnId) =>
             resolveSelectableAttachment(requestedAddOnId) as never,
         );
+        getComboChoiceGroupsSpy = spyOn(
+            catalogRepository,
+            "getComboChoiceGroupsByProductId",
+        ).mockResolvedValue([] as never);
+        getComboChoiceOptionsSpy = spyOn(
+            catalogRepository,
+            "getComboChoiceOptionsByGroupIds",
+        ).mockResolvedValue([] as never);
     });
 
     afterEach(() => {
         getProductByIdSpy.mockRestore();
         getSelectableAttachmentSpy.mockRestore();
+        getComboChoiceGroupsSpy.mockRestore();
+        getComboChoiceOptionsSpy.mockRestore();
     });
 
     test("creates a plain product line with trusted catalog pricing snapshots", async () => {
@@ -411,6 +497,45 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(sale?.subtotal).toBe(240);
         expect(sale?.discountTotal).toBe(24);
         expect(sale?.grandTotal).toBe(216);
+    });
+
+    test("prices Combo option adjustments and nested add-ons in the sale total", async () => {
+        getProductByIdSpy.mockImplementation(async (_organizationId, requestedProductId) => {
+            if (requestedProductId === comboProductId) return comboProduct as never;
+            if (requestedProductId === comboOptionProductId) return comboOptionProduct as never;
+            return product as never;
+        });
+        getComboChoiceGroupsSpy.mockResolvedValue([comboChoiceGroup] as never);
+        getComboChoiceOptionsSpy.mockResolvedValue([comboChoiceOption] as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [{
+                    productId: comboProductId,
+                    quantity: 2,
+                    addOns: [],
+                    comboSelections: [{
+                        groupId: comboChoiceGroupId,
+                        optionProductId: comboOptionProductId,
+                        quantity: 1,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    }],
+                }],
+            },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItemBundleComponents).toHaveLength(1);
+        expect(createdSaleItemBundleComponentAddOns).toHaveLength(1);
+        expect(createdSaleItems[0]?.lineSubtotal).toBe(260);
+        expect(createdSaleItems[0]?.discountAmount).toBe(4);
+        expect(createdSaleItems[0]?.lineTotal).toBe(256);
+        expect(response.data?.sale.subtotal).toBe(260);
+        expect(response.data?.sale.discountTotal).toBe(4);
+        expect(response.data?.sale.grandTotal).toBe(256);
     });
 
     test("sale totals include both parent product rows and child add-on rows", async () => {

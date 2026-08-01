@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ComboProductResponse, ProductAddOnAttachmentResponseDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
@@ -11,7 +11,9 @@ import { formatCurrency } from "@/lib/format";
 export type ComboDialogSelection = {
     groupId: string;
     optionProductId: string;
+    optionName: string;
     quantity: number;
+    priceAdjustment: number;
     addOns: Array<{ addOnId: string; name: string; quantity: number; unitPrice: number; unitDiscount: number }>;
 };
 
@@ -27,12 +29,6 @@ const ConfigureComboDialog = ({ open, onOpenChange, combo, attachmentsByProductI
     const [quantities, setQuantities] = useState<Record<string, number>>({});
     const [addOnQuantities, setAddOnQuantities] = useState<Record<string, number>>({});
 
-    useEffect(() => {
-        if (!open || !combo) return;
-        setQuantities({});
-        setAddOnQuantities({});
-    }, [open, combo]);
-
     const selections = useMemo<ComboDialogSelection[]>(() => combo?.choiceGroups.flatMap((group) => group.options.flatMap((option) => {
         const quantity = quantities[`${group.id}:${option.optionProductId}`] ?? 0;
         if (quantity === 0) return [];
@@ -40,7 +36,9 @@ const ConfigureComboDialog = ({ open, onOpenChange, combo, attachmentsByProductI
         return [{
             groupId: group.id,
             optionProductId: option.optionProductId,
+            optionName: option.product.name,
             quantity,
+            priceAdjustment: Number(option.priceAdjustment ?? 0),
             addOns: attachments.flatMap((attachment) => {
                 const addOnQuantity = addOnQuantities[`${group.id}:${option.optionProductId}:${attachment.addOnId}`] ?? 0;
                 return addOnQuantity > 0 ? [{ addOnId: attachment.addOnId, name: attachment.addOn.name, quantity: addOnQuantity, unitPrice: Number(attachment.addOn.price), unitDiscount: Number(attachment.addOn.discount ?? 0) }] : [];
@@ -50,8 +48,7 @@ const ConfigureComboDialog = ({ open, onOpenChange, combo, attachmentsByProductI
 
     const selectedCountByGroup = useMemo(() => new Map((combo?.choiceGroups ?? []).map((group) => [group.id, group.options.reduce((total, option) => total + (quantities[`${group.id}:${option.optionProductId}`] ?? 0), 0)])), [combo, quantities]);
     const extraTotal = selections.reduce((total, selection) => {
-        const option = combo?.choiceGroups.find((group) => group.id === selection.groupId)?.options.find((item) => item.optionProductId === selection.optionProductId);
-        return total + selection.addOns.reduce((sum, addOn) => sum + Math.max(addOn.unitPrice - addOn.unitDiscount, 0) * addOn.quantity, 0) + (Number(option?.priceAdjustment ?? 0) * selection.quantity);
+        return total + selection.addOns.reduce((sum, addOn) => sum + Math.max(addOn.unitPrice - addOn.unitDiscount, 0) * addOn.quantity, 0) + (selection.priceAdjustment * selection.quantity);
     }, 0);
     const baseTotal = combo ? Number(combo.product.price) - Number(combo.product.discount ?? 0) : 0;
     const canConfirm = (combo?.choiceGroups ?? []).every((group) => {

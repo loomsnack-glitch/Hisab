@@ -857,6 +857,7 @@ const prepareComboSaleLine = async (
     const preparedBundleComponents: PreparedBundleComponent[] = [];
     let adjustmentSubtotal = 0;
     let optionAddOnSubtotal = 0;
+    let optionAddOnDiscountTotal = 0;
 
     for (const group of groups) {
         const groupSelections = selectionsByGroup.get(group.id) ?? [];
@@ -929,10 +930,8 @@ const prepareComboSaleLine = async (
                 }
 
                 const addOnTotalQuantity = selectedAddOn.quantity * totalQuantity;
-                optionAddOnSubtotal += addOnTotalQuantity * Math.max(
-                    moneyFrom(attachment.addOn.price) - moneyFrom(attachment.addOn.discount),
-                    0,
-                );
+                optionAddOnSubtotal += addOnTotalQuantity * moneyFrom(attachment.addOn.price);
+                optionAddOnDiscountTotal += addOnTotalQuantity * moneyFrom(attachment.addOn.discount);
                 preparedAddOns.push({
                     id: crypto.randomUUID(),
                     organizationId,
@@ -973,7 +972,9 @@ const prepareComboSaleLine = async (
 
     const unitPrice = moneyFrom(product.price);
     const lineSubtotal = roundMoney(parentQuantity * unitPrice + adjustmentSubtotal + optionAddOnSubtotal);
-    const discountAmount = roundMoney(moneyFrom(product.discount) * parentQuantity);
+    const discountAmount = roundMoney(
+        moneyFrom(product.discount) * parentQuantity + optionAddOnDiscountTotal,
+    );
     if (lineSubtotal < 0 || discountAmount > lineSubtotal) {
         return {
             error: {
