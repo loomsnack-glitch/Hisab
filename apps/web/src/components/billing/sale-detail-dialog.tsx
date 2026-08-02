@@ -8,7 +8,6 @@ import { Card, CardContent } from "@repo/ui/components/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
@@ -555,6 +554,44 @@ const SaleDetailDialog = ({
                                         </div>
                                     </CardContent>
                                 </Card>
+
+                                {canMutate && sale.status === "completed" && Number(sale.paidTotal) === 0 ? (
+                                    <Card className="rounded-[28px] border-destructive/20 bg-destructive/5">
+                                        <CardContent className="space-y-4 p-5">
+                                            <div>
+                                                <h3 className="font-semibold text-foreground">Void bill</h3>
+                                                <p className="mt-1 text-sm text-muted-foreground">
+                                                    This is available because no payment has been collected yet.
+                                                </p>
+                                            </div>
+
+                                            <Field>
+                                                <FieldLabel>Reason</FieldLabel>
+                                                <FieldContent>
+                                                    <Textarea
+                                                        className="min-h-24 rounded-2xl bg-background/80"
+                                                        placeholder="Why is this bill being voided?"
+                                                        value={voidDraft.reason}
+                                                        onChange={(event) =>
+                                                            setVoidDraft({
+                                                                reason: event.target.value,
+                                                            })
+                                                        }
+                                                    />
+                                                </FieldContent>
+                                            </Field>
+
+                                            <Button
+                                                variant="destructive"
+                                                className="w-full rounded-2xl"
+                                                disabled={voidSaleMutation.isPending || !voidDraft.reason.trim()}
+                                                onClick={() => voidSaleMutation.mutate()}
+                                            >
+                                                {voidSaleMutation.isPending ? "Voiding..." : "Void bill"}
+                                            </Button>
+                                        </CardContent>
+                                    </Card>
+                                ) : null}
                             </div>
 
                             <div className="space-y-5">
@@ -635,25 +672,22 @@ const SaleDetailDialog = ({
                                             <Field>
                                                 <FieldLabel>Method</FieldLabel>
                                                 <FieldContent>
-                                                    <Select
+                                                    <select
                                                         value={paymentValues.method}
-                                                        onValueChange={(value) =>
+                                                        onChange={(event) =>
                                                             updatePaymentDraft({
-                                                                method: value as PaymentMethod,
+                                                                method: event.target.value as PaymentMethod,
                                                             })
                                                         }
+                                                        aria-label="Payment method"
+                                                        className="h-11 w-full rounded-2xl border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
                                                     >
-                                                        <SelectTrigger className="h-11 w-full rounded-2xl">
-                                                            <SelectValue placeholder="Select payment method" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {paymentMethods.map((method) => (
-                                                                <SelectItem key={method.value} value={method.value}>
-                                                                    {method.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+                                                        {paymentMethods.map((method) => (
+                                                            <option key={method.value} value={method.value}>
+                                                                {method.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
                                                 </FieldContent>
                                             </Field>
 
@@ -734,43 +768,6 @@ const SaleDetailDialog = ({
                                     </Card>
                                 ) : null}
 
-                                {canMutate && sale.status === "completed" && Number(sale.paidTotal) === 0 ? (
-                                    <Card className="rounded-[28px] border-destructive/20 bg-destructive/5">
-                                        <CardContent className="space-y-4 p-5">
-                                            <div>
-                                                <h3 className="font-semibold text-foreground">Void bill</h3>
-                                                <p className="mt-1 text-sm text-muted-foreground">
-                                                    This is available because no payment has been collected yet.
-                                                </p>
-                                            </div>
-
-                                            <Field>
-                                                <FieldLabel>Reason</FieldLabel>
-                                                <FieldContent>
-                                                    <Textarea
-                                                        className="min-h-24 rounded-2xl bg-background/80"
-                                                        placeholder="Why is this bill being voided?"
-                                                        value={voidDraft.reason}
-                                                        onChange={(event) =>
-                                                            setVoidDraft({
-                                                                reason: event.target.value,
-                                                            })
-                                                        }
-                                                    />
-                                                </FieldContent>
-                                            </Field>
-
-                                            <Button
-                                                variant="destructive"
-                                                className="w-full rounded-2xl"
-                                                disabled={voidSaleMutation.isPending || !voidDraft.reason.trim()}
-                                                onClick={() => voidSaleMutation.mutate()}
-                                            >
-                                                {voidSaleMutation.isPending ? "Voiding..." : "Void bill"}
-                                            </Button>
-                                        </CardContent>
-                                    </Card>
-                                ) : null}
                             </div>
                         </div>
                     </div>
