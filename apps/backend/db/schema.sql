@@ -189,8 +189,15 @@ BEGIN
            SELECT 1
            FROM payments
            WHERE sale_id = NEW.id
+       )
+       AND NOT EXISTS (
+           SELECT 1
+           FROM sales replacement
+           WHERE replacement.replacement_of_sale_id = NEW.id
+             AND replacement.organization_id = NEW.organization_id
+             AND replacement.store_id = NEW.store_id
        ) THEN
-        RAISE EXCEPTION 'sales with collected payments cannot be voided';
+        RAISE EXCEPTION 'sales with collected payments can only be voided as a replacement';
     END IF;
 
     RETURN NEW;
@@ -575,13 +582,15 @@ CREATE TABLE public.sales (
     created_by_device_id uuid,
     updated_by_device_id uuid,
     completion_request_id uuid,
+    replacement_of_sale_id uuid,
     CONSTRAINT sales_discount_total_check CHECK (((discount_total >= (0)::numeric) AND (discount_total <= subtotal))),
     CONSTRAINT sales_draft_commit_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (committed_at IS NULL) AND (payment_status = 'pending'::public.payment_status_enum)) OR ((status <> 'draft'::public.sale_status_enum) AND (committed_at IS NOT NULL)))),
     CONSTRAINT sales_draft_sale_number_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL)))),
     CONSTRAINT sales_grand_total_check CHECK (((grand_total >= (0)::numeric) AND (grand_total = (subtotal - discount_total)))),
     CONSTRAINT sales_receivable_customer_check CHECK (((status = 'draft'::public.sale_status_enum) OR (payment_status = 'paid'::public.payment_status_enum) OR (customer_id IS NOT NULL))),
     CONSTRAINT sales_subtotal_check CHECK ((subtotal >= (0)::numeric)),
-    CONSTRAINT sales_void_metadata_check CHECK (((status <> 'voided'::public.sale_status_enum) OR ((payment_status = 'pending'::public.payment_status_enum) AND (voided_at IS NOT NULL) AND (void_reason IS NOT NULL)))),
+    CONSTRAINT sales_void_metadata_check CHECK (((status <> 'voided'::public.sale_status_enum) OR ((voided_at IS NOT NULL) AND (void_reason IS NOT NULL)))),
+    CONSTRAINT sales_replacement_not_self_check CHECK (((replacement_of_sale_id IS NULL) OR (replacement_of_sale_id <> id))),
     CONSTRAINT sales_walk_in_payment_check CHECK (((status = 'draft'::public.sale_status_enum) OR (customer_id IS NOT NULL) OR (payment_status = 'paid'::public.payment_status_enum)))
 );
 
@@ -1021,6 +1030,9 @@ ALTER TABLE ONLY public.sales
 ALTER TABLE ONLY public.sales
     ADD CONSTRAINT sales_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.sales
+    ADD CONSTRAINT sales_replacement_of_sale_id_fkey FOREIGN KEY (replacement_of_sale_id, organization_id, store_id) REFERENCES public.sales(id, organization_id, store_id) ON DELETE RESTRICT;
+
 
 --
 -- Name: sales sales_store_id_sale_number_key; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1449,6 +1461,8 @@ CREATE INDEX idx_sales_organization_created_at ON public.sales USING btree (orga
 CREATE INDEX idx_sales_status ON public.sales USING btree (organization_id, status, payment_status);
 
 CREATE UNIQUE INDEX sales_store_completion_request_id_key ON public.sales USING btree (store_id, completion_request_id) WHERE (completion_request_id IS NOT NULL);
+
+CREATE UNIQUE INDEX idx_sales_replacement_of_sale_id ON public.sales USING btree (replacement_of_sale_id) WHERE (replacement_of_sale_id IS NOT NULL);
 
 
 --
@@ -2249,4 +2263,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260731123000'),
     ('20260731124000'),
     ('20260731130000'),
-    ('20260731140000');
+    ('20260731140000'),
+    ('20260802120000');

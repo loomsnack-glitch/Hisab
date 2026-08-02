@@ -16,6 +16,7 @@ import type {
     CustomerListQuerySchema,
     ParentScopedAddOnSalesRollupDTOSchema,
     PaymentDTOSchema,
+    ReplaceSaleSchema,
     SaleDeviceAuditDTOSchema,
     SaleDetailDTOSchema,
     SaleItemAddOnDTOSchema,
@@ -66,10 +67,7 @@ export type CreateCustomerREPO = Pick<
 
 export type UpdateCustomerJSON = z.infer<typeof UpdateCustomerSchema>;
 export type UpdateCustomerSVC = UpdateCustomerJSON;
-export type UpdateCustomerREPO = Pick<
-    CustomerDTO,
-    "id" | "organizationId" | "name" | "isActive" | "updatedBy"
-> & {
+export type UpdateCustomerREPO = Pick<CustomerDTO, "id" | "organizationId" | "name" | "isActive" | "updatedBy"> & {
     phone?: string | null;
 };
 
@@ -86,6 +84,8 @@ export type CommitSaleJSON = z.infer<typeof CommitSaleSchema>;
 export type CommitSaleSVC = CommitSaleJSON;
 export type CompleteSaleJSON = z.infer<typeof CompleteSaleSchema>;
 export type CompleteSaleSVC = CompleteSaleJSON;
+export type ReplaceSaleJSON = z.infer<typeof ReplaceSaleSchema>;
+export type ReplaceSaleSVC = ReplaceSaleJSON;
 export type CreatePaymentJSON = z.infer<typeof CreatePaymentSchema>;
 export type CreatePaymentSVC = CreatePaymentJSON;
 export type VoidSaleJSON = z.infer<typeof VoidSaleSchema>;
@@ -93,15 +93,9 @@ export type VoidSaleSVC = VoidSaleJSON;
 
 export type CreateSaleREPO = Pick<
     SaleSummaryDTO,
-    | "id"
-    | "organizationId"
-    | "storeId"
-    | "status"
-    | "paymentStatus"
-    | "subtotal"
-    | "discountTotal"
-    | "grandTotal"
+    "id" | "organizationId" | "storeId" | "status" | "paymentStatus" | "subtotal" | "discountTotal" | "grandTotal"
 > & {
+    replacementOfSaleId?: string | null;
     completionRequestId?: string | null;
     userId?: string | null;
     createdByDeviceId?: string | null;

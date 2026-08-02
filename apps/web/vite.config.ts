@@ -40,6 +40,10 @@ export default defineConfig(({ mode }) => {
             alias: [
                 { find: "@", replacement: path.resolve(__dirname, "./src") },
                 {
+                    find: "@repo/services",
+                    replacement: path.resolve(__dirname, "../../packages/services/src/index.ts"),
+                },
+                {
                     find: /^hoist-non-react-statics$/,
                     replacement: path.resolve(__dirname, "./src/shims/hoist-non-react-statics.ts"),
                 },

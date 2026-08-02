@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
     CommitSaleSchema,
     CompleteSaleSchema,
+    ReplaceSaleSchema,
     CreateCustomerSchema,
     CreateDraftSaleSchema,
     CreatePaymentSchema,
@@ -98,10 +99,7 @@ router.get("/combos/:productId", async (c) => {
         const productId = c.req.param("productId");
         const invalidProductId = validateUuidParam(productId, "Invalid product id");
         if (invalidProductId) return c.json(invalidProductId, invalidProductId.code);
-        const serviceResponse = await catalogService.getComboProductDetailsForDevice(
-            c.get("authDevice"),
-            productId,
-        );
+        const serviceResponse = await catalogService.getComboProductDetailsForDevice(c.get("authDevice"), productId);
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "getComboProductDetailsForDevice", c, error);
@@ -143,20 +141,32 @@ router.get("/sales", validateSchema("query", SalesListQuerySchema), async (c) =>
 
 router.get("/purchases", validateSchema("query", PurchaseListQuerySchema), async (c) => {
     try {
-        return handleServiceResponse(c, await purchaseService.getPurchasesForDevice(c.get("authDevice"), c.req.valid("query")));
-    } catch (error) { return handleError(FILE_NAME, "getPurchasesForDevice", c, error); }
+        return handleServiceResponse(
+            c,
+            await purchaseService.getPurchasesForDevice(c.get("authDevice"), c.req.valid("query")),
+        );
+    } catch (error) {
+        return handleError(FILE_NAME, "getPurchasesForDevice", c, error);
+    }
 });
 
 router.get("/purchases/summary", async (c) => {
     try {
         return handleServiceResponse(c, await purchaseService.getSummaryForDevice(c.get("authDevice")));
-    } catch (error) { return handleError(FILE_NAME, "getSummaryForDevice", c, error); }
+    } catch (error) {
+        return handleError(FILE_NAME, "getSummaryForDevice", c, error);
+    }
 });
 
 router.post("/purchases", validateSchema("json", CreatePurchaseSchema), async (c) => {
     try {
-        return handleServiceResponse(c, await purchaseService.createPurchaseForDevice(c.get("authDevice"), c.req.valid("json")));
-    } catch (error) { return handleError(FILE_NAME, "createPurchaseForDevice", c, error); }
+        return handleServiceResponse(
+            c,
+            await purchaseService.createPurchaseForDevice(c.get("authDevice"), c.req.valid("json")),
+        );
+    } catch (error) {
+        return handleError(FILE_NAME, "createPurchaseForDevice", c, error);
+    }
 });
 
 router.get("/purchases/:purchaseId", async (c) => {
@@ -165,7 +175,9 @@ router.get("/purchases/:purchaseId", async (c) => {
         const invalid = validateUuidParam(purchaseId, "Invalid purchase id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await purchaseService.getPurchaseForDevice(c.get("authDevice"), purchaseId));
-    } catch (error) { return handleError(FILE_NAME, "getPurchaseForDevice", c, error); }
+    } catch (error) {
+        return handleError(FILE_NAME, "getPurchaseForDevice", c, error);
+    }
 });
 
 router.patch("/purchases/:purchaseId", validateSchema("json", UpdatePurchaseSchema), async (c) => {
@@ -173,8 +185,13 @@ router.patch("/purchases/:purchaseId", validateSchema("json", UpdatePurchaseSche
         const purchaseId = c.req.param("purchaseId");
         const invalid = validateUuidParam(purchaseId, "Invalid purchase id");
         if (invalid) return c.json(invalid, invalid.code);
-        return handleServiceResponse(c, await purchaseService.updatePurchaseForDevice(c.get("authDevice"), purchaseId, c.req.valid("json")));
-    } catch (error) { return handleError(FILE_NAME, "updatePurchaseForDevice", c, error); }
+        return handleServiceResponse(
+            c,
+            await purchaseService.updatePurchaseForDevice(c.get("authDevice"), purchaseId, c.req.valid("json")),
+        );
+    } catch (error) {
+        return handleError(FILE_NAME, "updatePurchaseForDevice", c, error);
+    }
 });
 
 router.post("/purchases/:purchaseId/void", validateSchema("json", VoidPurchaseSchema), async (c) => {
@@ -182,8 +199,13 @@ router.post("/purchases/:purchaseId/void", validateSchema("json", VoidPurchaseSc
         const purchaseId = c.req.param("purchaseId");
         const invalid = validateUuidParam(purchaseId, "Invalid purchase id");
         if (invalid) return c.json(invalid, invalid.code);
-        return handleServiceResponse(c, await purchaseService.voidPurchaseForDevice(c.get("authDevice"), purchaseId, c.req.valid("json")));
-    } catch (error) { return handleError(FILE_NAME, "voidPurchaseForDevice", c, error); }
+        return handleServiceResponse(
+            c,
+            await purchaseService.voidPurchaseForDevice(c.get("authDevice"), purchaseId, c.req.valid("json")),
+        );
+    } catch (error) {
+        return handleError(FILE_NAME, "voidPurchaseForDevice", c, error);
+    }
 });
 
 router.post("/sales", validateSchema("json", CreateDraftSaleSchema), async (c) => {
@@ -238,6 +260,23 @@ router.patch("/sales/:saleId", validateSchema("json", UpdateDraftSaleSchema), as
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "updateDraftSaleForDevice", c, error);
+    }
+});
+
+router.post("/sales/:saleId/replace", validateSchema("json", ReplaceSaleSchema), async (c) => {
+    try {
+        const saleId = c.req.param("saleId");
+        const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+        if (invalidSaleId) {
+            return c.json(invalidSaleId, invalidSaleId.code);
+        }
+
+        const authDevice = c.get("authDevice");
+        const body = c.req.valid("json");
+        const serviceResponse = await billingService.replaceSaleForDevice(authDevice, saleId, body);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "replaceSaleForDevice", c, error);
     }
 });
 

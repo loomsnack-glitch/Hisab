@@ -20,6 +20,7 @@ export {
     getPosProducts,
     getPosSale,
     getPosSales,
+    replacePosSale,
     updatePosDraftSale,
     voidPosSale,
     createPosPurchase,

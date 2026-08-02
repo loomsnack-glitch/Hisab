@@ -37,6 +37,9 @@ type SaleSummaryRow = Record<string, unknown> & {
     customer_is_active?: boolean | null;
     created_by_device_name?: string | null;
     updated_by_device_name?: string | null;
+    replacement_sale_id?: string | null;
+    replacement_sale_number?: number | string | null;
+    replacement_of_sale_number?: number | string | null;
 };
 
 const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
@@ -53,24 +56,24 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
 
     const customer = customerId
         ? {
-            id: customerId,
-            name: customerName ?? "",
-            phone: customerPhone ?? null,
-            balance: Number(customerBalance ?? 0),
-            isActive: Boolean(customerIsActive ?? true),
-        }
+              id: customerId,
+              name: customerName ?? "",
+              phone: customerPhone ?? null,
+              balance: Number(customerBalance ?? 0),
+              isActive: Boolean(customerIsActive ?? true),
+          }
         : null;
     const createdByDevice = createdByDeviceId
         ? {
-            id: createdByDeviceId,
-            name: createdByDeviceName ?? "",
-        }
+              id: createdByDeviceId,
+              name: createdByDeviceName ?? "",
+          }
         : null;
     const updatedByDevice = updatedByDeviceId
         ? {
-            id: updatedByDeviceId,
-            name: updatedByDeviceName ?? "",
-        }
+              id: updatedByDeviceId,
+              name: updatedByDeviceName ?? "",
+          }
         : null;
 
     delete summary.customerName;
@@ -110,9 +113,7 @@ export const createCustomer = async (
     return result ? mapRow<CustomerDTO>(result) : null;
 };
 
-export const updateCustomer = async (
-    customerData: UpdateCustomerREPO,
-): Promise<CustomerDTO | null> => {
+export const updateCustomer = async (customerData: UpdateCustomerREPO): Promise<CustomerDTO | null> => {
     const [result] = await pg`
         UPDATE customers
         SET name = ${customerData.name},
@@ -152,10 +153,7 @@ export const getCustomersByOrganizationId = async (
     return results.map((result: Record<string, unknown>) => mapRow<CustomerDTO>(result));
 };
 
-export const getCustomerById = async (
-    organizationId: string,
-    customerId: string,
-): Promise<CustomerDTO | null> => {
+export const getCustomerById = async (organizationId: string, customerId: string): Promise<CustomerDTO | null> => {
     const [result] = await pg`
         SELECT *
         FROM customers
@@ -206,10 +204,7 @@ export const getCustomerLedgerByCustomerId = async (
     return results.map((result: Record<string, unknown>) => mapRow<CustomerLedgerEntryDTO>(result));
 };
 
-export const createSale = async (
-    saleData: CreateSaleREPO,
-    tx?: Bun.TransactionSQL,
-): Promise<SaleSummaryDTO | null> => {
+export const createSale = async (saleData: CreateSaleREPO, tx?: Bun.TransactionSQL): Promise<SaleSummaryDTO | null> => {
     const db = tx || pg;
     const [result] = await db`
         INSERT INTO sales ${camelToSnakeSql(saleData)}
@@ -219,10 +214,7 @@ export const createSale = async (
     return result ? mapSaleSummaryRow(result as SaleSummaryRow) : null;
 };
 
-export const updateSale = async (
-    saleData: UpdateSaleREPO,
-    tx?: Bun.TransactionSQL,
-): Promise<SaleSummaryDTO | null> => {
+export const updateSale = async (saleData: UpdateSaleREPO, tx?: Bun.TransactionSQL): Promise<SaleSummaryDTO | null> => {
     const db = tx || pg;
     const [result] = await db`
         UPDATE sales
@@ -292,7 +284,10 @@ export const getSalesByStore = async (
             c.balance AS customer_balance,
             c.is_active AS customer_is_active,
             created_device.name AS created_by_device_name,
-            updated_device.name AS updated_by_device_name
+            updated_device.name AS updated_by_device_name,
+            replacement.id AS replacement_sale_id,
+            replacement.sale_number AS replacement_sale_number,
+            original.sale_number AS replacement_of_sale_number
         FROM sales s
         LEFT JOIN customers c
             ON c.id = s.customer_id
@@ -304,6 +299,14 @@ export const getSalesByStore = async (
             ON updated_device.id = s.updated_by_device_id
            AND updated_device.organization_id = s.organization_id
            AND updated_device.store_id = s.store_id
+        LEFT JOIN sales replacement
+            ON replacement.replacement_of_sale_id = s.id
+           AND replacement.organization_id = s.organization_id
+           AND replacement.store_id = s.store_id
+        LEFT JOIN sales original
+            ON original.id = s.replacement_of_sale_id
+           AND original.organization_id = s.organization_id
+           AND original.store_id = s.store_id
         LEFT JOIN (
             SELECT 
                 sale_id, 
@@ -360,7 +363,10 @@ export const getSaleById = async (
             c.balance AS customer_balance,
             c.is_active AS customer_is_active,
             created_device.name AS created_by_device_name,
-            updated_device.name AS updated_by_device_name
+            updated_device.name AS updated_by_device_name,
+            replacement.id AS replacement_sale_id,
+            replacement.sale_number AS replacement_sale_number,
+            original.sale_number AS replacement_of_sale_number
         FROM sales s
         LEFT JOIN customers c
             ON c.id = s.customer_id
@@ -372,6 +378,14 @@ export const getSaleById = async (
             ON updated_device.id = s.updated_by_device_id
            AND updated_device.organization_id = s.organization_id
            AND updated_device.store_id = s.store_id
+        LEFT JOIN sales replacement
+            ON replacement.replacement_of_sale_id = s.id
+           AND replacement.organization_id = s.organization_id
+           AND replacement.store_id = s.store_id
+        LEFT JOIN sales original
+            ON original.id = s.replacement_of_sale_id
+           AND original.organization_id = s.organization_id
+           AND original.store_id = s.store_id
         LEFT JOIN (
             SELECT 
                 sale_id, 
@@ -427,10 +441,10 @@ export const createSaleItem = async (
 
     return result
         ? {
-            ...mapRow<Omit<SaleItemDTO, "addOns" | "bundleComponents">>(result),
-            addOns: [],
-            bundleComponents: [],
-        }
+              ...mapRow<Omit<SaleItemDTO, "addOns" | "bundleComponents">>(result),
+              addOns: [],
+              bundleComponents: [],
+          }
         : null;
 };
 
@@ -515,9 +529,7 @@ export const getSaleItemBundleComponentAddOnsBySaleId = async (
         ORDER BY created_at ASC
     `;
 
-    return results.map((result: Record<string, unknown>) =>
-        mapRow<SaleItemBundleComponentAddOnDTO>(result),
-    );
+    return results.map((result: Record<string, unknown>) => mapRow<SaleItemBundleComponentAddOnDTO>(result));
 };
 
 export const getSaleItemBundleComponentsBySaleId = async (
@@ -551,10 +563,7 @@ export const getSaleItemBundleComponentsBySaleId = async (
     });
 };
 
-export const getSaleItemsBySaleId = async (
-    saleId: string,
-    tx?: Bun.TransactionSQL,
-): Promise<SaleItemDTO[]> => {
+export const getSaleItemsBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<SaleItemDTO[]> => {
     const db = tx || pg;
     const [itemResults, addOnResults, bundleComponentResults] = await Promise.all([
         db`
@@ -605,10 +614,7 @@ export const createPayment = async (
     return result ? mapRow<PaymentDTO>(result) : null;
 };
 
-export const getPaymentsBySaleId = async (
-    saleId: string,
-    tx?: Bun.TransactionSQL,
-): Promise<PaymentDTO[]> => {
+export const getPaymentsBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<PaymentDTO[]> => {
     const db = tx || pg;
     const results = await db`
         SELECT *
@@ -620,10 +626,7 @@ export const getPaymentsBySaleId = async (
     return results.map((result: Record<string, unknown>) => mapRow<PaymentDTO>(result));
 };
 
-export const getPaidTotalBySaleId = async (
-    saleId: string,
-    tx?: Bun.TransactionSQL,
-): Promise<number> => {
+export const getPaidTotalBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<number> => {
     const db = tx || pg;
     const [result] = await db`
         SELECT COALESCE(SUM(amount), 0) AS total
@@ -634,10 +637,7 @@ export const getPaidTotalBySaleId = async (
     return Number(result?.total ?? 0);
 };
 
-export const countPaymentsBySaleId = async (
-    saleId: string,
-    tx?: Bun.TransactionSQL,
-): Promise<number> => {
+export const countPaymentsBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<number> => {
     const db = tx || pg;
     const [result] = await db`
         SELECT COUNT(*)::int AS total
@@ -840,9 +840,7 @@ export const getBundleComponentProductUsageRollups = async (
         ORDER BY MAX(si.product_name_snapshot) ASC, MAX(sibc.product_name_snapshot) ASC
     `;
 
-    return results.map((result: Record<string, unknown>) =>
-        mapRow<BundleComponentProductUsageRollupDTO>(result),
-    );
+    return results.map((result: Record<string, unknown>) => mapRow<BundleComponentProductUsageRollupDTO>(result));
 };
 
 export const getBundleComponentAddOnUsageRollups = async (
@@ -885,7 +883,5 @@ export const getBundleComponentAddOnUsageRollups = async (
             MAX(sibca.add_on_name_snapshot) ASC
     `;
 
-    return results.map((result: Record<string, unknown>) =>
-        mapRow<BundleComponentAddOnUsageRollupDTO>(result),
-    );
+    return results.map((result: Record<string, unknown>) => mapRow<BundleComponentAddOnUsageRollupDTO>(result));
 };

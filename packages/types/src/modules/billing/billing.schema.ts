@@ -1,35 +1,21 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
 
-const nameSchema = z
-    .string()
-    .trim()
-    .min(1, "Name is required")
-    .max(255, "Name must be at most 255 characters");
+const nameSchema = z.string().trim().min(1, "Name is required").max(255, "Name must be at most 255 characters");
 
 const optionalPhoneSchema = z
-    .union([
-        z.literal(""),
-        z.string().trim().max(20, "Phone must be at most 20 characters"),
-    ])
+    .union([z.literal(""), z.string().trim().max(20, "Phone must be at most 20 characters")])
     .nullable()
     .optional();
 
 const optionalNotesSchema = z
-    .union([
-        z.literal(""),
-        z.string().trim().max(2000, "Notes must be at most 2000 characters"),
-    ])
+    .union([z.literal(""), z.string().trim().max(2000, "Notes must be at most 2000 characters")])
     .nullable()
     .optional();
 
-const moneySchema = z
-    .number({ error: "Amount is required" })
-    .min(0, "Amount must be 0 or more");
+const moneySchema = z.number({ error: "Amount is required" }).min(0, "Amount must be 0 or more");
 
-const positiveMoneySchema = z
-    .number({ error: "Amount is required" })
-    .gt(0, "Amount must be greater than 0");
+const positiveMoneySchema = z.number({ error: "Amount is required" }).gt(0, "Amount must be greater than 0");
 
 const quantitySchema = z
     .number({ error: "Quantity is required" })
@@ -196,6 +182,10 @@ export const SaleSummaryDTOSchema = z.object({
     voidReason: z.string().nullable().optional(),
     createdAt: dtoDateSchema,
     updatedAt: dtoDateSchema,
+    replacementOfSaleId: z.uuid("Invalid original sale id").nullable().optional(),
+    replacementSaleId: z.uuid("Invalid replacement sale id").nullable().optional(),
+    replacementOfSaleNumber: z.number().int().nullable().optional(),
+    replacementSaleNumber: z.number().int().nullable().optional(),
     itemCount: z.number().int().min(0),
     itemsSummary: z.string().nullable().optional(),
     paymentMethods: z.string().nullable().optional(),
@@ -222,10 +212,9 @@ export const UpdateCustomerSchema = z
         phone: optionalPhoneSchema,
         isActive: z.boolean().optional(),
     })
-    .refine(
-        (value) => value.name !== undefined || value.phone !== undefined || value.isActive !== undefined,
-        { message: "At least one field is required" },
-    );
+    .refine((value) => value.name !== undefined || value.phone !== undefined || value.isActive !== undefined, {
+        message: "At least one field is required",
+    });
 
 export const CustomerListQuerySchema = z.object({
     search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
@@ -252,7 +241,10 @@ export const SaleItemInputSchema = z.object({
 });
 
 export const CreateDraftSaleSchema = z.object({
-    customerId: z.union([z.literal(""), z.uuid("Invalid customer id")]).nullable().optional(),
+    customerId: z
+        .union([z.literal(""), z.uuid("Invalid customer id")])
+        .nullable()
+        .optional(),
     orderDiscountAmount: moneySchema.optional(),
     notes: optionalNotesSchema,
     items: z.array(SaleItemInputSchema).optional().default([]),
@@ -260,17 +252,20 @@ export const CreateDraftSaleSchema = z.object({
 
 export const UpdateDraftSaleSchema = z
     .object({
-        customerId: z.union([z.literal(""), z.uuid("Invalid customer id")]).nullable().optional(),
+        customerId: z
+            .union([z.literal(""), z.uuid("Invalid customer id")])
+            .nullable()
+            .optional(),
         orderDiscountAmount: moneySchema.optional(),
         notes: optionalNotesSchema,
         items: z.array(SaleItemInputSchema).optional(),
     })
     .refine(
-        value =>
-            value.customerId !== undefined
-            || value.orderDiscountAmount !== undefined
-            || value.notes !== undefined
-            || value.items !== undefined,
+        (value) =>
+            value.customerId !== undefined ||
+            value.orderDiscountAmount !== undefined ||
+            value.notes !== undefined ||
+            value.items !== undefined,
         { message: "At least one field is required" },
     );
 
@@ -285,7 +280,10 @@ export const CreatePaymentSchema = z.object({
 });
 
 export const CommitSaleSchema = z.object({
-    customerId: z.union([z.literal(""), z.uuid("Invalid customer id")]).nullable().optional(),
+    customerId: z
+        .union([z.literal(""), z.uuid("Invalid customer id")])
+        .nullable()
+        .optional(),
     orderDiscountAmount: moneySchema.optional(),
     notes: optionalNotesSchema,
     payments: z.array(CreatePaymentSchema).optional().default([]),
@@ -293,11 +291,18 @@ export const CommitSaleSchema = z.object({
 
 export const CompleteSaleSchema = z.object({
     requestId: z.uuid("Invalid completion request id"),
-    customerId: z.union([z.literal(""), z.uuid("Invalid customer id")]).nullable().optional(),
+    customerId: z
+        .union([z.literal(""), z.uuid("Invalid customer id")])
+        .nullable()
+        .optional(),
     orderDiscountAmount: moneySchema.optional(),
     notes: optionalNotesSchema,
     items: z.array(SaleItemInputSchema).min(1, "At least one item is required"),
     payments: z.array(CreatePaymentSchema).optional().default([]),
+});
+
+export const ReplaceSaleSchema = CompleteSaleSchema.extend({
+    replacementReason: z.string().trim().min(1, "Replacement reason is required").max(1000),
 });
 
 export const VoidSaleSchema = z.object({

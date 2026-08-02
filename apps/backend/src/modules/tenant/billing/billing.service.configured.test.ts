@@ -1,12 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  spyOn,
-  test,
-} from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const storeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -22,6 +14,7 @@ const comboChoiceGroupId = "14141414-1414-4141-8141-141414141414";
 const comboChoiceOptionId = "15151515-1515-4151-8151-151515151515";
 
 const now = new Date("2026-07-11T12:00:00.000Z");
+const amendmentCustomerId = "abababab-abab-4aba-8aba-abababababab";
 
 const organization = { id: organizationId, name: "Demo Org" };
 const store = { id: storeId, organizationId, name: "Main Store" };
@@ -146,6 +139,19 @@ const createdSaleItems: Array<Record<string, unknown>> = [];
 const createdSaleItemAddOns: Array<Record<string, unknown>> = [];
 const createdSaleItemBundleComponents: Array<Record<string, unknown>> = [];
 const createdSaleItemBundleComponentAddOns: Array<Record<string, unknown>> = [];
+const createdPayments: Array<Record<string, unknown>> = [];
+const amendmentCustomer = {
+    id: amendmentCustomerId,
+    organizationId,
+    name: "Amendment Customer",
+    phone: null,
+    balance: 0,
+    isActive: true,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
 
 const createSale = mock(async (data: Record<string, unknown>) => {
     const sale = {
@@ -170,13 +176,13 @@ const createSale = mock(async (data: Record<string, unknown>) => {
 });
 
 const createSaleItem = mock(async (data: Record<string, unknown>) => {
-  const item = {
-    ...data,
-    addOns: [],
-    bundleComponents: [],
-    createdAt: now,
-    updatedAt: now,
-  };
+    const item = {
+        ...data,
+        addOns: [],
+        bundleComponents: [],
+        createdAt: now,
+        updatedAt: now,
+    };
     createdSaleItems.push(item);
     return item;
 });
@@ -199,8 +205,7 @@ const createSaleItemAddOn = mock(async (data: Record<string, unknown>) => {
     return addOnRow;
 });
 
-const getSaleById = mock(
-  async (_organizationId: string, _storeId: string, saleId: string) => {
+const getSaleById = mock(async (_organizationId: string, _storeId: string, saleId: string) => {
     const sale = createdSales.find((row) => row.id === saleId);
     if (!sale) {
         return null;
@@ -208,21 +213,17 @@ const getSaleById = mock(
 
     return {
         ...sale,
-      itemCount: createdSaleItems.filter((item) => item.saleId === saleId)
-        .length,
+        itemCount: createdSaleItems.filter((item) => item.saleId === saleId).length,
         itemsSummary: "Burger",
     };
-  },
-);
+});
 
 const getSaleItemsBySaleId = mock(async (saleId: string) => {
     return createdSaleItems
         .filter((item) => item.saleId === saleId)
-            .map((item) => ({
+        .map((item) => ({
             ...item,
-      addOns: createdSaleItemAddOns.filter(
-        (addOnRow) => addOnRow.saleItemId === item.id,
-            ),
+            addOns: createdSaleItemAddOns.filter((addOnRow) => addOnRow.saleItemId === item.id),
             bundleComponents: createdSaleItemBundleComponents
                 .filter((component) => component.saleItemId === item.id)
                 .map((component) => ({
@@ -234,19 +235,14 @@ const getSaleItemsBySaleId = mock(async (saleId: string) => {
         }));
 });
 
-const getPaymentsBySaleId = mock(async () => []);
+const getPaymentsBySaleId = mock(async (saleId: string) => createdPayments.filter((payment) => payment.saleId === saleId));
 const getSaleIdByCompletionRequestId = mock(
-  async (_organizationId: string, _storeId: string, requestId: string) =>
-    (createdSales.find((sale) => sale.completionRequestId === requestId)?.id as string | undefined) ?? null,
+    async (_organizationId: string, _storeId: string, requestId: string) =>
+        (createdSales.find((sale) => sale.completionRequestId === requestId)?.id as string | undefined) ?? null,
 );
 
-const deleteSaleItemsBySaleId = mock(
-  async (_organizationId: string, _storeId: string, saleId: string) => {
-    const itemIds = new Set(
-      createdSaleItems
-        .filter((item) => item.saleId === saleId)
-        .map((item) => item.id as string),
-    );
+const deleteSaleItemsBySaleId = mock(async (_organizationId: string, _storeId: string, saleId: string) => {
+    const itemIds = new Set(createdSaleItems.filter((item) => item.saleId === saleId).map((item) => item.id as string));
     for (let index = createdSaleItemAddOns.length - 1; index >= 0; index -= 1) {
         if (itemIds.has(createdSaleItemAddOns[index]?.saleItemId as string)) {
             createdSaleItemAddOns.splice(index, 1);
@@ -257,8 +253,7 @@ const deleteSaleItemsBySaleId = mock(
             createdSaleItems.splice(index, 1);
         }
     }
-  },
-);
+});
 
 const updateSale = mock(async (data: Record<string, unknown>) => {
     const index = createdSales.findIndex((row) => row.id === data.id);
@@ -284,12 +279,14 @@ const deleteDraftSale = mock(async (_organizationId: string, _storeId: string, s
     return true;
 });
 
-const getCustomerById = mock(async () => null);
-const createPayment = mock(async (data: Record<string, unknown>) => ({
-    ...data,
-    createdAt: now,
-    updatedAt: now,
-}));
+const getCustomerById = mock(async (_organizationId: string, customerId: string) =>
+    customerId === amendmentCustomerId ? amendmentCustomer : null,
+);
+const createPayment = mock(async (data: Record<string, unknown>) => {
+    const payment = { ...data, createdAt: now, updatedAt: now };
+    createdPayments.push(payment);
+    return payment;
+});
 const getParentScopedAddOnSalesRollups = mock(async () => []);
 const getAddOnScopedSalesRollups = mock(async () => []);
 
@@ -326,15 +323,20 @@ mock.module("./billing.repository", () => ({
     getCustomerLedgerByCustomerId: mock(async () => []),
     getSalesByStore: mock(async () => []),
     createPayment,
-    createCustomerLedgerEntry: mock(async () => null),
-    updateCustomerBalance: mock(async () => null),
+    createCustomerLedgerEntry: mock(async (data: Record<string, unknown>) => ({
+        ...data,
+        createdAt: now,
+        updatedAt: now,
+    })),
+    updateCustomerBalance: mock(async (_organizationId: string, customerId: string, balance: number) =>
+        customerId === amendmentCustomerId ? { ...amendmentCustomer, balance } : null,
+    ),
     incrementStoreSaleCounter: mock(async () => 1),
     getParentScopedAddOnSalesRollups,
     getAddOnScopedSalesRollups,
 }));
 
-const catalogRepository =
-  await import("@/modules/tenant/catalog/catalog.repository");
+const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
 const billingService = await import("./billing.service");
 
 const resolveSelectableAttachment = (requestedAddOnId: string) => {
@@ -359,6 +361,7 @@ describe("Configured product billing with trusted snapshots", () => {
         createdSaleItemAddOns.length = 0;
         createdSaleItemBundleComponents.length = 0;
         createdSaleItemBundleComponentAddOns.length = 0;
+        createdPayments.length = 0;
 
         createSale.mockClear();
         createSaleItem.mockClear();
@@ -377,25 +380,20 @@ describe("Configured product billing with trusted snapshots", () => {
         getParentScopedAddOnSalesRollups.mockResolvedValue([]);
         getAddOnScopedSalesRollups.mockResolvedValue([]);
 
-    getProductByIdSpy = spyOn(
-      catalogRepository,
-      "getProductById",
-    ).mockResolvedValue(product as never);
-    getSelectableAttachmentSpy = spyOn(
+        getProductByIdSpy = spyOn(catalogRepository, "getProductById").mockResolvedValue(product as never);
+        getSelectableAttachmentSpy = spyOn(
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
-    ).mockImplementation(
-      async (_organizationId, _productId, requestedAddOnId) =>
-            resolveSelectableAttachment(requestedAddOnId) as never,
+        ).mockImplementation(
+            async (_organizationId, _productId, requestedAddOnId) =>
+                resolveSelectableAttachment(requestedAddOnId) as never,
         );
-        getComboChoiceGroupsSpy = spyOn(
-            catalogRepository,
-            "getComboChoiceGroupsByProductId",
-        ).mockResolvedValue([] as never);
-        getComboChoiceOptionsSpy = spyOn(
-            catalogRepository,
-            "getComboChoiceOptionsByGroupIds",
-        ).mockResolvedValue([] as never);
+        getComboChoiceGroupsSpy = spyOn(catalogRepository, "getComboChoiceGroupsByProductId").mockResolvedValue(
+            [] as never,
+        );
+        getComboChoiceOptionsSpy = spyOn(catalogRepository, "getComboChoiceOptionsByGroupIds").mockResolvedValue(
+            [] as never,
+        );
     });
 
     afterEach(() => {
@@ -406,14 +404,9 @@ describe("Configured product billing with trusted snapshots", () => {
     });
 
     test("creates a plain product line with trusted catalog pricing snapshots", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId, quantity: 2, addOns: [] }],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         expect(createSaleItem).toHaveBeenCalled();
@@ -441,18 +434,8 @@ describe("Configured product billing with trusted snapshots", () => {
             payments: [{ amount: 90, method: "cash" as const, notes: null }],
         };
 
-        const firstResponse = await billingService.completeSale(
-            userId,
-            organizationId,
-            storeId,
-            payload,
-        );
-        const secondResponse = await billingService.completeSale(
-            userId,
-            organizationId,
-            storeId,
-            payload,
-        );
+        const firstResponse = await billingService.completeSale(userId, organizationId, storeId, payload);
+        const secondResponse = await billingService.completeSale(userId, organizationId, storeId, payload);
 
         expect(firstResponse.status).toBe("success");
         expect(secondResponse.status).toBe("success");
@@ -462,11 +445,7 @@ describe("Configured product billing with trusted snapshots", () => {
     });
 
     test("creates a configured product line with trusted add-on snapshots from the database", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -474,15 +453,10 @@ describe("Configured product billing with trusted snapshots", () => {
                     addOns: [{ addOnId, quantity: 1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
-    expect(getSelectableAttachmentSpy).toHaveBeenCalledWith(
-      organizationId,
-      productId,
-      addOnId,
-    );
+        expect(getSelectableAttachmentSpy).toHaveBeenCalledWith(organizationId, productId, addOnId);
         expect(createSaleItemAddOn).toHaveBeenCalled();
 
         const parent = createdSaleItems[0];
@@ -520,24 +494,23 @@ describe("Configured product billing with trusted snapshots", () => {
         getComboChoiceGroupsSpy.mockResolvedValue([comboChoiceGroup] as never);
         getComboChoiceOptionsSpy.mockResolvedValue([comboChoiceOption] as never);
 
-        const response = await billingService.createDraftSale(
-            userId,
-            organizationId,
-            storeId,
-            {
-                items: [{
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [
+                {
                     productId: comboProductId,
                     quantity: 2,
                     addOns: [],
-                    comboSelections: [{
-                        groupId: comboChoiceGroupId,
-                        optionProductId: comboOptionProductId,
-                        quantity: 1,
-                        addOns: [{ addOnId, quantity: 1 }],
-                    }],
-                }],
-            },
-        );
+                    comboSelections: [
+                        {
+                            groupId: comboChoiceGroupId,
+                            optionProductId: comboOptionProductId,
+                            quantity: 1,
+                            addOns: [{ addOnId, quantity: 1 }],
+                        },
+                    ],
+                },
+            ],
+        });
 
         expect(response.status).toBe("success");
         expect(createdSaleItemBundleComponents).toHaveLength(1);
@@ -548,14 +521,12 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(response.data?.sale.subtotal).toBe(260);
         expect(response.data?.sale.discountTotal).toBe(4);
         expect(response.data?.sale.grandTotal).toBe(256);
+        expect(response.data?.sale.orderDiscountAmount).toBe(0);
     });
 
+
     test("sale totals include both parent product rows and child add-on rows", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -563,8 +534,7 @@ describe("Configured product billing with trusted snapshots", () => {
                     addOns: [{ addOnId, quantity: 2 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         expect(response.data?.sale.subtotal).toBe(140);
@@ -573,14 +543,9 @@ describe("Configured product billing with trusted snapshots", () => {
     });
 
     test("rejects client-trusted pricing by loading catalog values only", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId, quantity: 1, addOns: [] }],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         expect(createdSaleItems[0]?.unitPriceSnapshot).toBe(100);
@@ -588,11 +553,7 @@ describe("Configured product billing with trusted snapshots", () => {
     });
 
     test("returns nested add-ons under the parent product in bill details", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -600,8 +561,7 @@ describe("Configured product billing with trusted snapshots", () => {
                     addOns: [{ addOnId, quantity: 1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         const item = response.data?.sale.items[0];
@@ -634,16 +594,13 @@ describe("Configuration-aware Draft Sale behavior", () => {
         deleteSaleItemsBySaleId.mockClear();
         updateSale.mockClear();
 
-    getProductByIdSpy = spyOn(
-      catalogRepository,
-      "getProductById",
-    ).mockResolvedValue(product as never);
+        getProductByIdSpy = spyOn(catalogRepository, "getProductById").mockResolvedValue(product as never);
         getSelectableAttachmentSpy = spyOn(
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
-    ).mockImplementation(
-      async (_organizationId, _productId, requestedAddOnId) =>
-            resolveSelectableAttachment(requestedAddOnId) as never,
+        ).mockImplementation(
+            async (_organizationId, _productId, requestedAddOnId) =>
+                resolveSelectableAttachment(requestedAddOnId) as never,
         );
     });
 
@@ -653,12 +610,9 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("deletes a draft sale and rejects a second deletion", async () => {
-        const created = await billingService.createDraftSale(
-            userId,
-            organizationId,
-            storeId,
-            { items: [{ productId, quantity: 1, addOns: [] }] },
-        );
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
         const saleId = created.data?.sale.id;
         expect(created.status).toBe("success");
         expect(saleId).toBeDefined();
@@ -677,18 +631,100 @@ describe("Configuration-aware Draft Sale behavior", () => {
         expect(missing).toMatchObject({ status: "error", code: 404 });
     });
 
+    test("replaces a paid bill with a new normal sale and preserves the old payment state", async () => {
+        const originalSaleId = "44444444-4444-4444-8444-444444444444";
+        const replacementRequestId = "55555555-5555-4555-8555-555555555555";
+        createdSales.push({
+            id: originalSaleId,
+            organizationId,
+            storeId,
+            customerId: amendmentCustomerId,
+            status: "completed",
+            paymentStatus: "paid",
+            subtotal: 100,
+            discountTotal: 10,
+            grandTotal: 90,
+            paidTotal: 90,
+            dueTotal: 0,
+            notes: null,
+            saleNumber: 21,
+            committedAt: now,
+            updatedAt: now,
+            voidedAt: null,
+            voidReason: null,
+            replacementSaleId: null,
+        });
+        createdPayments.push({
+            id: "old-payment-id",
+            saleId: originalSaleId,
+            amount: 90,
+            method: "cash",
+        });
+
+        const session = {
+            organization: { id: organizationId },
+            store: { id: storeId },
+            device: { id: "66666666-6666-4666-8666-666666666666" },
+        } as Parameters<typeof billingService.replaceSaleForDevice>[0];
+
+        const replaced = await billingService.replaceSaleForDevice(session, originalSaleId, {
+            requestId: replacementRequestId,
+            customerId: amendmentCustomerId,
+            orderDiscountAmount: 0,
+            notes: "Corrected order",
+            items: [{ productId, quantity: 2, addOns: [] }],
+            payments: [{ amount: 180, method: "cash", referenceNumber: null, notes: null }],
+            replacementReason: "Customer changed the order",
+        });
+
+        expect(replaced.status).toBe("success");
+        expect(createdSales).toHaveLength(2);
+        expect(createdSales[0]).toMatchObject({
+            id: originalSaleId,
+            status: "voided",
+            paymentStatus: "paid",
+            saleNumber: 21,
+            voidReason: "Customer changed the order",
+        });
+        expect(createdSales[1]).toMatchObject({
+            status: "completed",
+            paymentStatus: "paid",
+            replacementOfSaleId: originalSaleId,
+            grandTotal: 180,
+        });
+        expect(createdPayments.filter((payment) => payment.saleId === originalSaleId)).toHaveLength(1);
+        expect(createdPayments.filter((payment) => payment.saleId === createdSales[1]?.id)).toHaveLength(1);
+
+        const retried = await billingService.replaceSaleForDevice(session, originalSaleId, {
+            requestId: replacementRequestId,
+            customerId: amendmentCustomerId,
+            orderDiscountAmount: 0,
+            notes: "Corrected order",
+            items: [{ productId, quantity: 2, addOns: [] }],
+            payments: [{ amount: 180, method: "cash", referenceNumber: null, notes: null }],
+            replacementReason: "Customer changed the order",
+        });
+
+        expect(retried.status).toBe("success");
+        expect(createdSales).toHaveLength(2);
+    });
+
+
     test("merges identical configurations by quantity", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
-                { productId, quantity: 1, addOns: [{ addOnId, quantity: 1 }] },
-                { productId, quantity: 2, addOns: [{ addOnId, quantity: 1 }] },
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+                {
+                    productId,
+                    quantity: 2,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         expect(createdSaleItems).toHaveLength(1);
@@ -702,35 +738,32 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("keeps different configurations of the same product on separate lines", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 { productId, quantity: 1, addOns: [] },
-                { productId, quantity: 1, addOns: [{ addOnId, quantity: 1 }] },
-                { productId, quantity: 1, addOns: [{ addOnId, quantity: 2 }] },
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 2 }],
+                },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         expect(createdSaleItems).toHaveLength(3);
 
-    const signatures = createdSaleItems
-      .map((item) => item.configurationSignature)
-      .sort();
+        const signatures = createdSaleItems.map((item) => item.configurationSignature).sort();
         expect(signatures).toEqual(["", `${addOnId}:1`, `${addOnId}:2`]);
         expect(response.data?.sale.items).toHaveLength(3);
     });
 
     test("normalized signature ignores add-on selection order", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -749,8 +782,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     ],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         expect(createdSaleItems).toHaveLength(1);
@@ -762,18 +794,13 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("customize with no selected add-ons merges into the plain product line", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 { productId, quantity: 1, addOns: [] },
                 { productId, quantity: 2 },
                 { productId, quantity: 1, addOns: [] },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         expect(createdSaleItems).toHaveLength(1);
@@ -783,14 +810,9 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("rejects decimal product quantities", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [{ productId, quantity: 1.5, addOns: [] }],
-      },
-    );
+        });
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("whole number");
@@ -799,11 +821,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("rejects negative add-on quantities in backend validation", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -811,8 +829,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId, quantity: -1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("whole number");
@@ -821,11 +838,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("rejects decimal add-on quantities", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -833,8 +846,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId, quantity: 1.5 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("whole number");
@@ -843,11 +855,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("rejects add-on quantity above the selection cap", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -855,8 +863,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId, quantity: 3 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("selection cap");
@@ -866,11 +873,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("rejects invalid configured selections atomically", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -881,8 +884,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     ],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("Duplicate add-ons");
@@ -892,20 +894,14 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("rejects inactive or unattached add-ons atomically without partial save", async () => {
-    getSelectableAttachmentSpy.mockImplementation(
-      async (_organizationId, _productId, requestedAddOnId) => {
+        getSelectableAttachmentSpy.mockImplementation(async (_organizationId, _productId, requestedAddOnId) => {
             if (requestedAddOnId === addOnId) {
                 return selectableAttachment as never;
             }
             return null;
-      },
-    );
+        });
 
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -916,8 +912,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     ],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("not selectable");
@@ -927,11 +922,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("quantity updates scale the frozen configuration without changing add-on selection", async () => {
-    const created = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -942,32 +933,26 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     ],
                 },
             ],
-      },
-    );
+        });
 
         expect(created.status).toBe("success");
         const saleId = created.data?.sale.id;
         expect(saleId).toBeTruthy();
 
         const originalSignature = createdSaleItems[0]?.configurationSignature;
-    expect(
-      createdSaleItemAddOns.map((row) => ({
-            addOnId: row.addOnId,
-            quantityPerParent: row.quantityPerParent,
-      })),
-    ).toEqual(
+        expect(
+            createdSaleItemAddOns.map((row) => ({
+                addOnId: row.addOnId,
+                quantityPerParent: row.quantityPerParent,
+            })),
+        ).toEqual(
             expect.arrayContaining([
                 { addOnId, quantityPerParent: 1 },
                 { addOnId: addOnId2, quantityPerParent: 2 },
             ]),
         );
 
-    const updated = await billingService.updateDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      saleId!,
-      {
+        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId!, {
             items: [
                 {
                     productId,
@@ -978,8 +963,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     ],
                 },
             ],
-      },
-    );
+        });
 
         expect(updated.status).toBe("success");
         expect(createdSaleItems).toHaveLength(1);
@@ -996,11 +980,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("accepts multiple different add-ons on one configured product line", async () => {
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -1011,8 +991,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     ],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("success");
         expect(createdSaleItems).toHaveLength(1);
@@ -1028,11 +1007,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
             status: "inactive",
         } as never);
 
-    const response = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -1040,8 +1015,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId, quantity: 1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("not available for new sale selections");
@@ -1049,11 +1023,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     });
 
     test("keeps frozen configured draft lines readable and updatable after catalog deactivation", async () => {
-    const created = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -1061,8 +1031,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId, quantity: 1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(created.status).toBe("success");
         const saleId = created.data?.sale.id;
@@ -1080,12 +1049,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
         } as never);
         getSelectableAttachmentSpy.mockResolvedValue(null);
 
-    const updated = await billingService.updateDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      saleId!,
-      {
+        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId!, {
             items: [
                 {
                     productId,
@@ -1093,32 +1057,21 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId, quantity: 1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(updated.status).toBe("success");
         expect(updated.data?.sale.items).toHaveLength(1);
         expect(updated.data?.sale.items[0]?.productNameSnapshot).toBe("Burger");
-    expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(
-      originalUnitPrice,
-    );
+        expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(originalUnitPrice);
         expect(updated.data?.sale.items[0]?.quantity).toBe(2);
-    expect(updated.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe(
-      originalAddOnName,
-    );
-    expect(updated.data?.sale.items[0]?.addOns[0]?.unitPriceSnapshot).toBe(
-      originalAddOnUnitPrice,
-    );
+        expect(updated.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe(originalAddOnName);
+        expect(updated.data?.sale.items[0]?.addOns[0]?.unitPriceSnapshot).toBe(originalAddOnUnitPrice);
         expect(updated.data?.sale.items[0]?.addOns[0]?.totalQuantity).toBe(2);
         expect(getProductByIdSpy).toHaveBeenCalledTimes(1);
     });
 
     test("commits a draft with frozen configured lines after later catalog deactivation", async () => {
-    const created = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -1126,8 +1079,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId, quantity: 1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(created.status).toBe("success");
         const saleId = created.data?.sale.id!;
@@ -1139,94 +1091,60 @@ describe("Configuration-aware Draft Sale behavior", () => {
         } as never);
         getSelectableAttachmentSpy.mockResolvedValue(null);
 
-    const committed = await billingService.commitSale(
-      userId,
-      organizationId,
-      storeId,
-      saleId,
-      {
+        const committed = await billingService.commitSale(userId, organizationId, storeId, saleId, {
             payments: [
                 {
                     amount: grandTotal,
                     method: "cash",
                 },
             ],
-      },
-    );
+        });
 
         expect(committed.status).toBe("success");
         expect(committed.data?.sale.status).toBe("completed");
         expect(committed.data?.sale.items[0]?.addOns).toHaveLength(1);
         expect(committed.data?.sale.items[0]?.productNameSnapshot).toBe("Burger");
-    expect(committed.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe(
-      "Extra Cheese",
-    );
+        expect(committed.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
         expect(createPayment).toHaveBeenCalled();
     });
 
-  test("commits a walk-in due sale without a customer", async () => {
-    const created = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
-        items: [{ productId, quantity: 1, addOns: [] }],
-      },
-    );
+    test("commits a walk-in due sale without a customer", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
 
-    expect(created.status).toBe("success");
+        expect(created.status).toBe("success");
 
-    const committed = await billingService.commitSale(
-      userId,
-      organizationId,
-      storeId,
-      created.data?.sale.id!,
-      {
-        payments: [],
-      },
-    );
+        const committed = await billingService.commitSale(userId, organizationId, storeId, created.data?.sale.id!, {
+            payments: [],
+        });
 
-    expect(committed.status).toBe("success");
-    expect(committed.data?.sale.status).toBe("completed");
-    expect(committed.data?.sale.paymentStatus).toBe("pending");
-    expect(committed.data?.sale.customer).toBeNull();
-  });
+        expect(committed.status).toBe("success");
+        expect(committed.data?.sale.status).toBe("completed");
+        expect(committed.data?.sale.paymentStatus).toBe("pending");
+        expect(committed.data?.sale.customer).toBeNull();
+    });
 
-  test("commits a walk-in partial sale without a customer", async () => {
-    const created = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
-        items: [{ productId, quantity: 1, addOns: [] }],
-      },
-    );
+    test("commits a walk-in partial sale without a customer", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
 
-    expect(created.status).toBe("success");
-    const grandTotal = Number(created.data?.sale.grandTotal);
+        expect(created.status).toBe("success");
+        const grandTotal = Number(created.data?.sale.grandTotal);
 
-    const committed = await billingService.commitSale(
-      userId,
-      organizationId,
-      storeId,
-      created.data?.sale.id!,
-      {
-        payments: [{ amount: grandTotal / 2, method: "cash" }],
-      },
-    );
+        const committed = await billingService.commitSale(userId, organizationId, storeId, created.data?.sale.id!, {
+            payments: [{ amount: grandTotal / 2, method: "cash" }],
+        });
 
-    expect(committed.status).toBe("success");
-    expect(committed.data?.sale.status).toBe("completed");
-    expect(committed.data?.sale.paymentStatus).toBe("partial");
-    expect(committed.data?.sale.customer).toBeNull();
-  });
+        expect(committed.status).toBe("success");
+        expect(committed.data?.sale.status).toBe("completed");
+        expect(committed.data?.sale.paymentStatus).toBe("partial");
+        expect(committed.data?.sale.customer).toBeNull();
+    });
 
     test("blocks new configured selections after deactivation while preserving existing frozen lines", async () => {
-    const created = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -1234,20 +1152,14 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId, quantity: 1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(created.status).toBe("success");
         const saleId = created.data?.sale.id!;
 
         getSelectableAttachmentSpy.mockResolvedValue(null);
 
-    const updated = await billingService.updateDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      saleId,
-      {
+        const updated = await billingService.updateDraftSale(userId, organizationId, storeId, saleId, {
             items: [
                 {
                     productId,
@@ -1260,19 +1172,14 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     addOns: [{ addOnId: addOnId2, quantity: 1 }],
                 },
             ],
-      },
-    );
+        });
 
         expect(updated.status).toBe("error");
         expect(updated.message).toContain("not selectable");
     });
 
     test("exposes nested add-ons in receipt-like bill detail output after commit", async () => {
-    const created = await billingService.createDraftSale(
-      userId,
-      organizationId,
-      storeId,
-      {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
             items: [
                 {
                     productId,
@@ -1283,33 +1190,26 @@ describe("Configuration-aware Draft Sale behavior", () => {
                     ],
                 },
             ],
-      },
-    );
+        });
 
         expect(created.status).toBe("success");
         const saleId = created.data?.sale.id!;
         const grandTotal = Number(created.data?.sale.grandTotal);
 
-    const committed = await billingService.commitSale(
-      userId,
-      organizationId,
-      storeId,
-      saleId,
-      {
+        const committed = await billingService.commitSale(userId, organizationId, storeId, saleId, {
             payments: [{ amount: grandTotal, method: "cash" }],
-      },
-    );
+        });
 
         expect(committed.status).toBe("success");
         const parent = committed.data?.sale.items[0];
         expect(parent?.productNameSnapshot).toBe("Burger");
-    expect(
-      parent?.addOns.map((addOn) => ({
-            name: addOn.addOnNameSnapshot,
-            quantityPerParent: addOn.quantityPerParent,
-            lineTotal: addOn.lineTotal,
-      })),
-    ).toEqual(
+        expect(
+            parent?.addOns.map((addOn) => ({
+                name: addOn.addOnNameSnapshot,
+                quantityPerParent: addOn.quantityPerParent,
+                lineTotal: addOn.lineTotal,
+            })),
+        ).toEqual(
             expect.arrayContaining([
                 { name: "Extra Cheese", quantityPerParent: 1, lineTotal: 18 },
                 { name: "Mayo", quantityPerParent: 2, lineTotal: 10 },
@@ -1355,22 +1255,12 @@ describe("Configuration-aware Draft Sale behavior", () => {
         getParentScopedAddOnSalesRollups.mockResolvedValue(parentScoped as never);
         getAddOnScopedSalesRollups.mockResolvedValue(addOnScoped as never);
 
-    const response = await billingService.getAddOnSalesRollups(
-      userId,
-      organizationId,
-      storeId,
-    );
+        const response = await billingService.getAddOnSalesRollups(userId, organizationId, storeId);
 
         expect(response.status).toBe("success");
         expect(response.data?.rollups.parentScoped).toEqual(parentScoped);
         expect(response.data?.rollups.addOnScoped).toEqual(addOnScoped);
-    expect(getParentScopedAddOnSalesRollups).toHaveBeenCalledWith(
-      organizationId,
-      storeId,
-    );
-    expect(getAddOnScopedSalesRollups).toHaveBeenCalledWith(
-      organizationId,
-      storeId,
-    );
+        expect(getParentScopedAddOnSalesRollups).toHaveBeenCalledWith(organizationId, storeId);
+        expect(getAddOnScopedSalesRollups).toHaveBeenCalledWith(organizationId, storeId);
     });
 });

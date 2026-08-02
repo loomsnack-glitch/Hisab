@@ -1,17 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { collectPayment, collectPosPayment, getPosSale, getSale, voidPosSale, voidSale } from "@repo/services";
-import type { CreatePaymentJSON, PaymentMethod, VoidSaleJSON } from "@repo/types";
+import type { CreatePaymentJSON, PaymentMethod, SaleDetailDTO, VoidSaleJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from "@repo/ui/components/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
@@ -26,10 +20,12 @@ import {
     Clock,
     CreditCard,
     Download,
+    Link2,
     Printer,
     ReceiptText,
     Smartphone,
     User,
+    Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,6 +42,7 @@ type SaleDetailDialogProps = {
     organizationId: string;
     storeId: string;
     saleId: string | null;
+    onEdit?: (sale: SaleDetailDTO) => void;
 };
 
 const paymentMethods: Array<{ value: PaymentMethod; label: string }> = [
@@ -75,6 +72,7 @@ const SaleDetailDialog = ({
     organizationId,
     storeId,
     saleId,
+    onEdit,
 }: SaleDetailDialogProps) => {
     const queryClient = useQueryClient();
     const canMutate = mode === "device";
@@ -84,24 +82,23 @@ const SaleDetailDialog = ({
 
     const saleQuery = useQuery({
         queryKey: saleId ? billingKeys.sale(organizationId, storeId, saleId) : ["billing", "sale", "idle"],
-        queryFn: () => mode === "device" ? getPosSale(saleId as string) : getSale(organizationId, storeId, saleId as string),
+        queryFn: () =>
+            mode === "device" ? getPosSale(saleId as string) : getSale(organizationId, storeId, saleId as string),
         enabled: open && Boolean(saleId),
     });
 
-    const sale = saleQuery.data?.status === "success" ? saleQuery.data.data?.sale ?? null : null;
+    const sale = saleQuery.data?.status === "success" ? (saleQuery.data.data?.sale ?? null) : null;
     const itemDiscountTotal = sale
         ? sale.items.reduce((total, item) => {
-            const parentDiscount = Number(item.discountAmount ?? 0);
-            const addOnDiscount = (item.addOns ?? []).reduce(
-                (addOnTotal, addOn) => addOnTotal + Number(addOn.discountAmount ?? 0),
-                0,
-            );
-            return total + parentDiscount + addOnDiscount;
-        }, 0)
+              const parentDiscount = Number(item.discountAmount ?? 0);
+              const addOnDiscount = (item.addOns ?? []).reduce(
+                  (addOnTotal, addOn) => addOnTotal + Number(addOn.discountAmount ?? 0),
+                  0,
+              );
+              return total + parentDiscount + addOnDiscount;
+          }, 0)
         : 0;
-    const discountedItemsSubtotal = sale
-        ? Math.max(Number(sale.subtotal ?? 0) - itemDiscountTotal, 0)
-        : 0;
+    const discountedItemsSubtotal = sale ? Math.max(Number(sale.subtotal ?? 0) - itemDiscountTotal, 0) : 0;
 
     const defaultPaymentDraft: CreatePaymentJSON = {
         amount: Number(sale?.dueTotal ?? 0),
@@ -118,7 +115,9 @@ const SaleDetailDialog = ({
     };
 
     const invalidateBilling = () => {
-        queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
+        queryClient.invalidateQueries({
+            queryKey: billingKeys.organization(organizationId),
+        });
     };
 
     const collectPaymentMutation = useMutation({
@@ -201,7 +200,13 @@ const SaleDetailDialog = ({
                                     <AlertTriangle className="mx-auto size-6 text-amber-500" />
                                     <p className="font-medium text-foreground">Unable to load this bill</p>
                                     <p className="text-sm text-muted-foreground">
-                                        {saleQuery.data?.message || (saleQuery.error as { message?: string })?.message || "Please try again."}
+                                        {saleQuery.data?.message ||
+                                            (
+                                                saleQuery.error as {
+                                                    message?: string;
+                                                }
+                                            )?.message ||
+                                            "Please try again."}
                                     </p>
                                 </div>
                             </CardContent>
@@ -217,30 +222,87 @@ const SaleDetailDialog = ({
                                         <DialogTitle className="font-display text-3xl font-semibold tracking-tight">
                                             {sale.saleNumber ? `Bill #${sale.saleNumber}` : "Draft bill"}
                                         </DialogTitle>
-                                        <Badge className={cn("rounded-full border text-xs", saleStatusStyles[sale.status])}>
+                                        <Badge
+                                            className={cn("rounded-full border text-xs", saleStatusStyles[sale.status])}
+                                        >
                                             {sale.status}
                                         </Badge>
-                                        <Badge className={cn("rounded-full border text-xs", paymentStatusStyles[sale.paymentStatus])}>
+                                        <Badge
+                                            className={cn(
+                                                "rounded-full border text-xs",
+                                                paymentStatusStyles[sale.paymentStatus],
+                                            )}
+                                        >
                                             {sale.paymentStatus}
                                         </Badge>
                                     </div>
                                     <DialogDescription className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-muted-foreground mt-2">
                                         <div className="flex items-center gap-1.5">
                                             <Calendar className="size-3.5" />
-                                            <span>Created: <span className="text-foreground/80">{formatDateTime(sale.createdAt)}</span></span>
+                                            <span>
+                                                Created:{" "}
+                                                <span className="text-foreground/80">
+                                                    {formatDateTime(sale.createdAt)}
+                                                </span>
+                                            </span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                             <Clock className="size-3.5" />
-                                            <span>Updated: <span className="text-foreground/80">{formatDateTime(sale.updatedAt)}</span></span>
+                                            <span>
+                                                Updated:{" "}
+                                                <span className="text-foreground/80">
+                                                    {formatDateTime(sale.updatedAt)}
+                                                </span>
+                                            </span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                             <User className="size-3.5" />
-                                            <span>Customer: <span className="text-foreground/80 font-semibold">{sale.customer?.name || "Walk-in Customer"}</span></span>
+                                            <span>
+                                                Customer:{" "}
+                                                <span className="text-foreground/80 font-semibold">
+                                                    {sale.customer?.name || "Walk-in Customer"}
+                                                </span>
+                                            </span>
                                         </div>
+                                        {sale.replacementOfSaleId ? (
+                                            <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+                                                <Link2 className="size-3.5" />
+                                                <span>
+                                                    Edited from:{" "}
+                                                    {sale.replacementOfSaleNumber
+                                                        ? `#${sale.replacementOfSaleNumber}`
+                                                        : "linked bill"}
+                                                </span>
+                                            </div>
+                                        ) : sale.replacementSaleId ? (
+                                            <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+                                                <Link2 className="size-3.5" />
+                                                <span>
+                                                    Edited as:{" "}
+                                                    {sale.replacementSaleNumber
+                                                        ? `#${sale.replacementSaleNumber}`
+                                                        : "linked bill"}
+                                                </span>
+                                            </div>
+                                        ) : null}
                                     </DialogDescription>
                                 </DialogHeader>
-                                
+
                                 <div className="flex items-center gap-2 self-start sm:self-auto mr-8 shrink-0">
+                                    {canMutate && sale.status === "completed" && onEdit ? (
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            onClick={() => {
+                                                onEdit(sale);
+                                                onOpenChange(false);
+                                            }}
+                                            className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
+                                        >
+                                            <Pencil className="size-4" />
+                                            <span>Edit bill</span>
+                                        </Button>
+                                    ) : null}
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -275,8 +337,25 @@ const SaleDetailDialog = ({
                                             {sale.items.map((item) => {
                                                 const addOns = item.addOns ?? [];
                                                 const bundleComponents = item.bundleComponents ?? [];
-                                                const configuredLineTotal = Number(item.lineTotal)
-                                                    + addOns.reduce((total, addOn) => total + Number(addOn.lineTotal), 0);
+                                                const comboChildAddOnDiscount = bundleComponents.reduce(
+                                                    (total, component) =>
+                                                        total +
+                                                        (component.addOns ?? []).reduce(
+                                                            (addOnTotal, addOn) =>
+                                                                addOnTotal +
+                                                                Number(addOn.unitDiscountSnapshot) *
+                                                                    Number(addOn.totalQuantity),
+                                                            0,
+                                                        ),
+                                                    0,
+                                                );
+                                                const displayedItemDiscount = Math.max(
+                                                    Number(item.discountAmount) - comboChildAddOnDiscount,
+                                                    0,
+                                                );
+                                                const configuredLineTotal =
+                                                    Number(item.lineTotal) +
+                                                    addOns.reduce((total, addOn) => total + Number(addOn.lineTotal), 0);
 
                                                 return (
                                                     <div
@@ -289,22 +368,29 @@ const SaleDetailDialog = ({
                                                                     <ReceiptText className="size-4" />
                                                                 </div>
                                                                 <div>
-                                                                    <p className="font-semibold text-sm text-foreground/90">{item.productNameSnapshot}</p>
+                                                                    <p className="font-semibold text-sm text-foreground/90">
+                                                                        {item.productNameSnapshot}
+                                                                    </p>
                                                                     <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
                                                                         <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-bold text-foreground/75">
                                                                             Qty {Number(item.quantity)}
                                                                         </span>
                                                                         <span>×</span>
-                                                                        <span>{formatCurrency(item.unitPriceSnapshot)}</span>
-                                                                        {Number(item.discountAmount) > 0 && (
+                                                                        <span>
+                                                                            {formatCurrency(item.unitPriceSnapshot)}
+                                                                        </span>
+                                                                        {displayedItemDiscount > 0 && (
                                                                             <span className="text-rose-500 font-medium">
-                                                                                (Disc. -{formatCurrency(item.discountAmount)})
+                                                                                (Disc. -
+                                                                                {formatCurrency(displayedItemDiscount)})
                                                                             </span>
                                                                         )}
                                                                     </p>
                                                                 </div>
                                                             </div>
-                                                            <p className="font-bold text-sm text-foreground">{formatCurrency(configuredLineTotal)}</p>
+                                                            <p className="font-bold text-sm text-foreground">
+                                                                {formatCurrency(configuredLineTotal)}
+                                                            </p>
                                                         </div>
 
                                                         {addOns.length > 0 ? (
@@ -319,7 +405,10 @@ const SaleDetailDialog = ({
                                                                                 + {addOn.addOnNameSnapshot}
                                                                             </p>
                                                                             <p className="text-xs text-muted-foreground mt-0.5">
-                                                                                Qty {Number(addOn.totalQuantity)} × {formatCurrency(addOn.unitPriceSnapshot)}
+                                                                                Qty {Number(addOn.totalQuantity)} ×{" "}
+                                                                                {formatCurrency(
+                                                                                    addOn.unitPriceSnapshot,
+                                                                                )}
                                                                                 {Number(addOn.discountAmount) > 0
                                                                                     ? ` (Disc. -${formatCurrency(addOn.discountAmount)})`
                                                                                     : ""}
@@ -335,16 +424,20 @@ const SaleDetailDialog = ({
 
                                                         {bundleComponents.length > 0 ? (
                                                             <div className="mt-3 space-y-2 border-l border-border/60 ml-3.5 pl-4">
-                                                        {bundleComponents.map((component) => (
-                                                            <div key={component.id} className="space-y-1.5">
+                                                                {bundleComponents.map((component) => (
+                                                                    <div key={component.id} className="space-y-1.5">
                                                                         <div className="flex items-center justify-between gap-3">
                                                                             <div>
                                                                                 <p className="text-sm text-foreground/85">
                                                                                     {component.productNameSnapshot}
                                                                                 </p>
                                                                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                                                                    Qty {Number(component.totalQuantity)}
-                                                                                    {Number(component.priceAdjustmentSnapshot ?? 0) !== 0
+                                                                                    Qty{" "}
+                                                                                    {Number(component.totalQuantity)}
+                                                                                    {Number(
+                                                                                        component.priceAdjustmentSnapshot ??
+                                                                                            0,
+                                                                                    ) !== 0
                                                                                         ? ` • Adjustment ${Number(component.priceAdjustmentSnapshot) > 0 ? "+" : ""}${formatCurrency(component.priceAdjustmentSnapshot)}`
                                                                                         : ""}
                                                                                 </p>
@@ -352,21 +445,37 @@ const SaleDetailDialog = ({
                                                                         </div>
                                                                         {(component.addOns ?? []).length > 0 ? (
                                                                             <div className="space-y-1 border-l border-border/50 ml-2 pl-3">
-                                                                                {(component.addOns ?? []).map((addOn) => (
-                                                                                    <p
-                                                                                        key={addOn.id}
-                                                                                        className="text-xs text-muted-foreground"
-                                                                                    >
-                                                                                        + {addOn.addOnNameSnapshot}
-                                                                                        {" "}
-                                                                                        × {Number(addOn.totalQuantity)} • {formatCurrency(
-                                                                                            (Number(addOn.unitPriceSnapshot) - Number(addOn.unitDiscountSnapshot)) * Number(addOn.totalQuantity),
-                                                                                        )}
-                                                                                        {Number(addOn.unitDiscountSnapshot) > 0
-                                                                                            ? ` (Disc. -${formatCurrency(Number(addOn.unitDiscountSnapshot) * Number(addOn.totalQuantity))})`
-                                                                                            : ""}
-                                                                                    </p>
-                                                                                ))}
+                                                                                {(component.addOns ?? []).map(
+                                                                                    (addOn) => (
+                                                                                        <p
+                                                                                            key={addOn.id}
+                                                                                            className="text-xs text-muted-foreground"
+                                                                                        >
+                                                                                            + {addOn.addOnNameSnapshot}{" "}
+                                                                                            ×{" "}
+                                                                                            {Number(
+                                                                                                addOn.totalQuantity,
+                                                                                            )}{" "}
+                                                                                            •{" "}
+                                                                                            {formatCurrency(
+                                                                                                (Number(
+                                                                                                    addOn.unitPriceSnapshot,
+                                                                                                ) -
+                                                                                                    Number(
+                                                                                                        addOn.unitDiscountSnapshot,
+                                                                                                    )) *
+                                                                                                    Number(
+                                                                                                        addOn.totalQuantity,
+                                                                                                    ),
+                                                                                            )}
+                                                                                            {Number(
+                                                                                                addOn.unitDiscountSnapshot,
+                                                                                            ) > 0
+                                                                                                ? ` (Disc. -${formatCurrency(Number(addOn.unitDiscountSnapshot) * Number(addOn.totalQuantity))})`
+                                                                                                : ""}
+                                                                                        </p>
+                                                                                    ),
+                                                                                )}
                                                                             </div>
                                                                         ) : null}
                                                                     </div>
@@ -394,15 +503,34 @@ const SaleDetailDialog = ({
                                             ) : (
                                                 sale.payments.map((payment) => {
                                                     const method = payment.method.toLowerCase();
-                                                    const Icon = method === "cash" ? Banknote : method === "card" ? CreditCard : method === "upi" ? Smartphone : CircleDollarSign;
-                                                    const colorClass = method === "cash" ? "bg-emerald-500/10 text-emerald-500" : method === "card" ? "bg-purple-500/10 text-purple-500" : method === "upi" ? "bg-blue-500/10 text-blue-500" : "bg-zinc-500/10 text-zinc-400";
+                                                    const Icon =
+                                                        method === "cash"
+                                                            ? Banknote
+                                                            : method === "card"
+                                                              ? CreditCard
+                                                              : method === "upi"
+                                                                ? Smartphone
+                                                                : CircleDollarSign;
+                                                    const colorClass =
+                                                        method === "cash"
+                                                            ? "bg-emerald-500/10 text-emerald-500"
+                                                            : method === "card"
+                                                              ? "bg-purple-500/10 text-purple-500"
+                                                              : method === "upi"
+                                                                ? "bg-blue-500/10 text-blue-500"
+                                                                : "bg-zinc-500/10 text-zinc-400";
                                                     return (
                                                         <div
                                                             key={payment.id}
                                                             className="group flex items-center justify-between rounded-2xl border border-border/50 bg-background/40 hover:bg-background/80 px-4 py-3.5 transition-all duration-200"
                                                         >
                                                             <div className="flex items-start gap-3">
-                                                                <div className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg font-bold", colorClass)}>
+                                                                <div
+                                                                    className={cn(
+                                                                        "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg font-bold",
+                                                                        colorClass,
+                                                                    )}
+                                                                >
                                                                     <Icon className="size-4" />
                                                                 </div>
                                                                 <div>
@@ -411,11 +539,15 @@ const SaleDetailDialog = ({
                                                                     </p>
                                                                     <p className="text-xs text-muted-foreground mt-0.5">
                                                                         {formatDateTime(payment.collectedAt)}
-                                                                        {payment.referenceNumber ? ` • Ref: ${payment.referenceNumber}` : ""}
+                                                                        {payment.referenceNumber
+                                                                            ? ` • Ref: ${payment.referenceNumber}`
+                                                                            : ""}
                                                                     </p>
                                                                 </div>
                                                             </div>
-                                                            <p className="font-bold text-sm text-foreground">{formatCurrency(payment.amount)}</p>
+                                                            <p className="font-bold text-sm text-foreground">
+                                                                {formatCurrency(payment.amount)}
+                                                            </p>
                                                         </div>
                                                     );
                                                 })
@@ -430,37 +562,53 @@ const SaleDetailDialog = ({
                                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.1),_transparent_40%)]" />
                                     <CardContent className="relative space-y-5 p-6">
                                         <div className="space-y-1.5 pb-2 border-b border-white/5">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/50">Settlement Total</p>
-                                            <p className="text-4xl font-extrabold tracking-tight text-white">{formatCurrency(sale.grandTotal)}</p>
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/50">
+                                                Settlement Total
+                                            </p>
+                                            <p className="text-4xl font-extrabold tracking-tight text-white">
+                                                {formatCurrency(sale.grandTotal)}
+                                            </p>
                                         </div>
                                         <div className="space-y-3.5 text-xs">
                                             <div className="flex items-center justify-between gap-4 text-white/70 w-full">
                                                 <span className="font-medium">Items subtotal</span>
-                                                <span className="font-semibold text-white/90">{formatCurrency(discountedItemsSubtotal)}</span>
+                                                <span className="font-semibold text-white/90">
+                                                    {formatCurrency(discountedItemsSubtotal)}
+                                                </span>
                                             </div>
                                             {itemDiscountTotal > 0 && (
                                                 <div className="flex items-center justify-between gap-4 text-white/60 w-full">
                                                     <span className="font-medium">Item discount included</span>
-                                                    <span className="font-semibold text-white/80">{formatCurrency(itemDiscountTotal)}</span>
+                                                    <span className="font-semibold text-white/80">
+                                                        {formatCurrency(itemDiscountTotal)}
+                                                    </span>
                                                 </div>
                                             )}
                                             {Number(sale.orderDiscountAmount) > 0 && (
                                                 <div className="flex items-center justify-between gap-4 text-white/70 w-full">
                                                     <span className="font-medium">Order discount</span>
-                                                    <span className="font-semibold text-white/90">-{formatCurrency(sale.orderDiscountAmount)}</span>
+                                                    <span className="font-semibold text-white/90">
+                                                        -{formatCurrency(sale.orderDiscountAmount)}
+                                                    </span>
                                                 </div>
                                             )}
                                             <div className="flex items-center justify-between gap-4 text-white/70 w-full">
                                                 <span className="font-medium">Collected</span>
-                                                <span className="font-semibold text-emerald-400">{formatCurrency(sale.paidTotal)}</span>
+                                                <span className="font-semibold text-emerald-400">
+                                                    {formatCurrency(sale.paidTotal)}
+                                                </span>
                                             </div>
                                             <div className="border-t border-white/10 my-2" />
                                             <div className="flex items-center justify-between gap-4 pt-1.5 w-full">
                                                 <span className="text-sm font-bold text-white/80">Due Amount</span>
-                                                <span className={cn(
-                                                    "text-lg font-extrabold",
-                                                    Number(sale.dueTotal) > 0 ? "text-amber-400" : "text-emerald-400"
-                                                )}>
+                                                <span
+                                                    className={cn(
+                                                        "text-lg font-extrabold",
+                                                        Number(sale.dueTotal) > 0
+                                                            ? "text-amber-400"
+                                                            : "text-emerald-400",
+                                                    )}
+                                                >
                                                     {formatCurrency(sale.dueTotal)}
                                                 </span>
                                             </div>
@@ -489,7 +637,11 @@ const SaleDetailDialog = ({
                                                 <FieldContent>
                                                     <Select
                                                         value={paymentValues.method}
-                                                        onValueChange={(value) => updatePaymentDraft({ method: value as PaymentMethod })}
+                                                        onValueChange={(value) =>
+                                                            updatePaymentDraft({
+                                                                method: value as PaymentMethod,
+                                                            })
+                                                        }
                                                     >
                                                         <SelectTrigger className="h-11 w-full rounded-2xl">
                                                             <SelectValue placeholder="Select payment method" />
@@ -514,12 +666,21 @@ const SaleDetailDialog = ({
                                                         step="0.01"
                                                         className="h-11 rounded-2xl"
                                                         value={paymentValues.amount}
-                                                        onChange={(event) => updatePaymentDraft({ amount: Number(event.target.value || 0) })}
+                                                        onChange={(event) =>
+                                                            updatePaymentDraft({
+                                                                amount: Number(event.target.value || 0),
+                                                            })
+                                                        }
                                                     />
                                                     <FieldError
                                                         errors={
                                                             paymentValues.amount > Number(sale.dueTotal)
-                                                                ? [{ message: "Amount cannot exceed the remaining due total" }]
+                                                                ? [
+                                                                      {
+                                                                          message:
+                                                                              "Amount cannot exceed the remaining due total",
+                                                                      },
+                                                                  ]
                                                                 : undefined
                                                         }
                                                     />
@@ -533,7 +694,11 @@ const SaleDetailDialog = ({
                                                         className="h-11 rounded-2xl"
                                                         placeholder="Optional reference number"
                                                         value={paymentValues.referenceNumber ?? ""}
-                                                        onChange={(event) => updatePaymentDraft({ referenceNumber: event.target.value })}
+                                                        onChange={(event) =>
+                                                            updatePaymentDraft({
+                                                                referenceNumber: event.target.value,
+                                                            })
+                                                        }
                                                     />
                                                 </FieldContent>
                                             </Field>
@@ -545,7 +710,11 @@ const SaleDetailDialog = ({
                                                         className="min-h-24 rounded-2xl"
                                                         placeholder="Optional payment note"
                                                         value={paymentValues.notes ?? ""}
-                                                        onChange={(event) => updatePaymentDraft({ notes: event.target.value })}
+                                                        onChange={(event) =>
+                                                            updatePaymentDraft({
+                                                                notes: event.target.value,
+                                                            })
+                                                        }
                                                     />
                                                 </FieldContent>
                                             </Field>
@@ -553,9 +722,9 @@ const SaleDetailDialog = ({
                                             <Button
                                                 className="w-full rounded-2xl"
                                                 disabled={
-                                                    collectPaymentMutation.isPending
-                                                    || paymentValues.amount <= 0
-                                                    || paymentValues.amount > Number(sale.dueTotal)
+                                                    collectPaymentMutation.isPending ||
+                                                    paymentValues.amount <= 0 ||
+                                                    paymentValues.amount > Number(sale.dueTotal)
                                                 }
                                                 onClick={() => collectPaymentMutation.mutate()}
                                             >
@@ -582,7 +751,11 @@ const SaleDetailDialog = ({
                                                         className="min-h-24 rounded-2xl bg-background/80"
                                                         placeholder="Why is this bill being voided?"
                                                         value={voidDraft.reason}
-                                                        onChange={(event) => setVoidDraft({ reason: event.target.value })}
+                                                        onChange={(event) =>
+                                                            setVoidDraft({
+                                                                reason: event.target.value,
+                                                            })
+                                                        }
                                                     />
                                                 </FieldContent>
                                             </Field>

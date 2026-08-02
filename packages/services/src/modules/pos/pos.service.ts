@@ -5,6 +5,7 @@ import type {
     ComboProductsListResponse,
     CommitSaleJSON,
     CompleteSaleJSON,
+    ReplaceSaleJSON,
     CreateCustomerJSON,
     CreateDraftSaleJSON,
     CreatePaymentJSON,
@@ -64,9 +65,7 @@ export const getPosProductAddOnAttachments = async (): Promise<
     }
 };
 
-export const getPosComboProduct = async (
-    productId: string,
-): Promise<ServiceResponse<ComboProductResponse | null>> => {
+export const getPosComboProduct = async (productId: string): Promise<ServiceResponse<ComboProductResponse | null>> => {
     try {
         const response = await api.get(`/pos/combos/${productId}`);
         return response.data;
@@ -84,9 +83,10 @@ export const getPosComboProducts = async (): Promise<ServiceResponse<ComboProduc
     }
 };
 
-export const getPosCustomers = async (
-    params?: { search?: string; limit?: number },
-): Promise<ServiceResponse<CustomersListResponse | null>> => {
+export const getPosCustomers = async (params?: {
+    search?: string;
+    limit?: number;
+}): Promise<ServiceResponse<CustomersListResponse | null>> => {
     try {
         const response = await api.get("/pos/customers", { params });
         return response.data;
@@ -106,9 +106,7 @@ export const createPosCustomer = async (
     }
 };
 
-export const getPosSales = async (
-    params?: SalesListQuery,
-): Promise<ServiceResponse<SalesListResponse | null>> => {
+export const getPosSales = async (params?: SalesListQuery): Promise<ServiceResponse<SalesListResponse | null>> => {
     try {
         const response = await api.get("/pos/sales", { params });
         return response.data;
@@ -117,9 +115,7 @@ export const getPosSales = async (
     }
 };
 
-export const createPosDraftSale = async (
-    data: CreateDraftSaleJSON,
-): Promise<ServiceResponse<SaleResponse | null>> => {
+export const createPosDraftSale = async (data: CreateDraftSaleJSON): Promise<ServiceResponse<SaleResponse | null>> => {
     try {
         const response = await api.post("/pos/sales", data);
         return response.data;
@@ -128,9 +124,7 @@ export const createPosDraftSale = async (
     }
 };
 
-export const getPosSale = async (
-    saleId: string,
-): Promise<ServiceResponse<SaleResponse | null>> => {
+export const getPosSale = async (saleId: string): Promise<ServiceResponse<SaleResponse | null>> => {
     try {
         const response = await api.get(`/pos/sales/${saleId}`);
         return response.data;
@@ -151,9 +145,19 @@ export const updatePosDraftSale = async (
     }
 };
 
-export const deletePosDraftSale = async (
+export const replacePosSale = async (
     saleId: string,
-): Promise<ServiceResponse<null>> => {
+    data: ReplaceSaleJSON,
+): Promise<ServiceResponse<SaleResponse | null>> => {
+    try {
+        const response = await api.post(`/pos/sales/${saleId}/replace`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const deletePosDraftSale = async (saleId: string): Promise<ServiceResponse<null>> => {
     try {
         const response = await api.delete(`/pos/sales/${saleId}`);
         return response.data;
@@ -174,9 +178,7 @@ export const commitPosSale = async (
     }
 };
 
-export const completePosSale = async (
-    data: CompleteSaleJSON,
-): Promise<ServiceResponse<SaleResponse | null>> => {
+export const completePosSale = async (data: CompleteSaleJSON): Promise<ServiceResponse<SaleResponse | null>> => {
     try {
         const response = await api.post("/pos/sales/complete", data);
         return response.data;
@@ -213,40 +215,52 @@ export const getPosPurchases = async (params?: PurchaseListQuery) => {
     try {
         const response = await api.get("/pos/purchases", { params });
         return response.data;
-    } catch (error) { return handleApiError(error); }
+    } catch (error) {
+        return handleApiError(error);
+    }
 };
 
 export const getPosPurchaseSummary = async () => {
     try {
         const response = await api.get("/pos/purchases/summary");
         return response.data;
-    } catch (error) { return handleApiError(error); }
+    } catch (error) {
+        return handleApiError(error);
+    }
 };
 
 export const getPosPurchase = async (purchaseId: string) => {
     try {
         const response = await api.get(`/pos/purchases/${purchaseId}`);
         return response.data;
-    } catch (error) { return handleApiError(error); }
+    } catch (error) {
+        return handleApiError(error);
+    }
 };
 
 export const createPosPurchase = async (data: CreatePurchaseJSON) => {
     try {
         const response = await api.post("/pos/purchases", data);
         return response.data;
-    } catch (error) { return handleApiError(error); }
+    } catch (error) {
+        return handleApiError(error);
+    }
 };
 
 export const updatePosPurchase = async (purchaseId: string, data: UpdatePurchaseJSON) => {
     try {
         const response = await api.patch(`/pos/purchases/${purchaseId}`, data);
         return response.data;
-    } catch (error) { return handleApiError(error); }
+    } catch (error) {
+        return handleApiError(error);
+    }
 };
 
 export const voidPosPurchase = async (purchaseId: string, data: VoidPurchaseJSON) => {
     try {
         const response = await api.post(`/pos/purchases/${purchaseId}/void`, data);
         return response.data;
-    } catch (error) { return handleApiError(error); }
+    } catch (error) {
+        return handleApiError(error);
+    }
 };
