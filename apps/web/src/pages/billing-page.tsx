@@ -61,6 +61,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@repo/ui/components/dialog";
+import { DatePicker } from "@repo/ui/components/date-picker";
 import { Input } from "@repo/ui/components/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
@@ -176,7 +177,7 @@ const isSameComposerConfiguration = (
 type SettlementMode = "full" | "partial" | "due";
 type SaleSort = "newest" | "oldest" | "highest" | "lowest";
 type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
-type SalesDateFilter = "all" | "today" | "yesterday" | "this-week";
+type SalesDateFilter = "all" | "today" | "yesterday" | "this-week" | "custom";
 
 const salesSortOptions: Array<{ value: SaleSort; label: string }> = [
     { value: "newest", label: "Newest" },
@@ -200,6 +201,7 @@ const salesDateFilterOptions: Array<{ value: SalesDateFilter; label: string }> =
     { value: "today", label: "Today" },
     { value: "yesterday", label: "Yesterday" },
     { value: "this-week", label: "This Week" },
+    { value: "custom", label: "Custom" },
 ];
 
 const settlementOptions: Array<{
@@ -284,6 +286,8 @@ const BillingPage = ({
     const [sortBy, setSortBy] = useState<SaleSort>("newest");
     const [paymentMethodFilter, setPaymentMethodFilter] = useState<SalesPaymentMethodFilter>("all");
     const [dateFilter, setDateFilter] = useState<SalesDateFilter>("all");
+    const [customFromDate, setCustomFromDate] = useState<Date | null>(null);
+    const [customToDate, setCustomToDate] = useState<Date | null>(null);
     const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
     const [configureComboProductId, setConfigureComboProductId] = useState<string | null>(null);
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
@@ -295,6 +299,14 @@ const BillingPage = ({
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
     const deferredCustomerDirectorySearch = useDeferredValue(customerDirectorySearch.trim().toLowerCase());
     const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
+
+    const setSalesDateFilter = (filter: SalesDateFilter) => {
+        setDateFilter(filter);
+        if (filter !== "custom") {
+            setCustomFromDate(null);
+            setCustomToDate(null);
+        }
+    };
 
     const selectedStoreId = isDeviceMode ? (session?.store.id ?? "") : searchParams.get("storeId") || "";
 
@@ -602,6 +614,17 @@ const BillingPage = ({
                 if (dateFilter === "today") return created >= startOfToday;
                 if (dateFilter === "yesterday") return created >= startOfYesterday && created < startOfToday;
                 if (dateFilter === "this-week") return created >= startOfThisWeek;
+                if (dateFilter === "custom") {
+                    const startOfCustomRange = customFromDate
+                        ? new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate())
+                        : null;
+                    const endOfCustomRange = customToDate
+                        ? new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1)
+                        : null;
+
+                    if (startOfCustomRange && created < startOfCustomRange) return false;
+                    if (endOfCustomRange && created >= endOfCustomRange) return false;
+                }
                 return true;
             })();
 
@@ -1804,7 +1827,7 @@ const BillingPage = ({
                                             <button
                                                 key={opt.value}
                                                 type="button"
-                                                onClick={() => setDateFilter(opt.value)}
+                                                onClick={() => setSalesDateFilter(opt.value)}
                                                 className={cn(
                                                     "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
                                                     dateFilter === opt.value
@@ -1816,6 +1839,45 @@ const BillingPage = ({
                                             </button>
                                         ))}
                                     </div>
+
+                                    {dateFilter === "custom" && (
+                                        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto border-t border-border/40 pt-3 scrollbar-none sm:overflow-visible sm:border-t-0 sm:pt-0">
+                                            <DatePicker
+                                                value={customFromDate}
+                                                onChange={(date) => {
+                                                    setCustomFromDate(date);
+                                                    setDateFilter("custom");
+                                                }}
+                                                placeholder="From date"
+                                                className="h-8 w-32 shrink-0 text-xs sm:w-36"
+                                                clearable={false}
+                                            />
+                                            <span className="shrink-0 text-xs text-muted-foreground">to</span>
+                                            <DatePicker
+                                                value={customToDate}
+                                                onChange={(date) => {
+                                                    setCustomToDate(date);
+                                                    setDateFilter("custom");
+                                                }}
+                                                placeholder="To date"
+                                                className="h-8 w-32 shrink-0 text-xs sm:w-36"
+                                                clearable={false}
+                                            />
+                                            {(customFromDate || customToDate) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSalesDateFilter("all");
+                                                    }}
+                                                    aria-label="Clear custom date range"
+                                                    className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                                >
+                                                    <X className="size-3.5" />
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
