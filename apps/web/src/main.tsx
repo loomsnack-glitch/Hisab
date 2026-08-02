@@ -5,8 +5,15 @@ import { RouterProvider, createBrowserRouter, createRoutesFromElements, Route } 
 import "@repo/ui/app.css";
 import "@repo/ui/globals.css";
 
+import logo from "@repo/assets/logo.png";
 import App from "./App";
 import Providers from "./providers";
+
+const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+if (favicon) {
+    favicon.href = logo;
+    favicon.type = "image/png";
+}
 
 const router = createBrowserRouter(
     createRoutesFromElements(
