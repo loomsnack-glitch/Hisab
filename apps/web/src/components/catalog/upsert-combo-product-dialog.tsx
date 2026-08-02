@@ -12,6 +12,7 @@ import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Boxes, Minus, Pencil, Plus, PlusCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import ComboProductPickerDialog from "@/components/catalog/combo-product-picker-dialog";
 import { catalogKeys } from "@/lib/query-keys";
 
 type Props = {
@@ -75,7 +76,6 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
     const watchedGroups = form.watch("choiceGroups");
     const categoryOptions = useMemo(() => categories.map((item) => ({ label: item.name, value: item.id })), [categories]);
     const optionProducts = useMemo(() => products.filter((item) => item.productType === "single" && item.status === "active"), [products]);
-    const productOptions = useMemo(() => optionProducts.map((item) => ({ label: item.name, value: item.id })), [optionProducts]);
     const statusOptions = ProductStatusSchema.options.map((value) => ({ label: value[0].toUpperCase() + value.slice(1), value }));
     const detailsQuery = useQuery({
         queryKey: [...catalogKeys.products(organizationId), "combo", product?.id],
@@ -190,7 +190,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                             </div>
                             <div className="space-y-2 pl-2">
                                 {group?.options?.map((option, optionIndex) => <div key={`${field.id}-${optionIndex}`} className="grid gap-2 sm:grid-cols-[1fr_110px_130px_auto] sm:items-end">
-                                    <Field><FieldLabel>Product</FieldLabel><FieldContent><ReactSelect options={productOptions} value={productOptions.find((item) => item.value === option.productId) ?? null} onChange={(item) => updateOption(groupIndex, optionIndex, { productId: item?.value ?? "" })} placeholder="Select product" /><FieldError errors={[form.formState.errors.choiceGroups?.[groupIndex]?.options?.[optionIndex]?.productId]} /></FieldContent></Field>
+                                    <Field><FieldLabel>Product</FieldLabel><FieldContent><ComboProductPickerDialog categories={categories} products={optionProducts} value={option.productId} onChange={(productId) => updateOption(groupIndex, optionIndex, { productId })} /><FieldError errors={[form.formState.errors.choiceGroups?.[groupIndex]?.options?.[optionIndex]?.productId]} /></FieldContent></Field>
                                     <Field><FieldLabel>Max qty</FieldLabel><FieldContent><Input type="number" min="1" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.maxQuantity`)} /></FieldContent></Field>
                                     <Field><FieldLabel>Price + / -</FieldLabel><FieldContent><Input type="number" step="0.01" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.priceAdjustment`)} /></FieldContent></Field>
                                     <Button type="button" variant="ghost" size="icon" disabled={group.options.length === 1} onClick={() => updateGroup(groupIndex, { options: group.options.filter((_, index) => index !== optionIndex) })} aria-label="Remove option"><Minus className="size-4" /></Button>
