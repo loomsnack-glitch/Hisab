@@ -117,7 +117,7 @@ const ManageAddOnsDialog = ({ organizationId, trigger }: ManageAddOnsDialogProps
     const addOns = addOnsQuery.data?.status === "success" ? addOnsQuery.data.data?.addOns ?? [] : [];
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
             <DialogTrigger
                 render={
                     trigger ?? (

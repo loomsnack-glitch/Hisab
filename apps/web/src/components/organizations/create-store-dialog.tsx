@@ -96,7 +96,7 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
     };
 
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
             <DialogTrigger
                 render={
                     trigger ?? (

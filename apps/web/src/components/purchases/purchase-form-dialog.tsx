@@ -112,7 +112,7 @@ const PurchaseFormDialog = ({ open, onOpenChange, purchase, isLoading = false, i
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
             <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-1.5rem)] max-w-6xl flex-col overflow-hidden rounded-2xl p-4 sm:p-5">
                 <DialogHeader className="shrink-0">
                     <DialogTitle>{isLoading ? "Loading purchase..." : isEdit ? "Edit purchase" : "Add purchase"}</DialogTitle>

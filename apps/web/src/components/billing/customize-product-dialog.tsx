@@ -85,7 +85,7 @@ const CustomizeProductDialog = ({
     const selectedQuantity = selectedAddOns.reduce((total, addOn) => total + addOn.quantity, 0);
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
             <DialogContent className="flex h-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-2xl border-border/70 bg-background/95 p-0 shadow-2xl sm:max-h-[90dvh] sm:w-[calc(100%-2rem)]">
                 <DialogHeader className="shrink-0 space-y-2 border-b border-border/60 px-4 py-4 sm:px-6 sm:py-5">
                     <DialogTitle className="break-words pr-8 font-display text-lg font-semibold leading-tight tracking-tight sm:text-xl">

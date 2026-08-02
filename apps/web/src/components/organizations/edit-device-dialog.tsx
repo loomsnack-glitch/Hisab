@@ -189,7 +189,7 @@ const EditDeviceDialog = ({ organizationId, storeId, device, trigger, open: cont
     };
 
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
             {!isControlled && (
                 <DialogTrigger
                     render={

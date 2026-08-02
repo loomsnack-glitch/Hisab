@@ -2614,6 +2614,7 @@ const BillingPage = ({
 
       <Dialog
         open={placeOrderDialogOpen}
+        disablePointerDismissal
         onOpenChange={(open) => {
           setPlaceOrderDialogOpen(open);
         }}

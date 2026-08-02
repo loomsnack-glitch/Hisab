@@ -112,7 +112,7 @@ const CreateOrganizationDialog = ({ trigger }: CreateOrganizationDialogProps) =>
     };
 
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
             <DialogTrigger
                 render={
                     trigger ?? (

@@ -7,8 +7,6 @@ import { cn } from "@repo/ui/lib/utils"
 import { Button } from "@repo/ui/components/button"
 import { XIcon } from "lucide-react"
 
-const DialogDismissalContext = React.createContext(false)
-
 const getNestedLayerStyle = (
   baseZIndex: number
 ): React.CSSProperties => ({
@@ -46,20 +44,27 @@ const getNestedPopupStyle = (
 }
 
 function Dialog({
-  disablePointerDismissal,
+  disablePointerDismissal = true,
   children,
+  onOpenChange,
   ...props
 }: DialogPrimitive.Root.Props) {
   return (
-    <DialogDismissalContext.Provider value={!!disablePointerDismissal}>
-      <DialogPrimitive.Root
-        data-slot="dialog"
-        disablePointerDismissal={disablePointerDismissal}
-        {...props}
-      >
-        {children}
-      </DialogPrimitive.Root>
-    </DialogDismissalContext.Provider>
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      disablePointerDismissal={disablePointerDismissal}
+      onOpenChange={(nextOpen, eventDetails) => {
+        if (disablePointerDismissal && !nextOpen && eventDetails.reason === "outside-press") {
+          eventDetails.cancel()
+          return
+        }
+
+        onOpenChange?.(nextOpen, eventDetails)
+      }}
+      {...props}
+    >
+      {children}
+    </DialogPrimitive.Root>
   )
 }
 
@@ -103,32 +108,13 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
-  const disablePointerDismissal = React.useContext(DialogDismissalContext)
-  const popupRef = React.useRef<HTMLDivElement>(null)
-
-  const handleOutsidePointerDown = React.useCallback(
-    (event: React.PointerEvent) => {
-      if (!disablePointerDismissal) {
-        return
-      }
-
-      const target = event.target
-      if (!(target instanceof Node) || popupRef.current?.contains(target)) {
-        return
-      }
-
-    },
-    [disablePointerDismissal]
-  )
-
   return (
     <DialogPortal>
-      <DialogOverlay onPointerDown={handleOutsidePointerDown} />
+      <DialogOverlay />
       {/* Scrollable overlay wrapper centers short dialogs and scrolls tall ones. */}
       <div
         className="group/dialog-layer fixed inset-0 overflow-y-auto"
         style={getNestedLayerStyle(60)}
-        onPointerDown={handleOutsidePointerDown}
       >
         {/* Nested dialogs skip the backdrop (z-index sits below the parent popup), so this scrim
             covers the parent dialog with the same blur/dim effect as the root backdrop. */}
@@ -138,7 +124,6 @@ function DialogContent({
         />
         <div className="flex min-h-full items-center justify-center p-4">
           <DialogPrimitive.Popup
-            ref={popupRef}
             data-slot="dialog-content"
             className={cn(
               "bg-background/90 data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 text-sm ring-1 sm:max-w-md w-full outline-none relative transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50 border border-border/80 shadow-2xl backdrop-blur-md overflow-hidden",

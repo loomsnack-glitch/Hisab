@@ -57,7 +57,7 @@ const ConfigureComboDialog = ({ open, onOpenChange, combo, attachmentsByProductI
     });
 
     if (!combo) {
-        return <Dialog open={open} onOpenChange={onOpenChange}>
+        return <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
             <DialogContent className="flex min-h-48 items-center justify-center rounded-2xl">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Spinner className="size-4" />
@@ -77,7 +77,7 @@ const ConfigureComboDialog = ({ open, onOpenChange, combo, attachmentsByProductI
         if (next === 0) setAddOnQuantities((state) => Object.fromEntries(Object.entries(state).filter(([entryKey]) => !entryKey.startsWith(`${groupId}:${optionProductId}:`))));
     };
 
-    return <Dialog open={open} onOpenChange={onOpenChange}>
+    return <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
         <DialogContent className="flex max-h-[90dvh] max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl p-0">
             <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4"><div className="flex items-center gap-2 text-primary"><SlidersHorizontal className="size-4" /><span className="text-xs font-semibold uppercase tracking-[0.16em]">Configure Combo</span></div><DialogTitle className="text-left text-xl">{combo.product.name}</DialogTitle><div className="flex items-center justify-between text-sm text-muted-foreground"><span>Base price</span><ProductPriceDisplay price={combo.product.price} discount={combo.product.discount} size="sm" align="right" /></div></DialogHeader>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-5 pt-4">

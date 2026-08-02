@@ -165,7 +165,7 @@ const ManageProductAddOnsDialog = ({
     const isLoading = addOnsQuery.isPending || attachmentsQuery.isPending;
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
             <DialogTrigger
                 render={
                     trigger ?? (

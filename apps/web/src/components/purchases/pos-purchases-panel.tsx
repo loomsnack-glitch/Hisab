@@ -227,7 +227,7 @@ const PosPurchasesPanel = ({ session, search }: PosPurchasesPanelProps) => {
             </div>
 
             <PurchaseFormDialog open={formOpen} onOpenChange={(open) => { setFormOpen(open); if (!open) { setEditingPurchase(null); setEditLoading(false); } }} purchase={editingPurchase} isLoading={editLoading} isPending={saveMutation.isPending} onSubmit={async (data) => { await saveMutation.mutateAsync(data); }} />
-            <Dialog open={Boolean(selectedPurchase)} onOpenChange={(open) => { if (!open) setSelectedPurchase(null); }}>
+            <Dialog open={Boolean(selectedPurchase)} onOpenChange={(open) => { if (!open) setSelectedPurchase(null); }} disablePointerDismissal>
                 <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-1.5rem)] max-w-2xl flex-col overflow-hidden rounded-2xl p-4 sm:p-5">
                     <DialogHeader className="shrink-0">
                         <DialogTitle>Purchase details</DialogTitle>
