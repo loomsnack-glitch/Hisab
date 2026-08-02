@@ -19,6 +19,8 @@ import CategoriesPage from "@/pages/categories-page";
 import AddOnsPage from "@/pages/add-ons-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
+import { DisplayScaleProvider } from "@/providers/display-scale-provider";
+import type { DisplayScaleScope } from "@/lib/display-scale";
 
 const SPLASH_DURATION_MS = 2200;
 
@@ -73,45 +75,49 @@ const App = () => {
         authUser ??
         (authQuery.data?.status === "success" ? authQuery.data.data?.user ?? null : null);
 
-    if (!isPosRoute && authQuery.isPending) {
-        return <div className="min-h-screen bg-background" aria-busy="true" aria-label="Loading" />;
-    }
+    const displayScaleScope: DisplayScaleScope = isPosRoute ? "pos" : "admin";
 
     return (
-        <>
-            <Routes>
-                <Route path="/" element={<Navigate to={authenticatedUser ? "/organizations" : "/login"} replace />} />
-                <Route path="/login" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LoginPage />} />
-                <Route
-                    path="/register"
-                    element={authenticatedUser ? <Navigate to="/organizations" replace /> : <RegisterPage />}
-                />
-                <Route path="/pos/login" element={<PosLoginPage />} />
-                <Route path="/pos" element={<PosPage />} />
-                <Route path="/pos/purchases" element={<Navigate to="/pos?panel=purchases" replace />} />
-                <Route
-                    element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
-                >
-                    <Route path="/dashboard" element={<Navigate to="/organizations" replace />} />
-                    <Route path="/organizations" element={<OrganizationsPage />} />
-                    <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
-                    <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
-                    <Route path="/organizations/:organizationId/products" element={<ProductsPage />}>
-                        <Route index element={<Navigate to="list" replace />} />
-                        <Route path="list" element={<ProductsListPage />} />
-                        <Route path="categories" element={<CategoriesPage />} />
-                        <Route path="add-ons" element={<AddOnsPage />} />
-                    </Route>
-                    <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
-                    <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
-                </Route>
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+        <DisplayScaleProvider scope={displayScaleScope}>
+            {!isPosRoute && authQuery.isPending ? (
+                <div className="min-h-screen bg-background" aria-busy="true" aria-label="Loading" />
+            ) : (
+                <>
+                    <Routes>
+                        <Route path="/" element={<Navigate to={authenticatedUser ? "/organizations" : "/login"} replace />} />
+                        <Route path="/login" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LoginPage />} />
+                        <Route
+                            path="/register"
+                            element={authenticatedUser ? <Navigate to="/organizations" replace /> : <RegisterPage />}
+                        />
+                        <Route path="/pos/login" element={<PosLoginPage />} />
+                        <Route path="/pos" element={<PosPage />} />
+                        <Route path="/pos/purchases" element={<Navigate to="/pos?panel=purchases" replace />} />
+                        <Route
+                            element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
+                        >
+                            <Route path="/dashboard" element={<Navigate to="/organizations" replace />} />
+                            <Route path="/organizations" element={<OrganizationsPage />} />
+                            <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
+                            <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
+                            <Route path="/organizations/:organizationId/products" element={<ProductsPage />}>
+                                <Route index element={<Navigate to="list" replace />} />
+                                <Route path="list" element={<ProductsListPage />} />
+                                <Route path="categories" element={<CategoriesPage />} />
+                                <Route path="add-ons" element={<AddOnsPage />} />
+                            </Route>
+                            <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
+                            <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
+                        </Route>
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
 
-            {showSplash && authUser ? (
-                <SplashLoader durationMs={SPLASH_DURATION_MS} onComplete={() => setShowSplash(false)} />
-            ) : null}
-        </>
+                    {showSplash && authUser ? (
+                        <SplashLoader durationMs={SPLASH_DURATION_MS} onComplete={() => setShowSplash(false)} />
+                    ) : null}
+                </>
+            )}
+        </DisplayScaleProvider>
     );
 };
 

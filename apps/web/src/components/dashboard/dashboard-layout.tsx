@@ -23,6 +23,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@repo/ui/componen
 
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
 import ThemeToggle from "@/components/dashboard/theme-toggle";
+import DisplayScaleControl from "@/components/display-scale-control";
 import CreateOrganizationDialog from "@/components/organizations/create-organization-dialog";
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -359,6 +360,7 @@ const DashboardLayout = () => {
                                 <MonitorSmartphone className="mr-2 size-4" />
                                 Login as device
                             </Button>
+                            <DisplayScaleControl />
                             <ThemeToggle />
                             {authUser && (
                                 <Popover>
