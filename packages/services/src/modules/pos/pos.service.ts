@@ -19,6 +19,7 @@ import type {
     SalesListResponse,
     ServiceResponse,
     UpdateDraftSaleJSON,
+    UpdateCustomerJSON,
     VoidSaleJSON,
     CreatePurchaseJSON,
     PurchaseListQuery,
@@ -100,6 +101,18 @@ export const createPosCustomer = async (
 ): Promise<ServiceResponse<CustomerResponse | null>> => {
     try {
         const response = await api.post("/pos/customers", data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updatePosCustomer = async (
+    customerId: string,
+    data: UpdateCustomerJSON,
+): Promise<ServiceResponse<CustomerResponse | null>> => {
+    try {
+        const response = await api.patch(`/pos/customers/${customerId}`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

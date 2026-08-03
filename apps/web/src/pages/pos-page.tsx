@@ -12,10 +12,10 @@ const PosPage = () => {
   const [searchParams] = useSearchParams();
   const initialPanel = searchParams.get("panel");
   const [headerSearch, setHeaderSearch] = useState("");
-  const [activePanelTab, setActivePanelTab] = useState<"products" | "bills" | "purchases">(
-    initialPanel === "bills" || initialPanel === "purchases" ? initialPanel : "products",
+  const [activePanelTab, setActivePanelTab] = useState<"products" | "bills" | "customers" | "purchases">(
+    initialPanel === "bills" || initialPanel === "customers" || initialPanel === "purchases" ? initialPanel : "products",
   );
-  const handlePanelTabChange = useCallback((tab: "products" | "bills" | "purchases") => {
+  const handlePanelTabChange = useCallback((tab: "products" | "bills" | "customers" | "purchases") => {
     setActivePanelTab(tab);
     setHeaderSearch("");
   }, []);
@@ -54,7 +54,9 @@ const PosPage = () => {
         activePanelTab === "products"
           ? "Search products..."
           : activePanelTab === "bills"
-            ? "Search bills or customers..."
+            ? "Search bills..."
+            : activePanelTab === "customers"
+              ? "Search customers..."
             : "Search purchases..."
       }
       onSearchChange={setHeaderSearch}
@@ -62,9 +64,12 @@ const PosPage = () => {
       <BillingPage
         mode="device"
         session={session}
+        initialPanelTab={activePanelTab}
         productSearch={activePanelTab === "products" ? headerSearch : ""}
         salesSearch={activePanelTab === "bills" ? headerSearch : ""}
         purchaseSearch={activePanelTab === "purchases" ? headerSearch : ""}
+        customerSearch={activePanelTab === "customers" ? headerSearch : ""}
+        onCustomerSearchChange={setHeaderSearch}
         onPanelTabChange={handlePanelTabChange}
       />
         </PosLayout>

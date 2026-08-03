@@ -27,7 +27,10 @@ export const catalogKeys = {
 export const billingKeys = {
     all: ["billing"] as const,
     organization: (organizationId: string) => [...billingKeys.all, "organization", organizationId] as const,
-    customers: (organizationId: string) => [...billingKeys.organization(organizationId), "customers"] as const,
+    customers: (organizationId: string, filters?: Record<string, unknown>) =>
+        [...billingKeys.organization(organizationId), "customers", filters ?? {}] as const,
+    customerLedger: (organizationId: string, customerId: string) =>
+        [...billingKeys.customers(organizationId), "ledger", customerId] as const,
     sales: (organizationId: string, storeId: string) => [...billingKeys.organization(organizationId), "sales", storeId] as const,
     sale: (organizationId: string, storeId: string, saleId: string) =>
         [...billingKeys.sales(organizationId, storeId), "detail", saleId] as const,

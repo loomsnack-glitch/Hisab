@@ -10,7 +10,6 @@ import {
     createPosDraftSale,
     replacePosSale,
     getCategories,
-    getCustomers,
     getOrganizationDetails,
     getPosCategories,
     getPosCustomers,
@@ -65,6 +64,12 @@ import { DatePicker } from "@repo/ui/components/date-picker";
 import { Input } from "@repo/ui/components/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@repo/ui/components/dropdown-menu";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
@@ -72,20 +77,22 @@ import {
     Calendar,
     Filter,
     LayoutGrid,
+    MoreHorizontal,
     Minus,
     Plus,
     ReceiptText,
-    Search,
     ShoppingBag,
     ShoppingCart,
     Store,
     Trash2,
     User,
+    Users,
     X,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
+import CustomerDirectory from "@/components/customers/customer-directory";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
@@ -231,19 +238,25 @@ const paymentMethodOptions: Array<{ value: PaymentMethod; label: string }> = [
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
+    initialPanelTab?: "products" | "bills" | "customers" | "purchases";
     productSearch?: string;
     salesSearch?: string;
     purchaseSearch?: string;
-    onPanelTabChange?: (tab: "products" | "bills" | "purchases") => void;
+    customerSearch?: string;
+    onPanelTabChange?: (tab: "products" | "bills" | "customers" | "purchases") => void;
+    onCustomerSearchChange?: (value: string) => void;
 };
 
 const BillingPage = ({
     mode = "admin",
     session = null,
+    initialPanelTab = "products",
     productSearch: productSearchProp,
     salesSearch: salesSearchProp,
     purchaseSearch: purchaseSearchProp,
+    customerSearch: customerSearchProp,
     onPanelTabChange,
+    onCustomerSearchChange,
 }: BillingPageProps) => {
     const queryClient = useQueryClient();
     const { organizationId: organizationIdParam = "" } = useParams();
@@ -279,9 +292,8 @@ const BillingPage = ({
     const [discountEditorOpen, setDiscountEditorOpen] = useState(false);
     const [historyFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
     const [leftPanelTab, setLeftPanelTab] = useState<"products" | "bills" | "purchases" | "customers">(
-        isDeviceMode ? "products" : "bills",
+        isDeviceMode ? initialPanelTab : "bills",
     );
-    const [customerDirectorySearch, setCustomerDirectorySearch] = useState("");
 
     const [sortBy, setSortBy] = useState<SaleSort>("newest");
     const [paymentMethodFilter, setPaymentMethodFilter] = useState<SalesPaymentMethodFilter>("all");
@@ -297,7 +309,6 @@ const BillingPage = ({
     const purchaseSearch = purchaseSearchProp ?? "";
     const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
-    const deferredCustomerDirectorySearch = useDeferredValue(customerDirectorySearch.trim().toLowerCase());
     const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
 
     const setSalesDateFilter = (filter: SalesDateFilter) => {
@@ -335,9 +346,9 @@ const BillingPage = ({
     });
 
     const customersQuery = useQuery({
-        queryKey: billingKeys.customers(organizationId),
-        queryFn: () => (isDeviceMode ? getPosCustomers({ limit: 100 }) : getCustomers(organizationId, { limit: 100 })),
-        enabled: Boolean(organizationId),
+        queryKey: billingKeys.customers(organizationId, { mode: "device" }),
+        queryFn: () => getPosCustomers({ limit: 100 }),
+        enabled: isDeviceMode && Boolean(organizationId),
     });
 
     const salesQuery = useQuery({
@@ -486,7 +497,7 @@ const BillingPage = ({
             return;
         }
 
-        if (leftPanelTab === "products" || leftPanelTab === "bills" || leftPanelTab === "purchases") {
+        if (leftPanelTab === "products" || leftPanelTab === "bills" || leftPanelTab === "customers" || leftPanelTab === "purchases") {
             onPanelTabChange(leftPanelTab);
         }
     }, [isDeviceMode, leftPanelTab, onPanelTabChange]);
@@ -558,17 +569,6 @@ const BillingPage = ({
         return matchesCategory && matchesSearch;
     });
     const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
-
-    const directoryCustomers = customers.filter((customer) => {
-        if (!deferredCustomerDirectorySearch) {
-            return true;
-        }
-
-        return (
-            customer.name.toLowerCase().includes(deferredCustomerDirectorySearch) ||
-            (customer.phone ?? "").toLowerCase().includes(deferredCustomerDirectorySearch)
-        );
-    });
 
     const filteredSales = sales
         .filter((sale) => {
@@ -1400,6 +1400,20 @@ const BillingPage = ({
                             </button>
                             <button
                                 type="button"
+                                onClick={() => setLeftPanelTab("customers")}
+                                className={cn(
+                                    "relative flex size-10 items-center justify-center rounded-xl transition-all",
+                                    leftPanelTab === "customers"
+                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                                aria-label="Customers"
+                                title="Customers"
+                            >
+                                <Users className="size-4" />
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => setLeftPanelTab("purchases")}
                                 className={cn(
                                     "relative flex size-10 items-center justify-center rounded-xl transition-all",
@@ -1428,25 +1442,6 @@ const BillingPage = ({
                                 title="Store bills"
                             >
                                 <ReceiptText className="size-4" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setLeftPanelTab("customers")}
-                                className={cn(
-                                    "relative flex size-10 items-center justify-center rounded-xl transition-all",
-                                    leftPanelTab === "customers"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                                aria-label="All customers"
-                                title="All customers"
-                            >
-                                <User className="size-4" />
-                                {customers.length > 0 && (
-                                    <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-foreground px-1 text-[9px] font-bold text-background">
-                                        {customers.length > 9 ? "9+" : customers.length}
-                                    </span>
-                                )}
                             </button>
                         </>
                     )}
@@ -1498,19 +1493,35 @@ const BillingPage = ({
                                     </span>
                                 )}
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => setLeftPanelTab("purchases")}
-                                className={cn(
-                                    "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-all duration-200",
-                                    leftPanelTab === "purchases"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                            >
-                                <ShoppingBag className="size-3.5" />
-                                Purchases
-                            </button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    render={
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            className={cn(
+                                                "h-8 flex-1 gap-1.5 rounded-md px-2.5 text-xs font-semibold",
+                                                leftPanelTab === "customers" || leftPanelTab === "purchases"
+                                                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
+                                                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                            )}
+                                        >
+                                            <MoreHorizontal className="size-3.5" />
+                                            More
+                                        </Button>
+                                    }
+                                />
+                                <DropdownMenuContent align="end" className="w-44">
+                                    <DropdownMenuItem onClick={() => setLeftPanelTab("customers")}>
+                                        <Users className="size-4" />
+                                        Customers
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setLeftPanelTab("purchases")}>
+                                        <ShoppingBag className="size-4" />
+                                        Purchases
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     ) : (
                         <div className="mb-5 flex gap-2 border-b border-border/40 pb-3 lg:hidden">
@@ -1526,24 +1537,6 @@ const BillingPage = ({
                             >
                                 <ReceiptText className="size-4" />
                                 Store bills
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setLeftPanelTab("customers")}
-                                className={cn(
-                                    "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
-                                    leftPanelTab === "customers"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                            >
-                                <User className="size-4" />
-                                All customers
-                                {customers.length > 0 && (
-                                    <span className="flex h-5 items-center justify-center rounded-full bg-background/25 px-1.5 text-[10px] font-bold text-foreground">
-                                        {customers.length}
-                                    </span>
-                                )}
                             </button>
                         </div>
                     )}
@@ -1684,77 +1677,20 @@ const BillingPage = ({
                                 </div>
                             </div>
                         </>
-                    ) : !canMutate && leftPanelTab === "customers" ? (
-                        <>
-                            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <p className="text-sm font-semibold text-foreground">Organization customers</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Shared across all stores in this organization.
-                                    </p>
-                                </div>
-                                <span className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
-                                    {directoryCustomers.length} shown
-                                </span>
-                            </div>
-
-                            <div className="relative mb-5 max-w-md">
-                                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    className="h-10 rounded-xl bg-background/80 pl-10 text-sm"
-                                    placeholder="Search by name or phone..."
-                                    value={customerDirectorySearch}
-                                    onChange={(event) => setCustomerDirectorySearch(event.target.value)}
-                                />
-                            </div>
-
-                            {customersQuery.isPending ? (
-                                <div className="flex min-h-[320px] items-center justify-center">
-                                    <Spinner className="size-6 text-primary" />
-                                </div>
-                            ) : directoryCustomers.length === 0 ? (
-                                <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40">
-                                    <User className="size-8 text-muted-foreground/50" />
-                                    <p className="mt-3 font-medium text-foreground">No customers found</p>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        {customerDirectorySearch
-                                            ? "Try a different search term."
-                                            : "Customers created at any store will appear here."}
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col gap-2">
-                                    {directoryCustomers.map((customer) => (
-                                        <div
-                                            key={customer.id}
-                                            className="flex items-center justify-between rounded-xl border border-border/40 bg-card/70 px-4 py-3"
-                                        >
-                                            <div className="flex min-w-0 items-center gap-3">
-                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                                    <User className="size-4" />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="truncate text-sm font-semibold text-foreground">
-                                                        {customer.name}
-                                                    </p>
-                                                    <p className="truncate text-xs text-muted-foreground">
-                                                        {customer.phone || "No phone on file"}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="shrink-0 text-right">
-                                                <p className="text-sm font-semibold text-foreground">
-                                                    {formatCurrency(customer.balance)}
-                                                </p>
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    {customer.isActive ? "Active" : "Inactive"}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </>
+                    ) : canMutate && leftPanelTab === "customers" ? (
+                        <CustomerDirectory
+                            mode="device"
+                            organizationId={organizationId}
+                            selectedCustomerId={selectedCustomerId}
+                            searchValue={customerSearchProp}
+                            onSearchChange={onCustomerSearchChange}
+                            onUseForOrder={(customer) => {
+                                setSelectedCustomerId(customer.id);
+                                setSelectedCustomerFallback(customer);
+                                setCustomerSearch(customer.phone || customer.name);
+                                onPanelTabChange?.("products");
+                            }}
+                        />
                     ) : (
                         <>
                             {/* Filters & Control Panel */}
@@ -2504,48 +2440,10 @@ const BillingPage = ({
 
                         <div className="grid gap-3 px-5 py-5">
                             <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                    {leftPanelTab === "customers" ? "Organization" : "Store"}
-                                </p>
-                                <p className="mt-2 text-lg font-semibold text-foreground">
-                                    {leftPanelTab === "customers"
-                                        ? (organization?.name ?? "Organization")
-                                        : (selectedStore?.name ?? "Select a store")}
-                                </p>
+                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Store</p>
+                                <p className="mt-2 text-lg font-semibold text-foreground">{selectedStore?.name ?? "Select a store"}</p>
                             </div>
-                            {leftPanelTab === "customers" ? (
-                                <>
-                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                            Total customers
-                                        </p>
-                                        <p className="mt-2 text-3xl font-semibold text-foreground">
-                                            {customers.length}
-                                        </p>
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            Shared across {organizationStores.length} store
-                                            {organizationStores.length !== 1 ? "s" : ""}.
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                            With balance due
-                                        </p>
-                                        <p className="mt-2 text-2xl font-semibold text-foreground">
-                                            {customers.filter((customer) => customer.balance > 0).length}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                            Active customers
-                                        </p>
-                                        <p className="mt-2 text-2xl font-semibold text-foreground">
-                                            {customers.filter((customer) => customer.isActive).length}
-                                        </p>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
+                            <>
                                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
                                         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                                             Bills in view
@@ -2578,8 +2476,7 @@ const BillingPage = ({
                                             }
                                         </p>
                                     </div>
-                                </>
-                            )}
+                            </>
                         </div>
                     </aside>
                 )}

@@ -16,6 +16,7 @@ import StoresPage from "@/pages/stores-page";
 import ProductsPage from "@/pages/products-page";
 import ProductsListPage from "@/pages/products-list-page";
 import CategoriesPage from "@/pages/categories-page";
+import CustomersPage from "@/pages/customers-page";
 import AddOnsPage from "@/pages/add-ons-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -107,6 +108,7 @@ const App = () => {
                                 <Route path="add-ons" element={<AddOnsPage />} />
                             </Route>
                             <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
+                            <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                             <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                         </Route>
                         <Route path="*" element={<Navigate to="/" replace />} />

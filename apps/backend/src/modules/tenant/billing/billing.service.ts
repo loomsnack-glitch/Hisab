@@ -2946,6 +2946,24 @@ export const createCustomerForDevice = async (
     return createCustomerInOrganization(session.organization.id, organization.createdBy, customerData);
 };
 
+export const updateCustomerForDevice = async (
+    session: DeviceSessionDTO,
+    customerId: string,
+    customerData: UpdateCustomerSVC,
+): Promise<ServiceResponse<CustomerResponse | null>> => {
+    const organization = await getOrganizationById(session.organization.id);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+
+    return updateCustomer(organization.createdBy, session.organization.id, customerId, customerData);
+};
+
 export const getSalesForDevice = async (
     session: DeviceSessionDTO,
     query: SalesListQuery,

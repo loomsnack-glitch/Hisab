@@ -10,6 +10,7 @@ import {
     CustomerListQuerySchema,
     SalesListQuerySchema,
     STATUS_CODES,
+    UpdateCustomerSchema,
     UpdateDraftSaleSchema,
     VoidSaleSchema,
     CreatePurchaseSchema,
@@ -125,6 +126,23 @@ router.post("/customers", validateSchema("json", CreateCustomerSchema), async (c
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "createCustomerForDevice", c, error);
+    }
+});
+
+router.patch("/customers/:customerId", validateSchema("json", UpdateCustomerSchema), async (c) => {
+    try {
+        const customerId = c.req.param("customerId");
+        const invalidCustomerId = validateUuidParam(customerId, "Invalid customer id");
+        if (invalidCustomerId) {
+            return c.json(invalidCustomerId, invalidCustomerId.code);
+        }
+
+        const authDevice = c.get("authDevice");
+        const body = c.req.valid("json");
+        const serviceResponse = await billingService.updateCustomerForDevice(authDevice, customerId, body);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "updateCustomerForDevice", c, error);
     }
 });
 

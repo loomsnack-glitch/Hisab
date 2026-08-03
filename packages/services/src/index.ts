@@ -16,6 +16,7 @@ export {
     getPosComboProduct,
     getPosComboProducts,
     getPosCustomers,
+    updatePosCustomer,
     getPosProductAddOnAttachments,
     getPosProducts,
     getPosSale,
