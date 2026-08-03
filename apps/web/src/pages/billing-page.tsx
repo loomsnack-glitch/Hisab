@@ -77,12 +77,14 @@ import {
     ArrowLeft,
     ArrowUpDown,
     Calendar,
+    ChevronDown,
     Filter,
     LayoutGrid,
     MoreHorizontal,
     Minus,
     Plus,
     ReceiptText,
+    Search,
     ShoppingBag,
     ShoppingCart,
     Store,
@@ -188,6 +190,7 @@ type SaleSort = "newest" | "oldest" | "highest" | "lowest";
 type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
 type SalesDateFilter = "all" | "today" | "yesterday" | "this-week" | "specific" | "custom";
 type BillingPanelTab = "products" | "bills" | "purchases" | "customers";
+type InvoiceAction = "print" | "whatsapp";
 
 const salesSortOptions: Array<{ value: SaleSort; label: string }> = [
     { value: "newest", label: "Newest" },
@@ -368,6 +371,7 @@ const BillingPage = ({
     const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
     const [discountInput, setDiscountInput] = useState("");
     const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
+    const [invoiceActions, setInvoiceActions] = useState<InvoiceAction[]>([]);
     const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
     const [replacingSaleId, setReplacingSaleId] = useState<string | null>(null);
     const [replaceConfirmationOpen, setReplaceConfirmationOpen] = useState(false);
@@ -776,6 +780,19 @@ const BillingPage = ({
         setDiscountMode(nextMode);
     };
 
+    const toggleInvoiceAction = (action: InvoiceAction) => {
+        setInvoiceActions((current) =>
+            current.includes(action) ? current.filter((item) => item !== action) : [...current, action],
+        );
+    };
+
+    const selectCustomer = (customer: CustomerDTO | null) => {
+        setSelectedCustomerId(customer?.id ?? "");
+        setSelectedCustomerFallback(customer);
+        setCustomerSearch("");
+        setCustomerPickerOpen(false);
+    };
+
     const invalidateBillingQueries = () => {
         queryClient.invalidateQueries({
             queryKey: billingKeys.organization(organizationId),
@@ -796,6 +813,7 @@ const BillingPage = ({
         setPartialPaymentAmount("");
         setDiscountInput("");
         setDiscountMode("amount");
+        setInvoiceActions([]);
         setDiscountEditorOpen(false);
         setPlaceOrderDialogOpen(false);
         setCustomerPickerOpen(false);
@@ -1066,7 +1084,7 @@ const BillingPage = ({
     });
 
     const completeSaleMutation = useMutation({
-        mutationFn: async ({ requestId }: { requestId: string }) => {
+        mutationFn: async ({ requestId }: { requestId: string; shouldPrint: boolean }) => {
             if (!selectedStoreId) {
                 throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
             }
@@ -1153,14 +1171,16 @@ const BillingPage = ({
 
             return commitResponse.data.sale;
         },
-        onSuccess: (sale) => {
+        onSuccess: (sale, variables) => {
             const wasReplacing = Boolean(replacingSaleId);
             completionRequestRef.current = null;
             invalidateBillingQueries();
             setPlaceOrderDialogOpen(false);
             setMobileCartOpen(false);
             resetComposer();
-            setReceiptToPrint(sale);
+            if (variables.shouldPrint) {
+                setReceiptToPrint(sale);
+            }
             toast.success(
                 wasReplacing
                     ? `Bill #${sale.saleNumber ?? ""} edited`
@@ -1173,6 +1193,7 @@ const BillingPage = ({
     });
 
     const submitCompleteSale = () => {
+        const shouldPrint = invoiceActions.includes("print");
         const fingerprint = JSON.stringify({
             ...buildDraftPayload(),
             payments: buildCommitPayload().payments,
@@ -1180,7 +1201,7 @@ const BillingPage = ({
         const existingRequest = completionRequestRef.current;
         const requestId = existingRequest?.fingerprint === fingerprint ? existingRequest.requestId : safeRandomUUID();
         completionRequestRef.current = { requestId, fingerprint };
-        completeSaleMutation.mutate({ requestId });
+        completeSaleMutation.mutate({ requestId, shouldPrint });
     };
 
     const handleCompleteSale = () => {
@@ -2510,7 +2531,10 @@ const BillingPage = ({
                                                 saveDraftMutation.isPending ||
                                                 items.length === 0
                                             }
-                                            onClick={() => setPlaceOrderDialogOpen(true)}
+                                            onClick={() => {
+                                                setDiscountEditorOpen(true);
+                                                setPlaceOrderDialogOpen(true);
+                                            }}
                                         >
                                             {completeSaleMutation.isPending ? "Completing..." : "Place Order"}
                                         </Button>
@@ -2606,143 +2630,128 @@ const BillingPage = ({
                     </DialogHeader>
 
                     <div className="min-h-0 space-y-3 overflow-y-auto pt-1 pb-0 pr-1">
-                        <section className="space-y-3 rounded-2xl border border-border/60 bg-card/60 p-3">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex min-w-0 items-center gap-2">
-                                    <User className="size-4 shrink-0 text-muted-foreground" />
-                                    <div className="min-w-0">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                            Customer
-                                        </p>
-                                        <p className="truncate text-sm font-medium text-foreground">
-                                            {selectedCustomer?.name || "Walk-in"}
-                                        </p>
-                                        {selectedCustomer?.phone ? (
-                                            <p className="text-[10px] text-muted-foreground">
-                                                {selectedCustomer.phone}
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2">
-                                    {!selectedCustomer ? (
-                                        <span className="hidden text-[11px] font-medium text-muted-foreground sm:block">
-                                            Cash sale
-                                        </span>
-                                    ) : null}
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="h-8 shrink-0 rounded-lg px-2.5 text-[11px]"
-                                        onClick={() => {
-                                            setCustomerSearch("");
-                                            setCustomerPickerOpen((open) => !open);
-                                        }}
-                                    >
-                                        {customerPickerOpen ? "Done" : "Change"}
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {customerPickerOpen ? (
-                                <div className="space-y-2 border-t border-border/50 pt-3">
-                                    {selectedCustomer ? (
-                                        <button
+                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
+                            <div className="flex items-center gap-2">
+                                <User className="size-4 shrink-0 text-muted-foreground" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                        Customer (optional)
+                                    </p>
+                                    <div>
+                                        <Button
                                             type="button"
-                                            className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 text-left text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                                            variant="outline"
+                                            role="combobox"
+                                            aria-expanded={customerPickerOpen}
                                             onClick={() => {
-                                                setSelectedCustomerId("");
-                                                setSelectedCustomerFallback(null);
                                                 setCustomerSearch("");
-                                                setCustomerPickerOpen(false);
+                                                setCustomerPickerOpen((open) => !open);
                                             }}
+                                            className="mt-1 h-9 w-full min-w-0 justify-between rounded-lg bg-background/70 px-2.5 text-left text-xs font-medium"
                                         >
-                                            <User className="size-3.5" />
-                                            <span>Continue as Walk-in</span>
-                                        </button>
-                                    ) : null}
-                                    <div className="relative">
-                                        <Input
-                                            className="h-9 rounded-xl bg-background/70 pr-9 text-xs"
-                                            placeholder="Search by name or phone"
-                                            value={customerSearch}
-                                            onChange={(event) => {
-                                                setCustomerSearch(event.target.value);
-                                                if (selectedCustomerId) {
-                                                    setSelectedCustomerId("");
-                                                    setSelectedCustomerFallback(null);
-                                                }
-                                            }}
-                                            aria-label="Search customer"
-                                        />
-                                        {customerSearch ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setCustomerSearch("");
-                                                    setSelectedCustomerId("");
-                                                    setSelectedCustomerFallback(null);
-                                                }}
-                                                className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                                                aria-label="Clear customer"
-                                            >
-                                                <X className="size-3.5" />
-                                            </button>
+                                            <span className="min-w-0 truncate">
+                                                {selectedCustomer?.name || "Walk-in customer"}
+                                            </span>
+                                            <ChevronDown
+                                                className={cn(
+                                                    "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                                                    customerPickerOpen && "rotate-180",
+                                                )}
+                                            />
+                                        </Button>
+                                        {customerPickerOpen ? (
+                                            <div className="mt-2 space-y-2 rounded-xl border border-border/60 bg-background/90 p-2 shadow-inner">
+                                                <div className="relative">
+                                                    <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                                                    <Input
+                                                        autoFocus
+                                                        className="h-9 rounded-lg bg-muted/30 pl-8 text-xs"
+                                                        placeholder="Search name or phone"
+                                                        value={customerSearch}
+                                                        onChange={(event) => setCustomerSearch(event.target.value)}
+                                                        aria-label="Search customer"
+                                                    />
+                                                </div>
+                                                <div className="max-h-56 space-y-1 overflow-y-auto">
+                                                    <button
+                                                        type="button"
+                                                        aria-pressed={!selectedCustomer}
+                                                        onClick={() => selectCustomer(null)}
+                                                        className={cn(
+                                                            "flex min-h-9 w-full items-center justify-between rounded-lg px-2.5 text-left text-xs font-medium transition-colors",
+                                                            !selectedCustomer
+                                                                ? "bg-primary/10 text-primary"
+                                                                : "text-foreground hover:bg-muted",
+                                                        )}
+                                                    >
+                                                        <span>Walk-in customer</span>
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            {!selectedCustomer ? "Selected" : "No account"}
+                                                        </span>
+                                                    </button>
+
+                                                {filteredCustomers.length > 0 ? (
+                                                    <>
+                                                        <p className="px-2.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                                            {customerSearch ? "Customers" : "Recent customers"}
+                                                        </p>
+                                                        {filteredCustomers.map((customer) => (
+                                                            <button
+                                                                key={customer.id}
+                                                                type="button"
+                                                                className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
+                                                                onClick={() => selectCustomer(customer)}
+                                                            >
+                                                                <User className="size-3.5 shrink-0" />
+                                                                <span className="min-w-0 flex-1 truncate font-medium">
+                                                                    {customer.name}
+                                                                </span>
+                                                                <span className="shrink-0 text-[10px] opacity-60">
+                                                                    {customer.phone || ""}
+                                                                </span>
+                                                            </button>
+                                                        ))}
+                                                    </>
+                                                ) : (
+                                                    <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">
+                                                        No customers found
+                                                    </p>
+                                                )}
+
+                                                <CustomerQuickCreateDialog
+                                                    organizationId={organizationId}
+                                                    mode={mode}
+                                                    suggestedName={customerSearchLooksLikePhone ? "" : customerSearch}
+                                                    suggestedPhone={customerSearchLooksLikePhone ? customerSearch : ""}
+                                                    onCreated={(customer) => selectCustomer(customer)}
+                                                    trigger={
+                                                        <button
+                                                            type="button"
+                                                            className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                                                        >
+                                                            <Plus className="size-3.5" />
+                                                            <span>Create new customer</span>
+                                                        </button>
+                                                    }
+                                                />
+                                                </div>
+                                            </div>
                                         ) : null}
                                     </div>
-
-                                    {customerSearch && !selectedCustomer && filteredCustomers.length > 0 ? (
-                                        <div className="space-y-1">
-                                            {filteredCustomers.map((customer) => (
-                                                <button
-                                                    key={customer.id}
-                                                    type="button"
-                                                    className="flex min-h-9 w-full items-center gap-2 rounded-lg bg-background/60 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
-                                                    onClick={() => {
-                                                        setSelectedCustomerId(customer.id);
-                                                        setSelectedCustomerFallback(null);
-                                                        setCustomerSearch(customer.phone || customer.name);
-                                                        setCustomerPickerOpen(false);
-                                                    }}
-                                                >
-                                                    <User className="size-3.5 shrink-0" />
-                                                    <span className="font-medium">{customer.name}</span>
-                                                    <span className="ml-auto text-[10px] opacity-60">
-                                                        {customer.phone || ""}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    ) : null}
-
-                                    {customerSearch && !selectedCustomer ? (
-                                        <CustomerQuickCreateDialog
-                                            organizationId={organizationId}
-                                            mode={mode}
-                                            suggestedName={customerSearchLooksLikePhone ? "" : customerSearch}
-                                            suggestedPhone={customerSearchLooksLikePhone ? customerSearch : ""}
-                                            onCreated={(customer) => {
-                                                setSelectedCustomerId(customer.id);
-                                                setSelectedCustomerFallback(customer);
-                                                setCustomerSearch(customer.phone || customer.name);
-                                                setCustomerPickerOpen(false);
-                                            }}
-                                            trigger={
-                                                <button
-                                                    type="button"
-                                                    className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-3 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                                                >
-                                                    <Plus className="size-3.5" />
-                                                    <span>
-                                                        {filteredCustomers.length > 0
-                                                            ? "Create a different customer"
-                                                            : "Create new customer"}
-                                                    </span>
-                                                </button>
-                                            }
-                                        />
-                                    ) : null}
                                 </div>
+                                {selectedCustomer ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => selectCustomer(null)}
+                                        className="mt-4 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        aria-label="Use walk-in customer"
+                                    >
+                                        <X className="size-3.5" />
+                                    </button>
+                                ) : null}
+                            </div>
+                            {selectedCustomer?.phone ? (
+                                <p className="pl-6 text-[10px] text-muted-foreground">{selectedCustomer.phone}</p>
                             ) : null}
                         </section>
 
@@ -2828,7 +2837,7 @@ const BillingPage = ({
                             ) : null}
                         </section>
 
-                        <section className="space-y-3 rounded-2xl border border-border/60 bg-card/60 p-4">
+                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
                             <div className="flex items-center justify-between gap-3">
                                 <p className="text-sm font-semibold text-foreground">Settlement</p>
                                 <p className="text-xs text-muted-foreground">
@@ -2839,7 +2848,7 @@ const BillingPage = ({
                                           : "Pay later"}
                                 </p>
                             </div>
-                            <div className="grid grid-cols-3 gap-1.5">
+                            <div className="grid grid-cols-3 gap-1">
                                         {settlementOptions.map((option) => (
                                             <button
                                                 key={option.value}
@@ -2847,7 +2856,7 @@ const BillingPage = ({
                                                 onClick={() => setSettlementMode(option.value)}
                                                 aria-pressed={settlementMode === option.value}
                                                 className={cn(
-                                                    "min-h-9 rounded-lg px-2 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                                    "h-8 min-h-8 rounded-lg px-1.5 text-[11px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                                                     settlementMode === option.value
                                                         ? `${option.activeClassName} shadow-md`
                                                         : "border border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
@@ -2861,7 +2870,7 @@ const BillingPage = ({
                                     {settlementMode !== "due" ? (
                                         <div className="space-y-2 border-t border-border/50 pt-2">
                                             <p className="text-xs font-semibold text-foreground">Payment method</p>
-                                            <div className="grid grid-cols-3 gap-1.5">
+                                            <div className="grid grid-cols-3 gap-1">
                                                 {paymentMethodOptions.map((option) => (
                                                     <button
                                                         key={option.value}
@@ -2869,7 +2878,7 @@ const BillingPage = ({
                                                         onClick={() => setSelectedPaymentMethod(option.value)}
                                                         aria-pressed={selectedPaymentMethod === option.value}
                                                         className={cn(
-                                                            "min-h-9 rounded-lg px-2 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                                            "h-8 min-h-8 rounded-lg px-1.5 text-[11px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                                                             selectedPaymentMethod === option.value
                                                                 ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
                                                                 : "border border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
@@ -2888,7 +2897,7 @@ const BillingPage = ({
                                             min="0"
                                             step="0.01"
                                             inputMode="decimal"
-                                            className="h-9 rounded-lg bg-background/60 text-sm"
+                                            className="h-8 rounded-lg bg-background/60 text-sm"
                                             placeholder="Amount received"
                                             value={partialPaymentAmount}
                                             onChange={(event) => setPartialPaymentAmount(event.target.value)}
@@ -2918,6 +2927,38 @@ const BillingPage = ({
                                             amount.
                                         </p>
                                     ) : null}
+                        </section>
+
+                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-foreground">Invoice options</p>
+                                <p className="text-[11px] text-muted-foreground">After placing order</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    disabled={completeSaleMutation.isPending}
+                                    aria-pressed={invoiceActions.includes("print")}
+                                    onClick={() => toggleInvoiceAction("print")}
+                                    className={cn(
+                                        "h-8 rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                        invoiceActions.includes("print")
+                                            ? "border-primary bg-primary text-primary-foreground"
+                                            : "border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
+                                    )}
+                                >
+                                    Print invoice
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled
+                                    aria-disabled="true"
+                                    title="WhatsApp invoice is coming soon"
+                                    className="h-8 rounded-lg border border-border/50 bg-muted/40 px-2 text-xs font-semibold text-muted-foreground/60"
+                                >
+                                    WhatsApp
+                                </button>
+                            </div>
                         </section>
 
                         <aside className="space-y-3">
