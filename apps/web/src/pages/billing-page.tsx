@@ -1358,7 +1358,7 @@ const BillingPage = ({
             ) : null}
 
             {/* ─── Main Two-Panel Layout ─── */}
-            <div className="flex flex-1 flex-col lg:flex-row">
+            <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
                 <nav
                     aria-label="Billing workspace navigation"
                     className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-border/40 bg-card/40 py-3 lg:flex"
@@ -1454,7 +1454,7 @@ const BillingPage = ({
 
                 {/* ─── LEFT PANEL: Product Grid ─── */}
                 <div
-                    className="flex-1 overflow-y-auto p-4 pb-24 lg:min-w-0 lg:pb-4"
+                    className="min-h-0 flex-1 overflow-y-auto p-4 pb-24 lg:min-w-0 lg:pb-4"
                     style={{ maxHeight: panelMaxHeight }}
                 >
                     {/* Tab Switcher */}
@@ -2158,7 +2158,7 @@ const BillingPage = ({
 
                             <aside
                                 className={cn(
-                                    "flex w-full flex-col border-t border-border/50 bg-card/95 backdrop-blur-sm lg:static lg:w-[320px] lg:border-t-0 lg:border-l",
+                                    "flex min-h-0 w-full flex-col overflow-hidden border-t border-border/50 bg-card/95 backdrop-blur-sm lg:static lg:h-full lg:w-[320px] lg:border-t-0 lg:border-l",
                                     mobileCartOpen
                                         ? "max-lg:fixed max-lg:inset-x-0 max-lg:top-[calc(var(--pos-header-height)+env(safe-area-inset-top,0px))] max-lg:bottom-0 max-lg:z-40 max-lg:max-h-none max-lg:overflow-hidden max-lg:overscroll-contain"
                                         : "hidden lg:flex",
@@ -2171,7 +2171,7 @@ const BillingPage = ({
                                 </div>
 
                                 {/* Order Header */}
-                                <div className="border-b border-border/40 px-2 py-1">
+                                <div className="shrink-0 border-b border-border/40 px-2 py-1">
                                     <div className="flex items-center justify-between">
                                         <div className="flex min-w-0 items-baseline gap-1.5">
                                             <h2 className="text-sm font-bold text-foreground">Current Order</h2>
@@ -2204,7 +2204,7 @@ const BillingPage = ({
                                 </div>
 
                                 {/* Cart Items - Scrollable */}
-                                <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-1.5">
+                                <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-2 py-1.5">
                                     {items.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-10 text-center">
                                             <ShoppingCart className="size-10 text-muted-foreground/30" />
@@ -2403,7 +2403,7 @@ const BillingPage = ({
                                 </div>
 
                                 {/* ─── Compact Checkout Summary ─── */}
-                                <div className="border-t border-border/40 bg-card px-3 py-2.5 max-lg:pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+                                <div className="shrink-0 border-t border-border/40 bg-card px-3 py-2.5 max-lg:pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
                                     <div className="mb-2 space-y-0.5 rounded-lg bg-background/40 px-2.5 py-2 text-[11px]">
                                         <div className="flex justify-between text-muted-foreground">
                                             <span>Subtotal</span>
