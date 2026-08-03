@@ -25,8 +25,25 @@ type Props = {
     onConfirm: (combo: ComboProductResponse, selections: ComboDialogSelection[]) => void;
 };
 
+const getDefaultComboQuantities = (combo: ComboProductResponse | null): Record<string, number> => {
+    if (!combo) return {};
+
+    return Object.fromEntries(
+        combo.choiceGroups.flatMap((group) => {
+            if (group.minSelections !== 1 || group.maxSelections !== 1 || group.options.length !== 1) {
+                return [];
+            }
+
+            const [option] = group.options;
+            if (!option || option.maxQuantity < 1) return [];
+
+            return [[`${group.id}:${option.optionProductId}`, 1]];
+        }),
+    );
+};
+
 const ConfigureComboDialog = ({ open, onOpenChange, combo, attachmentsByProductId, onConfirm }: Props) => {
-    const [quantities, setQuantities] = useState<Record<string, number>>({});
+    const [quantities, setQuantities] = useState<Record<string, number>>(() => getDefaultComboQuantities(combo));
     const [addOnQuantities, setAddOnQuantities] = useState<Record<string, number>>({});
 
     const selections = useMemo<ComboDialogSelection[]>(() => combo?.choiceGroups.flatMap((group) => group.options.flatMap((option) => {

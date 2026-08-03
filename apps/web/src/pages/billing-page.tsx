@@ -3035,7 +3035,7 @@ const BillingPage = ({
             />
 
             <ConfigureComboDialog
-                key={configureComboProductId ?? "combo-dialog"}
+                key={`${configureComboProductId ?? "combo-dialog"}-${configureCombo ? "loaded" : "loading"}`}
                 open={Boolean(configureComboProductId && !comboUnavailable)}
                 onOpenChange={(open) => {
                     if (!open) setConfigureComboProductId(null);
