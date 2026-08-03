@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { deviceLogout } from "@repo/services";
 import type { DeviceSessionDTO } from "@repo/types";
-import logo from "@repo/assets/logo.png";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Expand, LogOut, Minimize, Search, X } from "lucide-react";
@@ -14,6 +13,7 @@ import DisplayScaleControl from "@/components/display-scale-control";
 import { formatLongDate } from "@/lib/format";
 import { deviceAuthKeys } from "@/lib/query-keys";
 import { useFullscreen } from "@/hooks/use-fullscreen";
+import WorkspaceBrand from "@/components/workspace/workspace-brand";
 
 type PosLayoutProps = {
     children: ReactNode;
@@ -63,29 +63,12 @@ const PosLayout = ({
     return (
     <div className="min-h-dvh bg-background text-foreground [--pos-header-height:6.5rem] sm:[--pos-header-height:3.5rem]">
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.14),_transparent_28%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.1),_transparent_28%)]" />
             </div>
 
       <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-2 border-b border-border/50 bg-background/90 px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-2 backdrop-blur-xl sm:flex-nowrap sm:px-6">
-                <Link
-                    to="/pos"
-                    className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90"
-                >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-primary to-primary/80 shadow-sm shadow-primary/20">
-            <img
-              src={logo}
-              alt="Ganatri"
-              className="h-5 w-5 object-contain brightness-0 invert"
-            />
-                    </div>
-                    <div className="min-w-0 flex flex-col justify-center">
-                        <p className="truncate text-[9px] font-bold uppercase tracking-[0.25em] text-primary leading-tight">
-                            Loomsnack
-                        </p>
-                        <p className="truncate font-display text-[15px] font-semibold tracking-tight text-foreground leading-tight mt-0.5">
-                            Ganatri
-                        </p>
-                    </div>
+                <Link to="/pos" className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90">
+                    <WorkspaceBrand workspace="pos" />
                 </Link>
 
         <div className="order-3 flex w-full min-w-0 items-center sm:order-none sm:flex-1 sm:px-4 lg:max-w-xl">

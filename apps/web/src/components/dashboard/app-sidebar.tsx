@@ -14,7 +14,6 @@ import {
     ShoppingBag,
     Users,
 } from "lucide-react";
-import logo from "@repo/assets/logo.png";
 import { getOrganizations } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
@@ -22,6 +21,7 @@ import { cn } from "@repo/ui/lib/utils";
 
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
+import WorkspaceBrand from "@/components/workspace/workspace-brand";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
@@ -260,19 +260,7 @@ const AppSidebar = ({
                             isCollapsed && !isMobile ? "justify-center" : "gap-2.5",
                         )}
                     >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-primary to-primary/80 shadow-sm shadow-primary/20">
-                            <img src={logo} alt="Ganatri" className="h-5 w-5 object-contain brightness-0 invert" />
-                        </div>
-                        {!isCollapsed || isMobile ? (
-                            <div className="min-w-0 flex flex-col justify-center">
-                                <p className="truncate text-[9px] font-bold uppercase tracking-[0.25em] text-primary leading-tight">
-                                    Loomsnack
-                                </p>
-                                <p className="truncate font-display text-[15px] font-semibold tracking-tight text-foreground leading-tight mt-0.5">
-                                    Ganatri
-                                </p>
-                            </div>
-                        ) : null}
+                        <WorkspaceBrand workspace="admin" showLabel={!isCollapsed || isMobile} />
                     </Link>
 
                     {!isMobile && !isCollapsed ? (

@@ -121,6 +121,76 @@ html {
   --shadow-2xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.25);
 }
 
+/* Workspace accents stay scoped so Admin and POS can share the same UI primitives. */
+[data-workspace="admin"] {
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --ring: #2563eb;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-ring: #2563eb;
+}
+
+[data-workspace="pos"] {
+  --background: #faf7ff;
+  --card: #ffffff;
+  --card-foreground: #211537;
+  --popover: #ffffff;
+  --popover-foreground: #211537;
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --muted: #f5f3ff;
+  --muted-foreground: #71627e;
+  --accent: #ede9fe;
+  --accent-foreground: #4c1d95;
+  --border: #e5def2;
+  --input: #e5def2;
+  --ring: #6d28d9;
+  --sidebar: #f5f3ff;
+  --sidebar-foreground: #211537;
+  --sidebar-primary: #6d28d9;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ede9fe;
+  --sidebar-accent-foreground: #4c1d95;
+  --sidebar-border: #e5def2;
+  --sidebar-ring: #6d28d9;
+}
+
+.dark [data-workspace="admin"] {
+  --primary: #60a5fa;
+  --primary-foreground: #0f172a;
+  --ring: #60a5fa;
+  --sidebar-primary: #60a5fa;
+  --sidebar-primary-foreground: #0f172a;
+  --sidebar-ring: #60a5fa;
+}
+
+.dark [data-workspace="pos"] {
+  --background: #14111f;
+  --foreground: #f5f3ff;
+  --card: #201a2d;
+  --card-foreground: #f5f3ff;
+  --popover: #201a2d;
+  --popover-foreground: #f5f3ff;
+  --primary: #a78bfa;
+  --primary-foreground: #1e1037;
+  --muted: #2c2340;
+  --muted-foreground: #b7accd;
+  --accent: #3b2b5d;
+  --accent-foreground: #ede9fe;
+  --border: #3b3151;
+  --input: #3b3151;
+  --ring: #a78bfa;
+  --sidebar: #191426;
+  --sidebar-foreground: #f5f3ff;
+  --sidebar-primary: #a78bfa;
+  --sidebar-primary-foreground: #1e1037;
+  --sidebar-accent: #3b2b5d;
+  --sidebar-accent-foreground: #ede9fe;
+  --sidebar-border: #3b3151;
+  --sidebar-ring: #a78bfa;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

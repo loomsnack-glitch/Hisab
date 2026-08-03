@@ -111,11 +111,11 @@ const PosLoginPage = () => {
             title="POS login"
             subtitle="Enter your business username, device username, and device secret to start a POS session."
         >
-            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 flex items-center justify-between gap-4 text-xs">
+            <div className="mb-3 rounded-xl border border-violet-500/20 bg-violet-500/10 px-3 py-2 flex items-center justify-between gap-4 text-xs">
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <span>Want to manage the store instead?</span>
                 </div>
-                <Link to="/login" className="font-semibold text-amber-600 dark:text-amber-400 hover:underline shrink-0">
+                <Link to="/login" className="font-semibold text-violet-700 dark:text-violet-300 hover:underline shrink-0">
                     Admin login &rarr;
                 </Link>
             </div>

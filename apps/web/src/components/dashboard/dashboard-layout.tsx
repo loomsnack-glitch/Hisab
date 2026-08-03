@@ -28,6 +28,7 @@ import CreateOrganizationDialog from "@/components/organizations/create-organiza
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import { authKeys, organizationKeys } from "@/lib/query-keys";
+import WorkspaceBrand from "@/components/workspace/workspace-brand";
 
 const getInitials = (firstName?: string, lastName?: string) => {
     return `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toUpperCase() || "HS";
@@ -243,6 +244,13 @@ const DashboardLayout = () => {
                                     />
                                 </SheetContent>
                             </Sheet>
+
+                            <Link
+                                to="/organizations"
+                                className="hidden min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90 xl:flex"
+                            >
+                                <WorkspaceBrand workspace="admin" />
+                            </Link>
 
                             <DropdownMenu>
                                 <DropdownMenuTrigger
