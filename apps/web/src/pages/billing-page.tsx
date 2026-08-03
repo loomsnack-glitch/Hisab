@@ -37,6 +37,8 @@ import type {
     ProductResponseDTO,
     ComboProductResponse,
     CustomerDTO,
+    SalesListQuery,
+    SalesListSummary,
     SaleDetailDTO,
     SaleSummaryDTO,
     UpdateDraftSaleJSON,
@@ -184,7 +186,8 @@ const isSameComposerConfiguration = (
 type SettlementMode = "full" | "partial" | "due";
 type SaleSort = "newest" | "oldest" | "highest" | "lowest";
 type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
-type SalesDateFilter = "all" | "today" | "yesterday" | "this-week" | "custom";
+type SalesDateFilter = "all" | "today" | "yesterday" | "this-week" | "specific" | "custom";
+type BillingPanelTab = "products" | "bills" | "purchases" | "customers";
 
 const salesSortOptions: Array<{ value: SaleSort; label: string }> = [
     { value: "newest", label: "Newest" },
@@ -208,8 +211,88 @@ const salesDateFilterOptions: Array<{ value: SalesDateFilter; label: string }> =
     { value: "today", label: "Today" },
     { value: "yesterday", label: "Yesterday" },
     { value: "this-week", label: "This Week" },
-    { value: "custom", label: "Custom" },
+    { value: "specific", label: "Specific date" },
+    { value: "custom", label: "Date range" },
 ];
+
+const startOfLocalDay = (value: Date) =>
+    new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
+const nextLocalDay = (value: Date) => {
+    const next = startOfLocalDay(value);
+    next.setDate(next.getDate() + 1);
+    return next;
+};
+
+const getSalesDateBounds = (
+    filter: SalesDateFilter,
+    specificDate: Date | null,
+    customFromDate: Date | null,
+    customToDate: Date | null,
+) => {
+    const today = startOfLocalDay(new Date());
+
+    if (filter === "today") {
+        return { from: today, to: nextLocalDay(today) };
+    }
+
+    if (filter === "yesterday") {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return { from: yesterday, to: today };
+    }
+
+    if (filter === "this-week") {
+        const weekStart = new Date(today);
+        weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+        return { from: weekStart, to: nextLocalDay(today) };
+    }
+
+    if (filter === "specific" && specificDate) {
+        const from = startOfLocalDay(specificDate);
+        return { from, to: nextLocalDay(from) };
+    }
+
+    if (filter === "custom") {
+        return {
+            from: customFromDate ? startOfLocalDay(customFromDate) : null,
+            to: customToDate ? nextLocalDay(customToDate) : null,
+        };
+    }
+
+    return { from: null, to: null };
+};
+
+const SalesSummaryBar = ({ summary }: { summary: SalesListSummary | null }) => {
+    if (!summary) return null;
+
+    return (
+        <div className="mb-4 grid grid-cols-4 gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-3.5 text-xs sm:gap-4 sm:px-4">
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Sales</p>
+                <p className="whitespace-nowrap text-sm font-semibold sm:text-base">{summary.completedCount}</p>
+            </div>
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+                <p className="whitespace-nowrap text-sm font-bold text-primary sm:text-base">
+                    {formatCurrency(summary.salesTotal)}
+                </p>
+            </div>
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Collected</p>
+                <p className="whitespace-nowrap text-sm font-semibold text-emerald-600 dark:text-emerald-400 sm:text-base">
+                    {formatCurrency(summary.collectedTotal)}
+                </p>
+            </div>
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Due</p>
+                <p className="whitespace-nowrap text-sm font-semibold text-amber-600 dark:text-amber-400 sm:text-base">
+                    {formatCurrency(summary.dueTotal)}
+                </p>
+            </div>
+        </div>
+    );
+};
 
 const settlementOptions: Array<{
     value: SettlementMode;
@@ -291,13 +374,14 @@ const BillingPage = ({
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
     const [discountEditorOpen, setDiscountEditorOpen] = useState(false);
     const [historyFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
-    const [leftPanelTab, setLeftPanelTab] = useState<"products" | "bills" | "purchases" | "customers">(
+    const [leftPanelTab, setLeftPanelTab] = useState<BillingPanelTab>(
         isDeviceMode ? initialPanelTab : "bills",
     );
 
     const [sortBy, setSortBy] = useState<SaleSort>("newest");
     const [paymentMethodFilter, setPaymentMethodFilter] = useState<SalesPaymentMethodFilter>("all");
-    const [dateFilter, setDateFilter] = useState<SalesDateFilter>("all");
+    const [dateFilter, setDateFilter] = useState<SalesDateFilter>("today");
+    const [specificDate, setSpecificDate] = useState<Date | null>(new Date());
     const [customFromDate, setCustomFromDate] = useState<Date | null>(null);
     const [customToDate, setCustomToDate] = useState<Date | null>(null);
     const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
@@ -313,10 +397,23 @@ const BillingPage = ({
 
     const setSalesDateFilter = (filter: SalesDateFilter) => {
         setDateFilter(filter);
+        if (filter === "specific" && !specificDate) {
+            setSpecificDate(new Date());
+        }
+        if (filter !== "specific") {
+            setSpecificDate(null);
+        }
         if (filter !== "custom") {
             setCustomFromDate(null);
             setCustomToDate(null);
         }
+    };
+
+    const changePanelTab = (tab: BillingPanelTab) => {
+        if (tab === "bills" && leftPanelTab !== "bills") {
+            setSalesDateFilter("today");
+        }
+        setLeftPanelTab(tab);
     };
 
     const selectedStoreId = isDeviceMode ? (session?.store.id ?? "") : searchParams.get("storeId") || "";
@@ -345,6 +442,21 @@ const BillingPage = ({
         enabled: isDeviceMode && Boolean(organizationId),
     });
 
+    const salesDateBounds = useMemo(
+        () => getSalesDateBounds(dateFilter, specificDate, customFromDate, customToDate),
+        [dateFilter, specificDate, customFromDate, customToDate],
+    );
+    const dateRangeNeedsInput = dateFilter === "custom" && !customFromDate && !customToDate;
+    const salesQueryParams = useMemo<SalesListQuery>(() => {
+        return {
+            limit: 40,
+            search: deferredSalesSearch || undefined,
+            paymentMethod: paymentMethodFilter === "all" ? undefined : paymentMethodFilter,
+            createdFrom: salesDateBounds.from?.toISOString(),
+            createdTo: salesDateBounds.to?.toISOString(),
+        };
+    }, [deferredSalesSearch, paymentMethodFilter, salesDateBounds.from, salesDateBounds.to]);
+
     const customersQuery = useQuery({
         queryKey: billingKeys.customers(organizationId, { mode: "device" }),
         queryFn: () => getPosCustomers({ limit: 100 }),
@@ -352,10 +464,12 @@ const BillingPage = ({
     });
 
     const salesQuery = useQuery({
-        queryKey: billingKeys.sales(organizationId, selectedStoreId),
+        queryKey: billingKeys.sales(organizationId, selectedStoreId, salesQueryParams),
         queryFn: () =>
-            isDeviceMode ? getPosSales({ limit: 40 }) : getSales(organizationId, selectedStoreId, { limit: 40 }),
-        enabled: Boolean(organizationId && selectedStoreId),
+            isDeviceMode
+                ? getPosSales(salesQueryParams)
+                : getSales(organizationId, selectedStoreId, salesQueryParams),
+        enabled: Boolean(organizationId && selectedStoreId) && !dateRangeNeedsInput,
     });
 
     const organization = isDeviceMode
@@ -443,6 +557,8 @@ const BillingPage = ({
     );
     const customers = customersQuery.data?.status === "success" ? (customersQuery.data.data?.customers ?? []) : [];
     const sales = salesQuery.data?.status === "success" ? (salesQuery.data.data?.sales ?? []) : [];
+    const salesSummary =
+        !dateRangeNeedsInput && salesQuery.data?.status === "success" ? salesQuery.data.data?.summary ?? null : null;
     const selectedCustomer =
         customers.find((customer) => customer.id === selectedCustomerId) ?? selectedCustomerFallback;
     const customerSearchLooksLikePhone = /^[+\d\s()-]+$/.test(customerSearch);
@@ -572,63 +688,18 @@ const BillingPage = ({
 
     const filteredSales = sales
         .filter((sale) => {
-            const matchesHistoryFilter = (() => {
-                switch (historyFilter) {
-                    case "draft":
-                        return sale.status === "draft";
-                    case "open":
-                        return sale.status === "completed" && sale.paymentStatus !== "paid";
-                    case "paid":
-                        return sale.paymentStatus === "paid";
-                    case "voided":
-                        return sale.status === "voided";
-                    default:
-                        return true;
-                }
-            })();
-
-            const customerName = sale.customer?.name?.toLowerCase() ?? "";
-            const customerPhone = sale.customer?.phone?.toLowerCase() ?? "";
-            const saleNumberText = sale.saleNumber ? String(sale.saleNumber) : "";
-            const matchesSearch =
-                !deferredSalesSearch ||
-                customerName.includes(deferredSalesSearch) ||
-                customerPhone.includes(deferredSalesSearch) ||
-                saleNumberText.includes(deferredSalesSearch);
-
-            const matchesPaymentMethod = (() => {
-                if (paymentMethodFilter === "all") return true;
-                return (sale.paymentMethods ?? "").toLowerCase().includes(paymentMethodFilter);
-            })();
-
-            const matchesDate = (() => {
-                if (dateFilter === "all") return true;
-                const created = new Date(sale.createdAt);
-                const now = new Date();
-                const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                const startOfYesterday = new Date(startOfToday);
-                startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-                const startOfThisWeek = new Date(startOfToday);
-                startOfThisWeek.setDate(startOfThisWeek.getDate() - 7);
-
-                if (dateFilter === "today") return created >= startOfToday;
-                if (dateFilter === "yesterday") return created >= startOfYesterday && created < startOfToday;
-                if (dateFilter === "this-week") return created >= startOfThisWeek;
-                if (dateFilter === "custom") {
-                    const startOfCustomRange = customFromDate
-                        ? new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate())
-                        : null;
-                    const endOfCustomRange = customToDate
-                        ? new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1)
-                        : null;
-
-                    if (startOfCustomRange && created < startOfCustomRange) return false;
-                    if (endOfCustomRange && created >= endOfCustomRange) return false;
-                }
-                return true;
-            })();
-
-            return matchesHistoryFilter && matchesSearch && matchesPaymentMethod && matchesDate;
+            switch (historyFilter) {
+                case "draft":
+                    return sale.status === "draft";
+                case "open":
+                    return sale.status === "completed" && sale.paymentStatus !== "paid";
+                case "paid":
+                    return sale.paymentStatus === "paid";
+                case "voided":
+                    return sale.status === "voided";
+                default:
+                    return true;
+            }
         })
         .sort((a, b) => {
             if (sortBy === "newest") {
@@ -1367,7 +1438,7 @@ const BillingPage = ({
                         <>
                             <button
                                 type="button"
-                                onClick={() => setLeftPanelTab("products")}
+                                onClick={() => changePanelTab("products")}
                                 className={cn(
                                     "relative flex size-10 items-center justify-center rounded-xl transition-all",
                                     leftPanelTab === "products"
@@ -1381,7 +1452,7 @@ const BillingPage = ({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setLeftPanelTab("bills")}
+                                onClick={() => changePanelTab("bills")}
                                 className={cn(
                                     "relative flex size-10 items-center justify-center rounded-xl transition-all",
                                     leftPanelTab === "bills"
@@ -1400,7 +1471,7 @@ const BillingPage = ({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setLeftPanelTab("customers")}
+                                onClick={() => changePanelTab("customers")}
                                 className={cn(
                                     "relative flex size-10 items-center justify-center rounded-xl transition-all",
                                     leftPanelTab === "customers"
@@ -1414,7 +1485,7 @@ const BillingPage = ({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setLeftPanelTab("purchases")}
+                                onClick={() => changePanelTab("purchases")}
                                 className={cn(
                                     "relative flex size-10 items-center justify-center rounded-xl transition-all",
                                     leftPanelTab === "purchases"
@@ -1431,7 +1502,7 @@ const BillingPage = ({
                         <>
                             <button
                                 type="button"
-                                onClick={() => setLeftPanelTab("bills")}
+                                onClick={() => changePanelTab("bills")}
                                 className={cn(
                                     "flex size-10 items-center justify-center rounded-xl transition-all",
                                     leftPanelTab === "bills"
@@ -1449,15 +1520,18 @@ const BillingPage = ({
 
                 {/* ─── LEFT PANEL: Product Grid ─── */}
                 <div
-                    className="min-h-0 flex-1 overflow-y-auto p-4 pb-24 lg:min-w-0 lg:pb-4"
+                    className={cn(
+                        "min-h-0 flex-1 overflow-y-auto p-4 pb-24 lg:min-w-0 lg:pb-4",
+                        canMutate && leftPanelTab === "products" && "lg:pt-0",
+                    )}
                     style={{ maxHeight: panelMaxHeight }}
                 >
                     {/* Tab Switcher */}
                     {canMutate ? (
-                        <div className="mb-3 flex gap-1 rounded-lg border border-border/40 bg-muted/30 p-1 lg:hidden">
+                        <div className="-mt-2 mb-3 flex gap-1 rounded-lg border border-border/40 bg-muted/30 p-1 lg:hidden">
                             <button
                                 type="button"
-                                onClick={() => setLeftPanelTab("products")}
+                                onClick={() => changePanelTab("products")}
                                 className={cn(
                                     "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-all duration-200",
                                     leftPanelTab === "products"
@@ -1470,7 +1544,7 @@ const BillingPage = ({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setLeftPanelTab("bills")}
+                                onClick={() => changePanelTab("bills")}
                                 className={cn(
                                     "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-all duration-200",
                                     leftPanelTab === "bills"
@@ -1512,11 +1586,11 @@ const BillingPage = ({
                                     }
                                 />
                                 <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem onClick={() => setLeftPanelTab("customers")}>
+                                    <DropdownMenuItem onClick={() => changePanelTab("customers")}>
                                         <Users className="size-4" />
                                         Customers
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setLeftPanelTab("purchases")}>
+                                    <DropdownMenuItem onClick={() => changePanelTab("purchases")}>
                                         <ShoppingBag className="size-4" />
                                         Purchases
                                     </DropdownMenuItem>
@@ -1527,7 +1601,7 @@ const BillingPage = ({
                         <div className="mb-5 flex gap-2 border-b border-border/40 pb-3 lg:hidden">
                             <button
                                 type="button"
-                                onClick={() => setLeftPanelTab("bills")}
+                                onClick={() => changePanelTab("bills")}
                                 className={cn(
                                     "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200",
                                     leftPanelTab === "bills"
@@ -1547,15 +1621,15 @@ const BillingPage = ({
                         ) : null
                     ) : canMutate && leftPanelTab === "products" ? (
                         <>
-                            <div className="flex min-h-full flex-col">
+                            <div className="flex min-h-full min-w-0 flex-col">
                                 {/* Category Filter Pills */}
-                                <div className="sticky top-0 z-10 -mx-4 mb-4 bg-background/95 px-4 pt-1 pb-2 backdrop-blur-md sm:-mx-4 sm:px-4">
-                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                <div className="sticky top-0 z-10 -mx-4 mt-0 mb-0 bg-background/95 px-4 pt-2 pb-5 shadow-sm backdrop-blur-md sm:-mx-4 sm:pb-2 sm:px-4">
+                                    <div className="mb-1 flex items-center justify-between gap-3">
                                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                             Categories
                                         </p>
                                     </div>
-                                    <div className="scrollbar-none flex min-h-9 touch-pan-x gap-1.5 overflow-x-auto pb-1">
+                                    <div className="flex min-w-0 flex-wrap gap-1.5">
                                         {categoryOptions.map((category) => (
                                             <button
                                                 key={category.id}
@@ -1719,18 +1793,12 @@ const BillingPage = ({
                                         ))}
                                     </div>
 
-                                    {/* Result count */}
-                                    <div className="flex items-center self-end lg:self-auto shrink-0">
-                                        <span className="text-xs font-medium text-muted-foreground shrink-0">
-                                            {filteredSales.length} {filteredSales.length === 1 ? "order" : "orders"}
-                                        </span>
-                                    </div>
                                 </div>
 
                                 {/* Second Row: Filters (Payment & Date) */}
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center border-t border-border/40 pt-4">
+                                <div className="flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:flex-wrap sm:items-start">
                                     {/* Payment Method Filters */}
-                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
                                             <Filter className="size-3.5" />
                                         </div>
@@ -1755,7 +1823,7 @@ const BillingPage = ({
                                     <div className="hidden sm:block h-4 w-px bg-border/40 mx-2" />
 
                                     {/* Date range Filters */}
-                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
                                             <Calendar className="size-3.5" />
                                         </div>
@@ -1776,8 +1844,30 @@ const BillingPage = ({
                                         ))}
                                     </div>
 
+                                    {dateFilter === "specific" && (
+                                        <div className="flex w-full min-w-0 items-center gap-1.5 border-t border-border/40 pt-3 sm:w-auto sm:border-t-0 sm:pt-0">
+                                            <DatePicker
+                                                value={specificDate}
+                                                onChange={(date) => {
+                                                    setSpecificDate(date);
+                                                    if (date) setDateFilter("specific");
+                                                }}
+                                                placeholder="Choose date"
+                                                className="h-8 min-w-0 w-full text-xs sm:w-40"
+                                                clearable={false}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setSalesDateFilter("today")}
+                                                className="inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                            >
+                                                Reset
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {dateFilter === "custom" && (
-                                        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto border-t border-border/40 pt-3 scrollbar-none sm:overflow-visible sm:border-t-0 sm:pt-0">
+                                        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 border-t border-border/40 pt-3 sm:flex sm:w-auto sm:flex-wrap sm:border-t-0 sm:pt-0">
                                             <DatePicker
                                                 value={customFromDate}
                                                 onChange={(date) => {
@@ -1785,7 +1875,7 @@ const BillingPage = ({
                                                     setDateFilter("custom");
                                                 }}
                                                 placeholder="From date"
-                                                className="h-8 w-32 shrink-0 text-xs sm:w-36"
+                                                className="h-8 min-w-0 w-full text-xs sm:w-36"
                                                 clearable={false}
                                             />
                                             <span className="shrink-0 text-xs text-muted-foreground">to</span>
@@ -1796,7 +1886,7 @@ const BillingPage = ({
                                                     setDateFilter("custom");
                                                 }}
                                                 placeholder="To date"
-                                                className="h-8 w-32 shrink-0 text-xs sm:w-36"
+                                                className="h-8 min-w-0 w-full text-xs sm:w-36"
                                                 clearable={false}
                                             />
                                             {(customFromDate || customToDate) && (
@@ -1806,7 +1896,7 @@ const BillingPage = ({
                                                         setSalesDateFilter("all");
                                                     }}
                                                     aria-label="Clear custom date range"
-                                                    className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                                    className="col-span-3 inline-flex h-8 items-center justify-center gap-1 justify-self-end rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:col-span-1"
                                                 >
                                                     <X className="size-3.5" />
                                                     Clear
@@ -1817,8 +1907,18 @@ const BillingPage = ({
                                 </div>
                             </div>
 
+                            <SalesSummaryBar summary={salesSummary} />
+
                             {/* Bills List */}
-                            {salesQuery.isPending ? (
+                            {dateRangeNeedsInput ? (
+                                <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
+                                    <Calendar className="size-8 text-muted-foreground/50" />
+                                    <p className="mt-3 font-medium text-foreground">Choose a date range</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Select a From date or To date to view matching bills.
+                                    </p>
+                                </div>
+                            ) : salesQuery.isPending ? (
                                 <div className="flex min-h-[320px] items-center justify-center">
                                     <Spinner className="size-6 text-primary" />
                                 </div>
@@ -1831,11 +1931,13 @@ const BillingPage = ({
                                     </p>
                                 </div>
                             ) : filteredSales.length === 0 ? (
-                                <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
-                                    <ReceiptText className="size-8 text-muted-foreground/50" />
-                                    <p className="mt-3 font-medium text-foreground">No bills found</p>
-                                    <p className="mt-1 text-sm text-muted-foreground">No bills in this view yet.</p>
-                                </div>
+                                <>
+                                    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
+                                        <ReceiptText className="size-8 text-muted-foreground/50" />
+                                        <p className="mt-3 font-medium text-foreground">No bills found</p>
+                                        <p className="mt-1 text-sm text-muted-foreground">No bills in this view yet.</p>
+                                    </div>
+                                </>
                             ) : (
                                 <>
                                     {/* Render payment badges helper function */}

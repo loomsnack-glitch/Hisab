@@ -1372,10 +1372,13 @@ const getSalesInStore = async (
         return invalidCustomerFilter;
     }
 
-    const sales = await billingRepository.getSalesByStore(organizationId, storeId, query);
+    const [sales, summary] = await Promise.all([
+        billingRepository.getSalesByStore(organizationId, storeId, query),
+        billingRepository.getSalesSummaryByStore(organizationId, storeId, query),
+    ]);
     return {
         status: "success",
-        data: { sales },
+        data: { sales, summary },
         message: "Sales fetched successfully",
         code: STATUS_CODES.SUCCESS,
     };

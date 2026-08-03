@@ -312,9 +312,19 @@ export const VoidSaleSchema = z.object({
 export const SalesListQuerySchema = z.object({
     status: SaleStatusSchema.optional(),
     paymentStatus: PaymentStatusSchema.optional(),
+    paymentMethod: PaymentMethodSchema.optional(),
     customerId: z.uuid("Invalid customer id").optional(),
     search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    createdFrom: z.iso.datetime().optional(),
+    createdTo: z.iso.datetime().optional(),
     limit: positiveIntLimitSchema.optional(),
+});
+
+export const SalesListSummarySchema = z.object({
+    completedCount: z.number().int().min(0),
+    salesTotal: moneySchema,
+    collectedTotal: moneySchema,
+    dueTotal: moneySchema,
 });
 
 export const ParentScopedAddOnSalesRollupDTOSchema = z.object({

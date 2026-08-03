@@ -322,6 +322,12 @@ mock.module("./billing.repository", () => ({
     customerPhoneExistsInOrganization: mock(async () => false),
     getCustomerLedgerByCustomerId: mock(async () => []),
     getSalesByStore: mock(async () => []),
+    getSalesSummaryByStore: mock(async () => ({
+        completedCount: 0,
+        salesTotal: 0,
+        collectedTotal: 0,
+        dueTotal: 0,
+    })),
     createPayment,
     createCustomerLedgerEntry: mock(async (data: Record<string, unknown>) => ({
         ...data,

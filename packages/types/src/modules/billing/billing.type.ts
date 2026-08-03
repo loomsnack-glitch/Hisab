@@ -26,6 +26,7 @@ import type {
     SaleItemDTOSchema,
     SaleItemInputSchema,
     SaleSummaryDTOSchema,
+    SalesListSummarySchema,
     SalesListQuerySchema,
     UpdateCustomerSchema,
     UpdateDraftSaleSchema,
@@ -73,6 +74,7 @@ export type UpdateCustomerREPO = Pick<CustomerDTO, "id" | "organizationId" | "na
 
 export type CustomerListQuery = z.infer<typeof CustomerListQuerySchema>;
 export type SalesListQuery = z.infer<typeof SalesListQuerySchema>;
+export type SalesListSummary = z.infer<typeof SalesListSummarySchema>;
 
 export type SaleItemAddOnInput = z.infer<typeof SaleItemAddOnInputSchema>;
 export type SaleItemInput = z.infer<typeof SaleItemInputSchema>;
@@ -222,6 +224,7 @@ export type CustomerLedgerResponse = {
 
 export type SalesListResponse = {
     sales: SaleSummaryDTO[];
+    summary: SalesListSummary;
 };
 
 export type SaleResponse = {

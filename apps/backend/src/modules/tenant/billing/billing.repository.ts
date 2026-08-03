@@ -23,6 +23,7 @@ import type {
     SaleItemBundleComponentDTO,
     SaleItemDTO,
     SaleSummaryDTO,
+    SalesListSummary,
     SalesListQuery,
     UpdateCustomerREPO,
     UpdateSaleREPO,
@@ -268,7 +269,10 @@ export const getSalesByStore = async (
     const searchPattern = search ? `%${search}%` : "";
     const status = query.status ?? "";
     const paymentStatus = query.paymentStatus ?? "";
+    const paymentMethod = query.paymentMethod ?? "";
     const customerId = query.customerId ?? "";
+    const createdFrom = query.createdFrom ?? null;
+    const createdTo = query.createdTo ?? null;
     const limit = query.limit ?? 50;
 
     const results = await pg`
@@ -329,7 +333,18 @@ export const getSalesByStore = async (
           AND s.store_id = ${storeId}
           AND (${status} = '' OR s.status::text = ${status})
           AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
+          AND (
+              ${paymentMethod} = ''
+              OR EXISTS (
+                  SELECT 1
+                  FROM payments payment_filter
+                  WHERE payment_filter.sale_id = s.id
+                    AND payment_filter.method::text = ${paymentMethod}
+              )
+          )
           AND (${customerId} = '' OR s.customer_id::text = ${customerId})
+          AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
+          AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)
           AND (
               ${search} = ''
               OR CAST(s.sale_number AS TEXT) ILIKE ${searchPattern}
@@ -341,6 +356,76 @@ export const getSalesByStore = async (
     `;
 
     return results.map((result: Record<string, unknown>) => mapSaleSummaryRow(result as SaleSummaryRow));
+};
+
+export const getSalesSummaryByStore = async (
+    organizationId: string,
+    storeId: string,
+    query: SalesListQuery,
+): Promise<SalesListSummary> => {
+    const search = query.search?.trim() ?? "";
+    const searchPattern = search ? `%${search}%` : "";
+    const status = query.status ?? "";
+    const paymentStatus = query.paymentStatus ?? "";
+    const paymentMethod = query.paymentMethod ?? "";
+    const customerId = query.customerId ?? "";
+    const createdFrom = query.createdFrom ?? null;
+    const createdTo = query.createdTo ?? null;
+
+    const [result] = await pg`
+        SELECT
+            COUNT(*) FILTER (WHERE s.status = 'completed')::int AS completed_count,
+            COALESCE(SUM(s.grand_total) FILTER (WHERE s.status = 'completed'), 0) AS sales_total,
+            COALESCE(
+                SUM(COALESCE(payment_stats.paid_total, 0)) FILTER (WHERE s.status = 'completed'),
+                0
+            ) AS collected_total,
+            COALESCE(
+                SUM(GREATEST(s.grand_total - COALESCE(payment_stats.paid_total, 0), 0))
+                    FILTER (WHERE s.status = 'completed'),
+                0
+            ) AS due_total
+        FROM sales s
+        LEFT JOIN customers c
+            ON c.id = s.customer_id
+        LEFT JOIN (
+            SELECT
+                sale_id,
+                COALESCE(SUM(amount), 0) AS paid_total
+            FROM payments
+            GROUP BY sale_id
+        ) payment_stats
+            ON payment_stats.sale_id = s.id
+        WHERE s.organization_id = ${organizationId}
+          AND s.store_id = ${storeId}
+          AND (${status} = '' OR s.status::text = ${status})
+          AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
+          AND (
+              ${paymentMethod} = ''
+              OR EXISTS (
+                  SELECT 1
+                  FROM payments payment_filter
+                  WHERE payment_filter.sale_id = s.id
+                    AND payment_filter.method::text = ${paymentMethod}
+              )
+          )
+          AND (${customerId} = '' OR s.customer_id::text = ${customerId})
+          AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
+          AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)
+          AND (
+              ${search} = ''
+              OR CAST(s.sale_number AS TEXT) ILIKE ${searchPattern}
+              OR COALESCE(c.name, '') ILIKE ${searchPattern}
+              OR COALESCE(c.phone, '') ILIKE ${searchPattern}
+          )
+    `;
+
+    return {
+        completedCount: Number(result?.completed_count ?? 0),
+        salesTotal: Number(result?.sales_total ?? 0),
+        collectedTotal: Number(result?.collected_total ?? 0),
+        dueTotal: Number(result?.due_total ?? 0),
+    };
 };
 
 export const getSaleById = async (
