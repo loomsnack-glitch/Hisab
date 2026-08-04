@@ -116,6 +116,7 @@ import {
     type ProductCardAction,
 } from "@/lib/product-card-interaction";
 import { safeRandomUUID } from "@/lib/uuid";
+import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
 type ComposerAddOn = CustomizeAddOnSelection;
 
@@ -351,6 +352,7 @@ const BillingPage = ({
     const [searchParams, setSearchParams] = useSearchParams();
     const isDeviceMode = mode === "device";
     const canMutate = isDeviceMode;
+    const posPrinter = useOptionalPosPrinter();
     const organizationId = isDeviceMode ? (session?.organization.id ?? "") : organizationIdParam;
 
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
@@ -373,7 +375,10 @@ const BillingPage = ({
     const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
     const [discountInput, setDiscountInput] = useState("");
     const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
-    const [invoiceActions, setInvoiceActions] = useState<InvoiceAction[]>([]);
+    const [invoiceActions, setInvoiceActions] = useState<InvoiceAction[]>(
+        isDeviceMode && posPrinter?.connected ? ["print"] : [],
+    );
+    const [settlementEditorOpen, setSettlementEditorOpen] = useState(false);
     const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
     const [replacingSaleId, setReplacingSaleId] = useState<string | null>(null);
     const [replaceConfirmationOpen, setReplaceConfirmationOpen] = useState(false);
@@ -844,11 +849,12 @@ const BillingPage = ({
         setNotes("");
         setItems([]);
         setSettlementMode("full");
+        setSettlementEditorOpen(false);
         setSelectedPaymentMethod("cash");
         setPartialPaymentAmount("");
         setDiscountInput("");
         setDiscountMode("amount");
-        setInvoiceActions([]);
+        setInvoiceActions(isDeviceMode && posPrinter?.connected ? ["print"] : []);
         setDiscountEditorOpen(false);
         setPlaceOrderDialogOpen(false);
         setCustomerPickerOpen(false);
@@ -857,6 +863,14 @@ const BillingPage = ({
         setNewCustomerPhone("");
         setMobileCartOpen(false);
     };
+
+    useEffect(() => {
+        if (isDeviceMode && posPrinter?.connected) {
+            setInvoiceActions((current) =>
+                current.includes("print") ? current : [...current, "print"],
+            );
+        }
+    }, [isDeviceMode, posPrinter?.connected]);
 
     useEffect(() => {
         if (!receiptToPrint) {
@@ -1235,7 +1249,21 @@ const BillingPage = ({
             setMobileCartOpen(false);
             resetComposer();
             if (variables.shouldPrint) {
-                setReceiptToPrint(sale);
+                if (isDeviceMode) {
+                    if (!posPrinter?.supported) {
+                        toast.error("WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS");
+                    } else if (!posPrinter.connected) {
+                        toast.error("Connect the 80mm USB printer before printing");
+                    } else {
+                        void posPrinter.printSale(sale)
+                            .then(() => toast.success("Receipt sent to printer"))
+                            .catch((error: { message?: string }) => {
+                                toast.error(error?.message || "Receipt printing failed");
+                            });
+                    }
+                } else {
+                    setReceiptToPrint(sale);
+                }
             }
             toast.success(
                 wasReplacing
@@ -1325,6 +1353,7 @@ const BillingPage = ({
             })),
         );
         setSettlementMode("full");
+        setSettlementEditorOpen(false);
         setSelectedPaymentMethod("cash");
         setPartialPaymentAmount("");
         setDiscountInput(Number(sale.orderDiscountAmount) > 0 ? String(sale.orderDiscountAmount) : "");
@@ -3013,18 +3042,26 @@ const BillingPage = ({
                             ) : null}
                         </section>
 
-                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
-                            <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-semibold text-foreground">Settlement</p>
-                                <p className="text-xs text-muted-foreground">
+                        <section className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+                            <button
+                                type="button"
+                                className="flex w-full items-center justify-between text-left text-xs font-semibold text-foreground"
+                                onClick={() => setSettlementEditorOpen((open) => !open)}
+                                aria-expanded={settlementEditorOpen}
+                            >
+                                <span>Settlement</span>
+                                <span className="text-muted-foreground">
                                     {settlementMode === "full"
                                         ? "Paid in full"
                                         : settlementMode === "partial"
                                           ? "Balance remains"
-                                          : "Pay later"}
-                                </p>
-                            </div>
-                            <div className="grid grid-cols-3 gap-1">
+                                          : "Pay later"}{" "}
+                                    {settlementEditorOpen ? "Hide" : "Edit"}
+                                </span>
+                            </button>
+                            {settlementEditorOpen ? (
+                                <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
+                                    <div className="grid grid-cols-3 gap-1">
                                         {settlementOptions.map((option) => (
                                             <button
                                                 key={option.value}
@@ -3107,6 +3144,8 @@ const BillingPage = ({
                                             amount.
                                         </p>
                                     ) : null}
+                                </div>
+                            ) : null}
                         </section>
 
                         <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">

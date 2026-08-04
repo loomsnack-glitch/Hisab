@@ -33,6 +33,7 @@ import { billingKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { buildReceiptText } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
+import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
 type SaleDetailDialogProps = {
     open: boolean;
@@ -78,6 +79,7 @@ const SaleDetailDialog = ({
     const [paymentDraft, setPaymentDraft] = useState<CreatePaymentJSON | null>(null);
     const [voidDraft, setVoidDraft] = useState<VoidSaleJSON>({ reason: "" });
     const [formError, setFormError] = useState<string | null>(null);
+    const posPrinter = useOptionalPosPrinter();
 
     const saleQuery = useQuery({
         queryKey: saleId ? billingKeys.sale(organizationId, storeId, saleId) : ["billing", "sale", "idle"],
@@ -159,8 +161,28 @@ const SaleDetailDialog = ({
         },
     });
 
-    const handlePrint = () => {
+    const handlePrint = async () => {
         if (!sale) return;
+
+        if (mode === "device") {
+            if (!posPrinter?.supported) {
+                toast.error("WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS");
+                return;
+            }
+
+            if (!posPrinter.connected) {
+                toast.error("Connect the 80mm USB printer before printing");
+                return;
+            }
+
+            try {
+                await posPrinter.printSale(sale);
+                toast.success("Receipt sent to printer");
+            } catch (error) {
+                toast.error((error as { message?: string })?.message || "Receipt printing failed");
+            }
+            return;
+        }
 
         printReceiptText({
             text: buildReceiptText(sale),

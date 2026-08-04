@@ -7,6 +7,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import PosLayout from "@/components/pos/pos-layout";
 import { deviceAuthKeys } from "@/lib/query-keys";
 import BillingPage from "@/pages/billing-page";
+import { PosPrinterProvider } from "@/providers/pos-printer-provider";
 
 const PosPage = () => {
   const [searchParams] = useSearchParams();
@@ -47,6 +48,7 @@ const PosPage = () => {
     }
 
     return (
+    <PosPrinterProvider>
     <PosLayout
       session={session}
       searchValue={headerSearch}
@@ -73,6 +75,7 @@ const PosPage = () => {
         onPanelTabChange={handlePanelTabChange}
       />
         </PosLayout>
+    </PosPrinterProvider>
     );
 };
 

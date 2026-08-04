@@ -5,7 +5,7 @@ import { deviceLogout } from "@repo/services";
 import type { DeviceSessionDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
-import { Expand, LogOut, Minimize, Search, X } from "lucide-react";
+import { Expand, LogOut, Minimize, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ThemeToggle from "@/components/dashboard/theme-toggle";
@@ -14,6 +14,7 @@ import { formatLongDate } from "@/lib/format";
 import { deviceAuthKeys } from "@/lib/query-keys";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
+import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
 type PosLayoutProps = {
     children: ReactNode;
@@ -33,12 +34,35 @@ const PosLayout = ({
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
+    const posPrinter = useOptionalPosPrinter();
 
     const handleFullscreenToggle = async () => {
         try {
             await toggleFullscreen();
         } catch {
             toast.error("Fullscreen could not be enabled");
+        }
+    };
+
+    const handlePrinterToggle = async () => {
+        if (!posPrinter) return;
+
+        if (!posPrinter.supported) {
+            toast.error("WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS");
+            return;
+        }
+
+        if (posPrinter.connected) {
+            await posPrinter.disconnect();
+            toast.success("USB printer disconnected");
+            return;
+        }
+
+        try {
+            await posPrinter.connect();
+            toast.success("USB printer connected");
+        } catch (error) {
+            toast.error((error as { message?: string })?.message || "Could not connect to USB printer");
         }
     };
 
@@ -106,6 +130,27 @@ const PosLayout = ({
 
                     <DisplayScaleControl />
                     <ThemeToggle />
+
+                    {posPrinter ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-9 rounded-full"
+                            aria-label={posPrinter.connected ? "Disconnect receipt printer" : "Connect receipt printer"}
+                            title={
+                                !posPrinter.supported
+                                    ? "WebUSB unavailable"
+                                    : posPrinter.connected
+                                    ? `Connected: ${posPrinter.printerName || "USB printer"}`
+                                    : "Connect 80mm receipt printer"
+                            }
+                            disabled={posPrinter.status === "connecting" || posPrinter.status === "printing"}
+                            onClick={() => void handlePrinterToggle()}
+                        >
+                            <Printer className="size-4" />
+                        </Button>
+                    ) : null}
 
                     {isSupported ? (
                         <Button
