@@ -8,6 +8,8 @@ import {
     completePosSale,
     createDraftSale,
     createPosDraftSale,
+    createCustomer,
+    createPosCustomer,
     replacePosSale,
     getCategories,
     getOrganizationDetails,
@@ -31,6 +33,7 @@ import type {
     CommitSaleJSON,
     ReplaceSaleJSON,
     CompleteSaleJSON,
+    CreateCustomerJSON,
     CreateDraftSaleJSON,
     DeviceSessionDTO,
     PaymentMethod,
@@ -77,7 +80,7 @@ import {
     ArrowLeft,
     ArrowUpDown,
     Calendar,
-    ChevronDown,
+    Check,
     Filter,
     LayoutGrid,
     MoreHorizontal,
@@ -95,7 +98,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
 import CustomerDirectory from "@/components/customers/customer-directory";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
@@ -376,6 +378,9 @@ const BillingPage = ({
     const [replacingSaleId, setReplacingSaleId] = useState<string | null>(null);
     const [replaceConfirmationOpen, setReplaceConfirmationOpen] = useState(false);
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+    const [customerCreateOpen, setCustomerCreateOpen] = useState(false);
+    const [newCustomerName, setNewCustomerName] = useState("");
+    const [newCustomerPhone, setNewCustomerPhone] = useState("");
     const [discountEditorOpen, setDiscountEditorOpen] = useState(false);
     const [historyFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
     const [leftPanelTab, setLeftPanelTab] = useState<BillingPanelTab>(
@@ -583,7 +588,7 @@ const BillingPage = ({
                 (customer.phone ?? "").toLowerCase().includes(deferredCustomerSearch)
             );
         })
-        .slice(0, 6);
+        .slice(0, customerPickerOpen ? 40 : 8);
 
     const selectAdjacentCategory = (direction: -1 | 1) => {
         const currentIndex = Math.max(
@@ -791,6 +796,36 @@ const BillingPage = ({
         setSelectedCustomerFallback(customer);
         setCustomerSearch("");
         setCustomerPickerOpen(false);
+        setCustomerCreateOpen(false);
+        setNewCustomerName("");
+        setNewCustomerPhone("");
+    };
+
+    const openCustomerPicker = () => {
+        setCustomerSearch("");
+        setCustomerCreateOpen(false);
+        setNewCustomerName("");
+        setNewCustomerPhone("");
+        setCustomerPickerOpen(true);
+    };
+
+    const openCustomerCreate = () => {
+        setCustomerCreateOpen(true);
+        if (customerSearchLooksLikePhone) {
+            setNewCustomerPhone(customerSearch.trim());
+            setNewCustomerName("");
+        } else {
+            setNewCustomerName(customerSearch.trim());
+            setNewCustomerPhone("");
+        }
+    };
+
+    const closeCustomerPicker = () => {
+        setCustomerPickerOpen(false);
+        setCustomerCreateOpen(false);
+        setCustomerSearch("");
+        setNewCustomerName("");
+        setNewCustomerPhone("");
     };
 
     const invalidateBillingQueries = () => {
@@ -817,6 +852,9 @@ const BillingPage = ({
         setDiscountEditorOpen(false);
         setPlaceOrderDialogOpen(false);
         setCustomerPickerOpen(false);
+        setCustomerCreateOpen(false);
+        setNewCustomerName("");
+        setNewCustomerPhone("");
         setMobileCartOpen(false);
     };
 
@@ -1037,6 +1075,24 @@ const BillingPage = ({
                           notes: null,
                       },
                   ],
+    });
+
+    const createCustomerMutation = useMutation({
+        mutationFn: (payload: CreateCustomerJSON) =>
+            isDeviceMode ? createPosCustomer(payload) : createCustomer(organizationId, payload),
+        onSuccess: (response) => {
+            if (response.status !== "success" || !response.data?.customer) {
+                toast.error(response.message || "Failed to create customer");
+                return;
+            }
+
+            queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
+            selectCustomer(response.data.customer);
+            toast.success("Customer created");
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error?.message || "Failed to create customer");
+        },
     });
 
     const saveDraftMutation = useMutation({
@@ -2613,146 +2669,266 @@ const BillingPage = ({
                 disablePointerDismissal
                 onOpenChange={(open) => {
                     setPlaceOrderDialogOpen(open);
+                    if (!open) {
+                        setCustomerPickerOpen(false);
+                        setCustomerCreateOpen(false);
+                        setCustomerSearch("");
+                        setNewCustomerName("");
+                        setNewCustomerPhone("");
+                    }
                 }}
             >
                 <DialogContent className="grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-2xl border-border/70 bg-background/95 p-2 shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:p-3">
                     <DialogHeader className="space-y-1 border-b border-border/50 pb-2">
-                        <div className="flex items-start justify-between gap-3 pr-6">
-                            <div>
+                        <div className="flex items-start gap-2 pr-6">
+                            {customerPickerOpen ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (customerCreateOpen) {
+                                            setCustomerCreateOpen(false);
+                                            setNewCustomerName("");
+                                            setNewCustomerPhone("");
+                                        } else {
+                                            closeCustomerPicker();
+                                        }
+                                    }}
+                                    className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                    aria-label={customerCreateOpen ? "Back to customer search" : "Back to complete order"}
+                                >
+                                    <ArrowLeft className="size-4" />
+                                </button>
+                            ) : null}
+                            <div className="min-w-0 flex-1">
                                 <DialogTitle className="text-xl font-semibold tracking-tight">
-                                    Complete order
+                                    {customerCreateOpen
+                                        ? "New customer"
+                                        : customerPickerOpen
+                                          ? "Select customer"
+                                          : "Complete order"}
                                 </DialogTitle>
                                 <DialogDescription className="mt-1 text-xs">
-                                    {cartItemCount} {cartItemCount === 1 ? "item" : "items"} in this order
+                                    {customerCreateOpen
+                                        ? "Add phone and name, then save"
+                                        : customerPickerOpen
+                                          ? "Search by name or phone · optional for paid bills"
+                                          : `${cartItemCount} ${cartItemCount === 1 ? "item" : "items"} in this order`}
                                 </DialogDescription>
                             </div>
                         </div>
                     </DialogHeader>
 
-                    <div className="min-h-0 space-y-3 overflow-y-auto pt-1 pb-0 pr-1">
-                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
-                            <div className="flex items-center gap-2">
-                                <User className="size-4 shrink-0 text-muted-foreground" />
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                        Customer (optional)
-                                    </p>
-                                    <div>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            role="combobox"
-                                            aria-expanded={customerPickerOpen}
-                                            onClick={() => {
-                                                setCustomerSearch("");
-                                                setCustomerPickerOpen((open) => !open);
-                                            }}
-                                            className="mt-1 h-9 w-full min-w-0 justify-between rounded-lg bg-background/70 px-2.5 text-left text-xs font-medium"
-                                        >
-                                            <span className="min-w-0 truncate">
-                                                {selectedCustomer?.name || "Walk-in customer"}
-                                            </span>
-                                            <ChevronDown
-                                                className={cn(
-                                                    "size-3.5 shrink-0 text-muted-foreground transition-transform",
-                                                    customerPickerOpen && "rotate-180",
-                                                )}
+                    {customerPickerOpen ? (
+                        <div className="flex min-h-0 flex-col gap-2 pt-1">
+                            {customerCreateOpen ? (
+                                <>
+                                    <div className="shrink-0 space-y-2">
+                                        <div>
+                                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                                Phone
+                                            </label>
+                                            <Input
+                                                autoFocus
+                                                type="tel"
+                                                inputMode="tel"
+                                                autoComplete="tel"
+                                                className="h-12 rounded-xl bg-muted/40 text-base"
+                                                placeholder="Phone number"
+                                                value={newCustomerPhone}
+                                                onChange={(event) => setNewCustomerPhone(event.target.value)}
+                                                aria-label="Customer phone"
                                             />
-                                        </Button>
-                                        {customerPickerOpen ? (
-                                            <div className="mt-2 space-y-2 rounded-xl border border-border/60 bg-background/90 p-2 shadow-inner">
-                                                <div className="relative">
-                                                    <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                                                    <Input
-                                                        autoFocus
-                                                        className="h-9 rounded-lg bg-muted/30 pl-8 text-xs"
-                                                        placeholder="Search name or phone"
-                                                        value={customerSearch}
-                                                        onChange={(event) => setCustomerSearch(event.target.value)}
-                                                        aria-label="Search customer"
-                                                    />
-                                                </div>
-                                                <div className="max-h-56 space-y-1 overflow-y-auto">
-                                                    <button
-                                                        type="button"
-                                                        aria-pressed={!selectedCustomer}
-                                                        onClick={() => selectCustomer(null)}
-                                                        className={cn(
-                                                            "flex min-h-9 w-full items-center justify-between rounded-lg px-2.5 text-left text-xs font-medium transition-colors",
-                                                            !selectedCustomer
-                                                                ? "bg-primary/10 text-primary"
-                                                                : "text-foreground hover:bg-muted",
-                                                        )}
-                                                    >
-                                                        <span>Walk-in customer</span>
-                                                        <span className="text-[10px] text-muted-foreground">
-                                                            {!selectedCustomer ? "Selected" : "No account"}
-                                                        </span>
-                                                    </button>
+                                        </div>
+                                        <div>
+                                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                                Name
+                                            </label>
+                                            <Input
+                                                className="h-12 rounded-xl bg-muted/40 text-base"
+                                                placeholder="Customer name"
+                                                value={newCustomerName}
+                                                onChange={(event) => setNewCustomerName(event.target.value)}
+                                                aria-label="Customer name"
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="shrink-0 text-xs text-muted-foreground">
+                                        Phone first keeps the number pad open. Name is required to save.
+                                    </p>
+                                    <div className="min-h-0 flex-1" />
+                                </>
+                            ) : (
+                                <>
+                                    <div className="relative shrink-0">
+                                        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                                        <Input
+                                            autoFocus
+                                            className="h-11 rounded-xl bg-muted/40 pl-10 text-sm"
+                                            placeholder="Search name or phone"
+                                            value={customerSearch}
+                                            onChange={(event) => setCustomerSearch(event.target.value)}
+                                            aria-label="Search customer"
+                                        />
+                                    </div>
 
-                                                {filteredCustomers.length > 0 ? (
-                                                    <>
-                                                        <p className="px-2.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                                                            {customerSearch ? "Customers" : "Recent customers"}
-                                                        </p>
-                                                        {filteredCustomers.map((customer) => (
-                                                            <button
-                                                                key={customer.id}
-                                                                type="button"
-                                                                className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
-                                                                onClick={() => selectCustomer(customer)}
+                                    <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
+                                        <button
+                                            type="button"
+                                            aria-pressed={!selectedCustomer}
+                                            onClick={() => selectCustomer(null)}
+                                            className={cn(
+                                                "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left transition-colors",
+                                                !selectedCustomer
+                                                    ? "bg-primary/10 text-primary ring-1 ring-primary/25"
+                                                    : "text-foreground hover:bg-muted/80",
+                                            )}
+                                        >
+                                            <span
+                                                className={cn(
+                                                    "flex size-9 shrink-0 items-center justify-center rounded-full",
+                                                    !selectedCustomer ? "bg-primary/15" : "bg-muted",
+                                                )}
+                                            >
+                                                <User className="size-4" />
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block text-sm font-semibold">Walk-in customer</span>
+                                                <span className="block text-[11px] text-muted-foreground">
+                                                    No account · fastest checkout
+                                                </span>
+                                            </span>
+                                            {!selectedCustomer ? <Check className="size-4 shrink-0" /> : null}
+                                        </button>
+
+                                        {filteredCustomers.length > 0 ? (
+                                            <>
+                                                <p className="px-1 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                                    {customerSearch ? "Matches" : "Customers"}
+                                                </p>
+                                                {filteredCustomers.map((customer) => {
+                                                    const isSelected = selectedCustomerId === customer.id;
+                                                    return (
+                                                        <button
+                                                            key={customer.id}
+                                                            type="button"
+                                                            aria-pressed={isSelected}
+                                                            onClick={() => selectCustomer(customer)}
+                                                            className={cn(
+                                                                "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left transition-colors",
+                                                                isSelected
+                                                                    ? "bg-primary/10 text-primary ring-1 ring-primary/25"
+                                                                    : "text-foreground hover:bg-muted/80",
+                                                            )}
+                                                        >
+                                                            <span
+                                                                className={cn(
+                                                                    "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                                                                    isSelected
+                                                                        ? "bg-primary/15"
+                                                                        : "bg-muted text-muted-foreground",
+                                                                )}
                                                             >
-                                                                <User className="size-3.5 shrink-0" />
-                                                                <span className="min-w-0 flex-1 truncate font-medium">
+                                                                {(customer.name.trim()[0] || "?").toUpperCase()}
+                                                            </span>
+                                                            <span className="min-w-0 flex-1">
+                                                                <span className="block truncate text-sm font-semibold">
                                                                     {customer.name}
                                                                 </span>
-                                                                <span className="shrink-0 text-[10px] opacity-60">
-                                                                    {customer.phone || ""}
+                                                                <span className="block truncate text-[11px] text-muted-foreground">
+                                                                    {customer.phone || "No phone"}
                                                                 </span>
-                                                            </button>
-                                                        ))}
-                                                    </>
-                                                ) : (
-                                                    <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">
-                                                        No customers found
-                                                    </p>
-                                                )}
-
-                                                <CustomerQuickCreateDialog
-                                                    organizationId={organizationId}
-                                                    mode={mode}
-                                                    suggestedName={customerSearchLooksLikePhone ? "" : customerSearch}
-                                                    suggestedPhone={customerSearchLooksLikePhone ? customerSearch : ""}
-                                                    onCreated={(customer) => selectCustomer(customer)}
-                                                    trigger={
-                                                        <button
-                                                            type="button"
-                                                            className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/50 px-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                                                        >
-                                                            <Plus className="size-3.5" />
-                                                            <span>Create new customer</span>
+                                                            </span>
+                                                            {isSelected ? (
+                                                                <Check className="size-4 shrink-0" />
+                                                            ) : null}
                                                         </button>
-                                                    }
-                                                />
-                                                </div>
+                                                    );
+                                                })}
+                                            </>
+                                        ) : (
+                                            <div className="space-y-3 px-1 py-6 text-center">
+                                                <p className="text-sm text-muted-foreground">No customers found</p>
+                                                {customerSearch.trim() ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={openCustomerCreate}
+                                                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"
+                                                    >
+                                                        <Plus className="size-4" />
+                                                        Create “{customerSearch.trim()}”
+                                                    </button>
+                                                ) : null}
                                             </div>
-                                        ) : null}
+                                        )}
                                     </div>
-                                </div>
+
+                                    <div className="shrink-0 border-t border-border/50 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={openCustomerCreate}
+                                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-background/60 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+                                        >
+                                            <Plus className="size-4" />
+                                            <span>Create new customer</span>
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ) : (
+                    <div className="min-h-0 space-y-3 overflow-y-auto pt-1 pb-0 pr-1">
+                        <section>
+                            <div className="flex items-stretch gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={openCustomerPicker}
+                                    className={cn(
+                                        "flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-xl border px-3 text-left transition-colors",
+                                        selectedCustomer
+                                            ? "border-primary/25 bg-primary/5 hover:bg-primary/10"
+                                            : "border-border/60 bg-card/60 hover:bg-muted/50",
+                                        requiresCustomerForReceivable &&
+                                            "border-amber-500/40 bg-amber-500/5 ring-1 ring-amber-500/20",
+                                    )}
+                                    aria-label="Select customer"
+                                >
+                                    <span
+                                        className={cn(
+                                            "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                                            selectedCustomer
+                                                ? "bg-primary/15 text-primary"
+                                                : "bg-muted text-muted-foreground",
+                                        )}
+                                    >
+                                        {selectedCustomer
+                                            ? (selectedCustomer.name.trim()[0] || "?").toUpperCase()
+                                            : <User className="size-4" />}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-sm font-semibold text-foreground">
+                                            {selectedCustomer?.name || "Walk-in customer"}
+                                        </span>
+                                        <span className="block truncate text-[11px] text-muted-foreground">
+                                            {selectedCustomer?.phone
+                                                ? selectedCustomer.phone
+                                                : requiresCustomerForReceivable
+                                                  ? "Customer required for due balance"
+                                                  : "Optional · tap to assign"}
+                                        </span>
+                                    </span>
+                                    <Search className="size-4 shrink-0 text-muted-foreground" />
+                                </button>
                                 {selectedCustomer ? (
                                     <button
                                         type="button"
                                         onClick={() => selectCustomer(null)}
-                                        className="mt-4 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                         aria-label="Use walk-in customer"
                                     >
-                                        <X className="size-3.5" />
+                                        <X className="size-4" />
                                     </button>
                                 ) : null}
                             </div>
-                            {selectedCustomer?.phone ? (
-                                <p className="pl-6 text-[10px] text-muted-foreground">{selectedCustomer.phone}</p>
-                            ) : null}
                         </section>
 
                         <section className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
@@ -2906,9 +3082,13 @@ const BillingPage = ({
                                     ) : null}
 
                                     {requiresCustomerForReceivable ? (
-                                        <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                                        <button
+                                            type="button"
+                                            onClick={openCustomerPicker}
+                                            className="w-full rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700 transition-colors hover:bg-amber-500/15 dark:text-amber-300"
+                                        >
                                             Select a customer to save a bill with a due balance.
-                                        </p>
+                                        </button>
                                     ) : null}
 
                                     {isOverpaid ? (
@@ -3000,33 +3180,78 @@ const BillingPage = ({
                             </div>
                         </aside>
                     </div>
+                    )}
 
                     <DialogFooter className="border-t border-border/50 bg-background/95 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
-                        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+                        {customerCreateOpen ? (
+                            <div className="grid w-full grid-cols-2 gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 w-full rounded-xl px-3 text-sm"
+                                    disabled={createCustomerMutation.isPending}
+                                    onClick={() => {
+                                        setCustomerCreateOpen(false);
+                                        setNewCustomerName("");
+                                        setNewCustomerPhone("");
+                                    }}
+                                >
+                                    Back
+                                </Button>
+                                <Button
+                                    type="button"
+                                    className="h-11 w-full rounded-xl px-3 text-sm font-semibold"
+                                    disabled={
+                                        createCustomerMutation.isPending || !newCustomerName.trim()
+                                    }
+                                    onClick={() => {
+                                        const payload: CreateCustomerJSON = {
+                                            name: newCustomerName.trim(),
+                                            phone: newCustomerPhone.trim() || undefined,
+                                            isActive: true,
+                                        };
+                                        createCustomerMutation.mutate(payload);
+                                    }}
+                                >
+                                    {createCustomerMutation.isPending ? "Saving..." : "Save & use"}
+                                </Button>
+                            </div>
+                        ) : customerPickerOpen ? (
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
-                                onClick={() => {
-                                    setPlaceOrderDialogOpen(false);
-                                }}
+                                className="h-10 w-full rounded-xl px-3 text-xs"
+                                onClick={closeCustomerPicker}
                             >
-                                Cancel
+                                Done
                             </Button>
-                            <Button
-                                type="button"
-                                className="h-10 w-full rounded-xl px-3 text-xs font-semibold sm:w-auto sm:px-5"
-                                disabled={
-                                    completeSaleMutation.isPending ||
-                                    hasInvalidDiscount ||
-                                    hasInvalidPartialPayment ||
-                                    requiresCustomerForReceivable
-                                }
-                                onClick={handleCompleteSale}
-                            >
-                                {completeSaleMutation.isPending ? "Placing..." : "Place order"}
-                            </Button>
-                        </div>
+                        ) : (
+                            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
+                                    onClick={() => {
+                                        setPlaceOrderDialogOpen(false);
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="button"
+                                    className="h-10 w-full rounded-xl px-3 text-xs font-semibold sm:w-auto sm:px-5"
+                                    disabled={
+                                        completeSaleMutation.isPending ||
+                                        hasInvalidDiscount ||
+                                        hasInvalidPartialPayment ||
+                                        requiresCustomerForReceivable
+                                    }
+                                    onClick={handleCompleteSale}
+                                >
+                                    {completeSaleMutation.isPending ? "Placing..." : "Place order"}
+                                </Button>
+                            </div>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
