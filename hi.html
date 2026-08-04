@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebUSB Receipt Printer</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a222c;
+      --text: #e8eef4;
+      --muted: #8b9aab;
+      --accent: #2dd4a8;
+      --danger: #f07178;
+      --line: #2a3542;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(ellipse at top, #1a2836 0%, var(--bg) 55%);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .card {
+      width: min(420px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 1.25rem;
+      font-weight: 650;
+    }
+
+    .subtitle {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #121820;
+      border: 1px solid var(--line);
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #5a6a7a;
+      flex-shrink: 0;
+    }
+
+    .dot.ok { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+    .dot.err { background: var(--danger); }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    button {
+      flex: 1;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: #06261d;
+      background: var(--accent);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: #243040;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .preview-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .preview {
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      white-space: pre;
+      background: #fff;
+      color: #111;
+      border-radius: 8px;
+      padding: 14px;
+      overflow-x: auto;
+    }
+
+    .hint {
+      margin-top: 14px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>WebUSB Receipt Printer</h1>
+    <p class="subtitle">Connect a USB ESC/POS thermal printer and print a sample slip.</p>
+
+    <div class="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Printer not connected</span>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="connect" class="secondary">Connect</button>
+      <button type="button" id="print" disabled>Print slip</button>
+    </div>
+
+    <div class="preview-label">Slip preview</div>
+    <pre class="preview" id="preview"></pre>
+    <p class="hint">Use Chrome/Edge on <code>localhost</code>. After connect, note the VID/PID shown in status.</p>
+  </div>
+
+<script>
+  const WIDTH = 32; // 58mm thermal paper character width
+
+  const ESC = {
+    init: [0x1b, 0x40],
+    alignCenter: [0x1b, 0x61, 0x01],
+    alignLeft: [0x1b, 0x61, 0x00],
+    boldOn: [0x1b, 0x45, 0x01],
+    boldOff: [0x1b, 0x45, 0x00],
+    doubleOn: [0x1d, 0x21, 0x11],
+    doubleOff: [0x1d, 0x21, 0x00],
+    feed: (n = 3) => [0x1b, 0x64, n],
+    cut: [0x1d, 0x56, 0x00],
+  };
+
+  const SAMPLE_ORDER = {
+    storeName: "Hisab Demo Store",
+    address: "12 Market Road, Pune",
+    phone: "+91 98765 43210",
+    billNo: "INV-1042",
+    cashier: "Asha",
+    table: "T-07",
+    items: [
+      { name: "Masala Dosa", qty: 2, price: 90 },
+      { name: "Filter Coffee", qty: 2, price: 40 },
+      { name: "Idli Sambar", qty: 1, price: 60 },
+      { name: "Vada Pav", qty: 3, price: 25 },
+    ],
+    taxRate: 0.05,
+    payment: "UPI",
+  };
+
+  let printer = null;
+  let outputEndpoint = null;
+
+  const $ = (id) => document.getElementById(id);
+  const encoder = new TextEncoder();
+
+  function setStatus(message, state = "idle") {
+    $("statusText").textContent = message;
+    $("statusDot").className = "dot" + (state === "ok" ? " ok" : state === "err" ? " err" : "");
+  }
+
+  function line(char = "-") {
+    return char.repeat(WIDTH);
+  }
+
+  function pad(left, right = "") {
+    const space = Math.max(1, WIDTH - left.length - right.length);
+    return left + " ".repeat(space) + right;
+  }
+
+  function wrapName(name, max = 18) {
+    return name.length <= max ? name : name.slice(0, max - 1) + "…";
+  }
+
+  function money(amount) {
+    return "Rs." + amount.toFixed(2);
+  }
+
+  function buildReceiptText(order, printedAt = new Date()) {
+    const subtotal = order.items.reduce((sum, item) => sum + item.qty * item.price, 0);
+    const tax = Math.round(subtotal * order.taxRate * 100) / 100;
+    const total = subtotal + tax;
+    const date = printedAt.toLocaleDateString("en-IN");
+    const time = printedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+
+    const itemLines = order.items.map((item) => {
+      const label = `${item.qty}x ${wrapName(item.name)}`;
+      return pad(label, money(item.qty * item.price));
+    });
+
+    return [
+      order.storeName,
+      order.address,
+      "Ph: " + order.phone,
+      line("="),
+      pad("Bill: " + order.billNo, date),
+      pad("Cashier: " + order.cashier, time),
+      pad("Table: " + order.table, order.payment),
+      line("-"),
+      ...itemLines,
+      line("-"),
+      pad("Subtotal", money(subtotal)),
+      pad("GST 5%", money(tax)),
+      line("="),
+      pad("TOTAL", money(total)),
+      line("="),
+      "Thank you! Visit again.",
+      "Powered by Hisab",
+      "",
+    ].join("\n");
+  }
+
+  function concatBytes(...chunks) {
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      out.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return out;
+  }
+
+  function bytes(...parts) {
+    return new Uint8Array(parts.flat());
+  }
+
+  function text(str) {
+    return encoder.encode(str);
+  }
+
+  function buildPrintPayload(order) {
+    const body = buildReceiptText(order);
+
+    return concatBytes(
+      bytes(ESC.init),
+      bytes(ESC.alignCenter, ESC.boldOn, ESC.doubleOn),
+      text(order.storeName + "\n"),
+      bytes(ESC.doubleOff, ESC.boldOff),
+      text(order.address + "\n"),
+      text("Ph: " + order.phone + "\n"),
+      bytes(ESC.alignLeft),
+      text(body.split("\n").slice(3).join("\n") + "\n"),
+      bytes(ESC.feed(4)),
+      bytes(ESC.cut),
+    );
+  }
+
+  async function findBulkOutEndpoint(device) {
+    if (!device.configuration) {
+      await device.selectConfiguration(1);
+    }
+
+    for (const usbInterface of device.configuration.interfaces) {
+      // Prefer alternate 0; claim before reading endpoints if needed
+      await device.claimInterface(usbInterface.interfaceNumber);
+
+      const alternate = usbInterface.alternate;
+      const endpoint = alternate.endpoints.find(
+        (ep) => ep.direction === "out" && ep.type === "bulk",
+      );
+
+      if (endpoint) {
+        return endpoint.endpointNumber;
+      }
+
+      await device.releaseInterface(usbInterface.interfaceNumber);
+    }
+
+    throw new Error("No USB bulk OUT endpoint found on this device");
+  }
+
+  async function connectPrinter() {
+    if (!("usb" in navigator)) {
+      throw new Error("WebUSB is not supported. Use Chrome/Edge on localhost or HTTPS.");
+    }
+
+    // Empty filters lists all devices. Later lock to your printer's VID/PID.
+    const device = await navigator.usb.requestDevice({ filters: [] });
+
+    if (device.opened) {
+      await device.close();
+    }
+
+    await device.open();
+    const endpoint = await findBulkOutEndpoint(device);
+
+    printer = device;
+    outputEndpoint = endpoint;
+    $("print").disabled = false;
+
+    const vid = "0x" + device.vendorId.toString(16).padStart(4, "0");
+    const pid = "0x" + device.productId.toString(16).padStart(4, "0");
+    setStatus(`Connected · ${device.productName || "USB device"} · VID ${vid} PID ${pid}`, "ok");
+  }
+
+  async function printSlip() {
+    if (!printer || outputEndpoint === undefined) {
+      throw new Error("Connect the printer first");
+    }
+
+    const payload = buildPrintPayload(SAMPLE_ORDER);
+    const result = await printer.transferOut(outputEndpoint, payload);
+
+    if (result.status !== "ok") {
+      throw new Error("transferOut status: " + result.status);
+    }
+
+    setStatus(`Printed ${result.bytesWritten} bytes · Bill ${SAMPLE_ORDER.billNo}`, "ok");
+  }
+
+  // Preview on load
+  $("preview").textContent = buildReceiptText(SAMPLE_ORDER);
+
+  $("connect").onclick = async () => {
+    try {
+      setStatus("Waiting for device selection…");
+      await connectPrinter();
+    } catch (err) {
+      console.error(err);
+      setStatus(err.message || String(err), "err");
+      $("print").disabled = true;
+    }
+  };
+
+  $("print").onclick = async () => {
+    try {
+      $("print").disabled = true;
+      setStatus("Sending slip to printer…");
+      await printSlip();
+    } catch (err) {
+      console.error(err);
+      setStatus(err.message || String(err), "err");
+    } finally {
+      $("print").disabled = !printer;
+    }
+  };
+</script>
+</body>
+</html>
