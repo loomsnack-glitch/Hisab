@@ -33,6 +33,10 @@ const App = () => {
     const hadAuthUserRef = useRef(false);
     const isPosRoute = location.pathname.startsWith("/pos");
 
+    useEffect(() => {
+        document.title = isPosRoute ? "Ganatri POS" : "Ganatri Admin";
+    }, [isPosRoute]);
+
     const authQuery = useQuery({
         queryKey: authKeys.me,
         queryFn: userAuthenticate,

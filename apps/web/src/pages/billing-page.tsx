@@ -1644,13 +1644,13 @@ const BillingPage = ({
                         <>
                             <div className="flex min-h-full min-w-0 flex-col">
                                 {/* Category Filter Pills */}
-                                <div className="sticky top-0 z-10 -mx-4 mt-0 mb-0 bg-background/95 px-4 pt-2 pb-5 shadow-sm backdrop-blur-md sm:-mx-4 sm:pb-2 sm:px-4">
-                                    <div className="mb-1 flex items-center justify-between gap-3">
+                                <div className="sticky top-0 z-10 -mx-4 mb-4 bg-background/95 px-4 pt-1 pb-2 backdrop-blur-md sm:-mx-4 sm:px-4">
+                                    <div className="mb-2 flex items-center justify-between gap-3">
                                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                             Categories
                                         </p>
                                     </div>
-                                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                                    <div className="scrollbar-none flex min-h-9 min-w-0 touch-pan-x gap-1.5 overflow-x-auto pb-1">
                                         {categoryOptions.map((category) => (
                                             <button
                                                 key={category.id}
@@ -1661,7 +1661,7 @@ const BillingPage = ({
                                                     "min-h-9 shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200",
                                                     activeCategoryFilter === category.id
                                                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                                        : "border border-border/60 bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
                                                 )}
                                             >
                                                 {category.name}
