@@ -2146,17 +2146,17 @@ const BillingPage = ({
                                             />
                                             <PopoverContent
                                                 align="start"
-                                                className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-3"
+                                                className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-2"
                                             >
-                                                <div className="flex min-w-0 flex-col gap-3">
-                                                    <div className="flex min-w-0 rounded-lg border border-border/50 bg-muted/30 p-0.5">
+                                                <div className="flex min-w-0 flex-col gap-2">
+                                                    <div className="flex min-w-0 rounded-md border border-border/50 bg-muted/30 p-px">
                                                         {(["date", "range"] as const).map((mode) => (
                                                             <button
                                                                 key={mode}
                                                                 type="button"
                                                                 onClick={() => setSalesDateMode(mode)}
                                                                 className={cn(
-                                                                    "min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-xs font-semibold transition-colors",
+                                                                    "min-w-0 flex-1 rounded px-1.5 py-1 text-center text-[11px] font-semibold transition-colors",
                                                                     dateFilter === mode
                                                                         ? "bg-background text-foreground shadow-sm"
                                                                         : "text-muted-foreground hover:text-foreground",
@@ -2167,14 +2167,14 @@ const BillingPage = ({
                                                         ))}
                                                     </div>
 
-                                                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                                                    <div className="flex min-w-0 flex-wrap gap-1">
                                                         {getSalesDatePresetOptions(dateFilter).map((preset) => (
                                                             <button
                                                                 key={preset.value}
                                                                 type="button"
                                                                 onClick={() => applySalesDatePreset(preset.value)}
                                                                 className={cn(
-                                                                    "min-w-0 max-w-full rounded-full border px-2.5 py-1 text-center text-xs font-medium whitespace-normal break-words transition-colors",
+                                                                    "min-w-0 max-w-full rounded-full border px-2 py-0.5 text-center text-[11px] font-medium whitespace-normal break-words transition-colors",
                                                                     datePreset === preset.value
                                                                         ? "border-primary/40 bg-primary/10 text-primary"
                                                                         : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground",
