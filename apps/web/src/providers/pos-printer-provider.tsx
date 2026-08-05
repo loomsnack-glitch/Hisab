@@ -19,6 +19,7 @@ import {
   saveRememberedPrinter,
   type UsbDevice,
 } from "@/lib/pos-printer";
+import type { ReceiptContext } from "@/lib/receipt-text";
 
 type PosPrinterStatus =
   | "unsupported"
@@ -36,7 +37,7 @@ type PosPrinterContextValue = {
   error: string | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
-  printSale: (sale: SaleDetailDTO) => Promise<void>;
+  printSale: (sale: SaleDetailDTO, context?: ReceiptContext) => Promise<void>;
 };
 
 const PosPrinterContext = createContext<PosPrinterContextValue | null>(null);
@@ -117,7 +118,7 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
     setStatus(usb ? "disconnected" : "unsupported");
   }, [disconnectDevice, usb]);
 
-  const printSale = useCallback(async (sale: SaleDetailDTO) => {
+  const printSale = useCallback(async (sale: SaleDetailDTO, context?: ReceiptContext) => {
     const device = deviceRef.current;
     const endpoint = endpointRef.current;
 
@@ -131,7 +132,7 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
     try {
       const result = await device.transferOut(
         endpoint.endpointNumber,
-        build80mmEscPosPayload(sale),
+        build80mmEscPosPayload(sale, context),
       );
       if (result.status !== "ok") {
         throw new Error(`Printer transfer failed: ${result.status}`);

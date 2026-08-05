@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime } from "@/lib/format";
-import { buildReceiptText } from "@/lib/receipt-text";
+import { buildReceiptText, type ReceiptContext } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
@@ -42,6 +42,7 @@ type SaleDetailDialogProps = {
     organizationId: string;
     storeId: string;
     saleId: string | null;
+    receiptContext: ReceiptContext;
     onEdit?: (sale: SaleDetailDTO) => void;
 };
 
@@ -72,6 +73,7 @@ const SaleDetailDialog = ({
     organizationId,
     storeId,
     saleId,
+    receiptContext,
     onEdit,
 }: SaleDetailDialogProps) => {
     const queryClient = useQueryClient();
@@ -176,7 +178,7 @@ const SaleDetailDialog = ({
             }
 
             try {
-                await posPrinter.printSale(sale);
+                await posPrinter.printSale(sale, receiptContext);
                 toast.success("Receipt sent to printer");
             } catch (error) {
                 toast.error((error as { message?: string })?.message || "Receipt printing failed");
@@ -185,7 +187,7 @@ const SaleDetailDialog = ({
         }
 
         printReceiptText({
-            text: buildReceiptText(sale),
+            text: buildReceiptText(sale, receiptContext),
             title: sale.saleNumber ? `Bill_${sale.saleNumber}` : "Receipt",
         });
     };
@@ -193,7 +195,7 @@ const SaleDetailDialog = ({
     const handleDownloadTxt = () => {
         if (!sale) return;
 
-        const text = buildReceiptText(sale);
+        const text = buildReceiptText(sale, receiptContext);
 
         const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
         const url = URL.createObjectURL(blob);

@@ -634,6 +634,17 @@ const BillingPage = ({
         : organizationQuery.data?.status === "success"
           ? (organizationQuery.data.data?.organization ?? null)
           : null;
+    const receiptContext = useMemo(() => {
+        const store = isDeviceMode
+            ? session?.store
+            : organization?.stores.find((candidate) => candidate.id === selectedStoreId);
+
+        return {
+            organizationName: isDeviceMode ? session?.organization.name : organization?.name,
+            storeName: store?.name,
+            storeAddress: store?.address,
+        };
+    }, [isDeviceMode, organization, selectedStoreId, session]);
     const categories = categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : [];
     const products = productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : [];
     const getComposerUnitDiscountFromSaleItem = (item: SaleDetailDTO["items"][number]) => {
@@ -1056,7 +1067,7 @@ const BillingPage = ({
 
         const printTimer = window.setTimeout(() => {
             printReceiptText({
-                text: buildReceiptText(receiptToPrint),
+                text: buildReceiptText(receiptToPrint, receiptContext),
                 title: receiptToPrint.saleNumber ? `Receipt_${receiptToPrint.saleNumber}` : "Receipt",
             });
             setReceiptToPrint(null);
@@ -1065,7 +1076,7 @@ const BillingPage = ({
         return () => {
             window.clearTimeout(printTimer);
         };
-    }, [receiptToPrint]);
+    }, [receiptContext, receiptToPrint]);
 
     const addPlainProductToBill = (product: ProductResponseDTO) => {
         setItems((current) => {
@@ -1432,7 +1443,7 @@ const BillingPage = ({
                     } else if (!posPrinter.connected) {
                         toast.error("Connect the 80mm USB printer before printing");
                     } else {
-                        void posPrinter.printSale(sale)
+                        void posPrinter.printSale(sale, receiptContext)
                             .then(() => toast.success("Receipt sent to printer"))
                             .catch((error: { message?: string }) => {
                                 toast.error(error?.message || "Receipt printing failed");
@@ -3641,6 +3652,7 @@ const BillingPage = ({
                 organizationId={organizationId}
                 storeId={selectedStoreId}
                 saleId={selectedSaleId}
+                receiptContext={receiptContext}
                 onEdit={handleEditSale}
             />
         </div>

@@ -57,4 +57,46 @@ describe("80mm ESC/POS receipt payload", () => {
 
     expect(output).toContain("??");
   });
+
+  test("keeps item columns and wraps long names without paid or due rows", () => {
+    const output = new TextDecoder().decode(
+      build80mmEscPosPayload({
+        ...sale,
+        items: [
+          {
+            ...sale.items[0],
+            productNameSnapshot: "Extra Long Masala Dosa With Cheese And Vegetables",
+          },
+        ],
+      }),
+    );
+
+    expect(output).toContain("ITEM");
+    expect(output).toContain("QTY");
+    expect(output).toContain("RATE");
+    expect(output).toContain("PRICE");
+    expect(output).toContain("Extra Long Masala Dosa With");
+    expect(output).toContain("Cheese And Vegetables");
+    expect(output).not.toContain("Collected:");
+    expect(output).not.toContain("Due:");
+    expect(output).toContain("FINAL AMOUNT: 180");
+    expect(output).not.toContain("Payable:");
+    expect(output).toContain("Thank you! Visit again");
+  });
+
+  test("prints organization and store context above the bill", () => {
+    const output = new TextDecoder().decode(
+      build80mmEscPosPayload(sale, {
+        organizationName: "Hisab Foods",
+        storeName: "Main Store",
+        storeAddress: "12 Market Road",
+      }),
+    );
+
+    expect(output).toContain("Hisab Foods");
+    expect(output).toContain("Main Store");
+    expect(output).toContain("12 Market Road");
+    expect(output).toContain("INVOICE / RECEIPT");
+    expect(output).toContain("\u001d!\u0011");
+  });
 });

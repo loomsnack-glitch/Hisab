@@ -1,6 +1,6 @@
 import type { SaleDetailDTO } from "@repo/types";
 
-import { buildReceiptText } from "@/lib/receipt-text";
+import { buildReceiptText, type ReceiptContext } from "@/lib/receipt-text";
 
 const rememberedPrinterKey = "hisab_pos_usb_printer";
 const paperWidth = 48;
@@ -11,6 +11,8 @@ const esc = {
   alignLeft: [0x1b, 0x61, 0x00],
   boldOn: [0x1b, 0x45, 0x01],
   boldOff: [0x1b, 0x45, 0x00],
+  doubleSizeOn: [0x1d, 0x21, 0x11],
+  doubleSizeOff: [0x1d, 0x21, 0x00],
   feed: (lines = 4) => [0x1b, 0x64, lines],
   cut: [0x1d, 0x56, 0x00],
 };
@@ -93,18 +95,42 @@ const wrapLine = (line: string) => {
   return lines;
 };
 
-export const build80mmEscPosPayload = (sale: SaleDetailDTO) => {
-  const receiptLines = buildReceiptText(sale)
+export const build80mmEscPosPayload = (
+  sale: SaleDetailDTO,
+  context?: ReceiptContext,
+) => {
+  const receiptLines = buildReceiptText(sale, context)
     .split("\n")
     .flatMap(wrapLine);
-  const body = receiptLines.slice(3).join("\n").trimEnd() + "\n";
+  const organizationLineIndex = context?.organizationName?.trim() ? 1 : -1;
+  const finalAmountLineIndex = receiptLines.findIndex((line) => line.includes("FINAL AMOUNT:"));
+  const body = receiptLines
+    .map((line, index) => {
+      const encodedLine = encoder.encode(toPrinterText(`${line}\n`));
+      if (index === finalAmountLineIndex) {
+        return concatBytes(
+          bytes(esc.alignCenter, esc.boldOn, esc.doubleSizeOn),
+          encoder.encode(toPrinterText(`${line.trim()}\n`)),
+          bytes(esc.doubleSizeOff, esc.boldOff, esc.alignLeft),
+        );
+      }
+
+      if (index !== organizationLineIndex) {
+        return encodedLine;
+      }
+
+      return concatBytes(
+        bytes(esc.alignCenter, esc.boldOn, esc.doubleSizeOn),
+        encoder.encode(toPrinterText(`${context?.organizationName?.trim()}\n`)),
+        bytes(esc.doubleSizeOff, esc.boldOff, esc.alignLeft),
+      );
+    })
+    .reduce((output, line) => concatBytes(output, line), new Uint8Array());
 
   return concatBytes(
     bytes(esc.init),
-    bytes(esc.alignCenter, esc.boldOn),
-    encoder.encode(toPrinterText("INVOICE / RECEIPT\n")),
-    bytes(esc.boldOff, esc.alignLeft),
-    encoder.encode(toPrinterText(body)),
+    bytes(esc.alignLeft),
+    body,
     bytes(esc.feed(), esc.cut),
   );
 };

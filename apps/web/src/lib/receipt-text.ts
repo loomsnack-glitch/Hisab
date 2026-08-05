@@ -2,11 +2,80 @@ import type { SaleDetailDTO } from "@repo/types";
 
 import { formatDateTime } from "@/lib/format";
 
+export type ReceiptContext = {
+    organizationName?: string | null;
+    storeName?: string | null;
+    storeAddress?: string | null;
+    storePhone?: string | null;
+};
+
+const receiptWidth = 48;
+const itemColumnWidth = 27;
+const quantityColumnWidth = 5;
+const rateColumnWidth = 8;
+const priceColumnWidth = 8;
+const summaryLabelWidth = 36;
+const summaryValueWidth = 12;
+
 const money = (value: number | string | null | undefined) => String(value ?? 0);
 
-export const buildReceiptText = (sale: SaleDetailDTO): string => {
-    const separator = "------------------------------------------";
-    const doubleSeparator = "==========================================";
+const wrapText = (value: string, width: number) => {
+    const words = value.trim().split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let current = "";
+
+    for (const word of words) {
+        if (word.length > width) {
+            if (current) {
+                lines.push(current);
+                current = "";
+            }
+            for (let index = 0; index < word.length; index += width) {
+                lines.push(word.slice(index, index + width));
+            }
+            continue;
+        }
+
+        const next = current ? `${current} ${word}` : word;
+        if (next.length > width) {
+            lines.push(current);
+            current = word;
+        } else {
+            current = next;
+        }
+    }
+
+    if (current) {
+        lines.push(current);
+    }
+
+    return lines.length > 0 ? lines : [""];
+};
+
+const centerText = (value: string) => {
+    const text = value.slice(0, receiptWidth);
+    const leftPadding = Math.max(Math.floor((receiptWidth - text.length) / 2), 0);
+    return `${" ".repeat(leftPadding)}${text}`;
+};
+
+const appendItemRow = (lines: string[], name: string, quantity: string, rate: string, price: string) => {
+    const nameLines = wrapText(name, itemColumnWidth);
+    nameLines.forEach((nameLine, index) => {
+        lines.push(
+            index === 0
+                ? `${nameLine.padEnd(itemColumnWidth)}${quantity.padStart(quantityColumnWidth)}${rate.padStart(rateColumnWidth)}${price.padStart(priceColumnWidth)}`
+                : nameLine.padEnd(receiptWidth),
+        );
+    });
+};
+
+const appendSummaryRow = (lines: string[], label: string, value: string) => {
+    lines.push(`${label.padEnd(summaryLabelWidth)}${value.padStart(summaryValueWidth)}`);
+};
+
+export const buildReceiptText = (sale: SaleDetailDTO, context: ReceiptContext = {}): string => {
+    const separator = "-".repeat(receiptWidth);
+    const doubleSeparator = "=".repeat(receiptWidth);
     const itemDiscountTotal = sale.items.reduce((total, item) => {
         const parentDiscount = Number(item.discountAmount ?? 0);
         const addOnDiscount = (item.addOns ?? []).reduce(
@@ -20,72 +89,97 @@ export const buildReceiptText = (sale: SaleDetailDTO): string => {
         0,
     );
 
-    let text = "";
-    text += `${doubleSeparator}\n`;
-    text += "             INVOICE / RECEIPT\n";
-    text += `${doubleSeparator}\n`;
-    text += `Bill #: ${sale.saleNumber ? sale.saleNumber : "Draft"}\n`;
-    text += `Date: ${formatDateTime(sale.createdAt)}\n`;
-    text += `Status: ${sale.status.toUpperCase()} (${sale.paymentStatus.toUpperCase()})\n`;
-    text += `Customer: ${sale.customer?.name || "Walk-in Customer"}\n`;
-    text += `${separator}\n`;
-    text += "ITEM                    QTY    PRICE    TOTAL\n";
-    text += `${separator}\n`;
+    const lines: string[] = [];
+    const organizationName = context.organizationName?.trim();
+    const storeName = context.storeName?.trim();
+    const storeAddress = context.storeAddress?.trim();
+    const storePhone = context.storePhone?.trim();
+
+    lines.push(doubleSeparator);
+    if (organizationName) lines.push(centerText(organizationName));
+    if (storeName) lines.push(centerText(storeName));
+    if (storeAddress) wrapText(storeAddress, receiptWidth).forEach((line) => lines.push(centerText(line)));
+    if (storePhone) lines.push(centerText(`Phone: ${storePhone}`));
+    lines.push(centerText("INVOICE / RECEIPT"));
+    if (organizationName || storeName || storeAddress || storePhone) lines.push(separator);
+    lines.push(`Bill #: ${sale.saleNumber ? sale.saleNumber : "Draft"}`);
+    lines.push(`Date: ${formatDateTime(sale.createdAt)}`);
+    const customerWithPhone = sale.customer?.phone ? sale.customer : null;
+    lines.push(`Customer: ${customerWithPhone?.name || "Walk-in Customer"}`);
+    if (customerWithPhone?.phone) lines.push(`Phone: ${customerWithPhone.phone}`);
+    lines.push(separator);
+    lines.push(
+        `${"ITEM".padEnd(itemColumnWidth)}${"QTY".padStart(quantityColumnWidth)}${"RATE".padStart(rateColumnWidth)}${"PRICE".padStart(priceColumnWidth)}`,
+    );
+    lines.push(separator);
 
     sale.items.forEach((item) => {
-        const name = item.productNameSnapshot.padEnd(20).substring(0, 20);
-        const qty = String(Number(item.quantity)).padStart(5);
-        const price = money(item.unitPriceSnapshot).padStart(8);
-        const total = money(item.lineTotal).padStart(8);
-        text += `${name}${qty}${price}${total}\n`;
+        appendItemRow(
+            lines,
+            item.productNameSnapshot,
+            String(Number(item.quantity)),
+            money(item.unitPriceSnapshot),
+            money(item.lineTotal),
+        );
         if (Number(item.discountAmount) > 0) {
-            text += `  * Disc: -${item.discountAmount}\n`;
+            wrapText(`  * Discount: -${item.discountAmount}`, receiptWidth).forEach((line) => lines.push(line));
         }
 
         (item.addOns ?? []).forEach((addOn) => {
-            const addOnName = `+ ${addOn.addOnNameSnapshot}`.padEnd(20).substring(0, 20);
-            const addOnQty = String(Number(addOn.totalQuantity)).padStart(5);
-            const addOnPrice = money(addOn.unitPriceSnapshot).padStart(8);
-            const addOnTotal = money(addOn.lineTotal).padStart(8);
-            text += `${addOnName}${addOnQty}${addOnPrice}${addOnTotal}\n`;
+            appendItemRow(
+                lines,
+                `+ ${addOn.addOnNameSnapshot}`,
+                String(Number(addOn.totalQuantity)),
+                money(addOn.unitPriceSnapshot),
+                money(addOn.lineTotal),
+            );
         });
 
         (item.bundleComponents ?? []).forEach((component) => {
-            const componentName = `* ${component.productNameSnapshot}`.padEnd(20).substring(0, 20);
-            const componentQty = String(Number(component.totalQuantity)).padStart(5);
-            text += `${componentName}${componentQty}${" ".repeat(16)}\n`;
+            appendItemRow(
+                lines,
+                `* ${component.productNameSnapshot}`,
+                String(Number(component.totalQuantity)),
+                money(component.unitPriceSnapshot),
+                "",
+            );
             if (Number(component.priceAdjustmentSnapshot ?? 0) !== 0) {
                 const adjustment = money(component.priceAdjustmentSnapshot);
-                text += `  * Option adjustment: ${adjustment}\n`;
+                wrapText(`  * Option adjustment: ${adjustment}`, receiptWidth).forEach((line) => lines.push(line));
             }
             (component.addOns ?? []).forEach((addOn) => {
-                const addOnName = `  + ${addOn.addOnNameSnapshot}`.padEnd(20).substring(0, 20);
-                const addOnQty = String(Number(addOn.totalQuantity)).padStart(5);
-                const addOnTotal = money(
-                    (Number(addOn.unitPriceSnapshot) - Number(addOn.unitDiscountSnapshot)) * Number(addOn.totalQuantity),
-                ).padStart(8);
-                text += `${addOnName}${addOnQty}${addOnTotal.padStart(16)}\n`;
+                const addOnRate = Number(addOn.unitPriceSnapshot) - Number(addOn.unitDiscountSnapshot);
+                const addOnTotal = addOnRate * Number(addOn.totalQuantity);
+                appendItemRow(
+                    lines,
+                    `  + ${addOn.addOnNameSnapshot}`,
+                    String(Number(addOn.totalQuantity)),
+                    money(addOnRate),
+                    money(addOnTotal),
+                );
                 if (Number(addOn.unitDiscountSnapshot) > 0) {
-                    text += `    * Add-on discount: -${money(Number(addOn.unitDiscountSnapshot) * Number(addOn.totalQuantity))}\n`;
+                    wrapText(
+                        `    * Add-on discount: -${money(Number(addOn.unitDiscountSnapshot) * Number(addOn.totalQuantity))}`,
+                        receiptWidth,
+                    ).forEach((line) => lines.push(line));
                 }
             });
         });
     });
 
-    text += `${separator}\n`;
-    text += `Items Subtotal:`.padEnd(30) + String(discountedItemsSubtotal).padStart(12) + "\n";
+    lines.push(separator);
+    appendSummaryRow(lines, "Subtotal:", String(discountedItemsSubtotal));
     if (itemDiscountTotal > 0) {
-        text += `Item Discount Included:`.padEnd(30) + String(itemDiscountTotal).padStart(12) + "\n";
+        appendSummaryRow(lines, "Item Discount:", `-${itemDiscountTotal}`);
     }
     if (Number(sale.orderDiscountAmount) > 0) {
-        text += `Order Discount:`.padEnd(30) + String(sale.orderDiscountAmount).padStart(12) + "\n";
+        appendSummaryRow(lines, "Order Discount:", `-${sale.orderDiscountAmount}`);
     }
-    text += `Settlement Total:`.padEnd(30) + money(sale.grandTotal).padStart(12) + "\n";
-    text += `Collected:`.padEnd(30) + money(sale.paidTotal).padStart(12) + "\n";
-    text += `Due:`.padEnd(30) + money(sale.dueTotal).padStart(12) + "\n";
-    text += `${doubleSeparator}\n`;
-    text += "           Thank you for shopping!\n";
-    text += `${doubleSeparator}\n`;
+    lines.push(doubleSeparator);
+    lines.push(centerText(`FINAL AMOUNT: ${money(sale.grandTotal)}`));
+    lines.push(doubleSeparator);
+    lines.push(centerText("Thank you! Visit again"));
+    lines.push(doubleSeparator);
 
-    return text;
+    return lines.join("\n") + "\n";
 };
