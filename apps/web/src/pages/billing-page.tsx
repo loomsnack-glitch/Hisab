@@ -1,6 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSwipeable } from "react-swipeable";
 import {
     commitSale,
@@ -366,6 +366,8 @@ const BillingPage = ({
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
     const [draftToDeleteId, setDraftToDeleteId] = useState<string | null>(null);
     const [receiptToPrint, setReceiptToPrint] = useState<SaleDetailDTO | null>(null);
+    const salesScrollContainerRef = useRef<HTMLDivElement | null>(null);
+    const salesLoadMoreRef = useRef<HTMLDivElement | null>(null);
     const completionRequestRef = useRef<{
         requestId: string;
         fingerprint: string;
@@ -461,15 +463,20 @@ const BillingPage = ({
         [dateFilter, specificDate, customFromDate, customToDate],
     );
     const dateRangeNeedsInput = dateFilter === "custom" && !customFromDate && !customToDate;
+    const salesStatusFilter = historyFilter === "draft" || historyFilter === "voided" ? historyFilter : historyFilter === "open" || historyFilter === "paid" ? "completed" : undefined;
+    const salesPaymentStatusFilter = historyFilter === "paid" ? "paid" : undefined;
     const salesQueryParams = useMemo<SalesListQuery>(() => {
         return {
             limit: 40,
+            sort: sortBy,
+            status: salesStatusFilter,
+            paymentStatus: salesPaymentStatusFilter,
             search: deferredSalesSearch || undefined,
             paymentMethod: paymentMethodFilter === "all" ? undefined : paymentMethodFilter,
             createdFrom: salesDateBounds.from?.toISOString(),
             createdTo: salesDateBounds.to?.toISOString(),
         };
-    }, [deferredSalesSearch, paymentMethodFilter, salesDateBounds.from, salesDateBounds.to]);
+    }, [deferredSalesSearch, paymentMethodFilter, salesDateBounds.from, salesDateBounds.to, salesPaymentStatusFilter, salesStatusFilter, sortBy]);
 
     const customersQuery = useQuery({
         queryKey: billingKeys.customers(organizationId, { mode: "device" }),
@@ -477,12 +484,21 @@ const BillingPage = ({
         enabled: isDeviceMode && Boolean(organizationId),
     });
 
-    const salesQuery = useQuery({
+    const salesQuery = useInfiniteQuery({
         queryKey: billingKeys.sales(organizationId, selectedStoreId, salesQueryParams),
-        queryFn: () =>
-            isDeviceMode
-                ? getPosSales(salesQueryParams)
-                : getSales(organizationId, selectedStoreId, salesQueryParams),
+        initialPageParam: null as string | null,
+        queryFn: async ({ pageParam }) => {
+            const query = pageParam ? { ...salesQueryParams, cursor: pageParam } : salesQueryParams;
+            const response = isDeviceMode ? await getPosSales(query) : await getSales(organizationId, selectedStoreId, query);
+            if (response.status === "error") {
+                throw new Error(response.message || "Bills failed to load");
+            }
+            return response;
+        },
+        getNextPageParam: (lastPage) =>
+            lastPage.status === "success" && lastPage.data?.pageInfo.hasMore
+                ? lastPage.data.pageInfo.nextCursor ?? undefined
+                : undefined,
         enabled: Boolean(organizationId && selectedStoreId) && !dateRangeNeedsInput,
     });
 
@@ -570,9 +586,19 @@ const BillingPage = ({
         [adminAttachmentQueries, isDeviceMode, selectableAttachmentsQuery.data],
     );
     const customers = customersQuery.data?.status === "success" ? (customersQuery.data.data?.customers ?? []) : [];
-    const sales = salesQuery.data?.status === "success" ? (salesQuery.data.data?.sales ?? []) : [];
+    const salesPages = salesQuery.data?.pages ?? [];
+    const sales = useMemo(
+        () =>
+            salesPages.flatMap((page) =>
+                page.status === "success" ? page.data?.sales ?? [] : [],
+            ),
+        [salesPages],
+    );
+    const firstSalesPage = salesPages[0];
+    const salesServiceError =
+        salesPages.length === 0 && salesQuery.error instanceof Error ? salesQuery.error.message : null;
     const salesSummary =
-        !dateRangeNeedsInput && salesQuery.data?.status === "success" ? salesQuery.data.data?.summary ?? null : null;
+        !dateRangeNeedsInput && firstSalesPage?.status === "success" ? firstSalesPage.data?.summary ?? null : null;
     const selectedCustomer =
         customers.find((customer) => customer.id === selectedCustomerId) ?? selectedCustomerFallback;
     const customerSearchLooksLikePhone = /^[+\d\s()-]+$/.test(customerSearch);
@@ -700,36 +726,60 @@ const BillingPage = ({
     });
     const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
 
-    const filteredSales = sales
-        .filter((sale) => {
-            switch (historyFilter) {
-                case "draft":
-                    return sale.status === "draft";
-                case "open":
-                    return sale.status === "completed" && sale.paymentStatus !== "paid";
-                case "paid":
-                    return sale.paymentStatus === "paid";
-                case "voided":
-                    return sale.status === "voided";
-                default:
-                    return true;
-            }
-        })
-        .sort((a, b) => {
-            if (sortBy === "newest") {
-                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-            }
-            if (sortBy === "oldest") {
-                return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-            }
-            if (sortBy === "highest") {
-                return b.grandTotal - a.grandTotal;
-            }
-            if (sortBy === "lowest") {
-                return a.grandTotal - b.grandTotal;
-            }
-            return 0;
-        });
+    const filteredSales = sales.filter((sale) => {
+        switch (historyFilter) {
+            case "draft":
+                return sale.status === "draft";
+            case "open":
+                return sale.status === "completed" && sale.paymentStatus !== "paid";
+            case "paid":
+                return sale.paymentStatus === "paid";
+            case "voided":
+                return sale.status === "voided";
+            default:
+                return true;
+        }
+    });
+
+    useEffect(() => {
+        const target = salesLoadMoreRef.current;
+        const scrollContainer = salesScrollContainerRef.current;
+        if (!target || !scrollContainer || !salesQuery.hasNextPage) {
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry?.isIntersecting && !salesQuery.isFetchingNextPage) {
+                    void salesQuery.fetchNextPage();
+                }
+            },
+            { root: scrollContainer, rootMargin: "240px" },
+        );
+        observer.observe(target);
+
+        return () => observer.disconnect();
+    }, [salesQuery.fetchNextPage, salesQuery.hasNextPage, salesQuery.isFetchingNextPage]);
+
+    const salesLoadMoreFooter = salesQuery.isFetchNextPageError ? (
+        <div className="flex justify-center py-4">
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => void salesQuery.fetchNextPage()}
+            >
+                Retry loading bills
+            </Button>
+        </div>
+    ) : salesQuery.hasNextPage ? (
+        <div ref={salesLoadMoreRef} className="flex min-h-20 items-center justify-center py-6" aria-live="polite">
+            {salesQuery.isFetchingNextPage ? <Spinner className="size-8 text-primary" /> : null}
+        </div>
+    ) : salesPages.length > 1 ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">All bills loaded</p>
+    ) : null;
 
     const subtotal = items.reduce((total, item) => {
         return total + getComposerItemPricing(item).subtotal;
@@ -1626,6 +1676,7 @@ const BillingPage = ({
 
                 {/* ─── LEFT PANEL: Product Grid ─── */}
                 <div
+                    ref={salesScrollContainerRef}
                     className={cn(
                         "min-h-0 flex-1 overflow-y-auto p-4 pb-24 lg:min-w-0 lg:pb-4",
                         canMutate && leftPanelTab === "products" && "lg:pt-0",
@@ -2028,12 +2079,12 @@ const BillingPage = ({
                                 <div className="flex min-h-[320px] items-center justify-center">
                                     <Spinner className="size-6 text-primary" />
                                 </div>
-                            ) : salesQuery.isError || salesQuery.data?.status === "error" ? (
+                            ) : salesPages.length === 0 && (salesQuery.isError || salesServiceError) ? (
                                 <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/20 bg-destructive/5 p-5 text-center">
                                     <ReceiptText className="size-8 text-destructive/70" />
                                     <p className="mt-3 font-medium text-foreground">Recent bills failed to load</p>
                                     <p className="mt-1 text-sm text-muted-foreground">
-                                        {salesQuery.data?.message || "Please refresh the page."}
+                                        {salesServiceError || "Please refresh the page."}
                                     </p>
                                 </div>
                             ) : filteredSales.length === 0 ? (
@@ -2257,6 +2308,7 @@ const BillingPage = ({
                                     })()}
                                 </>
                             )}
+                            {salesLoadMoreFooter}
                         </>
                     )}
                 </div>

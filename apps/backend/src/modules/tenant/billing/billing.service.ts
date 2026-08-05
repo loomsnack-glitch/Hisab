@@ -33,6 +33,7 @@ import {
     type VoidSaleSVC,
 } from "@repo/types";
 import * as billingRepository from "./billing.repository";
+import { decodeSalesCursor } from "./sales-pagination";
 
 const normalizeOptionalText = (value?: string | null) => {
     const trimmed = value?.trim();
@@ -1372,13 +1373,28 @@ const getSalesInStore = async (
         return invalidCustomerFilter;
     }
 
-    const [sales, summary] = await Promise.all([
-        billingRepository.getSalesByStore(organizationId, storeId, query),
-        billingRepository.getSalesSummaryByStore(organizationId, storeId, query),
+    const sort = query.sort ?? "newest";
+    if (query.cursor) {
+        const cursor = decodeSalesCursor(query.cursor);
+        if (!cursor || cursor.sort !== sort) {
+            return {
+                status: "error",
+                data: null,
+                message: "Invalid sales cursor",
+                code: STATUS_CODES.BAD_REQUEST,
+            };
+        }
+    }
+
+    const normalizedQuery = { ...query, sort };
+
+    const [salesPage, summary] = await Promise.all([
+        billingRepository.getSalesByStore(organizationId, storeId, normalizedQuery),
+        query.cursor ? Promise.resolve(null) : billingRepository.getSalesSummaryByStore(organizationId, storeId, normalizedQuery),
     ]);
     return {
         status: "success",
-        data: { sales, summary },
+        data: { ...salesPage, summary },
         message: "Sales fetched successfully",
         code: STATUS_CODES.SUCCESS,
     };

@@ -31,6 +31,7 @@ const positiveIntLimitSchema = z.coerce
 export const SaleStatusSchema = z.enum(["draft", "completed", "voided"]);
 export const PaymentStatusSchema = z.enum(["pending", "partial", "paid"]);
 export const PaymentMethodSchema = z.enum(["cash", "upi", "card", "bank_transfer", "other"]);
+export const SalesSortSchema = z.enum(["newest", "oldest", "highest", "lowest"]);
 export const CustomerLedgerEntryTypeSchema = z.enum(["sale", "payment", "void", "adjustment"]);
 export const SaleDeviceAuditDTOSchema = z.object({
     id: z.uuid("Invalid device id"),
@@ -317,6 +318,8 @@ export const SalesListQuerySchema = z.object({
     search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
     createdFrom: z.iso.datetime().optional(),
     createdTo: z.iso.datetime().optional(),
+    sort: SalesSortSchema.optional(),
+    cursor: z.string().trim().max(2048, "Cursor is too long").optional(),
     limit: positiveIntLimitSchema.optional(),
 });
 
@@ -325,6 +328,11 @@ export const SalesListSummarySchema = z.object({
     salesTotal: moneySchema,
     collectedTotal: moneySchema,
     dueTotal: moneySchema,
+});
+
+export const SalesListPageInfoSchema = z.object({
+    hasMore: z.boolean(),
+    nextCursor: z.string().nullable(),
 });
 
 export const ParentScopedAddOnSalesRollupDTOSchema = z.object({

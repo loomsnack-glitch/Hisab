@@ -25,9 +25,11 @@ import type {
     SaleSummaryDTO,
     SalesListSummary,
     SalesListQuery,
+    SalesSort,
     UpdateCustomerREPO,
     UpdateSaleREPO,
 } from "@repo/types";
+import { decodeSalesCursor, encodeSalesCursor } from "./sales-pagination";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 
@@ -41,6 +43,10 @@ type SaleSummaryRow = Record<string, unknown> & {
     replacement_sale_id?: string | null;
     replacement_sale_number?: number | string | null;
     replacement_of_sale_number?: number | string | null;
+};
+
+type SaleSummaryWithCursor = SaleSummaryDTO & {
+    cursorCreatedAt: string;
 };
 
 const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
@@ -264,7 +270,13 @@ export const getSalesByStore = async (
     organizationId: string,
     storeId: string,
     query: SalesListQuery,
-): Promise<SaleSummaryDTO[]> => {
+): Promise<{
+    sales: SaleSummaryDTO[];
+    pageInfo: {
+        hasMore: boolean;
+        nextCursor: string | null;
+    };
+}> => {
     const search = query.search?.trim() ?? "";
     const searchPattern = search ? `%${search}%` : "";
     const status = query.status ?? "";
@@ -274,10 +286,16 @@ export const getSalesByStore = async (
     const createdFrom = query.createdFrom ?? null;
     const createdTo = query.createdTo ?? null;
     const limit = query.limit ?? 50;
+    const sort: SalesSort = query.sort ?? "newest";
+    const cursor = query.cursor ? decodeSalesCursor(query.cursor) : null;
+    const cursorCreatedAt = cursor?.createdAt ?? null;
+    const cursorId = cursor?.id ?? null;
+    const cursorGrandTotal = cursor?.grandTotal ?? null;
 
     const results = await pg`
         SELECT
             s.*,
+            TO_CHAR(s.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_created_at,
             COALESCE(item_stats.item_count, 0) AS item_count,
             COALESCE(item_stats.items_summary, '') AS items_summary,
             COALESCE(payment_stats.payment_methods, '') AS payment_methods,
@@ -351,11 +369,82 @@ export const getSalesByStore = async (
               OR COALESCE(c.name, '') ILIKE ${searchPattern}
               OR COALESCE(c.phone, '') ILIKE ${searchPattern}
           )
-        ORDER BY s.created_at DESC
-        LIMIT ${limit}
+          AND (
+              ${cursorCreatedAt}::timestamptz IS NULL
+              OR (
+                  ${sort} = 'newest'
+                  AND (
+                      s.created_at < ${cursorCreatedAt}::timestamptz
+                      OR (s.created_at = ${cursorCreatedAt}::timestamptz AND s.id < ${cursorId}::uuid)
+                  )
+              )
+              OR (
+                  ${sort} = 'oldest'
+                  AND (
+                      s.created_at > ${cursorCreatedAt}::timestamptz
+                      OR (s.created_at = ${cursorCreatedAt}::timestamptz AND s.id > ${cursorId}::uuid)
+                  )
+              )
+              OR (
+                  ${sort} = 'highest'
+                  AND (
+                      s.grand_total < ${cursorGrandTotal}::numeric
+                      OR (
+                          s.grand_total = ${cursorGrandTotal}::numeric
+                          AND s.created_at < ${cursorCreatedAt}::timestamptz
+                      )
+                      OR (
+                          s.grand_total = ${cursorGrandTotal}::numeric
+                          AND s.created_at = ${cursorCreatedAt}::timestamptz
+                          AND s.id < ${cursorId}::uuid
+                      )
+                  )
+              )
+              OR (
+                  ${sort} = 'lowest'
+                  AND (
+                      s.grand_total > ${cursorGrandTotal}::numeric
+                      OR (
+                          s.grand_total = ${cursorGrandTotal}::numeric
+                          AND s.created_at > ${cursorCreatedAt}::timestamptz
+                      )
+                      OR (
+                          s.grand_total = ${cursorGrandTotal}::numeric
+                          AND s.created_at = ${cursorCreatedAt}::timestamptz
+                          AND s.id > ${cursorId}::uuid
+                      )
+                  )
+              )
+          )
+        ORDER BY
+            CASE WHEN ${sort} = 'newest' THEN s.created_at END DESC,
+            CASE WHEN ${sort} = 'oldest' THEN s.created_at END ASC,
+            CASE WHEN ${sort} = 'highest' THEN s.grand_total END DESC,
+            CASE WHEN ${sort} = 'lowest' THEN s.grand_total END ASC,
+            CASE WHEN ${sort} IN ('newest', 'highest') THEN s.created_at END DESC,
+            CASE WHEN ${sort} IN ('oldest', 'lowest') THEN s.created_at END ASC,
+            CASE WHEN ${sort} IN ('newest', 'highest') THEN s.id END DESC,
+            CASE WHEN ${sort} IN ('oldest', 'lowest') THEN s.id END ASC
+        LIMIT ${limit + 1}
     `;
 
-    return results.map((result: Record<string, unknown>) => mapSaleSummaryRow(result as SaleSummaryRow));
+    const salesWithCursor: SaleSummaryWithCursor[] = results
+        .slice(0, limit)
+        .map((result: Record<string, unknown>) => ({
+            ...mapSaleSummaryRow(result as SaleSummaryRow),
+            cursorCreatedAt: result.cursor_created_at as string,
+        }));
+    const sales = salesWithCursor.map(({ cursorCreatedAt: _cursorCreatedAt, ...sale }) => sale);
+    const hasMore = results.length > limit;
+    const lastSale = salesWithCursor.at(-1);
+
+    return {
+        sales,
+        pageInfo: {
+            hasMore,
+            nextCursor: hasMore && lastSale ? encodeSalesCursor(lastSale, sort) : null,
+        },
+    };
 };
 
 export const getSalesSummaryByStore = async (
