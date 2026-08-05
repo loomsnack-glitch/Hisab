@@ -65,8 +65,9 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@repo/ui/components/dialog";
-import { DatePicker } from "@repo/ui/components/date-picker";
+import { Calendar as DateCalendar } from "@repo/ui/components/calendar";
 import { Input } from "@repo/ui/components/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
 import {
@@ -81,6 +82,8 @@ import {
     ArrowUpDown,
     Calendar,
     Check,
+    ChevronLeft,
+    ChevronRight,
     Filter,
     LayoutGrid,
     MoreHorizontal,
@@ -191,7 +194,8 @@ const isSameComposerConfiguration = (
 type SettlementMode = "full" | "partial" | "due";
 type SaleSort = "newest" | "oldest" | "highest" | "lowest";
 type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
-type SalesDateFilter = "all" | "today" | "yesterday" | "this-week" | "specific" | "custom";
+type SalesDateMode = "date" | "range";
+type SalesDatePreset = "today" | "yesterday" | "this-week" | "this-month" | "custom" | "all";
 type BillingPanelTab = "products" | "bills" | "purchases" | "customers";
 type InvoiceAction = "print" | "whatsapp";
 
@@ -212,14 +216,27 @@ const salesPaymentMethodOptions: Array<{
     { value: "card", label: "Card" },
 ];
 
-const salesDateFilterOptions: Array<{ value: SalesDateFilter; label: string }> = [
-    { value: "all", label: "All" },
+const salesDatePresetOptions: Array<{ value: SalesDatePreset; label: string }> = [
     { value: "today", label: "Today" },
     { value: "yesterday", label: "Yesterday" },
-    { value: "this-week", label: "This Week" },
-    { value: "specific", label: "Specific date" },
-    { value: "custom", label: "Date range" },
+    { value: "this-week", label: "This week" },
+    { value: "this-month", label: "This month" },
+    { value: "custom", label: "Custom" },
+    { value: "all", label: "All dates" },
 ];
+
+const getSalesDatePresetOptions = (mode: SalesDateMode) =>
+    salesDatePresetOptions.filter((preset) =>
+        mode === "date"
+            ? preset.value === "today" || preset.value === "yesterday" || preset.value === "custom"
+            : preset.value === "this-week" ||
+              preset.value === "this-month" ||
+              preset.value === "custom" ||
+              preset.value === "all",
+    );
+
+const formatSalesDate = (value: Date) =>
+    value.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
 const startOfLocalDay = (value: Date) =>
     new Date(value.getFullYear(), value.getMonth(), value.getDate());
@@ -231,42 +248,48 @@ const nextLocalDay = (value: Date) => {
 };
 
 const getSalesDateBounds = (
-    filter: SalesDateFilter,
-    specificDate: Date | null,
+    mode: SalesDateMode,
+    selectedDate: Date,
     customFromDate: Date | null,
     customToDate: Date | null,
+    preset: SalesDatePreset,
 ) => {
+    if (preset === "all") {
+        return { from: null, to: null };
+    }
+
     const today = startOfLocalDay(new Date());
 
-    if (filter === "today") {
+    if (preset === "today") {
         return { from: today, to: nextLocalDay(today) };
     }
 
-    if (filter === "yesterday") {
+    if (preset === "yesterday") {
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         return { from: yesterday, to: today };
     }
 
-    if (filter === "this-week") {
+    if (preset === "this-week") {
         const weekStart = new Date(today);
         weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
         return { from: weekStart, to: nextLocalDay(today) };
     }
 
-    if (filter === "specific" && specificDate) {
-        const from = startOfLocalDay(specificDate);
+    if (preset === "this-month") {
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        return { from: monthStart, to: nextLocalDay(today) };
+    }
+
+    if (mode === "date") {
+        const from = startOfLocalDay(selectedDate);
         return { from, to: nextLocalDay(from) };
     }
 
-    if (filter === "custom") {
-        return {
-            from: customFromDate ? startOfLocalDay(customFromDate) : null,
-            to: customToDate ? nextLocalDay(customToDate) : null,
-        };
-    }
-
-    return { from: null, to: null };
+    return {
+        from: customFromDate ? startOfLocalDay(customFromDate) : null,
+        to: customToDate ? nextLocalDay(customToDate) : null,
+    };
 };
 
 const SalesSummaryBar = ({ summary }: { summary: SalesListSummary | null }) => {
@@ -396,10 +419,17 @@ const BillingPage = ({
 
     const [sortBy, setSortBy] = useState<SaleSort>("newest");
     const [paymentMethodFilter, setPaymentMethodFilter] = useState<SalesPaymentMethodFilter>("all");
-    const [dateFilter, setDateFilter] = useState<SalesDateFilter>("today");
-    const [specificDate, setSpecificDate] = useState<Date | null>(new Date());
+    const [dateFilter, setDateFilter] = useState<SalesDateMode>("date");
+    const [datePreset, setDatePreset] = useState<SalesDatePreset>("today");
+    const [specificDate, setSpecificDate] = useState(new Date());
     const [customFromDate, setCustomFromDate] = useState<Date | null>(null);
     const [customToDate, setCustomToDate] = useState<Date | null>(null);
+    const [salesDatePopoverOpen, setSalesDatePopoverOpen] = useState(false);
+    const [appliedDateFilter, setAppliedDateFilter] = useState<SalesDateMode>("date");
+    const [appliedDatePreset, setAppliedDatePreset] = useState<SalesDatePreset>("today");
+    const [appliedSpecificDate, setAppliedSpecificDate] = useState(new Date());
+    const [appliedCustomFromDate, setAppliedCustomFromDate] = useState<Date | null>(null);
+    const [appliedCustomToDate, setAppliedCustomToDate] = useState<Date | null>(null);
     const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
     const [configureComboProductId, setConfigureComboProductId] = useState<string | null>(null);
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
@@ -411,23 +441,112 @@ const BillingPage = ({
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
     const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
 
-    const setSalesDateFilter = (filter: SalesDateFilter) => {
-        setDateFilter(filter);
-        if (filter === "specific" && !specificDate) {
-            setSpecificDate(new Date());
+    const applySalesDatePreset = (preset: SalesDatePreset) => {
+        const today = startOfLocalDay(new Date());
+        setDatePreset(preset);
+
+        if (preset === "today") {
+            setDateFilter("date");
+            setSpecificDate(today);
+            return;
         }
-        if (filter !== "specific") {
-            setSpecificDate(null);
+
+        if (preset === "yesterday") {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            setDateFilter("date");
+            setSpecificDate(yesterday);
+            return;
         }
-        if (filter !== "custom") {
+
+        if (preset === "this-week") {
+            const weekStart = new Date(today);
+            weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+            setDateFilter("range");
+            setCustomFromDate(weekStart);
+            setCustomToDate(today);
+            return;
+        }
+
+        if (preset === "this-month") {
+            setDateFilter("range");
+            setCustomFromDate(new Date(today.getFullYear(), today.getMonth(), 1));
+            setCustomToDate(today);
+            return;
+        }
+
+        if (preset === "all") {
+            setDateFilter("range");
             setCustomFromDate(null);
             setCustomToDate(null);
+            return;
         }
+    };
+
+    const shiftSalesDate = (days: number) => {
+        const next = new Date(salesDatePopoverOpen ? specificDate : appliedSpecificDate);
+        next.setDate(next.getDate() + days);
+        const nextDate = startOfLocalDay(next);
+
+        setDateFilter("date");
+        setDatePreset("custom");
+        setSpecificDate(nextDate);
+        setAppliedDateFilter("date");
+        setAppliedDatePreset("custom");
+        setAppliedSpecificDate(nextDate);
+        setAppliedCustomFromDate(null);
+        setAppliedCustomToDate(null);
+        setSalesDatePopoverOpen(false);
+    };
+
+    const setSalesDateMode = (mode: SalesDateMode) => {
+        setDateFilter(mode);
+        setDatePreset("custom");
+
+        if (mode === "range" && !customFromDate && !customToDate) {
+            setCustomFromDate(specificDate);
+            setCustomToDate(specificDate);
+        }
+    };
+
+    const confirmSalesDateFilter = () => {
+        if (dateFilter === "range" && datePreset === "custom" && (!customFromDate || !customToDate)) {
+            return;
+        }
+
+        setAppliedDateFilter(dateFilter);
+        setAppliedDatePreset(datePreset);
+        setAppliedSpecificDate(specificDate);
+        setAppliedCustomFromDate(customFromDate);
+        setAppliedCustomToDate(customToDate);
+        setSalesDatePopoverOpen(false);
+    };
+
+    const handleSalesDatePopoverOpenChange = (open: boolean) => {
+        if (open) {
+            setDateFilter(appliedDateFilter);
+            setDatePreset(appliedDatePreset);
+            setSpecificDate(appliedSpecificDate);
+            setCustomFromDate(appliedCustomFromDate);
+            setCustomToDate(appliedCustomToDate);
+        } else {
+            setDateFilter(appliedDateFilter);
+            setDatePreset(appliedDatePreset);
+            setSpecificDate(appliedSpecificDate);
+            setCustomFromDate(appliedCustomFromDate);
+            setCustomToDate(appliedCustomToDate);
+        }
+        setSalesDatePopoverOpen(open);
     };
 
     const changePanelTab = (tab: BillingPanelTab) => {
         if (tab === "bills" && leftPanelTab !== "bills") {
-            setSalesDateFilter("today");
+            applySalesDatePreset("today");
+            setAppliedDateFilter("date");
+            setAppliedDatePreset("today");
+            setAppliedSpecificDate(startOfLocalDay(new Date()));
+            setAppliedCustomFromDate(null);
+            setAppliedCustomToDate(null);
         }
         setLeftPanelTab(tab);
     };
@@ -459,10 +578,18 @@ const BillingPage = ({
     });
 
     const salesDateBounds = useMemo(
-        () => getSalesDateBounds(dateFilter, specificDate, customFromDate, customToDate),
-        [dateFilter, specificDate, customFromDate, customToDate],
+        () =>
+            getSalesDateBounds(
+                appliedDateFilter,
+                appliedSpecificDate,
+                appliedCustomFromDate,
+                appliedCustomToDate,
+                appliedDatePreset,
+            ),
+        [appliedDateFilter, appliedDatePreset, appliedSpecificDate, appliedCustomFromDate, appliedCustomToDate],
     );
-    const dateRangeNeedsInput = dateFilter === "custom" && !customFromDate && !customToDate;
+    const dateRangeNeedsInput =
+        appliedDateFilter === "range" && appliedDatePreset === "custom" && (!appliedCustomFromDate || !appliedCustomToDate);
     const salesStatusFilter = historyFilter === "draft" || historyFilter === "voided" ? historyFilter : historyFilter === "open" || historyFilter === "paid" ? "completed" : undefined;
     const salesPaymentStatusFilter = historyFilter === "paid" ? "paid" : undefined;
     const salesQueryParams = useMemo<SalesListQuery>(() => {
@@ -1953,7 +2080,7 @@ const BillingPage = ({
                                 </div>
 
                                 {/* Second Row: Filters (Payment & Date) */}
-                                <div className="flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:flex-wrap sm:items-start">
+                                <div className="flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:flex-wrap sm:items-center">
                                     {/* Payment Method Filters */}
                                     <div className="flex flex-wrap items-center gap-2">
                                         <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
@@ -1979,88 +2106,156 @@ const BillingPage = ({
                                     {/* Divider for sm and up */}
                                     <div className="hidden sm:block h-4 w-px bg-border/40 mx-2" />
 
-                                    {/* Date range Filters */}
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    {/* Date filters */}
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                         <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
                                             <Calendar className="size-3.5" />
                                         </div>
-                                        {salesDateFilterOptions.map((opt) => (
-                                            <button
-                                                key={opt.value}
+                                        {dateFilter === "date" ? (
+                                            <Button
                                                 type="button"
-                                                onClick={() => setSalesDateFilter(opt.value)}
-                                                className={cn(
-                                                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
-                                                    dateFilter === opt.value
-                                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                                                )}
+                                                variant="outline"
+                                                size="icon"
+                                                className="size-8 shrink-0 rounded-lg"
+                                                aria-label="Previous date"
+                                                onClick={() => shiftSalesDate(-1)}
                                             >
-                                                {opt.label}
-                                            </button>
-                                        ))}
+                                                <ChevronLeft className="size-4" />
+                                            </Button>
+                                        ) : null}
+                                        <Popover open={salesDatePopoverOpen} onOpenChange={handleSalesDatePopoverOpenChange}>
+                                            <PopoverTrigger
+                                                render={
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        className="h-8 min-w-0 max-w-[280px] justify-start gap-2 rounded-lg px-2.5 text-xs"
+                                                    >
+                                                        <Calendar className="size-3.5 shrink-0" />
+                                                        <span className="truncate">
+                                                            {appliedDateFilter === "date"
+                                                                ? formatSalesDate(appliedSpecificDate)
+                                                                : appliedDatePreset === "all"
+                                                                  ? "All dates"
+                                                                  : appliedCustomFromDate && appliedCustomToDate
+                                                                    ? `${formatSalesDate(appliedCustomFromDate)} — ${formatSalesDate(appliedCustomToDate)}`
+                                                                    : "Select date range"}
+                                                        </span>
+                                                    </Button>
+                                                }
+                                            />
+                                            <PopoverContent
+                                                align="start"
+                                                className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-3"
+                                            >
+                                                <div className="flex min-w-0 flex-col gap-3">
+                                                    <div className="flex min-w-0 rounded-lg border border-border/50 bg-muted/30 p-0.5">
+                                                        {(["date", "range"] as const).map((mode) => (
+                                                            <button
+                                                                key={mode}
+                                                                type="button"
+                                                                onClick={() => setSalesDateMode(mode)}
+                                                                className={cn(
+                                                                    "min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-xs font-semibold transition-colors",
+                                                                    dateFilter === mode
+                                                                        ? "bg-background text-foreground shadow-sm"
+                                                                        : "text-muted-foreground hover:text-foreground",
+                                                                )}
+                                                            >
+                                                                {mode === "date" ? "Date" : "Date range"}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+
+                                                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                                                        {getSalesDatePresetOptions(dateFilter).map((preset) => (
+                                                            <button
+                                                                key={preset.value}
+                                                                type="button"
+                                                                onClick={() => applySalesDatePreset(preset.value)}
+                                                                className={cn(
+                                                                    "min-w-0 max-w-full rounded-full border px-2.5 py-1 text-center text-xs font-medium whitespace-normal break-words transition-colors",
+                                                                    datePreset === preset.value
+                                                                        ? "border-primary/40 bg-primary/10 text-primary"
+                                                                        : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                                                )}
+                                                            >
+                                                                {preset.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+
+                                                    <div className="min-w-0 max-w-full overflow-x-auto">
+                                                        <div className="flex w-full min-w-max justify-center">
+                                                        {dateFilter === "date" ? (
+                                                            <DateCalendar
+                                                                mode="single"
+                                                                className="mx-auto p-1 [--cell-size:--spacing(6)]"
+                                                                classNames={{
+                                                                    day_button: "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
+                                                                }}
+                                                                selected={specificDate}
+                                                                onSelect={(date) => {
+                                                                    if (date) {
+                                                                        setSpecificDate(date);
+                                                                        setDatePreset("custom");
+                                                                    }
+                                                                }}
+                                                                autoFocus
+                                                            />
+                                                        ) : (
+                                                            <DateCalendar
+                                                                mode="range"
+                                                                className="mx-auto p-1 [--cell-size:--spacing(6)]"
+                                                                classNames={{
+                                                                    day_button: "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
+                                                                }}
+                                                                selected={{
+                                                                    from: customFromDate ?? undefined,
+                                                                    to: customToDate ?? undefined,
+                                                                }}
+                                                                onSelect={(range) => {
+                                                                    setDatePreset("custom");
+                                                                    setCustomFromDate(range?.from ?? null);
+                                                                    setCustomToDate(range?.to ?? null);
+                                                                }}
+                                                                autoFocus
+                                                            />
+                                                        )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex justify-end border-t border-border/50 pt-3">
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            className="rounded-lg"
+                                                            disabled={
+                                                                dateFilter === "range" &&
+                                                                datePreset === "custom" &&
+                                                                (!customFromDate || !customToDate)
+                                                            }
+                                                            onClick={confirmSalesDateFilter}
+                                                        >
+                                                            Confirm
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+                                        {dateFilter === "date" ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="icon"
+                                                className="size-8 shrink-0 rounded-lg"
+                                                aria-label="Next date"
+                                                onClick={() => shiftSalesDate(1)}
+                                            >
+                                                <ChevronRight className="size-4" />
+                                            </Button>
+                                        ) : null}
                                     </div>
-
-                                    {dateFilter === "specific" && (
-                                        <div className="flex w-full min-w-0 items-center gap-1.5 border-t border-border/40 pt-3 sm:w-auto sm:border-t-0 sm:pt-0">
-                                            <DatePicker
-                                                value={specificDate}
-                                                onChange={(date) => {
-                                                    setSpecificDate(date);
-                                                    if (date) setDateFilter("specific");
-                                                }}
-                                                placeholder="Choose date"
-                                                className="h-8 min-w-0 w-full text-xs sm:w-40"
-                                                clearable={false}
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setSalesDateFilter("today")}
-                                                className="inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                            >
-                                                Reset
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {dateFilter === "custom" && (
-                                        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 border-t border-border/40 pt-3 sm:flex sm:w-auto sm:flex-wrap sm:border-t-0 sm:pt-0">
-                                            <DatePicker
-                                                value={customFromDate}
-                                                onChange={(date) => {
-                                                    setCustomFromDate(date);
-                                                    setDateFilter("custom");
-                                                }}
-                                                placeholder="From date"
-                                                className="h-8 min-w-0 w-full text-xs sm:w-36"
-                                                clearable={false}
-                                            />
-                                            <span className="shrink-0 text-xs text-muted-foreground">to</span>
-                                            <DatePicker
-                                                value={customToDate}
-                                                onChange={(date) => {
-                                                    setCustomToDate(date);
-                                                    setDateFilter("custom");
-                                                }}
-                                                placeholder="To date"
-                                                className="h-8 min-w-0 w-full text-xs sm:w-36"
-                                                clearable={false}
-                                            />
-                                            {(customFromDate || customToDate) && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setSalesDateFilter("all");
-                                                    }}
-                                                    aria-label="Clear custom date range"
-                                                    className="col-span-3 inline-flex h-8 items-center justify-center gap-1 justify-self-end rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:col-span-1"
-                                                >
-                                                    <X className="size-3.5" />
-                                                    Clear
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
