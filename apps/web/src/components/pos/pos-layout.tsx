@@ -1,11 +1,21 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { deviceLogout } from "@repo/services";
 import type { DeviceSessionDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
-import { Expand, LogOut, Minimize, Printer, Search, X } from "lucide-react";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@repo/ui/components/alert-dialog";
+import { Expand, LoaderCircle, LogOut, Minimize, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ThemeToggle from "@/components/dashboard/theme-toggle";
@@ -15,6 +25,46 @@ import { deviceAuthKeys } from "@/lib/query-keys";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
+
+type PrinterButtonVisualState =
+    | "connected"
+    | "disconnected"
+    | "connecting"
+    | "printing"
+    | "error"
+    | "unsupported";
+
+const getPrinterButtonClassName = (state: PrinterButtonVisualState) => {
+    switch (state) {
+        case "connected":
+            return "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400";
+        case "connecting":
+        case "printing":
+            return "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400";
+        case "error":
+            return "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20";
+        case "unsupported":
+            return "border-muted-foreground/30 bg-muted/30 text-muted-foreground hover:bg-muted/50";
+        default:
+            return "border-border bg-muted/30 text-muted-foreground hover:bg-muted";
+    }
+};
+
+const getPrinterStatusDotClassName = (state: PrinterButtonVisualState) => {
+    switch (state) {
+        case "connected":
+            return "bg-emerald-500";
+        case "connecting":
+        case "printing":
+            return "bg-sky-500";
+        case "error":
+            return "bg-destructive";
+        case "unsupported":
+            return "bg-muted-foreground/50";
+        default:
+            return "bg-muted-foreground/60";
+    }
+};
 
 type PosLayoutProps = {
     children: ReactNode;
@@ -35,6 +85,21 @@ const PosLayout = ({
     const queryClient = useQueryClient();
     const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
     const posPrinter = useOptionalPosPrinter();
+    const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false);
+    const printerButtonState: PrinterButtonVisualState | null = posPrinter
+        ? !posPrinter.supported
+            ? "unsupported"
+            : posPrinter.status === "error"
+            ? "error"
+            : posPrinter.status === "connecting"
+            ? "connecting"
+            : posPrinter.status === "printing"
+            ? "printing"
+            : posPrinter.connected
+            ? "connected"
+            : "disconnected"
+        : null;
+    const printerIsBusy = printerButtonState === "connecting" || printerButtonState === "printing";
 
     const handleFullscreenToggle = async () => {
         try {
@@ -136,19 +201,30 @@ const PosLayout = ({
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="size-9 rounded-full"
+                            className={`relative size-9 rounded-full transition-colors ${getPrinterButtonClassName(printerButtonState!)}`}
                             aria-label={posPrinter.connected ? "Disconnect receipt printer" : "Connect receipt printer"}
+                            aria-busy={printerIsBusy}
                             title={
                                 !posPrinter.supported
                                     ? "WebUSB unavailable"
+                                    : printerButtonState === "error"
+                                    ? `Printer error: ${posPrinter.error || "Try connecting again"}`
+                                    : printerIsBusy
+                                    ? posPrinter.status === "printing"
+                                        ? "Printing invoice"
+                                        : "Connecting printer"
                                     : posPrinter.connected
                                     ? `Connected: ${posPrinter.printerName || "USB printer"}`
                                     : "Connect 80mm receipt printer"
                             }
-                            disabled={posPrinter.status === "connecting" || posPrinter.status === "printing"}
+                            disabled={printerIsBusy}
                             onClick={() => void handlePrinterToggle()}
                         >
-                            <Printer className="size-4" />
+                            {printerIsBusy ? <LoaderCircle className="size-4 animate-spin" /> : <Printer className="size-4" />}
+                            <span
+                                aria-hidden="true"
+                                className={`absolute top-0 right-0 size-2.5 rounded-full border-2 border-background ${getPrinterStatusDotClassName(printerButtonState!)}`}
+                            />
                         </Button>
                     ) : null}
 
@@ -167,16 +243,39 @@ const PosLayout = ({
                         </Button>
                     ) : null}
 
-          <Button
-            variant="outline"
-            className="rounded-full"
-            onClick={handleLogout}
-          >
-                        <LogOut className="mr-2 size-4" />
-                        Logout
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-9 rounded-full"
+                        aria-label="Logout"
+                        title="Logout"
+                        onClick={() => setLogoutConfirmationOpen(true)}
+                    >
+                        <LogOut className="size-4" />
                     </Button>
                 </div>
             </header>
+
+            <AlertDialog open={logoutConfirmationOpen} onOpenChange={setLogoutConfirmationOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure you want to logout?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            You will need to sign in again on this POS device.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => void handleLogout()}
+                        >
+                            Logout
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <main className="w-full px-0">{children}</main>
         </div>
