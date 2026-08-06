@@ -1,6 +1,6 @@
 import { cn } from "@repo/ui/lib/utils";
 
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDiscountPercentage } from "@/lib/format";
 
 type ProductPriceDisplayProps = {
     price: number | string;
@@ -57,6 +57,7 @@ const ProductPriceDisplay = ({
     const discountAmount = Number(discount ?? 0);
     const hasDiscount = discountAmount > 0;
     const finalPrice = getDiscountedPrice(originalPrice, discountAmount);
+    const discountPercentage = formatDiscountPercentage(discountAmount, originalPrice);
     const styles = sizeStyles[size];
     const alignClass =
     align === "center"
@@ -99,6 +100,11 @@ const ProductPriceDisplay = ({
             >
                 {formatCurrency(finalPrice)}
             </span>
+            {discountPercentage ? (
+                <span className="text-[10px] font-semibold leading-none text-emerald-600/90 dark:text-emerald-400/90">
+                    Save {formatCurrency(discountAmount)} · {discountPercentage}
+                </span>
+            ) : null}
         </div>
     );
 };

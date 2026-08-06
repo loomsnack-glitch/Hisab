@@ -111,7 +111,7 @@ import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
-import { formatCurrency, formatDateTime, formatLongDate } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
@@ -950,6 +950,8 @@ const BillingPage = ({
                   : null;
     const hasInvalidDiscount = Boolean(discountValidationMessage);
     const totalDiscount = lineDiscountTotal + orderDiscountAmount;
+    const itemDiscountPercentage = formatDiscountPercentage(lineDiscountTotal, subtotal);
+    const orderDiscountPercentage = formatDiscountPercentage(orderDiscountAmount, discountBase);
     const grandTotal = Math.max(subtotal - totalDiscount, 0);
     const rawPartialPaymentAmount = Math.max(Number(partialPaymentAmount || 0), 0);
     const collectedTotal =
@@ -2817,13 +2819,19 @@ const BillingPage = ({
                                         {lineDiscountTotal > 0 ? (
                                             <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                                                 <span>Item discounts</span>
-                                                <span>-{formatCurrency(lineDiscountTotal)}</span>
+                                                <span>
+                                                    -{formatCurrency(lineDiscountTotal)}
+                                                    {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
+                                                </span>
                                             </div>
                                         ) : null}
                                         {orderDiscountAmount > 0 ? (
                                             <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                                                 <span>Order discount</span>
-                                                <span>-{formatCurrency(orderDiscountAmount)}</span>
+                                                <span>
+                                                    -{formatCurrency(orderDiscountAmount)}
+                                                    {orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}
+                                                </span>
                                             </div>
                                         ) : null}
                                         <div className="flex justify-between pt-1 text-sm font-bold text-foreground">
@@ -3237,7 +3245,7 @@ const BillingPage = ({
                                     }
                                 >
                                     {orderDiscountAmount > 0
-                                        ? `-${formatCurrency(orderDiscountAmount)}`
+                                        ? `-${formatCurrency(orderDiscountAmount)}${orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}`
                                         : discountEditorOpen
                                           ? "Hide"
                                           : "Optional"}
@@ -3458,13 +3466,19 @@ const BillingPage = ({
                                 {lineDiscountTotal > 0 ? (
                                     <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
                                         <span>Item discounts</span>
-                                        <span>-{formatCurrency(lineDiscountTotal)}</span>
+                                        <span>
+                                            -{formatCurrency(lineDiscountTotal)}
+                                            {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
+                                        </span>
                                     </div>
                                 ) : null}
                                 {orderDiscountAmount > 0 ? (
                                     <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
                                         <span>Order discount</span>
-                                        <span>-{formatCurrency(orderDiscountAmount)}</span>
+                                        <span>
+                                            -{formatCurrency(orderDiscountAmount)}
+                                            {orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}
+                                        </span>
                                     </div>
                                 ) : null}
                                 <div className="flex items-end justify-between border-t border-border/50 pt-3 text-foreground">

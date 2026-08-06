@@ -44,3 +44,27 @@ export const formatCurrency = (value: number | string | null | undefined) => {
         maximumFractionDigits: 2,
     }).format(Number.isFinite(numericValue) ? numericValue : 0);
 };
+
+export const getDiscountPercentage = (
+    discount: number | string | null | undefined,
+    base: number | string | null | undefined,
+) => {
+    const discountAmount = Number(discount ?? 0);
+    const baseAmount = Number(base ?? 0);
+
+    if (!Number.isFinite(discountAmount) || !Number.isFinite(baseAmount) || discountAmount <= 0 || baseAmount <= 0) {
+        return null;
+    }
+
+    return Math.min(100, Math.round((discountAmount / baseAmount) * 1000) / 10);
+};
+
+export const formatDiscountPercentage = (
+    discount: number | string | null | undefined,
+    base: number | string | null | undefined,
+) => {
+    const percentage = getDiscountPercentage(discount, base);
+    return percentage === null
+        ? null
+        : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(percentage)}%`;
+};

@@ -30,7 +30,7 @@ import { toast } from "sonner";
 
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { billingKeys } from "@/lib/query-keys";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatDiscountPercentage } from "@/lib/format";
 import { buildReceiptText, type ReceiptContext } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
@@ -102,6 +102,8 @@ const SaleDetailDialog = ({
           }, 0)
         : 0;
     const discountedItemsSubtotal = sale ? Math.max(Number(sale.subtotal ?? 0) - itemDiscountTotal, 0) : 0;
+    const itemDiscountPercentage = formatDiscountPercentage(itemDiscountTotal, sale?.subtotal);
+    const orderDiscountPercentage = formatDiscountPercentage(sale?.orderDiscountAmount, discountedItemsSubtotal);
 
     const defaultPaymentDraft: CreatePaymentJSON = {
         amount: Number(sale?.dueTotal ?? 0),
@@ -376,6 +378,10 @@ const SaleDetailDialog = ({
                                                     Number(item.discountAmount) - comboChildAddOnDiscount,
                                                     0,
                                                 );
+                                                const itemDiscountPercentage = formatDiscountPercentage(
+                                                    displayedItemDiscount,
+                                                    Number(item.unitPriceSnapshot) * Number(item.quantity),
+                                                );
                                                 const configuredLineTotal =
                                                     Number(item.lineTotal) +
                                                     addOns.reduce((total, addOn) => total + Number(addOn.lineTotal), 0);
@@ -405,7 +411,10 @@ const SaleDetailDialog = ({
                                                                         {displayedItemDiscount > 0 && (
                                                                             <span className="text-rose-500 font-medium">
                                                                                 (Disc. -
-                                                                                {formatCurrency(displayedItemDiscount)})
+                                                                                {formatCurrency(displayedItemDiscount)}
+                                                                                {itemDiscountPercentage
+                                                                                    ? `, ${itemDiscountPercentage}`
+                                                                                    : ""})
                                                                             </span>
                                                                         )}
                                                                     </p>
@@ -418,30 +427,36 @@ const SaleDetailDialog = ({
 
                                                         {addOns.length > 0 ? (
                                                             <div className="mt-3 space-y-2 border-l border-border/60 ml-3.5 pl-4">
-                                                                {addOns.map((addOn) => (
-                                                                    <div
-                                                                        key={addOn.id}
-                                                                        className="flex items-center justify-between gap-3"
-                                                                    >
-                                                                        <div>
-                                                                            <p className="text-sm text-foreground/85">
-                                                                                + {addOn.addOnNameSnapshot}
-                                                                            </p>
-                                                                            <p className="text-xs text-muted-foreground mt-0.5">
-                                                                                Qty {Number(addOn.totalQuantity)} ×{" "}
-                                                                                {formatCurrency(
-                                                                                    addOn.unitPriceSnapshot,
-                                                                                )}
-                                                                                {Number(addOn.discountAmount) > 0
-                                                                                    ? ` (Disc. -${formatCurrency(addOn.discountAmount)})`
-                                                                                    : ""}
+                                                                {addOns.map((addOn) => {
+                                                                    const addOnDiscountAmount = Number(addOn.discountAmount);
+                                                                    const addOnDiscountPercentage = formatDiscountPercentage(
+                                                                        addOnDiscountAmount,
+                                                                        Number(addOn.unitPriceSnapshot) * Number(addOn.totalQuantity),
+                                                                    );
+
+                                                                    return (
+                                                                        <div
+                                                                            key={addOn.id}
+                                                                            className="flex items-center justify-between gap-3"
+                                                                        >
+                                                                            <div>
+                                                                                <p className="text-sm text-foreground/85">
+                                                                                    + {addOn.addOnNameSnapshot}
+                                                                                </p>
+                                                                                <p className="text-xs text-muted-foreground mt-0.5">
+                                                                                    Qty {Number(addOn.totalQuantity)} ×{" "}
+                                                                                    {formatCurrency(addOn.unitPriceSnapshot)}
+                                                                                    {addOnDiscountAmount > 0
+                                                                                        ? ` (Disc. -${formatCurrency(addOnDiscountAmount)}${addOnDiscountPercentage ? `, ${addOnDiscountPercentage}` : ""})`
+                                                                                        : ""}
+                                                                                </p>
+                                                                            </div>
+                                                                            <p className="text-sm font-semibold text-foreground/90">
+                                                                                {formatCurrency(addOn.lineTotal)}
                                                                             </p>
                                                                         </div>
-                                                                        <p className="text-sm font-semibold text-foreground/90">
-                                                                            {formatCurrency(addOn.lineTotal)}
-                                                                        </p>
-                                                                    </div>
-                                                                ))}
+                                                                    );
+                                                                })}
                                                             </div>
                                                         ) : null}
 
@@ -468,37 +483,33 @@ const SaleDetailDialog = ({
                                                                         </div>
                                                                         {(component.addOns ?? []).length > 0 ? (
                                                                             <div className="space-y-1 border-l border-border/50 ml-2 pl-3">
-                                                                                {(component.addOns ?? []).map(
-                                                                                    (addOn) => (
+                                                                                {(component.addOns ?? []).map((addOn) => {
+                                                                                    const addOnDiscountAmount =
+                                                                                        Number(addOn.unitDiscountSnapshot) *
+                                                                                        Number(addOn.totalQuantity);
+                                                                                    const addOnDiscountPercentage = formatDiscountPercentage(
+                                                                                        addOnDiscountAmount,
+                                                                                        Number(addOn.unitPriceSnapshot) * Number(addOn.totalQuantity),
+                                                                                    );
+
+                                                                                    return (
                                                                                         <p
                                                                                             key={addOn.id}
                                                                                             className="text-xs text-muted-foreground"
                                                                                         >
                                                                                             + {addOn.addOnNameSnapshot}{" "}
-                                                                                            ×{" "}
-                                                                                            {Number(
-                                                                                                addOn.totalQuantity,
-                                                                                            )}{" "}
-                                                                                            •{" "}
+                                                                                            × {Number(addOn.totalQuantity)} •{" "}
                                                                                             {formatCurrency(
-                                                                                                (Number(
-                                                                                                    addOn.unitPriceSnapshot,
-                                                                                                ) -
-                                                                                                    Number(
-                                                                                                        addOn.unitDiscountSnapshot,
-                                                                                                    )) *
-                                                                                                    Number(
-                                                                                                        addOn.totalQuantity,
-                                                                                                    ),
+                                                                                                (Number(addOn.unitPriceSnapshot) -
+                                                                                                    Number(addOn.unitDiscountSnapshot)) *
+                                                                                                    Number(addOn.totalQuantity),
                                                                                             )}
-                                                                                            {Number(
-                                                                                                addOn.unitDiscountSnapshot,
-                                                                                            ) > 0
-                                                                                                ? ` (Disc. -${formatCurrency(Number(addOn.unitDiscountSnapshot) * Number(addOn.totalQuantity))})`
+                                                                                            {addOnDiscountAmount > 0
+                                                                                                ? ` (Disc. -${formatCurrency(addOnDiscountAmount)}${addOnDiscountPercentage ? `, ${addOnDiscountPercentage}` : ""})`
                                                                                                 : ""}
                                                                                         </p>
-                                                                                    ),
-                                                                                )}
+                                                                                    );
+                                                                                })}
                                                                             </div>
                                                                         ) : null}
                                                                     </div>
@@ -642,6 +653,7 @@ const SaleDetailDialog = ({
                                                     <span className="font-medium">Item discount included</span>
                                                     <span className="font-semibold text-white/80">
                                                         {formatCurrency(itemDiscountTotal)}
+                                                        {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
                                                     </span>
                                                 </div>
                                             )}
@@ -650,6 +662,7 @@ const SaleDetailDialog = ({
                                                     <span className="font-medium">Order discount</span>
                                                     <span className="font-semibold text-white/90">
                                                         -{formatCurrency(sale.orderDiscountAmount)}
+                                                        {orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}
                                                     </span>
                                                 </div>
                                             )}

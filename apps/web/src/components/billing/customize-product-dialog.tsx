@@ -119,11 +119,6 @@ const CustomizeProductDialog = ({
                                 {attachments.map((attachment) => {
                                     const quantity = quantities[attachment.addOnId] ?? 0;
                                     const isSelected = quantity > 0;
-                                    const addOnPrice = Math.max(
-                                        0,
-                                        Number(attachment.addOn.price) - Number(attachment.addOn.discount ?? 0),
-                                    );
-
                                     return (
                                         <div
                                             key={attachment.id}
@@ -153,9 +148,15 @@ const CustomizeProductDialog = ({
                                                     </span>
                                                 </span>
                                                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                                                    <div className="inline-flex items-center gap-0.5">
+                                                    <div className="inline-flex min-w-0 items-start gap-0.5">
                                                         <span>+</span>
-                                                        <span>{formatCurrency(addOnPrice)}</span>
+                                                        <ProductPriceDisplay
+                                                            price={attachment.addOn.price}
+                                                            discount={attachment.addOn.discount}
+                                                            size="xs"
+                                                            align="left"
+                                                            className="text-left"
+                                                        />
                                                     </div>
                                                     <span>
                                                         {quantity} / {attachment.selectionCap}
