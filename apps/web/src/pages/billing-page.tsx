@@ -89,6 +89,7 @@ import {
     MoreHorizontal,
     Minus,
     Plus,
+    Printer,
     ReceiptText,
     Search,
     ShoppingBag,
@@ -105,6 +106,7 @@ import CustomerDirectory from "@/components/customers/customer-directory";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
+import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
@@ -3418,12 +3420,13 @@ const BillingPage = ({
                                     aria-pressed={invoiceActions.includes("print")}
                                     onClick={() => toggleInvoiceAction("print")}
                                     className={cn(
-                                        "h-8 rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                        "flex h-8 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                                         invoiceActions.includes("print")
                                             ? "border-primary bg-primary text-primary-foreground"
                                             : "border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
                                     )}
                                 >
+                                    <Printer className="size-3.5" aria-hidden="true" />
                                     Print invoice
                                 </button>
                                 <button
@@ -3431,8 +3434,9 @@ const BillingPage = ({
                                     disabled
                                     aria-disabled="true"
                                     title="WhatsApp invoice is coming soon"
-                                    className="h-8 rounded-lg border border-border/50 bg-muted/40 px-2 text-xs font-semibold text-muted-foreground/60"
+                                    className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border/50 bg-muted/40 px-2 text-xs font-semibold text-muted-foreground/60"
                                 >
+                                    <WhatsAppIcon className="opacity-60" />
                                     WhatsApp
                                 </button>
                             </div>
