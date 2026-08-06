@@ -349,6 +349,8 @@ const paymentMethodOptions: Array<{ value: PaymentMethod; label: string }> = [
     { value: "card", label: "Card" },
 ];
 
+const discountPresetPercentages = [5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 75, 100] as const;
+
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
@@ -401,7 +403,7 @@ const BillingPage = ({
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("cash");
     const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
     const [discountInput, setDiscountInput] = useState("");
-    const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
+    const [discountMode, setDiscountMode] = useState<"amount" | "percent">("percent");
     const [invoiceActions, setInvoiceActions] = useState<InvoiceAction[]>(
         isDeviceMode && posPrinter?.connected ? ["print"] : [],
     );
@@ -952,6 +954,12 @@ const BillingPage = ({
     const totalDiscount = lineDiscountTotal + orderDiscountAmount;
     const itemDiscountPercentage = formatDiscountPercentage(lineDiscountTotal, subtotal);
     const orderDiscountPercentage = formatDiscountPercentage(orderDiscountAmount, discountBase);
+    const discountPresetOptions = discountPresetPercentages
+        .map((percentage) => ({
+            percentage,
+            amount: roundCurrency((discountBase * percentage) / 100),
+        }))
+        .filter((preset) => preset.amount > 0 && preset.amount <= discountBase + 0.005);
     const grandTotal = Math.max(subtotal - totalDiscount, 0);
     const rawPartialPaymentAmount = Math.max(Number(partialPaymentAmount || 0), 0);
     const collectedTotal =
@@ -981,6 +989,11 @@ const BillingPage = ({
         }
 
         setDiscountMode(nextMode);
+    };
+
+    const applyDiscountPreset = (percentage: number, amount: number) => {
+        setDiscountInput(String(discountMode === "percent" ? percentage : amount));
+        setDiscountEditorOpen(true);
     };
 
     const toggleInvoiceAction = (action: InvoiceAction) => {
@@ -1046,7 +1059,7 @@ const BillingPage = ({
         setSelectedPaymentMethod("cash");
         setPartialPaymentAmount("");
         setDiscountInput("");
-        setDiscountMode("amount");
+        setDiscountMode("percent");
         setInvoiceActions(isDeviceMode && posPrinter?.connected ? ["print"] : []);
         setDiscountEditorOpen(false);
         setPlaceOrderDialogOpen(false);
@@ -3302,6 +3315,41 @@ const BillingPage = ({
                                         }
                                         aria-invalid={hasInvalidDiscount}
                                     />
+                                    <div className="sm:col-span-2">
+                                        {discountPresetOptions.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {discountPresetOptions.map((preset) => {
+                                                    const isSelected =
+                                                        discountMode === "percent"
+                                                            ? Number(discountInput) === preset.percentage
+                                                            : Number(discountInput) === preset.amount;
+
+                                                    return (
+                                                        <button
+                                                            key={preset.percentage}
+                                                            type="button"
+                                                            onClick={() => applyDiscountPreset(preset.percentage, preset.amount)}
+                                                            aria-pressed={isSelected}
+                                                            className={cn(
+                                                                "rounded-full border px-2.5 py-1 text-[11px] font-semibold tabular-nums transition-colors",
+                                                                isSelected
+                                                                    ? "border-primary bg-primary text-primary-foreground"
+                                                                    : "border-border/60 bg-background/70 text-foreground hover:border-primary/40 hover:bg-primary/5",
+                                                            )}
+                                                        >
+                                                            {discountMode === "percent"
+                                                                ? `${preset.percentage}%`
+                                                                : formatCurrency(preset.amount)}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <p className="rounded-lg bg-background/50 px-2 py-1.5 text-[10px] text-muted-foreground">
+                                                Add items to enable discount presets.
+                                            </p>
+                                        )}
+                                    </div>
                                     {discountValidationMessage ? (
                                         <p className="text-xs text-destructive sm:col-span-2">
                                             {discountValidationMessage}
