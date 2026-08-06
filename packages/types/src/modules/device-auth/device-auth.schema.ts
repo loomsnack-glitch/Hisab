@@ -48,6 +48,7 @@ export const DeviceSessionOrganizationDTOSchema = OrganizationDTOSchema.pick({
     id: true,
     name: true,
     username: true,
+    tagline: true,
 });
 
 export const DeviceSessionDTOSchema = z.object({

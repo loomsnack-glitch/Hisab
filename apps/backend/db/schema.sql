@@ -373,6 +373,7 @@ CREATE TABLE public.organizations (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name character varying(255) NOT NULL,
     username character varying(64) NOT NULL,
+    tagline character varying(255),
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -2264,4 +2265,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260731124000'),
     ('20260731130000'),
     ('20260731140000'),
-    ('20260802120000');
+    ('20260802120000'),
+    ('20260806120000');

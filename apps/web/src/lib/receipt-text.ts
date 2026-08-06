@@ -4,6 +4,7 @@ import { formatDateTime } from "@/lib/format";
 
 export type ReceiptContext = {
     organizationName?: string | null;
+    organizationTagline?: string | null;
     storeName?: string | null;
     storeAddress?: string | null;
     storePhone?: string | null;
@@ -91,17 +92,21 @@ export const buildReceiptText = (sale: SaleDetailDTO, context: ReceiptContext = 
 
     const lines: string[] = [];
     const organizationName = context.organizationName?.trim();
+    const organizationTagline = context.organizationTagline?.trim();
     const storeName = context.storeName?.trim();
     const storeAddress = context.storeAddress?.trim();
     const storePhone = context.storePhone?.trim();
 
     lines.push(doubleSeparator);
     if (organizationName) lines.push(centerText(organizationName));
+    if (organizationTagline) {
+        wrapText(organizationTagline, receiptWidth).forEach((line) => lines.push(centerText(line)));
+    }
     if (storeName) lines.push(centerText(storeName));
     if (storeAddress) wrapText(storeAddress, receiptWidth).forEach((line) => lines.push(centerText(line)));
     if (storePhone) lines.push(centerText(`Phone: ${storePhone}`));
     lines.push(centerText("INVOICE / RECEIPT"));
-    if (organizationName || storeName || storeAddress || storePhone) lines.push(separator);
+    if (organizationName || organizationTagline || storeName || storeAddress || storePhone) lines.push(separator);
     lines.push(`Bill #: ${sale.saleNumber ? sale.saleNumber : "Draft"}`);
     lines.push(`Date: ${formatDateTime(sale.createdAt)}`);
     const customerWithPhone = sale.customer?.phone ? sale.customer : null;

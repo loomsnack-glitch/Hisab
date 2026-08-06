@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, type SubmitHandler } from "react-hook-form";
+import { useForm, useWatch, type SubmitHandler } from "react-hook-form";
 import { updateOrganization } from "@repo/services";
 import { UpdateOrganizationSchema, type OrganizationDTO, type UpdateOrganizationJSON } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
@@ -24,6 +24,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { Textarea } from "@repo/ui/components/textarea";
 import { Building2, Pencil, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,14 +43,23 @@ const EditOrganizationDialog = ({ organization, trigger }: EditOrganizationDialo
 
     const form = useForm<UpdateOrganizationJSON>({
         resolver: zodResolver(UpdateOrganizationSchema),
-        defaultValues: { name: organization.name, username: organization.username },
+        defaultValues: {
+            name: organization.name,
+            username: organization.username,
+            tagline: organization.tagline ?? "",
+        },
     });
+    const tagline = useWatch({ control: form.control, name: "tagline" });
 
     useEffect(() => {
         if (open) {
-            form.reset({ name: organization.name, username: organization.username });
+            form.reset({
+                name: organization.name,
+                username: organization.username,
+                tagline: organization.tagline ?? "",
+            });
         }
-    }, [form, open, organization.name, organization.username]);
+    }, [form, open, organization.name, organization.tagline, organization.username]);
 
     const updateMutation = useMutation({
         mutationFn: (values: UpdateOrganizationJSON) => updateOrganization(organization.id, values),
@@ -70,7 +80,11 @@ const EditOrganizationDialog = ({ organization, trigger }: EditOrganizationDialo
     });
 
     const onSubmit: SubmitHandler<UpdateOrganizationJSON> = (values) => {
-        const normalizedValues = { name: values.name.trim(), username: values.username.trim().toLowerCase() };
+        const normalizedValues = {
+            name: values.name.trim(),
+            username: values.username.trim().toLowerCase(),
+            tagline: values.tagline?.trim() ?? "",
+        };
         if (normalizedValues.username !== organization.username) {
             setPendingValues(normalizedValues);
             setShowUsernameConfirm(true);
@@ -111,7 +125,7 @@ const EditOrganizationDialog = ({ organization, trigger }: EditOrganizationDialo
                     </div>
                     <DialogTitle className="text-center text-lg font-semibold">Edit business</DialogTitle>
                     <DialogDescription className="text-center">
-                        Update the business name and username used for POS login.
+                        Update the business name, receipt tagline, and username used for POS login.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -125,6 +139,27 @@ const EditOrganizationDialog = ({ organization, trigger }: EditOrganizationDialo
                                 {...form.register("name")}
                             />
                             <FieldError errors={[form.formState.errors.name]} />
+                        </FieldContent>
+                    </Field>
+
+                    <Field data-invalid={!!form.formState.errors.tagline}>
+                        <div className="flex items-center justify-between">
+                            <FieldLabel>Brand tagline</FieldLabel>
+                            <span className="text-[10px] font-medium tabular-nums text-muted-foreground/50">
+                                {(tagline ?? "").length}/255
+                            </span>
+                        </div>
+                        <FieldContent>
+                            <Textarea
+                                className="min-h-20 resize-none rounded-xl"
+                                maxLength={255}
+                                placeholder="e.g. Fresh taste, every day"
+                                {...form.register("tagline")}
+                            />
+                            <FieldError errors={[form.formState.errors.tagline]} />
+                            <p className="text-[11px] text-muted-foreground">
+                                Shown below your business name on printed bills.
+                            </p>
                         </FieldContent>
                     </Field>
 

@@ -15,6 +15,13 @@ const usernameSchema = z
     .min(2, "Username must be at least 2 characters")
     .max(64, "Username must be at most 64 characters");
 
+const taglineSchema = z
+    .union([
+        z.literal(""),
+        z.string().trim().max(255, "Tagline must be at most 255 characters"),
+    ])
+    .optional();
+
 const optionalAddressSchema = z
     .union([
         z.literal(""),
@@ -34,6 +41,7 @@ export const OrganizationDTOSchema = z.object({
     id: z.uuid("Invalid organization id"),
     name: nameSchema,
     username: usernameSchema,
+    tagline: z.string().max(255, "Tagline must be at most 255 characters").nullable().optional(),
     createdBy: z.uuid("Invalid creator id"),
     updatedBy: z.uuid("Invalid updater id").nullable().optional(),
     createdAt: dtoDateSchema,
@@ -73,6 +81,7 @@ export const CreateOrganizationSchema = z.object({
 export const UpdateOrganizationSchema = z.object({
     name: nameSchema,
     username: usernameSchema,
+    tagline: taglineSchema,
 });
 
 export const CreateStoreSchema = z.object({

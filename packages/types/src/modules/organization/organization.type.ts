@@ -39,6 +39,7 @@ export type CreateOrganizationREPO = Pick<OrganizationDTO, "id" | "name" | "user
 };
 
 export type UpdateOrganizationREPO = Pick<OrganizationDTO, "id" | "name" | "username"> & {
+    tagline: string | null;
     updatedBy: string;
 };
 

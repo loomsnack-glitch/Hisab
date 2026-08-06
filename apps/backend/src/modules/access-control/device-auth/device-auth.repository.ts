@@ -27,6 +27,7 @@ const mapDeviceSession = (row: DeviceSessionRow): DeviceSessionDTO => {
             id: String(mapped.organizationId),
             name: String(mapped.organizationName),
             username: String(mapped.organizationUsername),
+            tagline: (mapped.organizationTagline as string | null | undefined) ?? null,
         },
     };
 };
@@ -38,7 +39,8 @@ export const getDeviceSessionById = async (deviceId: string): Promise<DeviceSess
             s.name AS store_name,
             s.address AS store_address,
             o.name AS organization_name,
-            o.username AS organization_username
+            o.username AS organization_username,
+            o.tagline AS organization_tagline
         FROM store_devices d
         INNER JOIN stores s
             ON s.id = d.store_id
@@ -61,7 +63,8 @@ export const getDeviceSessionByLoginUsername = async (
             s.name AS store_name,
             s.address AS store_address,
             o.name AS organization_name,
-            o.username AS organization_username
+            o.username AS organization_username,
+            o.tagline AS organization_tagline
         FROM store_devices d
         INNER JOIN stores s
             ON s.id = d.store_id

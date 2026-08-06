@@ -643,6 +643,7 @@ const BillingPage = ({
 
         return {
             organizationName: isDeviceMode ? session?.organization.name : organization?.name,
+            organizationTagline: isDeviceMode ? session?.organization.tagline : organization?.tagline,
             storeName: store?.name,
             storeAddress: store?.address,
         };

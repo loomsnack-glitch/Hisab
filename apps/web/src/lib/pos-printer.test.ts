@@ -88,15 +88,29 @@ describe("80mm ESC/POS receipt payload", () => {
     const output = new TextDecoder().decode(
       build80mmEscPosPayload(sale, {
         organizationName: "Hisab Foods",
+        organizationTagline: "Fresh taste, every day",
         storeName: "Main Store",
         storeAddress: "12 Market Road",
       }),
     );
 
     expect(output).toContain("Hisab Foods");
+    expect(output).toContain("Fresh taste, every day");
     expect(output).toContain("Main Store");
     expect(output).toContain("12 Market Road");
     expect(output).toContain("INVOICE / RECEIPT");
     expect(output).toContain("\u001d!\u0011");
+  });
+
+  test("wraps a long organization tagline to the printer width", () => {
+    const output = new TextDecoder().decode(
+      build80mmEscPosPayload(sale, {
+        organizationName: "Hisab Foods",
+        organizationTagline: "A".repeat(80),
+      }),
+    );
+
+    expect(output).toContain("A".repeat(48));
+    expect(output).toContain("A".repeat(32));
   });
 });

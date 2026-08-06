@@ -145,6 +145,7 @@ export const updateOrganization = async (
         id: organizationId,
         name: nextName,
         username: nextUsername,
+        tagline: normalizeOptionalText(organizationData.tagline),
         updatedBy: userId,
     });
 

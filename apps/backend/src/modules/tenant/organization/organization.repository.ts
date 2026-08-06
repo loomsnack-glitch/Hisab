@@ -128,6 +128,7 @@ export const updateOrganization = async (
         UPDATE organizations
         SET name = ${organizationData.name},
             username = ${organizationData.username},
+            tagline = ${organizationData.tagline},
             updated_by = ${organizationData.updatedBy},
             updated_at = NOW()
         WHERE id = ${organizationData.id}
