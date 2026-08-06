@@ -11,6 +11,10 @@ import LoginPage from "@/pages/login-page";
 import OrganizationsPage from "@/pages/organizations-page";
 import PosLoginPage from "@/pages/pos-login-page";
 import PosPage from "@/pages/pos-page";
+import PosBillsPage from "@/pages/pos-bills-page";
+import PosCustomersPage from "@/pages/pos-customers-page";
+import PosProductsPage from "@/pages/pos-products-page";
+import PosPurchasesPage from "@/pages/pos-purchases-page";
 import RegisterPage from "@/pages/register-page";
 import StoresPage from "@/pages/stores-page";
 import ProductsPage from "@/pages/products-page";
@@ -97,8 +101,12 @@ const App = () => {
                                 element={authenticatedUser ? <Navigate to="/organizations" replace /> : <RegisterPage />}
                             />
                             <Route path="/pos/login" element={<PosLoginPage />} />
-                            <Route path="/pos" element={<PosPage />} />
-                            <Route path="/pos/purchases" element={<Navigate to="/pos?panel=purchases" replace />} />
+                            <Route path="/pos" element={<PosPage />}>
+                                <Route index element={<PosProductsPage />} />
+                                <Route path="bills" element={<PosBillsPage />} />
+                                <Route path="customers" element={<PosCustomersPage />} />
+                                <Route path="purchases" element={<PosPurchasesPage />} />
+                            </Route>
                             <Route
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                             >

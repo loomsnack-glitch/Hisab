@@ -15,11 +15,13 @@ import { toast } from "sonner";
 
 import AuthShell from "@/components/auth/auth-shell";
 import { deviceAuthKeys } from "@/lib/query-keys";
+import { getPosReturnPath } from "@/pages/pos-route-context";
 
 const PosLoginPage = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [searchParams] = useSearchParams();
+    const returnTo = getPosReturnPath(searchParams.get("returnTo"));
 
     const deviceAuthQuery = useQuery({
         queryKey: deviceAuthKeys.me,
@@ -86,7 +88,7 @@ const PosLoginPage = () => {
             });
 
             toast.success("POS unlocked");
-            navigate("/pos", { replace: true });
+            navigate(returnTo, { replace: true });
         },
         onError: (error: { message?: string }) => {
             toast.error(error?.message || "Unable to start POS session");
@@ -103,7 +105,7 @@ const PosLoginPage = () => {
             : null;
 
     if (!deviceAuthQuery.isPending && activeSession) {
-        return <Navigate to="/pos" replace />;
+        return <Navigate to={returnTo} replace />;
     }
 
     return (

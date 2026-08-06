@@ -1,35 +1,52 @@
-import { useCallback, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { deviceAuthenticate } from "@repo/services";
+import type { DeviceSessionDTO } from "@repo/types";
 import { Spinner } from "@repo/ui/components/spinner";
 
 import PosLayout from "@/components/pos/pos-layout";
 import { deviceAuthKeys } from "@/lib/query-keys";
-import BillingPage from "@/pages/billing-page";
+import {
+    getPosLoginPath,
+    getPosPanelPath,
+    getPosPanelTabFromPath,
+    posPanelConfig,
+    type PosPanelTab,
+    type PosRouteContext,
+} from "@/pages/pos-route-context";
 import { PosPrinterProvider } from "@/providers/pos-printer-provider";
 
 const PosPage = () => {
-  const [searchParams] = useSearchParams();
-  const initialPanel = searchParams.get("panel");
-  const [headerSearch, setHeaderSearch] = useState("");
-  const [activePanelTab, setActivePanelTab] = useState<"products" | "bills" | "customers" | "purchases">(
-    initialPanel === "bills" || initialPanel === "customers" || initialPanel === "purchases" ? initialPanel : "products",
-  );
-  const handlePanelTabChange = useCallback((tab: "products" | "bills" | "customers" | "purchases") => {
-    setActivePanelTab(tab);
-    setHeaderSearch("");
-  }, []);
+    const location = useLocation();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const [headerSearch, setHeaderSearch] = useState("");
+    const activePanelTab = getPosPanelTabFromPath(location.pathname);
+    const legacyPanel = searchParams.get("panel");
+
+    const handlePanelTabChange = useCallback(
+        (tab: PosPanelTab) => {
+            const nextPath = getPosPanelPath(tab);
+            if (location.pathname !== nextPath) {
+                navigate(nextPath);
+            }
+        },
+        [location.pathname, navigate],
+    );
+
+    useEffect(() => {
+        setHeaderSearch("");
+    }, [activePanelTab]);
+
     const deviceAuthQuery = useQuery({
         queryKey: deviceAuthKeys.me,
         queryFn: deviceAuthenticate,
         retry: false,
     });
 
-    const session =
-        deviceAuthQuery.data?.status === "success"
-      ? (deviceAuthQuery.data.data?.session ?? null)
-            : null;
+    const session: DeviceSessionDTO | null =
+        deviceAuthQuery.data?.status === "success" ? (deviceAuthQuery.data.data?.session ?? null) : null;
 
     if (deviceAuthQuery.isPending) {
         return (
@@ -39,43 +56,33 @@ const PosPage = () => {
         );
     }
 
-  if (
-    deviceAuthQuery.isError ||
-    deviceAuthQuery.data?.status === "error" ||
-    !session
-  ) {
-        return <Navigate to="/pos/login" replace />;
+    if (deviceAuthQuery.isError || deviceAuthQuery.data?.status === "error" || !session) {
+        const returnTo = `${location.pathname}${location.search}${location.hash}`;
+        return <Navigate to={getPosLoginPath(returnTo)} replace />;
     }
 
+    if (location.pathname === "/pos" && (legacyPanel === "bills" || legacyPanel === "customers" || legacyPanel === "purchases")) {
+        return <Navigate to={getPosPanelPath(legacyPanel as PosPanelTab)} replace />;
+    }
+
+    const context: PosRouteContext = {
+        session,
+        searchValue: headerSearch,
+        onSearchChange: setHeaderSearch,
+        onPanelTabChange: handlePanelTabChange,
+    };
+
     return (
-    <PosPrinterProvider>
-    <PosLayout
-      session={session}
-      searchValue={headerSearch}
-      searchPlaceholder={
-        activePanelTab === "products"
-          ? "Search products..."
-          : activePanelTab === "bills"
-            ? "Search bills..."
-            : activePanelTab === "customers"
-              ? "Search customers..."
-            : "Search purchases..."
-      }
-      onSearchChange={setHeaderSearch}
-    >
-      <BillingPage
-        mode="device"
-        session={session}
-        initialPanelTab={activePanelTab}
-        productSearch={activePanelTab === "products" ? headerSearch : ""}
-        salesSearch={activePanelTab === "bills" ? headerSearch : ""}
-        purchaseSearch={activePanelTab === "purchases" ? headerSearch : ""}
-        customerSearch={activePanelTab === "customers" ? headerSearch : ""}
-        onCustomerSearchChange={setHeaderSearch}
-        onPanelTabChange={handlePanelTabChange}
-      />
-        </PosLayout>
-    </PosPrinterProvider>
+        <PosPrinterProvider>
+            <PosLayout
+                session={session}
+                searchValue={headerSearch}
+                searchPlaceholder={posPanelConfig[activePanelTab].searchPlaceholder}
+                onSearchChange={setHeaderSearch}
+            >
+                <Outlet context={context} />
+            </PosLayout>
+        </PosPrinterProvider>
     );
 };
 
