@@ -24,7 +24,9 @@ import {
     type SaleDetailDTO,
     type SaleItemDTO,
     type SaleItemInput,
+    type SaleNumberSettingsResponse,
     type SaleResponse,
+    type UpdateSaleNumberSettingsSVC,
     type SalesListQuery,
     type SalesListResponse,
     type ServiceResponse,
@@ -34,6 +36,7 @@ import {
 } from "@repo/types";
 import * as billingRepository from "./billing.repository";
 import { decodeSalesCursor } from "./sales-pagination";
+import { DEFAULT_SALE_NUMBER_TIMEZONE } from "./sale-numbering";
 
 const normalizeOptionalText = (value?: string | null) => {
     const trimmed = value?.trim();
@@ -383,6 +386,78 @@ const verifyOrganizationAndStore = async (
     }
 
     return null;
+};
+
+export const getSaleNumberSettings = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<SaleNumberSettingsResponse | null>> => {
+    const invalid = await verifyOrganizationAndStore(userId, organizationId, storeId);
+    if (invalid) {
+        return invalid as ServiceResponse<SaleNumberSettingsResponse | null>;
+    }
+
+    const existing = await billingRepository.getSaleNumberSettings(organizationId, storeId);
+    const settings =
+        existing ??
+        (await billingRepository.upsertSaleNumberSettings(
+            organizationId,
+            storeId,
+            "never",
+            DEFAULT_SALE_NUMBER_TIMEZONE,
+        ));
+
+    if (!settings) {
+        return {
+            status: "error",
+            message: "Failed to load Sale Number settings",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    return {
+        status: "success",
+        data: { settings },
+        message: "Sale Number settings fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const updateSaleNumberSettings = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    settingsData: UpdateSaleNumberSettingsSVC,
+): Promise<ServiceResponse<SaleNumberSettingsResponse | null>> => {
+    const invalid = await verifyOrganizationAndStore(userId, organizationId, storeId);
+    if (invalid) {
+        return invalid as ServiceResponse<SaleNumberSettingsResponse | null>;
+    }
+
+    const settings = await billingRepository.upsertSaleNumberSettings(
+        organizationId,
+        storeId,
+        settingsData.resetPeriod,
+        DEFAULT_SALE_NUMBER_TIMEZONE,
+    );
+
+    if (!settings) {
+        return {
+            status: "error",
+            message: "Failed to update Sale Number settings",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    return {
+        status: "success",
+        data: { settings },
+        message: "Sale Number settings updated successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
 };
 
 const validateSalesListCustomerFilter = async (
@@ -1811,87 +1886,122 @@ const commitSaleInStore = async (
     saleId: string,
     commitData: CommitSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-    const existingSale = await buildSaleDetails(organizationId, storeId, saleId);
-    if (!existingSale) {
-        return {
-            status: "error",
-            message: "Sale not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    if (existingSale.status !== "draft") {
-        return {
-            status: "error",
-            message: "Only draft sales can be committed",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
-
-    if (existingSale.items.length === 0 || moneyFrom(existingSale.grandTotal) <= 0) {
-        return {
-            status: "error",
-            message: "A sale must have at least one billable item before it can be committed",
-            data: null,
-            code: STATUS_CODES.BAD_REQUEST,
-        };
-    }
-
-    const customerId =
-        commitData.customerId === undefined
-            ? (existingSale.customerId ?? null)
-            : normalizeOptionalUuid(commitData.customerId);
-
-    const customerResult = await validateCustomerAssignment(organizationId, customerId);
-    if ("status" in customerResult) {
-        return customerResult;
-    }
-
     const payments = commitData.payments ?? [];
     const totalPayment = sumMoney(payments.map((payment) => payment.amount));
-    const nextOrderDiscountAmount =
-        commitData.orderDiscountAmount === undefined
-            ? moneyFrom(existingSale.orderDiscountAmount)
-            : moneyFrom(commitData.orderDiscountAmount);
-    const pricingTotals = buildSalePricingTotals(
-        existingSale.subtotal,
-        getSaleLineDiscountTotal(existingSale.items),
-        nextOrderDiscountAmount,
-    );
+    const transactionResult = await pg.begin(async (tx) => {
+        const saleSnapshot = await billingRepository.getSaleById(organizationId, storeId, saleId, tx);
+        if (!saleSnapshot) {
+            return {
+                committed: false as const,
+                response: {
+                    status: "error" as const,
+                    message: "Sale not found",
+                    data: null,
+                    code: STATUS_CODES.NOT_FOUND,
+                },
+            };
+        }
 
-    if (pricingTotals.error || !pricingTotals.totals) {
-        return (
-            pricingTotals.error ?? {
-                status: "error",
-                message: "Failed to calculate sale totals",
-                data: null,
-                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-            }
+        if (saleSnapshot.status !== "draft") {
+            return {
+                committed: false as const,
+                response: {
+                    status: "error" as const,
+                    message: "Only draft sales can be committed",
+                    data: null,
+                    code: STATUS_CODES.CONFLICT,
+                },
+            };
+        }
+
+        const draftLocked = await billingRepository.lockDraftSale(organizationId, storeId, saleId, tx);
+        if (!draftLocked) {
+            return {
+                committed: false as const,
+                response: {
+                    status: "error" as const,
+                    message: "Sale is already committed",
+                    data: null,
+                    code: STATUS_CODES.CONFLICT,
+                },
+            };
+        }
+
+        const existingSale = await buildSaleDetails(organizationId, storeId, saleId, tx);
+        if (!existingSale) {
+            throw new Error("Failed to fetch locked draft sale");
+        }
+
+        if (existingSale.items.length === 0 || moneyFrom(existingSale.grandTotal) <= 0) {
+            return {
+                committed: false as const,
+                response: {
+                    status: "error" as const,
+                    message: "A sale must have at least one billable item before it can be committed",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                },
+            };
+        }
+
+        const customerId =
+            commitData.customerId === undefined
+                ? (existingSale.customerId ?? null)
+                : normalizeOptionalUuid(commitData.customerId);
+        const customerResult = await validateCustomerAssignment(organizationId, customerId);
+        if ("status" in customerResult) {
+            return {
+                committed: false as const,
+                response: customerResult as ServiceResponse<SaleResponse | null>,
+            };
+        }
+
+        const nextOrderDiscountAmount =
+            commitData.orderDiscountAmount === undefined
+                ? moneyFrom(existingSale.orderDiscountAmount)
+                : moneyFrom(commitData.orderDiscountAmount);
+        const pricingTotals = buildSalePricingTotals(
+            existingSale.subtotal,
+            getSaleLineDiscountTotal(existingSale.items),
+            nextOrderDiscountAmount,
         );
-    }
 
-    const committedTotals = pricingTotals.totals;
-    const grandTotal = committedTotals.grandTotal;
+        if (pricingTotals.error || !pricingTotals.totals) {
+            return {
+                committed: false as const,
+                response: pricingTotals.error ?? {
+                    status: "error" as const,
+                    message: "Failed to calculate sale totals",
+                    data: null,
+                    code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+                },
+            };
+        }
 
-    if (totalPayment > grandTotal) {
-        return {
-            status: "error",
-            message: "Collected payment cannot exceed the sale total",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
+        const committedTotals = pricingTotals.totals;
+        const grandTotal = committedTotals.grandTotal;
+        if (totalPayment > grandTotal) {
+            return {
+                committed: false as const,
+                response: {
+                    status: "error" as const,
+                    message: "Collected payment cannot exceed the sale total",
+                    data: null,
+                    code: STATUS_CODES.CONFLICT,
+                },
+            };
+        }
 
-    const paymentStatus = totalPayment === 0 ? "pending" : totalPayment === grandTotal ? "paid" : "partial";
-
-    const committedAt = new Date();
-    const nextNotes =
-        commitData.notes === undefined ? (existingSale.notes ?? null) : normalizeOptionalText(commitData.notes);
-
-    await pg.begin(async (tx) => {
-        const saleNumber = await billingRepository.incrementStoreSaleCounter(organizationId, storeId, tx);
+        const paymentStatus = totalPayment === 0 ? "pending" : totalPayment === grandTotal ? "paid" : "partial";
+        const nextNotes =
+            commitData.notes === undefined ? (existingSale.notes ?? null) : normalizeOptionalText(commitData.notes);
+        const committedAt = new Date();
+        const saleNumber = await billingRepository.allocateSaleNumber(
+            organizationId,
+            storeId,
+            committedAt,
+            tx,
+        );
 
         const updatedSale = await billingRepository.updateSale(
             {
@@ -1907,7 +2017,9 @@ const commitSaleInStore = async (
                 grandTotal,
                 notes: nextNotes,
                 committedAt,
-                saleNumber,
+                saleNumber: saleNumber.saleNumber,
+                saleSequenceNumber: saleNumber.saleSequenceNumber,
+                salePeriodKey: saleNumber.salePeriodKey,
             },
             tx,
         );
@@ -1962,7 +2074,13 @@ const commitSaleInStore = async (
                 });
             }
         }
+
+        return { committed: true as const };
     });
+
+    if (!transactionResult.committed) {
+        return transactionResult.response;
+    }
 
     const sale = await buildSaleDetails(organizationId, storeId, saleId);
     if (!sale) {
@@ -2006,7 +2124,12 @@ const persistCompletedSale = async (
     tx: Bun.TransactionSQL,
     params: CompletedSaleTransactionParams,
 ): Promise<void> => {
-    const saleNumber = await billingRepository.incrementStoreSaleCounter(params.organizationId, params.storeId, tx);
+    const saleNumber = await billingRepository.allocateSaleNumber(
+        params.organizationId,
+        params.storeId,
+        params.committedAt,
+        tx,
+    );
     const sale = await billingRepository.createSale(
         {
             id: params.saleId,
@@ -2025,7 +2148,9 @@ const persistCompletedSale = async (
             grandTotal: params.prepared.totals.grandTotal,
             notes: params.notes,
             committedAt: params.committedAt,
-            saleNumber,
+            saleNumber: saleNumber.saleNumber,
+            saleSequenceNumber: saleNumber.saleSequenceNumber,
+            salePeriodKey: saleNumber.salePeriodKey,
             createdByDeviceId: params.actor.deviceId ?? null,
             updatedByDeviceId: params.actor.deviceId ?? null,
             userId: params.actor.userId ?? null,
@@ -2315,6 +2440,8 @@ const replaceSaleInStore = async (
                     notes: originalSale.notes ?? null,
                     committedAt: originalSale.committedAt ?? null,
                     saleNumber: originalSale.saleNumber ?? null,
+                    saleSequenceNumber: originalSale.saleSequenceNumber ?? null,
+                    salePeriodKey: originalSale.salePeriodKey ?? null,
                     voidedAt: new Date(),
                     voidReason: replacementReason,
                 },
@@ -2485,6 +2612,8 @@ const collectPaymentInStore = async (
                 notes: existingSale.notes ?? null,
                 committedAt: existingSale.committedAt ?? null,
                 saleNumber: existingSale.saleNumber ?? null,
+                saleSequenceNumber: existingSale.saleSequenceNumber ?? null,
+                salePeriodKey: existingSale.salePeriodKey ?? null,
                 voidedAt: existingSale.voidedAt ?? null,
                 voidReason: existingSale.voidReason ?? null,
             },
@@ -2578,6 +2707,8 @@ const voidSaleInStore = async (
                 notes: existingSale.notes ?? null,
                 committedAt: existingSale.committedAt ?? null,
                 saleNumber: existingSale.saleNumber ?? null,
+                saleSequenceNumber: existingSale.saleSequenceNumber ?? null,
+                salePeriodKey: existingSale.salePeriodKey ?? null,
                 voidedAt: new Date(),
                 voidReason: normalizeOptionalText(voidData.reason),
             },

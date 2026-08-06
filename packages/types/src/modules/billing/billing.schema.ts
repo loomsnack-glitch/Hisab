@@ -1,6 +1,29 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
 
+export const SaleNumberResetPeriodSchema = z.enum([
+    "never",
+    "daily",
+    "weekly",
+    "monthly",
+    "quarterly",
+    "half_yearly",
+    "yearly",
+]);
+
+export const SaleNumberSettingsDTOSchema = z.object({
+    storeId: z.uuid("Invalid store id"),
+    organizationId: z.uuid("Invalid organization id"),
+    resetPeriod: SaleNumberResetPeriodSchema,
+    timezone: z.string().min(1).max(64),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const UpdateSaleNumberSettingsSchema = z.object({
+    resetPeriod: SaleNumberResetPeriodSchema,
+});
+
 const nameSchema = z.string().trim().min(1, "Name is required").max(255, "Name must be at most 255 characters");
 
 const optionalPhoneSchema = z
@@ -165,7 +188,9 @@ export const SaleSummaryDTOSchema = z.object({
     id: z.uuid("Invalid sale id"),
     organizationId: z.uuid("Invalid organization id"),
     storeId: z.uuid("Invalid store id"),
-    saleNumber: z.number().int().nullable().optional(),
+    saleNumber: z.string().nullable().optional(),
+    saleSequenceNumber: z.number().int().nullable().optional(),
+    salePeriodKey: z.string().nullable().optional(),
     customerId: z.uuid("Invalid customer id").nullable().optional(),
     userId: z.uuid("Invalid user id").nullable().optional(),
     createdByDeviceId: z.uuid("Invalid creator device id").nullable().optional(),
@@ -185,8 +210,8 @@ export const SaleSummaryDTOSchema = z.object({
     updatedAt: dtoDateSchema,
     replacementOfSaleId: z.uuid("Invalid original sale id").nullable().optional(),
     replacementSaleId: z.uuid("Invalid replacement sale id").nullable().optional(),
-    replacementOfSaleNumber: z.number().int().nullable().optional(),
-    replacementSaleNumber: z.number().int().nullable().optional(),
+    replacementOfSaleNumber: z.string().nullable().optional(),
+    replacementSaleNumber: z.string().nullable().optional(),
     itemCount: z.number().int().min(0),
     itemsSummary: z.string().nullable().optional(),
     paymentMethods: z.string().nullable().optional(),

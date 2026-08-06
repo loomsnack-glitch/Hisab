@@ -14,6 +14,7 @@ import DeviceActionsMenu from "@/components/organizations/device-actions-menu";
 import DeviceStatusBadge from "@/components/organizations/device-status-badge";
 import EditDeviceDialog from "@/components/organizations/edit-device-dialog";
 import EditStoreDialog from "@/components/organizations/edit-store-dialog";
+import SaleNumberSettingsDialog from "@/components/organizations/sale-number-settings-dialog";
 import { formatDateTime } from "@/lib/format";
 
 type StoresSectionProps = {
@@ -132,6 +133,10 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-2">
+                                    <SaleNumberSettingsDialog
+                                        organizationId={organizationId}
+                                        store={store}
+                                    />
                                     <EditStoreDialog
                                         organizationId={organizationId}
                                         store={store}

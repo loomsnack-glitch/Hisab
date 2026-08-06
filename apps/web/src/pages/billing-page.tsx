@@ -2421,17 +2421,16 @@ const BillingPage = ({
                                                         key={sale.id}
                                                         className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border/40 bg-card/70 px-3 py-2 transition-all hover:border-primary/20 hover:bg-card/90 hover:shadow-xs"
                                                     >
-                                                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                                                            <div className="w-14 shrink-0">
-                                                                <p className="font-bold text-amber-500 dark:text-amber-400 text-sm">
+                                                        <div className="min-w-0 flex-1 pr-2">
+                                                            <div className="flex min-w-0 items-center gap-2">
+                                                                <p className="shrink-0 whitespace-nowrap text-xs font-bold text-amber-500 dark:text-amber-400">
                                                                     {sale.saleNumber ? `#${sale.saleNumber}` : "Draft"}
                                                                 </p>
-                                                            </div>
-
-                                                            <div className="min-w-0 flex-1 pr-2">
-                                                                <p className="truncate text-xs font-semibold text-foreground/80">
+                                                                <p className="min-w-0 truncate text-xs font-semibold text-foreground/80">
                                                                     {sale.customer?.name || "Walk-in customer"}
                                                                 </p>
+                                                            </div>
+                                                            <div className="min-w-0">
                                                                 {sale.customer?.phone ? (
                                                                     <p className="truncate text-[10px] text-muted-foreground">
                                                                         {sale.customer.phone}

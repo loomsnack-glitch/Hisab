@@ -12,12 +12,42 @@ import type {
     SaleResponse,
     SalesListQuery,
     SalesListResponse,
+    SaleNumberSettingsResponse,
     ServiceResponse,
+    UpdateSaleNumberSettingsJSON,
     UpdateCustomerJSON,
     UpdateDraftSaleJSON,
     VoidSaleJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
+
+export const getSaleNumberSettings = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<SaleNumberSettingsResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/sale-number-settings`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateSaleNumberSettings = async (
+    organizationId: string,
+    storeId: string,
+    data: UpdateSaleNumberSettingsJSON,
+): Promise<ServiceResponse<SaleNumberSettingsResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/stores/${storeId}/sale-number-settings`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
 
 export const getCustomers = async (
     organizationId: string,

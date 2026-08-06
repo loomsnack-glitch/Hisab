@@ -124,6 +124,21 @@ CREATE TYPE public.sale_status_enum AS ENUM (
 
 
 --
+-- Name: sale_number_reset_period_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.sale_number_reset_period_enum AS ENUM (
+    'never',
+    'daily',
+    'weekly',
+    'monthly',
+    'quarterly',
+    'half_yearly',
+    'yearly'
+);
+
+
+--
 -- Name: salutation_enum; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -198,6 +213,27 @@ BEGIN
              AND replacement.store_id = NEW.store_id
        ) THEN
         RAISE EXCEPTION 'sales with collected payments can only be voided as a replacement';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: prevent_sale_number_mutation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_sale_number_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF OLD.status <> 'draft' AND (
+        NEW.sale_number IS DISTINCT FROM OLD.sale_number
+        OR NEW.sale_sequence_number IS DISTINCT FROM OLD.sale_sequence_number
+        OR NEW.sale_period_key IS DISTINCT FROM OLD.sale_period_key
+    ) THEN
+        RAISE EXCEPTION 'committed Sale Numbers are immutable';
     END IF;
 
     RETURN NEW;
@@ -566,7 +602,9 @@ CREATE TABLE public.sales (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     organization_id uuid NOT NULL,
     store_id uuid NOT NULL,
-    sale_number bigint,
+    sale_number character varying(64),
+    sale_sequence_number bigint,
+    sale_period_key character varying(32),
     customer_id uuid,
     user_id uuid,
     status public.sale_status_enum DEFAULT 'draft'::public.sale_status_enum NOT NULL,
@@ -589,6 +627,8 @@ CREATE TABLE public.sales (
     CONSTRAINT sales_draft_sale_number_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL)))),
     CONSTRAINT sales_grand_total_check CHECK (((grand_total >= (0)::numeric) AND (grand_total = (subtotal - discount_total)))),
     CONSTRAINT sales_receivable_customer_check CHECK (((status = 'draft'::public.sale_status_enum) OR (payment_status = 'paid'::public.payment_status_enum) OR (customer_id IS NOT NULL))),
+    CONSTRAINT sales_sale_number_metadata_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL) AND (sale_sequence_number IS NULL) AND (sale_period_key IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL) AND (sale_sequence_number IS NOT NULL) AND (sale_period_key IS NOT NULL) AND (length(TRIM(BOTH FROM sale_period_key)) > 0)))),
+    CONSTRAINT sales_sale_sequence_number_check CHECK (((sale_sequence_number IS NULL) OR (sale_sequence_number > 0))),
     CONSTRAINT sales_subtotal_check CHECK ((subtotal >= (0)::numeric)),
     CONSTRAINT sales_void_metadata_check CHECK (((status <> 'voided'::public.sale_status_enum) OR ((voided_at IS NOT NULL) AND (void_reason IS NOT NULL)))),
     CONSTRAINT sales_replacement_not_self_check CHECK (((replacement_of_sale_id IS NULL) OR (replacement_of_sale_id <> id))),
@@ -674,15 +714,32 @@ CREATE TABLE public.store_devices (
 
 
 --
--- Name: store_sale_counters; Type: TABLE; Schema: public; Owner: -
+-- Name: store_billing_settings; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.store_sale_counters (
+CREATE TABLE public.store_billing_settings (
     store_id uuid NOT NULL,
     organization_id uuid NOT NULL,
-    next_sale_number bigint DEFAULT 1 NOT NULL,
+    sale_number_reset_period public.sale_number_reset_period_enum DEFAULT 'never'::public.sale_number_reset_period_enum NOT NULL,
+    sale_number_timezone character varying(64) DEFAULT 'Asia/Kolkata'::character varying NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT store_sale_counters_next_sale_number_check CHECK ((next_sale_number > 0))
+    CONSTRAINT store_billing_settings_timezone_check CHECK ((length(TRIM(BOTH FROM sale_number_timezone)) > 0))
+);
+
+
+--
+-- Name: store_sale_sequences; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.store_sale_sequences (
+    store_id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    period_key character varying(32) NOT NULL,
+    next_sequence_number bigint DEFAULT 1 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT store_sale_sequences_next_number_check CHECK ((next_sequence_number > 0)),
+    CONSTRAINT store_sale_sequences_period_key_check CHECK ((length(TRIM(BOTH FROM period_key)) > 0))
 );
 
 
@@ -1042,6 +1099,12 @@ ALTER TABLE ONLY public.sales
 ALTER TABLE ONLY public.sales
     ADD CONSTRAINT sales_store_id_sale_number_key UNIQUE (store_id, sale_number);
 
+ALTER TABLE ONLY public.store_billing_settings
+    ADD CONSTRAINT store_billing_settings_pkey PRIMARY KEY (store_id);
+
+ALTER TABLE ONLY public.store_sale_sequences
+    ADD CONSTRAINT store_sale_sequences_pkey PRIMARY KEY (store_id, period_key);
+
 
 --
 -- Name: purchase_items purchase_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1097,14 +1160,6 @@ ALTER TABLE ONLY public.store_devices
 
 ALTER TABLE ONLY public.store_devices
     ADD CONSTRAINT store_devices_organization_id_login_username_key UNIQUE (organization_id, login_username);
-
-
---
--- Name: store_sale_counters store_sale_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.store_sale_counters
-    ADD CONSTRAINT store_sale_counters_pkey PRIMARY KEY (store_id);
 
 
 --
@@ -1472,6 +1527,8 @@ CREATE UNIQUE INDEX idx_sales_replacement_of_sale_id ON public.sales USING btree
 
 CREATE INDEX idx_sales_store_sale_number ON public.sales USING btree (store_id, sale_number);
 
+CREATE INDEX idx_sales_store_period_sequence ON public.sales USING btree (store_id, sale_period_key, sale_sequence_number);
+
 
 --
 -- Name: idx_sales_updated_by_device_id; Type: INDEX; Schema: public; Owner: -
@@ -1534,6 +1591,13 @@ CREATE TRIGGER trg_payments_require_completed_sale BEFORE INSERT OR UPDATE ON pu
 --
 
 CREATE TRIGGER trg_sales_prevent_void_with_payments BEFORE UPDATE ON public.sales FOR EACH ROW EXECUTE FUNCTION public.prevent_voided_sale_with_payments();
+
+
+--
+-- Name: sales trg_sales_sale_number_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_sales_sale_number_immutable BEFORE UPDATE OF sale_number, sale_sequence_number, sale_period_key ON public.sales FOR EACH ROW EXECUTE FUNCTION public.prevent_sale_number_mutation();
 
 
 --
@@ -2201,11 +2265,19 @@ ALTER TABLE ONLY public.store_devices
 
 
 --
--- Name: store_sale_counters store_sale_counters_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: store_billing_settings store_billing_settings_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.store_sale_counters
-    ADD CONSTRAINT store_sale_counters_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.store_billing_settings
+    ADD CONSTRAINT store_billing_settings_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+
+--
+-- Name: store_sale_sequences store_sale_sequences_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_sale_sequences
+    ADD CONSTRAINT store_sale_sequences_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
 
 
 --
@@ -2266,4 +2338,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260731130000'),
     ('20260731140000'),
     ('20260802120000'),
-    ('20260806120000');
+    ('20260806120000'),
+    ('20260807120000');

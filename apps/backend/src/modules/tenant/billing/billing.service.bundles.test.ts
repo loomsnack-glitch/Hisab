@@ -260,10 +260,11 @@ const updateSale = mock(async (data: Record<string, unknown>) => {
 const getBundleCommercialSalesRollups = mock(async () => []);
 const getBundleComponentProductUsageRollups = mock(async () => []);
 const getBundleComponentAddOnUsageRollups = mock(async () => []);
+const lockDraftSale = mock(async () => true);
 
 mock.module("@/config/db", () => ({
     pg: {
-        begin: async (callback: (tx: unknown) => Promise<void>) => callback({}),
+        begin: async <T>(callback: (tx: unknown) => Promise<T>) => callback({}),
     },
 }));
 
@@ -304,7 +305,12 @@ mock.module("./billing.repository", () => ({
     })),
     createCustomerLedgerEntry: mock(async () => null),
     updateCustomerBalance: mock(async () => null),
-    incrementStoreSaleCounter: mock(async () => 1),
+    lockDraftSale,
+    allocateSaleNumber: mock(async () => ({
+        saleNumber: "1",
+        saleSequenceNumber: 1,
+        salePeriodKey: "continuous",
+    })),
     getParentScopedAddOnSalesRollups: mock(async () => []),
     getAddOnScopedSalesRollups: mock(async () => []),
     getBundleCommercialSalesRollups,

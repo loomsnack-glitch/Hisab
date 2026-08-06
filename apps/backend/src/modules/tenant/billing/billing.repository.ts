@@ -22,6 +22,7 @@ import type {
     SaleItemBundleComponentAddOnDTO,
     SaleItemBundleComponentDTO,
     SaleItemDTO,
+    SaleNumberSettingsDTO,
     SaleSummaryDTO,
     SalesListSummary,
     SalesListQuery,
@@ -30,6 +31,11 @@ import type {
     UpdateSaleREPO,
 } from "@repo/types";
 import { decodeSalesCursor, encodeSalesCursor } from "./sales-pagination";
+import {
+    DEFAULT_SALE_NUMBER_TIMEZONE,
+    formatSaleNumber,
+    getSaleNumberPeriodKey,
+} from "./sale-numbering";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 
@@ -41,8 +47,8 @@ type SaleSummaryRow = Record<string, unknown> & {
     created_by_device_name?: string | null;
     updated_by_device_name?: string | null;
     replacement_sale_id?: string | null;
-    replacement_sale_number?: number | string | null;
-    replacement_of_sale_number?: number | string | null;
+    replacement_sale_number?: string | null;
+    replacement_of_sale_number?: string | null;
 };
 
 type SaleSummaryWithCursor = SaleSummaryDTO & {
@@ -235,6 +241,8 @@ export const updateSale = async (saleData: UpdateSaleREPO, tx?: Bun.TransactionS
             notes = ${saleData.notes ?? null},
             committed_at = ${saleData.committedAt ?? null},
             sale_number = ${saleData.saleNumber ?? null},
+            sale_sequence_number = ${saleData.saleSequenceNumber ?? null},
+            sale_period_key = ${saleData.salePeriodKey ?? null},
             voided_at = ${saleData.voidedAt ?? null},
             void_reason = ${saleData.voidReason ?? null},
             updated_at = NOW()
@@ -245,6 +253,25 @@ export const updateSale = async (saleData: UpdateSaleREPO, tx?: Bun.TransactionS
     `;
 
     return result ? mapSaleSummaryRow(result as SaleSummaryRow) : null;
+};
+
+export const lockDraftSale = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+    tx: Bun.TransactionSQL,
+): Promise<boolean> => {
+    const [result] = await tx`
+        SELECT id
+        FROM sales
+        WHERE id = ${saleId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND status = 'draft'
+        FOR UPDATE
+    `;
+
+    return Boolean(result);
 };
 
 export const deleteDraftSale = async (
@@ -854,30 +881,99 @@ export const updateCustomerBalance = async (
     return result ? mapRow<CustomerDTO>(result) : null;
 };
 
-export const incrementStoreSaleCounter = async (
+export const getSaleNumberSettings = async (
     organizationId: string,
     storeId: string,
     tx?: Bun.TransactionSQL,
-): Promise<number> => {
+): Promise<SaleNumberSettingsDTO | null> => {
     const db = tx || pg;
     const [result] = await db`
-        INSERT INTO store_sale_counters (
+        SELECT
             store_id,
             organization_id,
-            next_sale_number
+            sale_number_reset_period AS reset_period,
+            sale_number_timezone AS timezone,
+            created_at,
+            updated_at
+        FROM store_billing_settings
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
+    return result ? mapRow<SaleNumberSettingsDTO>(result) : null;
+};
+
+export const upsertSaleNumberSettings = async (
+    organizationId: string,
+    storeId: string,
+    resetPeriod: SaleNumberSettingsDTO["resetPeriod"],
+    timezone: string,
+): Promise<SaleNumberSettingsDTO | null> => {
+    const [result] = await pg`
+        INSERT INTO store_billing_settings (
+            store_id,
+            organization_id,
+            sale_number_reset_period,
+            sale_number_timezone
         ) VALUES (
             ${storeId},
             ${organizationId},
-            2
+            ${resetPeriod},
+            ${timezone}
         )
         ON CONFLICT (store_id)
         DO UPDATE SET
-            next_sale_number = store_sale_counters.next_sale_number + 1,
+            sale_number_reset_period = EXCLUDED.sale_number_reset_period,
+            sale_number_timezone = EXCLUDED.sale_number_timezone,
             updated_at = NOW()
-        RETURNING next_sale_number - 1 AS sale_number
+        RETURNING
+            store_id,
+            organization_id,
+            sale_number_reset_period AS reset_period,
+            sale_number_timezone AS timezone,
+            created_at,
+            updated_at
     `;
 
-    return Number(result?.sale_number ?? 1);
+    return result ? mapRow<SaleNumberSettingsDTO>(result) : null;
+};
+
+export const allocateSaleNumber = async (
+    organizationId: string,
+    storeId: string,
+    committedAt: Date,
+    tx?: Bun.TransactionSQL,
+): Promise<{ saleNumber: string; saleSequenceNumber: number; salePeriodKey: string }> => {
+    const db = tx || pg;
+    const settings =
+        (await getSaleNumberSettings(organizationId, storeId, tx)) ??
+        ({ resetPeriod: "never", timezone: DEFAULT_SALE_NUMBER_TIMEZONE } as const);
+    const periodKey = getSaleNumberPeriodKey(settings.resetPeriod, committedAt, settings.timezone);
+    const [result] = await db`
+        INSERT INTO store_sale_sequences (
+            store_id,
+            organization_id,
+            period_key,
+            next_sequence_number
+        ) VALUES (
+            ${storeId},
+            ${organizationId},
+            ${periodKey},
+            2
+        )
+        ON CONFLICT (store_id, period_key)
+        DO UPDATE SET
+            next_sequence_number = store_sale_sequences.next_sequence_number + 1,
+            updated_at = NOW()
+        RETURNING next_sequence_number - 1 AS sequence_number
+    `;
+
+    const saleSequenceNumber = Number(result?.sequence_number ?? 1);
+    return {
+        saleNumber: formatSaleNumber(settings.resetPeriod, periodKey, saleSequenceNumber),
+        saleSequenceNumber,
+        salePeriodKey: periodKey,
+    };
 };
 
 export const getParentScopedAddOnSalesRollups = async (

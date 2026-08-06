@@ -5,6 +5,7 @@ import {
     CustomerListQuerySchema,
     STATUS_CODES,
     SalesListQuerySchema,
+    UpdateSaleNumberSettingsSchema,
     UpdateCustomerSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
@@ -47,6 +48,50 @@ const validateOrgAndStoreParams = (organizationId: string, storeId?: string) => 
 };
 
 router.use("*", authMiddleware);
+
+router.get("/:organizationId/stores/:storeId/sale-number-settings", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalidParams = validateOrgAndStoreParams(organizationId, storeId);
+        if (invalidParams) {
+            return c.json(invalidParams, invalidParams.code);
+        }
+
+        const authUser = c.get("authUser");
+        const serviceResponse = await billingService.getSaleNumberSettings(authUser.id, organizationId, storeId);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getSaleNumberSettings", c, error);
+    }
+});
+
+router.patch(
+    "/:organizationId/stores/:storeId/sale-number-settings",
+    validateSchema("json", UpdateSaleNumberSettingsSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalidParams = validateOrgAndStoreParams(organizationId, storeId);
+            if (invalidParams) {
+                return c.json(invalidParams, invalidParams.code);
+            }
+
+            const authUser = c.get("authUser");
+            const body = c.req.valid("json");
+            const serviceResponse = await billingService.updateSaleNumberSettings(
+                authUser.id,
+                organizationId,
+                storeId,
+                body,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateSaleNumberSettings", c, error);
+        }
+    },
+);
 
 router.get("/:organizationId/customers", validateSchema("query", CustomerListQuerySchema), async (c) => {
     try {

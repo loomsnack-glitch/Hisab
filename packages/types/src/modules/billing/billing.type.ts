@@ -25,6 +25,8 @@ import type {
     SaleItemBundleComponentDTOSchema,
     SaleItemDTOSchema,
     SaleItemInputSchema,
+    SaleNumberResetPeriodSchema,
+    SaleNumberSettingsDTOSchema,
     SaleSummaryDTOSchema,
     SalesListPageInfoSchema,
     SalesListSummarySchema,
@@ -32,6 +34,7 @@ import type {
     SalesSortSchema,
     UpdateCustomerSchema,
     UpdateDraftSaleSchema,
+    UpdateSaleNumberSettingsSchema,
     VoidSaleSchema,
 } from "./billing.schema";
 
@@ -45,6 +48,8 @@ export type CustomerLedgerEntryDTO = z.infer<typeof CustomerLedgerEntryDTOSchema
 export type SaleDeviceAuditDTO = z.infer<typeof SaleDeviceAuditDTOSchema>;
 export type SaleSummaryDTO = z.infer<typeof SaleSummaryDTOSchema>;
 export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema>;
+export type SaleNumberResetPeriod = z.infer<typeof SaleNumberResetPeriodSchema>;
+export type SaleNumberSettingsDTO = z.infer<typeof SaleNumberSettingsDTOSchema>;
 export type ParentScopedAddOnSalesRollupDTO = z.infer<typeof ParentScopedAddOnSalesRollupDTOSchema>;
 export type AddOnScopedSalesRollupDTO = z.infer<typeof AddOnScopedSalesRollupDTOSchema>;
 export type AddOnSalesRollupsResponse = z.infer<typeof AddOnSalesRollupsResponseSchema>;
@@ -96,6 +101,9 @@ export type CreatePaymentJSON = z.infer<typeof CreatePaymentSchema>;
 export type CreatePaymentSVC = CreatePaymentJSON;
 export type VoidSaleJSON = z.infer<typeof VoidSaleSchema>;
 export type VoidSaleSVC = VoidSaleJSON;
+export type UpdateSaleNumberSettingsJSON = z.infer<typeof UpdateSaleNumberSettingsSchema>;
+export type UpdateSaleNumberSettingsSVC = UpdateSaleNumberSettingsJSON;
+export type SaleNumberSettingsResponse = { settings: SaleNumberSettingsDTO };
 
 export type CreateSaleREPO = Pick<
     SaleSummaryDTO,
@@ -109,7 +117,9 @@ export type CreateSaleREPO = Pick<
     customerId?: string | null;
     notes?: string | null;
     committedAt?: string | Date | null;
-    saleNumber?: number | null;
+    saleNumber?: string | null;
+    saleSequenceNumber?: number | null;
+    salePeriodKey?: string | null;
     voidedAt?: string | Date | null;
     voidReason?: string | null;
 };
@@ -122,7 +132,9 @@ export type UpdateSaleREPO = Pick<
     customerId?: string | null;
     notes?: string | null;
     committedAt?: string | Date | null;
-    saleNumber?: number | null;
+    saleNumber?: string | null;
+    saleSequenceNumber?: number | null;
+    salePeriodKey?: string | null;
     voidedAt?: string | Date | null;
     voidReason?: string | null;
 };

@@ -289,10 +289,16 @@ const createPayment = mock(async (data: Record<string, unknown>) => {
 });
 const getParentScopedAddOnSalesRollups = mock(async () => []);
 const getAddOnScopedSalesRollups = mock(async () => []);
+const lockDraftSale = mock(async () => true);
+const allocateSaleNumber = mock(async () => ({
+    saleNumber: "1",
+    saleSequenceNumber: 1,
+    salePeriodKey: "continuous",
+}));
 
 mock.module("@/config/db", () => ({
     pg: {
-        begin: async (callback: (tx: unknown) => Promise<void>) => callback({}),
+        begin: async <T>(callback: (tx: unknown) => Promise<T>) => callback({}),
     },
 }));
 
@@ -337,7 +343,8 @@ mock.module("./billing.repository", () => ({
     updateCustomerBalance: mock(async (_organizationId: string, customerId: string, balance: number) =>
         customerId === amendmentCustomerId ? { ...amendmentCustomer, balance } : null,
     ),
-    incrementStoreSaleCounter: mock(async () => 1),
+    lockDraftSale,
+    allocateSaleNumber,
     getParentScopedAddOnSalesRollups,
     getAddOnScopedSalesRollups,
 }));
@@ -383,6 +390,9 @@ describe("Configured product billing with trusted snapshots", () => {
         createPayment.mockClear();
         getParentScopedAddOnSalesRollups.mockClear();
         getAddOnScopedSalesRollups.mockClear();
+        lockDraftSale.mockClear();
+        lockDraftSale.mockResolvedValue(true);
+        allocateSaleNumber.mockClear();
         getParentScopedAddOnSalesRollups.mockResolvedValue([]);
         getAddOnScopedSalesRollups.mockResolvedValue([]);
 
@@ -448,6 +458,26 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(firstResponse.data?.sale.id).toBe(secondResponse.data?.sale.id);
         expect(createdSales).toHaveLength(1);
         expect(createPayment).toHaveBeenCalledTimes(1);
+    });
+
+    test("does not allocate a number when the draft is already committed", async () => {
+        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const saleId = created.data?.sale.id;
+        expect(created.status).toBe("success");
+        expect(saleId).toBeTruthy();
+
+        lockDraftSale.mockResolvedValue(false);
+
+        const response = await billingService.commitSale(userId, organizationId, storeId, saleId!, {
+            payments: [],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(allocateSaleNumber).not.toHaveBeenCalled();
+        expect(createdSales[0]?.status).toBe("draft");
     });
 
     test("creates a configured product line with trusted add-on snapshots from the database", async () => {
@@ -653,7 +683,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
             paidTotal: 90,
             dueTotal: 0,
             notes: null,
-            saleNumber: 21,
+            saleNumber: "21",
             committedAt: now,
             updatedAt: now,
             voidedAt: null,
@@ -689,7 +719,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
             id: originalSaleId,
             status: "voided",
             paymentStatus: "paid",
-            saleNumber: 21,
+            saleNumber: "21",
             voidReason: "Customer changed the order",
         });
         expect(createdSales[1]).toMatchObject({

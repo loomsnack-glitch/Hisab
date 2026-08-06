@@ -35,6 +35,8 @@ export const billingKeys = {
         [...billingKeys.organization(organizationId), "sales", storeId, filters ?? {}] as const,
     sale: (organizationId: string, storeId: string, saleId: string) =>
         [...billingKeys.sales(organizationId, storeId), "detail", saleId] as const,
+    saleNumberSettings: (organizationId: string, storeId: string) =>
+        [...billingKeys.organization(organizationId), "sale-number-settings", storeId] as const,
 };
 
 export const purchaseKeys = {

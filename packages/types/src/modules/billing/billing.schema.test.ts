@@ -3,9 +3,27 @@ import {
     AddOnSalesRollupsResponseSchema,
     SaleItemInputSchema,
     SaleDetailDTOSchema,
+    SaleNumberSettingsDTOSchema,
+    UpdateSaleNumberSettingsSchema,
 } from "./billing.schema";
 
 describe("Configured sale billing contracts", () => {
+    test("sale number settings accept every supported reset period", () => {
+        const base = {
+            storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            timezone: "Asia/Kolkata",
+            createdAt: new Date("2026-08-07T12:00:00.000Z"),
+            updatedAt: new Date("2026-08-07T12:00:00.000Z"),
+        };
+        const periods = ["never", "daily", "weekly", "monthly", "quarterly", "half_yearly", "yearly"] as const;
+
+        for (const resetPeriod of periods) {
+            expect(SaleNumberSettingsDTOSchema.safeParse({ ...base, resetPeriod }).success).toBe(true);
+            expect(UpdateSaleNumberSettingsSchema.safeParse({ resetPeriod }).success).toBe(true);
+        }
+    });
+
     test("sale item input accepts selection-only product and add-on ids with quantities", () => {
         const result = SaleItemInputSchema.safeParse({
             productId: "11111111-1111-4111-8111-111111111111",

@@ -244,7 +244,7 @@ const SaleDetailDialog = ({
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <DialogHeader className="space-y-3">
                                     <div className="flex flex-wrap items-center gap-3">
-                                        <DialogTitle className="font-display text-3xl font-semibold tracking-tight">
+                                        <DialogTitle className="whitespace-nowrap font-display text-3xl font-semibold tracking-tight">
                                             {sale.saleNumber ? `Bill #${sale.saleNumber}` : "Draft bill"}
                                         </DialogTitle>
                                         <Badge
