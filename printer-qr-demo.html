@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESC/POS QR Printer Demo</title>
+    <style>
+      body { max-width: 620px; margin: 40px auto; padding: 0 20px; font: 16px system-ui, sans-serif; }
+      label { display: block; margin: 16px 0 6px; font-weight: 600; }
+      input, button { box-sizing: border-box; font: inherit; padding: 10px 12px; }
+      input { width: 100%; }
+      button { margin: 16px 8px 0 0; cursor: pointer; }
+      #status { min-height: 24px; margin-top: 20px; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>ESC/POS QR Printer Demo</h1>
+    <p>Connect an 80mm USB printer, then print a native QR code.</p>
+
+    <label for="url">QR URL</label>
+    <input id="url" value="https://instagram.com/yourstore" />
+
+    <button id="connect">Connect printer</button>
+    <button id="print" disabled>Print QR and cut</button>
+    <div id="status">Not connected</div>
+
+    <script>
+      let device = null;
+      let endpointNumber = null;
+      let interfaceNumber = null;
+
+      const status = (message) => {
+        document.querySelector("#status").textContent = message;
+      };
+
+      const join = (...chunks) => {
+        const result = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
+        let offset = 0;
+        for (const chunk of chunks) {
+          result.set(chunk, offset);
+          offset += chunk.length;
+        }
+        return result;
+      };
+
+      const bytes = (...values) => new Uint8Array(values);
+      const encoder = new TextEncoder();
+
+      const escPosQr = (url) => {
+        const data = encoder.encode(url);
+        const payloadLength = data.length + 3;
+        const pL = payloadLength & 0xff;
+        const pH = (payloadLength >> 8) & 0xff;
+
+        return join(
+          // Initialize and center.
+          bytes(0x1b, 0x40),
+          bytes(0x1b, 0x61, 0x01),
+
+          // QR model 2.
+          bytes(0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00),
+
+          // Module size: 6 dots.
+          bytes(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x06),
+
+          // Error correction: M.
+          bytes(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31),
+
+          // Store URL in the printer's QR symbol buffer.
+          bytes(0x1d, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30),
+          data,
+
+          // Print stored QR, then feed and cut.
+          bytes(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30),
+          bytes(0x0a),
+          bytes(0x1b, 0x64, 0x04),
+          bytes(0x1d, 0x56, 0x00),
+        );
+      };
+
+      const findBulkOutEndpoint = async (usbDevice) => {
+        if (!usbDevice.configuration) {
+          await usbDevice.selectConfiguration(1);
+        }
+
+        for (const usbInterface of usbDevice.configuration.interfaces) {
+          let claimed = false;
+          try {
+            await usbDevice.claimInterface(usbInterface.interfaceNumber);
+            claimed = true;
+            const endpoint = usbInterface.alternate.endpoints.find(
+              (candidate) => candidate.direction === "out" && candidate.type === "bulk",
+            );
+            if (endpoint) {
+              return {
+                endpointNumber: endpoint.endpointNumber,
+                interfaceNumber: usbInterface.interfaceNumber,
+              };
+            }
+          } catch (_) {
+            // Try the next interface.
+          }
+          if (claimed) {
+            await usbDevice.releaseInterface(usbInterface.interfaceNumber).catch(() => {});
+          }
+        }
+
+        throw new Error("No USB bulk OUT endpoint found");
+      };
+
+      document.querySelector("#connect").addEventListener("click", async () => {
+        if (!navigator.usb) {
+          status("WebUSB is unavailable. Use Chrome or Edge on localhost or HTTPS.");
+          return;
+        }
+
+        try {
+          status("Choose your receipt printer...");
+          device = await navigator.usb.requestDevice({ filters: [] });
+          await device.open();
+          ({ endpointNumber, interfaceNumber } = await findBulkOutEndpoint(device));
+          document.querySelector("#print").disabled = false;
+          status(`Connected: ${device.productName || "USB printer"}`);
+        } catch (error) {
+          status(`Connection failed: ${error.message || error}`);
+        }
+      });
+
+      document.querySelector("#print").addEventListener("click", async () => {
+        const url = document.querySelector("#url").value.trim();
+        if (!url || !device || endpointNumber === null) return;
+
+        try {
+          status("Sending QR to printer...");
+          const result = await device.transferOut(endpointNumber, escPosQr(url));
+          if (result.status !== "ok") throw new Error(result.status);
+          status("QR printed and paper cut.");
+        } catch (error) {
+          status(`Print failed: ${error.message || error}`);
+        }
+      });
+
+      window.addEventListener("beforeunload", async () => {
+        if (device && device.opened) {
+          if (interfaceNumber !== null) await device.releaseInterface(interfaceNumber).catch(() => {});
+          await device.close().catch(() => {});
+        }
+      });
+    </script>
+  </body>
+</html>
