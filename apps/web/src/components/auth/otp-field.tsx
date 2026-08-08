@@ -28,7 +28,7 @@ const OtpField = <T extends FieldValues>({ control, name, autoFocus = true }: Ot
                 control={control}
                 render={({ field, fieldState }) => (
                     <Field data-invalid={fieldState.invalid}>
-                        <div className="flex justify-center">
+                        <div className="flex justify-center w-full">
                             <InputOTP
                                 id={String(name)}
                                 maxLength={6}
@@ -36,23 +36,23 @@ const OtpField = <T extends FieldValues>({ control, name, autoFocus = true }: Ot
                                 value={(field.value as string | undefined) ?? ""}
                                 onChange={field.onChange}
                             >
-                                <InputOTPGroup className="gap-2">
-                                    <InputOTPSlot index={0} className="h-12 w-12 rounded-xl border text-lg" />
-                                    <InputOTPSlot index={1} className="h-12 w-12 rounded-xl border text-lg" />
-                                    <InputOTPSlot index={2} className="h-12 w-12 rounded-xl border text-lg" />
+                                <InputOTPGroup className="gap-1.5 sm:gap-2.5">
+                                    <InputOTPSlot index={0} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
+                                    <InputOTPSlot index={1} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
+                                    <InputOTPSlot index={2} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
                                 </InputOTPGroup>
-                                <InputOTPSeparator className="w-6" />
-                                <InputOTPGroup className="gap-2">
-                                    <InputOTPSlot index={3} className="h-12 w-12 rounded-xl border text-lg" />
-                                    <InputOTPSlot index={4} className="h-12 w-12 rounded-xl border text-lg" />
-                                    <InputOTPSlot index={5} className="h-12 w-12 rounded-xl border text-lg" />
+                                <InputOTPSeparator className="w-3 sm:w-6 flex justify-center shrink-0 text-muted-foreground" />
+                                <InputOTPGroup className="gap-1.5 sm:gap-2.5">
+                                    <InputOTPSlot index={3} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
+                                    <InputOTPSlot index={4} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
+                                    <InputOTPSlot index={5} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
                                 </InputOTPGroup>
                             </InputOTP>
                         </div>
-                        <FieldDescription className="mt-2 flex items-center justify-center gap-2 text-center">
+                        <FieldDescription className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
                             <span>Enter the code sent on</span>
-                            <img src={whatsAppIcon} alt="WhatsApp" className="h-4 w-4" />
-                            <span>WhatsApp.</span>
+                            <img src={whatsAppIcon} alt="WhatsApp" className="h-3.5 w-3.5" />
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">WhatsApp</span>
                         </FieldDescription>
                         <FieldError errors={[fieldState.error]} />
                     </Field>

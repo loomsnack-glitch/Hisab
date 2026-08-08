@@ -17,11 +17,11 @@ const sanitizeIndianMobileNumber = (value: string) => value.replace(/\D/g, "").s
 const PhoneNumberField = React.forwardRef<HTMLInputElement, PhoneNumberFieldProps>(
     ({ value, onChange, onBlur, error, required }, ref) => {
         return (
-            <Field data-invalid={!!error}>
-                <FieldLabel required={required}>Phone number</FieldLabel>
+            <Field data-invalid={!!error} className="space-y-1">
+                <FieldLabel required={required} className="text-xs">Phone number</FieldLabel>
                 <FieldContent>
                     <div
-                        className={`flex h-11 w-full rounded-xl border bg-transparent transition-all duration-200 focus-within:ring-[3px] overflow-hidden ${
+                        className={`flex h-10 w-full rounded-xl border bg-transparent transition-colors duration-200 focus-within:ring-[3px] overflow-hidden ${
                             error
                                 ? "border-destructive focus-within:border-destructive focus-within:ring-destructive/20 dark:focus-within:ring-destructive/40"
                                 : "border-input focus-within:border-ring focus-within:ring-ring/50"
@@ -41,7 +41,7 @@ const PhoneNumberField = React.forwardRef<HTMLInputElement, PhoneNumberFieldProp
                             onBlur={onBlur}
                         />
                     </div>
-                    <FieldError errors={[error]} />
+                    <FieldError errors={[error]} className="text-[10px]" />
                 </FieldContent>
             </Field>
         );

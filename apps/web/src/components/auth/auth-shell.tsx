@@ -27,18 +27,14 @@ const featureItems = [
 
 const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
     return (
-        <div className="relative min-h-screen lg:h-screen w-full bg-background flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto lg:overflow-hidden">
-            <div className="absolute right-4 top-4 z-20 sm:right-6 lg:right-8">
-                <ThemeToggle />
-            </div>
-
+        <div className="relative min-h-[100dvh] w-full bg-background flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8">
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
                 <div className="absolute inset-0 bg-secondary/10 dark:bg-secondary/5" />
                 <div className="grid-bg absolute inset-0 opacity-20 dark:opacity-10" />
             </div>
 
-            <div className="w-full h-auto lg:h-full max-w-xl lg:max-w-7xl overflow-hidden lg:rounded-3xl lg:border lg:border-border/70 lg:bg-card lg:shadow-2xl grid lg:grid-cols-[1.05fr_0.95fr]">
-                {/* Left Panel - Hidden on small screens, premium gradient and glows on large screens */}
+            <div className="w-full max-w-md lg:max-w-7xl lg:rounded-3xl lg:border lg:border-border/70 lg:bg-card lg:shadow-2xl grid lg:grid-cols-[1.05fr_0.95fr] overflow-hidden">
+                {/* Left Panel - Desktop only */}
                 <div className="relative hidden overflow-hidden bg-slate-950 p-10 text-slate-100 lg:flex lg:flex-col lg:justify-between border-r border-border/10">
                     <div className="absolute -left-20 -top-20 w-80 h-80 rounded-full bg-primary/15 blur-[100px] pointer-events-none" />
                     <div className="absolute -right-20 -bottom-20 w-96 h-96 rounded-full bg-primary/10 blur-[100px] pointer-events-none" />
@@ -46,14 +42,17 @@ const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
                     
                     <div className="auth-panel-pattern absolute inset-0 opacity-20" />
 
-                    <div className="relative z-10 flex animate-in fade-in slide-in-from-left-4 items-center gap-3 duration-700">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/80 transition-transform duration-300 hover:scale-105 shadow-md shadow-primary/20">
-                            <img src={logo} alt="Ganatri" className="h-7 w-7 object-contain brightness-0 invert" />
+                    <div className="relative z-10 flex items-center justify-between">
+                        <div className="flex animate-in fade-in slide-in-from-left-4 items-center gap-3 duration-700">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+                                <img src={logo} alt="Ganatri" className="h-7 w-7 object-contain brightness-0 invert" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Loomsnack</p>
+                                <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-50">Ganatri</h1>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Loomsnack</p>
-                            <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-50 animate-pulse">Ganatri</h1>
-                        </div>
+                        <ThemeToggle />
                     </div>
 
                     <div className="relative z-10 animate-in fade-in slide-in-from-left-6 space-y-8 duration-700 delay-150 fill-mode-both">
@@ -95,34 +94,38 @@ const AuthShell = ({ title, subtitle, children }: AuthShellProps) => {
                     </div>
                 </div>
 
-                {/* Right Panel - Fits perfectly on one page without scrollbars */}
-                <div className="flex flex-col justify-center p-0 lg:p-8 h-auto lg:h-full overflow-visible lg:overflow-hidden">
-                    <div className="w-full max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both py-2">
-                        <div className="mb-6 flex items-center justify-between lg:hidden">
-                            <Link to="/" className="inline-flex items-center gap-3 transition-opacity duration-200 hover:opacity-90">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/80">
-                                    <img src={logo} alt="Ganatri" className="h-6 w-6 object-contain brightness-0 invert" />
+                {/* Right Panel */}
+                <div className="flex flex-col justify-center p-0 lg:p-8 w-full">
+                    <div className="w-full max-w-md mx-auto py-2">
+                        {/* Mobile Top Navigation Bar */}
+                        <div className="flex items-center justify-between lg:hidden mb-4">
+                            <Link to="/" className="inline-flex items-center gap-2.5 transition-opacity duration-200 hover:opacity-90">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                                    <img src={logo} alt="Ganatri" className="h-5.5 w-5.5 object-contain brightness-0 invert" />
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-primary">Loomsnack</p>
-                                    <p className="font-display text-xl font-semibold tracking-tight text-foreground">Ganatri</p>
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-primary">Loomsnack</p>
+                                    <p className="font-display text-lg font-bold tracking-tight text-foreground">Ganatri</p>
                                 </div>
                             </Link>
-                            <Badge variant="secondary" className="rounded-full text-xs">
-                                Auth flow
-                            </Badge>
+                            <ThemeToggle />
                         </div>
 
-                        <div className="mb-5 space-y-1.5">
-                            <h2 className="font-display text-2xl font-semibold tracking-tight text-foreground">{title}</h2>
-                            <p className="text-xs leading-5 text-muted-foreground">{subtitle}</p>
+                        {/* Header Title Section */}
+                        <div className="mb-3 space-y-1">
+                            <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-foreground">{title}</h2>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{subtitle}</p>
                         </div>
 
-                        {children}
+                        {/* Main Form Content */}
+                        <div className="my-auto">
+                            {children}
+                        </div>
 
-                        <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground border-t border-border/40 pt-4">
-                            <ArrowRight className="auth-feature-icon size-3.5 text-primary" />
-                            Secure cookies keep your authenticated workspace session ready after verification.
+                        {/* Footer Security Note */}
+                        <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground border-t border-border/40 pt-2.5">
+                            <ArrowRight className="size-3 shrink-0 text-primary" />
+                            <span>Secure cookies keep your workspace session ready.</span>
                         </div>
                     </div>
                 </div>

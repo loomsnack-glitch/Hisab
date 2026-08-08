@@ -113,80 +113,82 @@ const PosLoginPage = () => {
             title="POS login"
             subtitle="Enter your business username, device username, and device secret to start a POS session."
         >
-            <div className="mb-3 rounded-xl border border-violet-500/20 bg-violet-500/10 px-3 py-2 flex items-center justify-between gap-4 text-xs">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <span>Want to manage the store instead?</span>
+            <div className="space-y-3">
+                <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 px-3 py-2 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <span>Want to manage store instead?</span>
+                    </div>
+                    <Link to="/login" className="font-semibold text-violet-700 dark:text-violet-300 hover:underline shrink-0">
+                        Admin login &rarr;
+                    </Link>
                 </div>
-                <Link to="/login" className="font-semibold text-violet-700 dark:text-violet-300 hover:underline shrink-0">
-                    Admin login &rarr;
-                </Link>
+
+                <Card className="border-border/70 shadow-sm">
+                    <CardContent className="space-y-4 p-4 sm:p-6">
+                        {deviceAuthQuery.isPending ? (
+                            <div className="flex min-h-32 items-center justify-center">
+                                <Spinner className="size-5 text-primary" />
+                            </div>
+                        ) : (
+                            <form className="space-y-3.5" onSubmit={form.handleSubmit(onSubmit)}>
+                                <Field data-invalid={!!form.formState.errors.organizationUsername} className="space-y-1">
+                                    <FieldLabel required className="text-xs">Business username</FieldLabel>
+                                    <FieldContent>
+                                        <Input
+                                            className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                            placeholder="e.g. demo-grocery-mart"
+                                            {...form.register("organizationUsername")}
+                                        />
+                                        <FieldError errors={[form.formState.errors.organizationUsername]} className="text-[10px]" />
+                                    </FieldContent>
+                                </Field>
+
+                                <Field data-invalid={!!form.formState.errors.deviceUsername} className="space-y-1">
+                                    <FieldLabel required className="text-xs">Device username</FieldLabel>
+                                    <FieldContent>
+                                        <Input
+                                            className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                            placeholder="e.g. counter1"
+                                            {...form.register("deviceUsername")}
+                                        />
+                                        <FieldError errors={[form.formState.errors.deviceUsername]} className="text-[10px]" />
+                                    </FieldContent>
+                                </Field>
+
+                                <Field data-invalid={!!form.formState.errors.deviceSecret} className="space-y-1">
+                                    <FieldLabel required className="text-xs">Device secret</FieldLabel>
+                                    <FieldContent>
+                                        <PasswordInput
+                                            className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                            placeholder="Enter the device secret"
+                                            visibilityLabel={{ show: "Show device secret", hide: "Hide device secret" }}
+                                            trailingContent={copiedDeviceSecret ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={handlePasteDeviceSecret}
+                                                    className="rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 text-[10px] sm:text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95 border border-emerald-500/20 shadow-xs cursor-pointer flex items-center"
+                                                >
+                                                    Paste
+                                                </button>
+                                            ) : undefined}
+                                            {...form.register("deviceSecret")}
+                                        />
+                                        <FieldError errors={[form.formState.errors.deviceSecret]} className="text-[10px]" />
+                                    </FieldContent>
+                                </Field>
+
+                                <Button
+                                    type="submit"
+                                    className="h-10 w-full rounded-xl transition-all duration-200 text-sm font-semibold"
+                                    disabled={loginMutation.isPending}
+                                >
+                                    {loginMutation.isPending ? "Opening POS..." : "Start POS session"}
+                                </Button>
+                            </form>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
-
-            <Card className="border-border/70 shadow-sm">
-                <CardContent className="space-y-4 p-5 sm:p-6">
-                    {deviceAuthQuery.isPending ? (
-                        <div className="flex min-h-40 items-center justify-center">
-                            <Spinner className="size-6 text-primary" />
-                        </div>
-                    ) : (
-                        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-                            <Field data-invalid={!!form.formState.errors.organizationUsername} className="space-y-1">
-                                <FieldLabel required className="text-xs">Business username</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        className="h-10 rounded-xl transition-colors duration-200 text-sm"
-                                        placeholder="e.g. demo-grocery-mart"
-                                        {...form.register("organizationUsername")}
-                                    />
-                                    <FieldError errors={[form.formState.errors.organizationUsername]} className="text-[10px]" />
-                                </FieldContent>
-                            </Field>
-
-                            <Field data-invalid={!!form.formState.errors.deviceUsername} className="space-y-1">
-                                <FieldLabel required className="text-xs">Device username</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        className="h-10 rounded-xl transition-colors duration-200 text-sm"
-                                        placeholder="e.g. counter1"
-                                        {...form.register("deviceUsername")}
-                                    />
-                                    <FieldError errors={[form.formState.errors.deviceUsername]} className="text-[10px]" />
-                                </FieldContent>
-                            </Field>
-
-                            <Field data-invalid={!!form.formState.errors.deviceSecret} className="space-y-1">
-                                <FieldLabel required className="text-xs">Device secret</FieldLabel>
-                                <FieldContent>
-                                    <PasswordInput
-                                        className="h-10 rounded-xl transition-colors duration-200 text-sm"
-                                        placeholder="Enter the device secret"
-                                        visibilityLabel={{ show: "Show device secret", hide: "Hide device secret" }}
-                                        trailingContent={copiedDeviceSecret ? (
-                                            <button
-                                                type="button"
-                                                onClick={handlePasteDeviceSecret}
-                                                className="rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95 border border-emerald-500/20 shadow-xs cursor-pointer flex items-center"
-                                            >
-                                                Paste
-                                            </button>
-                                        ) : undefined}
-                                        {...form.register("deviceSecret")}
-                                    />
-                                    <FieldError errors={[form.formState.errors.deviceSecret]} className="text-[10px]" />
-                                </FieldContent>
-                            </Field>
-
-                            <Button
-                                type="submit"
-                                className="h-10 w-full rounded-xl transition-all duration-200 text-sm font-semibold"
-                                disabled={loginMutation.isPending}
-                            >
-                                {loginMutation.isPending ? "Opening POS..." : "Start POS session"}
-                            </Button>
-                        </form>
-                    )}
-                </CardContent>
-            </Card>
         </AuthShell>
     );
 };
