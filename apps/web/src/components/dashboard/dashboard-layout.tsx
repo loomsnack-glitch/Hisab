@@ -215,16 +215,16 @@ const DashboardLayout = () => {
                 </aside>
 
                 <div className="flex min-w-0 flex-1 flex-col">
-                    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+                    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-3 sm:px-6 lg:px-8 backdrop-blur-xl">
                         {/* Left side: Organization selector and Create button */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                             <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
                                 <SheetTrigger
                                     render={
                                         <Button
                                             variant="ghost"
                                             size="icon-sm"
-                                            className="h-9 w-9 rounded-xl lg:hidden hover:bg-muted/70"
+                                            className="h-9 w-9 rounded-xl lg:hidden hover:bg-muted/70 shrink-0"
                                             aria-label="Open navigation menu"
                                         >
                                             <Menu className="size-5 text-muted-foreground hover:text-foreground" />
@@ -250,25 +250,22 @@ const DashboardLayout = () => {
                                         <Button
                                             variant="outline"
                                             className={cn(
-                                                "h-9 gap-2.5 rounded-xl border border-border/70 bg-background/50 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-muted/30 hover:border-amber-500/50 focus:border-amber-500/60 focus:ring-1 focus:ring-amber-500/60",
-                                                activeOrg && "pl-2.5 pr-3"
+                                                "h-9 gap-1.5 sm:gap-2.5 rounded-xl border border-border/70 bg-background/50 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-all duration-200 hover:bg-muted/30 hover:border-amber-500/50 max-w-[140px] sm:max-w-[220px]",
+                                                activeOrg && "pl-2 sm:pl-2.5 pr-2 sm:pr-3"
                                             )}
                                         >
                                             {activeOrg && (
-                                                <Star className={cn("size-4 shrink-0 transition-transform", isStarredActive ? "text-amber-500 fill-amber-500 scale-105" : "text-muted-foreground/50")} />
+                                                <Star className={cn("size-3.5 sm:size-4 shrink-0 transition-transform hidden sm:block", isStarredActive ? "text-amber-500 fill-amber-500 scale-105" : "text-muted-foreground/50")} />
                                             )}
                                             {activeOrg && (
-                                                <div className={cn("size-6 rounded-full flex items-center justify-center text-[10px] font-bold border shrink-0", getOrgBgColor(activeOrg.id))}>
+                                                <div className={cn("size-5 sm:size-6 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold border shrink-0", getOrgBgColor(activeOrg.id))}>
                                                     {getOrgInitials(activeOrgName)}
                                                 </div>
                                             )}
-                                            <span className="truncate max-w-[140px] text-foreground">
+                                            <span className="truncate max-w-[70px] sm:max-w-[140px] text-foreground">
                                                 {activeOrgName || "Select organization"}
                                             </span>
-                                            {activeOrg && (
-                                                <div className="h-4 w-px bg-border/60 mx-0.5 shrink-0" />
-                                            )}
-                                            <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+                                            <ChevronDown className="size-3.5 sm:size-4 text-muted-foreground shrink-0" />
                                         </Button>
                                     }
                                 />
@@ -341,7 +338,7 @@ const DashboardLayout = () => {
                                     <Button
                                         variant="outline"
                                         size="icon-sm"
-                                        className="h-9 w-9 rounded-xl border-border/70 bg-background/50 hover:bg-muted/50"
+                                        className="h-9 w-9 rounded-xl border-border/70 bg-background/50 hover:bg-muted/50 shrink-0"
                                         aria-label="Create organization"
                                     >
                                         <Plus className="size-4 text-muted-foreground hover:text-foreground" />
@@ -351,7 +348,7 @@ const DashboardLayout = () => {
                         </div>
 
                         {/* Right side: Theme Toggle & User Profile Popover */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
                             <Button
                                 variant="outline"
                                 className="hidden rounded-xl border-amber-500/25 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200 sm:flex"
@@ -360,7 +357,9 @@ const DashboardLayout = () => {
                                 <MonitorSmartphone className="mr-2 size-4" />
                                 Login as device
                             </Button>
-                            <DisplayScaleControl />
+                            <div className="hidden sm:block">
+                                <DisplayScaleControl />
+                            </div>
                             <ThemeToggle />
                             {authUser && (
                                 <Popover>
@@ -368,7 +367,7 @@ const DashboardLayout = () => {
                                         render={
                                             <Button
                                                 variant="ghost"
-                                                className="h-9 w-9 rounded-full p-0 ring-1 ring-border/60 hover:bg-transparent"
+                                                className="h-9 w-9 rounded-full p-0 ring-1 ring-border/60 hover:bg-transparent shrink-0"
                                             >
                                                 <Avatar size="sm" className="h-8 w-8">
                                                     <AvatarFallback className="text-[10px]">
@@ -393,6 +392,11 @@ const DashboardLayout = () => {
                                         </div>
 
                                         <div className="h-px bg-border/60 -mx-3 my-0.5" />
+
+                                        <div className="sm:hidden px-1 py-1">
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Text Scale</p>
+                                            <DisplayScaleControl />
+                                        </div>
 
                                         <Link
                                             to="/pos/login"
@@ -419,13 +423,13 @@ const DashboardLayout = () => {
                     </header>
 
                     <main className={cn(
-                        "flex-1",
+                        "flex-1 min-w-0 w-full",
                         location.pathname.includes("/billing")
                             ? "p-0"
-                            : "px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
+                            : "px-3.5 py-4 sm:px-6 lg:px-8 lg:py-8",
                     )}>
                         <div className={cn(
-                            "mx-auto",
+                            "mx-auto w-full min-w-0",
                             location.pathname.includes("/billing") ? "max-w-none" : "max-w-7xl",
                         )}>
                             <Outlet />

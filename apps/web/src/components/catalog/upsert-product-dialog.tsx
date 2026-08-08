@@ -248,19 +248,10 @@ const UpsertProductDialog = ({
                 }
             />
             <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                        <Package2 className="size-5" />
-                    </div>
-                    <DialogTitle className="text-center text-lg font-semibold">
-                        {isEditMode ? "Edit product" : "Create product"}
-                    </DialogTitle>
-                    <DialogDescription className="text-center">
-                        {hasCategories
-                            ? "Set the product details — name, category, pricing, and image."
-                            : "Create a category first so products have somewhere to live."}
-                    </DialogDescription>
-                </DialogHeader>
+                <DialogHeader
+                    icon={<Package2 className="size-5" />}
+                    title={isEditMode ? "Edit product" : "Create product"}
+                />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     {/* Row 1: Category + Name */}

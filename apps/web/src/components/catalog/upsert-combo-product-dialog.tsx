@@ -154,12 +154,11 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
 
     return <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
         <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="mr-2 size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-            <DialogHeader>
-                <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600"><Boxes className="size-5" /></div>
-                <DialogTitle className="text-center">{isEdit ? "Edit Combo" : "Create Combo"}</DialogTitle>
-                <DialogDescription className="text-center">Set the groups customers must choose from. Each Combo can be repeated with a different selection.</DialogDescription>
-            </DialogHeader>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader
+                icon={<Boxes className="size-5" />}
+                title={isEdit ? "Edit Combo" : "Create Combo"}
+            />
             {isLoadingDetails ? (
                 <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
                     Loading Combo details...

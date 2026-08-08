@@ -6,7 +6,7 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
-import { ExternalLink, MonitorSmartphone, Pencil, PlusCircle, Store, Search } from "lucide-react";
+import { ExternalLink, MonitorSmartphone, Pencil, PlusCircle, Store, Search, X } from "lucide-react";
 
 import CreateDeviceDialog from "@/components/organizations/create-device-dialog";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
@@ -59,15 +59,25 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
         <section className="space-y-5">
             {/* Search & Actions bar */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <div className="relative flex-1 max-w-md w-full group/search">
+                    <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                     <Input
                         type="text"
                         placeholder="Search stores..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 h-11 rounded-full border-border/60 bg-card/60 focus-visible:ring-primary w-full"
+                        className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
                     />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
+                            aria-label="Clear search"
+                        >
+                            <X className="size-3.5" />
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -101,38 +111,38 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                 </Card>
             ) : (
                 filteredStores.map((store) => (
-                    <Card key={store.id} className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                        <CardHeader className="gap-4 border-b border-border/50">
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                <div className="space-y-3">
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Card key={store.id} className="border-border/60 bg-card/80 shadow-sm sm:shadow-md">
+                        <CardHeader className="p-4 sm:p-6 gap-3 sm:gap-4 border-b border-border/50">
+                            <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="space-y-2.5 sm:space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
                                             <Store className="size-4" />
                                         </div>
-                                        <div>
-                                            <CardTitle className="font-display text-2xl">{store.name}</CardTitle>
-                                            <CardDescription className="mt-0.5">
+                                        <div className="min-w-0">
+                                            <CardTitle className="font-display text-xl sm:text-2xl truncate">{store.name}</CardTitle>
+                                            <CardDescription className="mt-0.5 text-xs sm:text-sm truncate">
                                                 {store.address ?? "Address not added yet"}
                                             </CardDescription>
-                                            <p className="text-xs text-muted-foreground/70">
+                                            <p className="text-[11px] sm:text-xs text-muted-foreground/70">
                                                 Created {formatDateTime(store.createdAt)}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        <Badge variant="outline" className="rounded-full">
+                                        <Badge variant="outline" className="rounded-full text-xs">
                                             {store.devices.length} device{store.devices.length === 1 ? "" : "s"}
                                         </Badge>
                                         <Badge
                                             variant="outline"
-                                            className="rounded-full border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                            className="rounded-full border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs"
                                         >
                                             {store.devices.filter((device) => device.status === "active").length} active
                                         </Badge>
                                     </div>
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2 pt-1 lg:pt-0">
                                     <SaleNumberSettingsDialog
                                         organizationId={organizationId}
                                         store={store}
@@ -141,8 +151,8 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                         organizationId={organizationId}
                                         store={store}
                                         trigger={
-                                            <Button variant="outline" className="rounded-full">
-                                                <Pencil className="mr-2 size-4" />
+                                            <Button variant="outline" className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4">
+                                                <Pencil className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
                                                 Edit store
                                             </Button>
                                         }
@@ -153,8 +163,8 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                         storeId={store.id}
                                         storeName={store.name}
                                         trigger={
-                                            <Button variant="outline" className="rounded-full">
-                                                <PlusCircle className="mr-2 size-4" />
+                                            <Button variant="outline" className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4">
+                                                <PlusCircle className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
                                                 Add device
                                             </Button>
                                         }

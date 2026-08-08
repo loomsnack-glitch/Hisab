@@ -146,19 +146,10 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
                 }
             />
             <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <Puzzle className="size-5" />
-                    </div>
-                    <DialogTitle className="text-center text-lg font-semibold">
-                        {isEditMode ? "Edit add-on" : "Create add-on"}
-                    </DialogTitle>
-                    <DialogDescription className="text-center">
-                        {isEditMode
-                            ? "Update pricing, discount, or status. Attachments keep their own selection caps."
-                            : "Create a reusable extra such as Extra Cheese that can be attached to products."}
-                    </DialogDescription>
-                </DialogHeader>
+                <DialogHeader
+                    icon={<Puzzle className="size-5" />}
+                    title={isEditMode ? "Edit add-on" : "Create add-on"}
+                />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>

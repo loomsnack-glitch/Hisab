@@ -259,21 +259,22 @@ export function PremiumTable<T>({
             {(showSearch || onRefresh) && (
               <div className="flex items-center gap-2 shrink-0">
                 {showSearch && (
-                  <div className="relative w-[300px] group/search">
-                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-300 group-focus-within/search:text-primary" />
+                  <div className="relative w-full sm:w-[320px] max-w-xs group/search">
+                    <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                     <Input
                       placeholder={searchPlaceholder}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className={cn(
-                        "pl-9 h-9 bg-card border-border/50 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all duration-300 rounded-xl shadow-2xs text-sm w-full",
-                        searchQuery && "pr-8"
+                        "pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
                       )}
                     />
                     {searchQuery && (
                       <button
+                        type="button"
                         onClick={() => setSearchQuery("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
+                        aria-label="Clear search"
                       >
                         <X className="size-3.5" />
                       </button>

@@ -56,9 +56,6 @@ const ManageCategoriesDialog = ({
                                 <DialogTitle className="font-display text-xl font-semibold">
                                     Manage Categories
                                 </DialogTitle>
-                                <DialogDescription className="text-xs mt-0.5">
-                                    Create, edit, and delete product categories.
-                                </DialogDescription>
                             </div>
                         </div>
                         {categories.length > 0 && (

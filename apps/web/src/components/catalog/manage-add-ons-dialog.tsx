@@ -139,9 +139,6 @@ const ManageAddOnsDialog = ({ organizationId, trigger }: ManageAddOnsDialogProps
                                 <DialogTitle className="font-display text-xl font-semibold">
                                     Manage Add-Ons
                                 </DialogTitle>
-                                <DialogDescription className="text-xs mt-0.5">
-                                    Organization-level extras with their own price, discount, and status.
-                                </DialogDescription>
                             </div>
                         </div>
                         {addOns.length > 0 && (

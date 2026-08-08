@@ -64,7 +64,7 @@ const ProductsPage = () => {
         <div className="space-y-6">
             {/* Tab Navigation */}
             <div className="border-b border-border/60">
-                <nav className="flex gap-1" aria-label="Product navigation tabs">
+                <nav className="grid grid-cols-3 w-full sm:flex sm:w-auto sm:justify-start gap-1" aria-label="Product navigation tabs">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.path;
@@ -74,14 +74,14 @@ const ProductsPage = () => {
                                 key={tab.path}
                                 to={`${basePath}/${tab.path}`}
                                 className={cn(
-                                    "relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 rounded-t-lg",
+                                    "relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 text-xs sm:text-sm font-medium transition-colors duration-200 rounded-t-lg whitespace-nowrap text-center",
                                     isActive
-                                        ? "text-primary"
+                                        ? "text-primary font-semibold"
                                         : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
                                 )}
                             >
-                                <Icon className="size-4" />
-                                {tab.label}
+                                <Icon className="size-3.5 sm:size-4 shrink-0" />
+                                <span className="whitespace-nowrap">{tab.label}</span>
                                 {isActive && (
                                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
                                 )}

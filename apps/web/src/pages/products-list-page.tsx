@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { getCategories, getProducts } from "@repo/services";
@@ -7,6 +7,7 @@ import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
+import { cn } from "@repo/ui/lib/utils";
 import { Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, RefreshCw, Search, Trash2 } from "lucide-react";
 
 import DeleteProductButton from "@/components/catalog/delete-product-button";
@@ -46,6 +47,48 @@ const ProductsListPage = () => {
 
     const defaultCategoryIdForNewProduct =
         selectedCategoryFilter !== "all" ? selectedCategoryFilter : undefined;
+
+    const [touchStartX, setTouchStartX] = useState<number | null>(null);
+    const [touchEndX, setTouchEndX] = useState<number | null>(null);
+    const [swipeAnimDirection, setSwipeAnimDirection] = useState<"next" | "prev" | null>(null);
+    const categoryPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+    const allCategoriesList = useMemo(() => [{ id: "all", name: "All" }, ...categories], [categories]);
+
+    // Auto-scroll the active category pill into center view whenever selectedCategoryFilter changes
+    useEffect(() => {
+        const el = categoryPillRefs.current[selectedCategoryFilter];
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+        }
+    }, [selectedCategoryFilter]);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        setTouchEndX(null);
+        setTouchStartX(e.targetTouches[0].clientX);
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        setTouchEndX(e.targetTouches[0].clientX);
+    };
+
+    const handleTouchEnd = () => {
+        if (touchStartX === null || touchEndX === null) return;
+        const distance = touchStartX - touchEndX;
+        const minSwipeDistance = 45;
+
+        const currentIndex = allCategoriesList.findIndex((c) => c.id === selectedCategoryFilter);
+
+        if (distance > minSwipeDistance && currentIndex < allCategoriesList.length - 1) {
+            // Swipe left -> Next category
+            setSwipeAnimDirection("next");
+            setSelectedCategoryFilter(allCategoriesList[currentIndex + 1].id);
+        } else if (distance < -minSwipeDistance && currentIndex > 0) {
+            // Swipe right -> Previous category
+            setSwipeAnimDirection("prev");
+            setSelectedCategoryFilter(allCategoriesList[currentIndex - 1].id);
+        }
+    };
 
     const filteredProducts = useMemo(() => {
         return products.filter((product) => {
@@ -112,31 +155,46 @@ const ProductsListPage = () => {
     }
 
     return (
-        <div className="space-y-5">
+        <div
+            className="space-y-5 touch-pan-y"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+        >
             {/* Search & Actions bar */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative flex-1 max-w-md w-full group/search">
+                    <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                     <Input
                         type="text"
                         placeholder="Search products..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 h-11 rounded-full border-border/60 bg-card/60 focus-visible:ring-primary w-full"
+                        className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
                     />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
+                            aria-label="Clear search"
+                        >
+                            <X className="size-3.5" />
+                        </button>
+                    )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <UpsertProductDialog
                         organizationId={organizationId}
                         categories={categories}
                         defaultCategoryId={defaultCategoryIdForNewProduct}
                         trigger={
                             <Button
-                                className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-5"
+                                className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
                                 disabled={categories.length === 0}
                             >
-                                <PlusCircle className="mr-2 size-4" />
+                                <PlusCircle className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
                                 Add product
                             </Button>
                         }
@@ -150,23 +208,24 @@ const ProductsListPage = () => {
                         trigger={
                             <Button
                                 variant="outline"
-                                className="rounded-full border-border/60 h-11 px-5"
+                                className="rounded-full border-border/60 h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
                                 disabled={categories.length === 0}
                             >
-                                <Boxes className="mr-2 size-4" />
-                                    Add Combo
+                                <Boxes className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
+                                Add Combo
                             </Button>
                         }
                     />
                 </div>
             </div>
 
-            {/* Category filter pills */}
+            {/* Category filter pills - Horizontally scrollable on mobile */}
             {categories.length > 0 && (
-                <div className="flex flex-wrap gap-2 pb-1">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none -mx-1 px-1 sm:flex-wrap sm:overflow-visible touch-pan-x">
                     <Button
+                        ref={(el) => { categoryPillRefs.current["all"] = el; }}
                         variant={selectedCategoryFilter === "all" ? "default" : "outline"}
-                        className="rounded-full px-5 h-9 font-medium text-xs transition-all cursor-pointer"
+                        className="rounded-full px-4 sm:px-5 h-8 sm:h-9 font-medium text-xs transition-all cursor-pointer shrink-0"
                         onClick={() => setSelectedCategoryFilter("all")}
                     >
                         All
@@ -174,8 +233,9 @@ const ProductsListPage = () => {
                     {categories.map((category) => (
                         <Button
                             key={category.id}
+                            ref={(el) => { categoryPillRefs.current[category.id] = el; }}
                             variant={selectedCategoryFilter === category.id ? "default" : "outline"}
-                            className="rounded-full px-5 h-9 font-medium text-xs transition-all cursor-pointer"
+                            className="rounded-full px-4 sm:px-5 h-8 sm:h-9 font-medium text-xs transition-all cursor-pointer shrink-0"
                             onClick={() => setSelectedCategoryFilter(category.id)}
                         >
                             {category.name}
@@ -238,17 +298,25 @@ const ProductsListPage = () => {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))]">
+                <div
+                    key={selectedCategoryFilter}
+                    className={cn(
+                        "grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] transition-all duration-300 ease-out animate-in fade-in-40 duration-300",
+                        swipeAnimDirection === "next" && "slide-in-from-right-8",
+                        swipeAnimDirection === "prev" && "slide-in-from-left-8",
+                        !swipeAnimDirection && "slide-in-from-bottom-2"
+                    )}
+                >
                     {filteredProducts.map((product) => {
                         const categoryName = categoryMap.get(product.categoryId)?.name ?? "Unknown";
 
                         return (
                             <Card
                                 key={product.id}
-                                className="group rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-sm transition-all duration-200 hover:border-primary/25 hover:bg-card hover:shadow-md"
+                                className="group rounded-2xl border border-border/60 bg-card/70 p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-primary/25 hover:bg-card hover:shadow-md min-w-0"
                             >
-                                <div className="flex items-center gap-3.5">
-                                    <div className="relative flex h-[4.25rem] w-[4.25rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-[1.02] dark:ring-white/5">
+                                <div className="flex items-start sm:items-center gap-3">
+                                    <div className="relative flex h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-[1.02] dark:ring-white/5">
                                         {product.imageSignedUrl ? (
                                             <img
                                                 src={product.imageSignedUrl}
@@ -256,17 +324,17 @@ const ProductsListPage = () => {
                                                 className="h-full w-full object-cover"
                                             />
                                         ) : (
-                                            <Package2 className="size-8 text-muted-foreground/55" />
+                                            <Package2 className="size-6 sm:size-8 text-muted-foreground/55" />
                                         )}
                                     </div>
 
-                                    <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                    <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div className="min-w-0 space-y-1">
-                                            <h4 className="whitespace-normal break-words font-display text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+                                            <h4 className="font-display text-sm sm:text-[15px] font-semibold leading-snug tracking-tight text-foreground truncate" title={product.name}>
                                                 {product.name}
                                             </h4>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className="text-xs font-medium capitalize text-muted-foreground">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <span className="text-[11px] sm:text-xs font-medium capitalize text-muted-foreground">
                                                     {categoryName}
                                                 </span>
                                                 <ProductTypeBadge productType={product.productType} />
@@ -276,17 +344,16 @@ const ProductsListPage = () => {
                                             </div>
                                         </div>
 
-                                        <div className="flex shrink-0 items-center gap-2.5">
+                                        <div className="flex shrink-0 items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-border/30">
                                             <ProductPriceDisplay
                                                 price={product.price}
                                                 discount={product.discount}
                                                 size="sm"
-                                                align="right"
+                                                align="left"
                                                 singleTone="foreground"
-                                                className="min-w-[4.5rem]"
                                             />
 
-                                            <div className="flex items-center gap-0.5 border-l border-border/50 pl-2.5">
+                                            <div className="flex items-center gap-0.5 border-l border-border/50 pl-2">
                                                 {product.productType === "single" ? (
                                                     <ManageProductAddOnsDialog
                                                         organizationId={organizationId}

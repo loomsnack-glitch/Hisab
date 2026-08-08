@@ -127,7 +127,6 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
                 <DialogHeader
                     icon={<MonitorSmartphone className="size-5 transition-transform duration-300" />}
                     title="Add device"
-                    subtitle={<>Registering device for <span className="font-semibold text-foreground">{storeName}</span></>}
                 />
 
                 <form className="space-y-4 pt-3" onSubmit={form.handleSubmit(onSubmit)}>

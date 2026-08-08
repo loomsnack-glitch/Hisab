@@ -102,19 +102,10 @@ const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCateg
                 }
             />
             <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <Tags className="size-5" />
-                    </div>
-                    <DialogTitle className="text-center text-lg font-semibold">
-                        {isEditMode ? "Edit category" : "Create category"}
-                    </DialogTitle>
-                    <DialogDescription className="text-center">
-                        {isEditMode
-                            ? "Update the name or status. Products in this category stay linked."
-                            : "Create a group to organize products — e.g. Burgers, Drinks."}
-                    </DialogDescription>
-                </DialogHeader>
+                <DialogHeader
+                    icon={<Tags className="size-5" />}
+                    title={isEditMode ? "Edit category" : "Create category"}
+                />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
