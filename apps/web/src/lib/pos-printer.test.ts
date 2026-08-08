@@ -98,6 +98,52 @@ describe("80mm ESC/POS receipt payload", () => {
     expect(output).toContain("12 Market Road");
     expect(output).toContain("INVOICE / RECEIPT");
     expect(output).toContain("\u001bM\u0000");
+    expect(output).toContain("\u001d!\u0011");
+  });
+
+  test("keeps every wrapped brand line emphasized", () => {
+    const organizationName = "A".repeat(50);
+    const output = new TextDecoder().decode(
+      build80mmEscPosPayload(sale, { organizationName }),
+    );
+    const doubleSizeStarts = output.match(/\u001d!\u0011/g) ?? [];
+
+    expect(doubleSizeStarts).toHaveLength(4);
+  });
+
+  test("indents add-ons and combo components under their parent item", () => {
+    const output = new TextDecoder().decode(
+      build80mmEscPosPayload({
+        ...sale,
+        items: [
+          {
+            ...sale.items[0],
+            productNameSnapshot: "Combo Meal",
+            addOns: [
+              {
+                addOnNameSnapshot: "Extra Cheese",
+                totalQuantity: 1,
+                unitPriceSnapshot: 20,
+                lineTotal: 20,
+                discountAmount: 0,
+              },
+            ],
+            bundleComponents: [
+              {
+                productNameSnapshot: "Side Salad",
+                totalQuantity: 1,
+                unitPriceSnapshot: 0,
+                priceAdjustmentSnapshot: 0,
+                addOns: [],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(output).toContain("  + Extra Cheese");
+    expect(output).toContain("  * Side Salad");
   });
 
   test("wraps a long organization tagline to the printer width", () => {
@@ -162,7 +208,7 @@ describe("80mm ESC/POS receipt payload", () => {
   });
 
   test("rejects an invalid receipt width before wrapping", () => {
-    expect(() => buildReceiptText(sale, {}, { width: 0 })).toThrow(
+    expect(() => buildReceiptText(sale, {}, { width: 22 })).toThrow(
       "Receipt width must be an integer",
     );
   });

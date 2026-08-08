@@ -16,8 +16,9 @@ const quantityColumnWidth = 5;
 const rateColumnWidth = 8;
 const priceColumnWidth = 8;
 const summaryValueWidth = 12;
+const maximumItemIndent = 4;
 const minimumReceiptWidth =
-  quantityColumnWidth + rateColumnWidth + priceColumnWidth + 1;
+  quantityColumnWidth + rateColumnWidth + priceColumnWidth + maximumItemIndent;
 
 const money = (value: number | string | null | undefined) => String(value ?? 0);
 
@@ -63,6 +64,9 @@ const appendCenteredText = (lines: string[], value: string, width: number) => {
   wrapText(value, width).forEach((line) => lines.push(centerText(line, width)));
 };
 
+export const countWrappedReceiptLines = (value: string, width: number) =>
+  wrapText(value, width).length;
+
 const appendItemRow = (
   lines: string[],
   name: string,
@@ -70,8 +74,12 @@ const appendItemRow = (
   rate: string,
   price: string,
   itemColumnWidth: number,
+  indent = "",
 ) => {
-  const nameLines = wrapText(name, itemColumnWidth);
+  const nameLines = wrapText(name, itemColumnWidth - indent.length).map(
+    (line, index) =>
+      `${index === 0 ? indent : " ".repeat(indent.length)}${line}`,
+  );
   const quantityLines = wrapText(quantity, quantityColumnWidth);
   const rateLines = wrapText(rate, rateColumnWidth);
   const priceLines = wrapText(price, priceColumnWidth);
@@ -107,6 +115,7 @@ const appendSummaryRow = (
 };
 
 type ReceiptTextOptions = {
+  doubleWidthEmphasis?: boolean;
   width?: number;
 };
 
@@ -127,6 +136,7 @@ export const buildReceiptText = (
   }
   const itemColumnWidth =
     width - quantityColumnWidth - rateColumnWidth - priceColumnWidth;
+  const emphasisWidth = Math.floor(width / 2);
   const summaryLabelWidth = width - summaryValueWidth;
   const separator = "-".repeat(width);
   const doubleSeparator = "=".repeat(width);
@@ -151,7 +161,13 @@ export const buildReceiptText = (
   const storePhone = context.storePhone?.trim();
 
   lines.push(doubleSeparator);
-  if (organizationName) appendCenteredText(lines, organizationName, width);
+  if (organizationName) {
+    appendCenteredText(
+      lines,
+      organizationName,
+      options.doubleWidthEmphasis ? emphasisWidth : width,
+    );
+  }
   if (organizationTagline) {
     appendCenteredText(lines, organizationTagline, width);
   }
@@ -210,6 +226,7 @@ export const buildReceiptText = (
         money(addOn.unitPriceSnapshot),
         money(addOn.lineTotal),
         itemColumnWidth,
+        "  ",
       );
     });
 
@@ -221,6 +238,7 @@ export const buildReceiptText = (
         money(component.unitPriceSnapshot),
         "",
         itemColumnWidth,
+        "  ",
       );
       if (Number(component.priceAdjustmentSnapshot ?? 0) !== 0) {
         const adjustment = money(component.priceAdjustmentSnapshot);
@@ -234,11 +252,12 @@ export const buildReceiptText = (
         const addOnTotal = addOnRate * Number(addOn.totalQuantity);
         appendItemRow(
           lines,
-          `  + ${addOn.addOnNameSnapshot}`,
+          `+ ${addOn.addOnNameSnapshot}`,
           String(Number(addOn.totalQuantity)),
           money(addOnRate),
           money(addOnTotal),
           itemColumnWidth,
+          "    ",
         );
         if (Number(addOn.unitDiscountSnapshot) > 0) {
           wrapText(
@@ -274,7 +293,11 @@ export const buildReceiptText = (
     );
   }
   lines.push(doubleSeparator);
-  appendCenteredText(lines, `FINAL AMOUNT: ${money(sale.grandTotal)}`, width);
+  appendCenteredText(
+    lines,
+    `FINAL AMOUNT: ${money(sale.grandTotal)}`,
+    options.doubleWidthEmphasis ? emphasisWidth : width,
+  );
   lines.push(doubleSeparator);
   appendCenteredText(lines, "Thank you! Visit again", width);
   lines.push(doubleSeparator);
