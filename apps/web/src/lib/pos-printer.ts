@@ -1,14 +1,19 @@
 import type { SaleDetailDTO } from "@repo/types";
 
-import { buildReceiptText, type ReceiptContext } from "@/lib/receipt-text";
+import {
+  buildReceiptText,
+  countWrappedReceiptLines,
+  RECEIPT_WIDTH,
+  type ReceiptContext,
+} from "@/lib/receipt-text";
 
 const rememberedPrinterKey = "hisab_pos_usb_printer";
-const paperWidth = 48;
+const paperWidth = RECEIPT_WIDTH;
 
 const esc = {
   init: [0x1b, 0x40],
+  fontA: [0x1b, 0x4d, 0x00],
   alignCenter: [0x1b, 0x61, 0x01],
-  alignLeft: [0x1b, 0x61, 0x00],
   boldOn: [0x1b, 0x45, 0x01],
   boldOff: [0x1b, 0x45, 0x00],
   doubleSizeOn: [0x1d, 0x21, 0x11],
@@ -99,37 +104,52 @@ export const build80mmEscPosPayload = (
   sale: SaleDetailDTO,
   context?: ReceiptContext,
 ) => {
-  const receiptLines = buildReceiptText(sale, context)
+  const receiptLines = buildReceiptText(sale, context, {
+    doubleWidthEmphasis: true,
+    width: RECEIPT_WIDTH,
+  })
     .split("\n")
     .flatMap(wrapLine);
   const organizationLineIndex = context?.organizationName?.trim() ? 1 : -1;
-  const finalAmountLineIndex = receiptLines.findIndex((line) => line.includes("FINAL AMOUNT:"));
+  const organizationLineCount =
+    organizationLineIndex >= 0
+      ? countWrappedReceiptLines(
+          context?.organizationName?.trim() ?? "",
+          Math.floor(RECEIPT_WIDTH / 2),
+        )
+      : 0;
+  const finalAmountLineIndex = receiptLines.findIndex((line) =>
+    line.includes("FINAL AMOUNT:"),
+  );
+  const finalAmountEndIndex = receiptLines.findIndex(
+    (line, index) =>
+      index > finalAmountLineIndex && line.trim() === "=".repeat(RECEIPT_WIDTH),
+  );
   const body = receiptLines
     .map((line, index) => {
-      const encodedLine = encoder.encode(toPrinterText(`${line}\n`));
-      if (index === finalAmountLineIndex) {
+      const isBrandLine =
+        organizationLineIndex >= 0 &&
+        index >= organizationLineIndex &&
+        index < organizationLineIndex + organizationLineCount;
+      const isFinalAmountLine =
+        finalAmountLineIndex >= 0 &&
+        index >= finalAmountLineIndex &&
+        index < finalAmountEndIndex;
+
+      if (isBrandLine || isFinalAmountLine) {
         return concatBytes(
           bytes(esc.alignCenter, esc.boldOn, esc.doubleSizeOn),
           encoder.encode(toPrinterText(`${line.trim()}\n`)),
-          bytes(esc.doubleSizeOff, esc.boldOff, esc.alignLeft),
+          bytes(esc.doubleSizeOff, esc.boldOff, esc.alignCenter),
         );
       }
 
-      if (index !== organizationLineIndex) {
-        return encodedLine;
-      }
-
-      return concatBytes(
-        bytes(esc.alignCenter, esc.boldOn, esc.doubleSizeOn),
-        encoder.encode(toPrinterText(`${context?.organizationName?.trim()}\n`)),
-        bytes(esc.doubleSizeOff, esc.boldOff, esc.alignLeft),
-      );
+      return encoder.encode(toPrinterText(`${line.padEnd(paperWidth)}\n`));
     })
     .reduce((output, line) => concatBytes(output, line), new Uint8Array());
 
   return concatBytes(
-    bytes(esc.init),
-    bytes(esc.alignLeft),
+    bytes(esc.init, esc.fontA, esc.alignCenter),
     body,
     bytes(esc.feed(), esc.cut),
   );
