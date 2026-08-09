@@ -13,6 +13,7 @@ import {
     getPosPanelTabFromPath,
     posPanelConfig,
     type PosPanelTab,
+    type PosComposerHandoff,
     type PosRouteContext,
 } from "@/pages/pos-route-context";
 import { PosPrinterProvider } from "@/providers/pos-printer-provider";
@@ -22,11 +23,18 @@ const PosPage = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const [headerSearch, setHeaderSearch] = useState("");
+    const [pendingComposerHandoff, setPendingComposerHandoff] = useState<PosComposerHandoff | null>(null);
     const activePanelTab = getPosPanelTabFromPath(location.pathname);
     const legacyPanel = searchParams.get("panel");
 
     const handlePanelTabChange = useCallback(
-        (tab: PosPanelTab) => {
+        (tab: PosPanelTab, composerHandoff?: PosComposerHandoff) => {
+            if (composerHandoff) {
+                setPendingComposerHandoff(composerHandoff);
+            } else if (tab !== "products") {
+                setPendingComposerHandoff(null);
+            }
+
             const nextPath = getPosPanelPath(tab);
             if (location.pathname !== nextPath) {
                 navigate(nextPath);
@@ -34,6 +42,10 @@ const PosPage = () => {
         },
         [location.pathname, navigate],
     );
+
+    const clearPendingComposerHandoff = useCallback(() => {
+        setPendingComposerHandoff(null);
+    }, []);
 
     useEffect(() => {
         setHeaderSearch("");
@@ -70,6 +82,8 @@ const PosPage = () => {
         searchValue: headerSearch,
         onSearchChange: setHeaderSearch,
         onPanelTabChange: handlePanelTabChange,
+        pendingComposerHandoff,
+        clearPendingComposerHandoff,
     };
 
     return (

@@ -1,6 +1,11 @@
-import type { DeviceSessionDTO } from "@repo/types";
+import type { DeviceSessionDTO, SaleDetailDTO } from "@repo/types";
 
 export type PosPanelTab = "products" | "bills" | "customers" | "purchases";
+
+export type PosComposerHandoff = {
+    sale: SaleDetailDTO;
+    editSaleId: string | null;
+};
 
 export const posPanelConfig = {
     products: { path: "/pos", searchPlaceholder: "Search products..." },
@@ -34,5 +39,7 @@ export type PosRouteContext = {
     session: DeviceSessionDTO;
     searchValue: string;
     onSearchChange: (value: string) => void;
-    onPanelTabChange: (tab: PosPanelTab) => void;
+    onPanelTabChange: (tab: PosPanelTab, composerHandoff?: PosComposerHandoff) => void;
+    pendingComposerHandoff: PosComposerHandoff | null;
+    clearPendingComposerHandoff: () => void;
 };

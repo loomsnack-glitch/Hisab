@@ -4,7 +4,13 @@ import BillingPage from "@/pages/billing-page";
 import type { PosRouteContext } from "@/pages/pos-route-context";
 
 const PosProductsPage = () => {
-    const { session, searchValue, onPanelTabChange } = useOutletContext<PosRouteContext>();
+    const {
+        session,
+        searchValue,
+        onPanelTabChange,
+        pendingComposerHandoff,
+        clearPendingComposerHandoff,
+    } = useOutletContext<PosRouteContext>();
 
     return (
         <BillingPage
@@ -13,6 +19,8 @@ const PosProductsPage = () => {
             initialPanelTab="products"
             productSearch={searchValue}
             onPanelTabChange={onPanelTabChange}
+            pendingComposerHandoff={pendingComposerHandoff}
+            onComposerHandoffConsumed={clearPendingComposerHandoff}
         />
     );
 };

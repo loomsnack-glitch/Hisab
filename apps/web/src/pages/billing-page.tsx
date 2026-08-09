@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -109,6 +109,7 @@ import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
+import type { PosComposerHandoff } from "@/pages/pos-route-context";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
@@ -358,8 +359,13 @@ type BillingPageProps = {
     salesSearch?: string;
     purchaseSearch?: string;
     customerSearch?: string;
-    onPanelTabChange?: (tab: "products" | "bills" | "customers" | "purchases") => void;
+    onPanelTabChange?: (
+        tab: "products" | "bills" | "customers" | "purchases",
+        composerHandoff?: PosComposerHandoff,
+    ) => void;
     onCustomerSearchChange?: (value: string) => void;
+    pendingComposerHandoff?: PosComposerHandoff | null;
+    onComposerHandoffConsumed?: () => void;
 };
 
 const BillingPage = ({
@@ -372,6 +378,8 @@ const BillingPage = ({
     customerSearch: customerSearchProp,
     onPanelTabChange,
     onCustomerSearchChange,
+    pendingComposerHandoff = null,
+    onComposerHandoffConsumed,
 }: BillingPageProps) => {
     const queryClient = useQueryClient();
     const { organizationId: organizationIdParam = "" } = useParams();
@@ -391,6 +399,8 @@ const BillingPage = ({
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
     const [saleDialogOpen, setSaleDialogOpen] = useState(false);
     const [draftToDeleteId, setDraftToDeleteId] = useState<string | null>(null);
+    const [resumingDraftId, setResumingDraftId] = useState<string | null>(null);
+    const consumedComposerHandoffRef = useRef<string | null>(null);
     const [receiptToPrint, setReceiptToPrint] = useState<SaleDetailDTO | null>(null);
     const salesScrollContainerRef = useRef<HTMLDivElement | null>(null);
     const salesLoadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -651,7 +661,7 @@ const BillingPage = ({
     }, [isDeviceMode, organization, selectedStoreId, session]);
     const categories = categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : [];
     const products = productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : [];
-    const getComposerUnitDiscountFromSaleItem = (item: SaleDetailDTO["items"][number]) => {
+    const getComposerUnitDiscountFromSaleItem = useCallback((item: SaleDetailDTO["items"][number]) => {
         const quantity = Number(item.quantity);
         if (quantity <= 0) return 0;
 
@@ -672,7 +682,7 @@ const BillingPage = ({
         );
 
         return Math.max(Number(item.discountAmount) / quantity - comboAddOnDiscountPerParent, 0);
-    };
+    }, []);
     const comboProductsQuery = useQuery({
         queryKey: catalogKeys.combos(organizationId),
         queryFn: () => (isDeviceMode ? getPosComboProducts() : getComboProducts(organizationId)),
@@ -1481,7 +1491,7 @@ const BillingPage = ({
         submitCompleteSale();
     };
 
-    const loadSaleIntoComposer = (sale: SaleDetailDTO, editSaleId: string | null) => {
+    const loadSaleIntoComposer = useCallback((sale: SaleDetailDTO, editSaleId: string | null) => {
         setReplacingSaleId(editSaleId);
         setActiveDraftId(editSaleId ? null : sale.id);
         setSelectedCustomerId(sale.customerId ?? "");
@@ -1544,14 +1554,43 @@ const BillingPage = ({
         setDiscountMode("amount");
         setDiscountEditorOpen(Number(sale.orderDiscountAmount) > 0);
         setLeftPanelTab("products");
-    };
+    }, [getComposerUnitDiscountFromSaleItem]);
+
+    useEffect(() => {
+        if (!pendingComposerHandoff) {
+            consumedComposerHandoffRef.current = null;
+            return;
+        }
+
+        const handoffKey = `${pendingComposerHandoff.sale.id}:${pendingComposerHandoff.editSaleId ?? "resume"}`;
+        if (consumedComposerHandoffRef.current === handoffKey) {
+            return;
+        }
+
+        consumedComposerHandoffRef.current = handoffKey;
+        loadSaleIntoComposer(pendingComposerHandoff.sale, pendingComposerHandoff.editSaleId);
+        setMobileCartOpen(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        onComposerHandoffConsumed?.();
+        toast.success(
+            pendingComposerHandoff.editSaleId
+                ? "Bill loaded for editing"
+                : "Draft loaded into the composer",
+        );
+    }, [loadSaleIntoComposer, onComposerHandoffConsumed, pendingComposerHandoff]);
 
     const handleEditSale = (sale: SaleDetailDTO) => {
-        loadSaleIntoComposer(sale, sale.id);
+        if (isDeviceMode && onPanelTabChange) {
+            onPanelTabChange("products", { sale, editSaleId: sale.id });
+        } else {
+            loadSaleIntoComposer(sale, sale.id);
+            setMobileCartOpen(true);
+        }
         setSaleDialogOpen(false);
         setSelectedSaleId(null);
-        setMobileCartOpen(true);
-        toast.success("Bill loaded for editing");
+        if (!isDeviceMode || !onPanelTabChange) {
+            toast.success("Bill loaded for editing");
+        }
     };
 
     const resumeDraftMutation = useMutation({
