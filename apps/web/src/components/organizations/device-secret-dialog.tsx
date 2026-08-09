@@ -144,7 +144,7 @@ const DeviceSecretDialog = ({
                                     className="rounded-full"
                                     onClick={() => setIsVisible((value) => !value)}
                                 >
-                                    {isVisible ? <EyeOff className="mr-2 size-4" /> : <Eye className="mr-2 size-4" />}
+                                    {isVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                                     {isVisible ? "Hide" : "Show"}
                                 </Button>
                             </div>
@@ -183,7 +183,7 @@ const DeviceSecretDialog = ({
                 <DialogFooter className="sm:justify-between">
                     {errorMessage && onRetry ? (
                         <Button type="button" variant="outline" className="rounded-full" onClick={onRetry}>
-                            <RotateCcw className="mr-2 size-4" />
+                            <RotateCcw className="size-4" />
                             Try again
                         </Button>
                     ) : (
@@ -204,7 +204,7 @@ const DeviceSecretDialog = ({
                                     />
                                 }
                             >
-                                <ExternalLink className="mr-2 size-4" />
+                                <ExternalLink className="size-4" />
                                 Open POS
                             </Button>
                         ) : null}

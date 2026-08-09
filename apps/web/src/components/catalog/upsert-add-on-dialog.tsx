@@ -139,7 +139,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
                 render={
                     trigger ?? (
                         <Button variant={isEditMode ? "outline" : "default"} className="rounded-full">
-                            {isEditMode ? <Pencil className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
+                            {isEditMode ? <Pencil className="size-4" /> : <Plus className="size-4" />}
                             {isEditMode ? "Edit add-on" : "Add add-on"}
                         </Button>
                     )

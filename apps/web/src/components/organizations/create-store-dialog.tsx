@@ -101,7 +101,7 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
                 render={
                     trigger ?? (
                         <Button variant="outline" className="rounded-full">
-                            <Plus className="mr-2 size-4" />
+                            <Plus className="size-4" />
                             Add store
                         </Button>
                     )

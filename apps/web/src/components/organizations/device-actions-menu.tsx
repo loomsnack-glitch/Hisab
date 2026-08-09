@@ -40,7 +40,7 @@ const DeviceActionsMenu = ({
                             className="rounded-full"
                             aria-label={`More actions for ${device.name}`}
                         >
-                            <MoreHorizontal className="mr-2 size-4" />
+                            <MoreHorizontal className="size-4" />
                             More
                         </Button>
                     }

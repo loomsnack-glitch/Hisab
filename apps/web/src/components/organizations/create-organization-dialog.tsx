@@ -117,7 +117,7 @@ const CreateOrganizationDialog = ({ trigger }: CreateOrganizationDialogProps) =>
                 render={
                     trigger ?? (
                         <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90">
-                            <Plus className="mr-2 size-4" />
+                            <Plus className="size-4" />
                             New business
                         </Button>
                     )

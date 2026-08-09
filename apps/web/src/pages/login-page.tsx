@@ -133,7 +133,7 @@ const LoginPage = () => {
                                     setTimeout(() => form.setFocus("phone"), 0);
                                 }}
                             >
-                                <KeyRound className="mr-1.5 size-3.5" />
+                                <KeyRound className="size-3.5" />
                                 Password
                             </Button>
                             <Button
@@ -148,7 +148,7 @@ const LoginPage = () => {
                                     setTimeout(() => form.setFocus("phone"), 0);
                                 }}
                             >
-                                <MessageSquareText className="mr-1.5 size-3.5" />
+                                <MessageSquareText className="size-3.5" />
                                 OTP
                             </Button>
                         </div>
@@ -236,7 +236,7 @@ const LoginPage = () => {
                                         "Sending OTP..."
                                     ) : (
                                         <>
-                                            <img src={whatsAppIcon} alt="" className="mr-1.5 size-3.5" />
+                                            <img src={whatsAppIcon} alt="" className="size-3.5" />
                                             Send OTP on WhatsApp
                                         </>
                                     )}

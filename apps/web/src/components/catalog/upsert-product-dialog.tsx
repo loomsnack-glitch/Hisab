@@ -241,7 +241,7 @@ const UpsertProductDialog = ({
                 render={
                     trigger ?? (
                         <Button variant={isEditMode ? "outline" : "default"} className="rounded-full" disabled={!hasCategories}>
-                            {isEditMode ? <Pencil className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
+                            {isEditMode ? <Pencil className="size-4" /> : <Plus className="size-4" />}
                             {isEditMode ? "Edit product" : "Add product"}
                         </Button>
                     )

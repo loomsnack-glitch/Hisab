@@ -170,7 +170,7 @@ const ManageProductAddOnsDialog = ({
                 render={
                     trigger ?? (
                         <Button variant="outline" size="sm" className="rounded-full">
-                            <Link2 className="mr-2 size-4" />
+                            <Link2 className="size-4" />
                             Add-ons
                         </Button>
                     )

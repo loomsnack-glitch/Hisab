@@ -39,7 +39,7 @@ const ManageCategoriesDialog = ({
                 render={
                     trigger ?? (
                         <Button variant="outline" className="rounded-full">
-                            <Layers3 className="mr-2 size-4" />
+                            <Layers3 className="size-4" />
                             Manage categories
                         </Button>
                     )
@@ -63,7 +63,7 @@ const ManageCategoriesDialog = ({
                                 organizationId={organizationId}
                                 trigger={
                                     <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs">
-                                        <PlusCircle className="mr-2 size-3.5" />
+                                        <PlusCircle className="size-3.5" />
                                         Add category
                                     </Button>
                                 }
@@ -134,7 +134,7 @@ const ManageCategoriesDialog = ({
                                                             category={category}
                                                             trigger={
                                                                 <Button variant="outline" size="sm" className="rounded-full">
-                                                                    <Pencil className="mr-1.5 size-3" />
+                                                                    <Pencil className="size-3" />
                                                                     Edit
                                                                 </Button>
                                                             }

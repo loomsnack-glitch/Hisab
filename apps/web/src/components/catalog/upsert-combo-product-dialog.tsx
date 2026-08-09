@@ -153,7 +153,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
     });
 
     return <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
-        <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="mr-2 size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
+        <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader
                 icon={<Boxes className="size-5" />}
@@ -177,7 +177,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                 </div>
                 {isEdit && <Field><FieldLabel>Status</FieldLabel><FieldContent><ReactSelect options={statusOptions} value={statusOptions.find((item) => item.value === form.watch("status")) ?? null} onChange={(item) => form.setValue("status", item?.value ?? "active")} /></FieldContent></Field>}
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between"><div><p className="font-medium">Choice groups</p><p className="text-xs text-muted-foreground">Example: Choose 1 burger, then choose up to 2 drinks.</p></div><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "Choose an option", minSelections: 1, maxSelections: 1, options: [{ productId: optionProducts[0]?.id ?? "", maxQuantity: 1, priceAdjustment: 0 }] })}><Plus className="mr-1 size-3.5" />Add group</Button></div>
+                    <div className="flex items-center justify-between"><div><p className="font-medium">Choice groups</p><p className="text-xs text-muted-foreground">Example: Choose 1 burger, then choose up to 2 drinks.</p></div><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "Choose an option", minSelections: 1, maxSelections: 1, options: [{ productId: optionProducts[0]?.id ?? "", maxQuantity: 1, priceAdjustment: 0 }] })}><Plus className="size-3.5" />Add group</Button></div>
                     {fields.map((field, groupIndex) => {
                         const group = watchedGroups[groupIndex];
                         return <div key={field.id} className="space-y-3 rounded-xl border border-border/60 p-3">
@@ -194,7 +194,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                                     <Field><FieldLabel>Price + / -</FieldLabel><FieldContent><Input type="number" step="0.01" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.priceAdjustment`)} /></FieldContent></Field>
                                     <Button type="button" variant="ghost" size="icon" disabled={group.options.length === 1} onClick={() => updateGroup(groupIndex, { options: group.options.filter((_, index) => index !== optionIndex) })} aria-label="Remove option"><Minus className="size-4" /></Button>
                                 </div>)}
-                                <Button type="button" variant="ghost" size="sm" onClick={() => addOption(groupIndex)} disabled={optionProducts.length <= (group?.options?.length ?? 0)}><Plus className="mr-1 size-3.5" />Add option</Button>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => addOption(groupIndex)} disabled={optionProducts.length <= (group?.options?.length ?? 0)}><Plus className="size-3.5" />Add option</Button>
                             </div>
                             <FieldError errors={[form.formState.errors.choiceGroups?.[groupIndex]?.options, form.formState.errors.choiceGroups?.[groupIndex]?.maxSelections]} />
                         </div>;

@@ -85,7 +85,7 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                         organizationId={organizationId}
                         trigger={
                             <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-5">
-                                <PlusCircle className="mr-2 size-4" />
+                                <PlusCircle className="size-4" />
                                 Add store
                             </Button>
                         }
@@ -247,7 +247,7 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                                                         className="rounded-full"
                                                                         render={<Link target="_blank" rel="noopener noreferrer" to={`/pos/login?org=${encodeURIComponent(organizationUsername)}&device=${encodeURIComponent(device.loginUsername)}`} />}
                                                                     >
-                                                                        <ExternalLink className="mr-2 size-4" />
+                                                                        <ExternalLink className="size-4" />
                                                                         Open POS
                                                                     </Button>
                                                                 )}
@@ -315,7 +315,7 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                                             className="rounded-full"
                                                             render={<Link target="_blank" rel="noopener noreferrer" to={`/pos/login?org=${encodeURIComponent(organizationUsername)}&device=${encodeURIComponent(device.loginUsername)}`} />}
                                                         >
-                                                            <ExternalLink className="mr-2 size-4" />
+                                                            <ExternalLink className="size-4" />
                                                             Open POS
                                                         </Button>
                                                     )}

@@ -52,7 +52,7 @@ const DeleteCategoryButton = ({ organizationId, category }: DeleteCategoryButton
             <AlertDialogTrigger
                 render={
                     <Button variant="destructive" size="sm" className="rounded-full">
-                        <Trash2 className="mr-2 size-4" />
+                        <Trash2 className="size-4" />
                         Delete
                     </Button>
                 }

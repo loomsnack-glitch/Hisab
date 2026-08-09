@@ -111,7 +111,7 @@ const CategoriesPage = () => {
                 category={category}
                 trigger={
                     <Button variant="outline" size="sm" className="rounded-full">
-                        <Pencil className="mr-1.5 size-3" />
+                        <Pencil className="size-3" />
                         Edit
                     </Button>
                 }
@@ -210,7 +210,7 @@ const CategoriesPage = () => {
                                     organizationId={organizationId}
                                     trigger={
                                         <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-4">
-                                            <PlusCircle className="mr-1.5 size-3.5" />
+                                            <PlusCircle className="size-3.5" />
                                             Add category
                                         </Button>
                                     }
@@ -277,7 +277,7 @@ const CategoriesPage = () => {
                                     organizationId={organizationId}
                                     trigger={
                                         <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-3 shrink-0">
-                                            <PlusCircle className="mr-1 size-3.5" />
+                                            <PlusCircle className="size-3.5" />
                                             Add
                                         </Button>
                                     }
@@ -328,7 +328,7 @@ const CategoriesPage = () => {
                                                             category={category}
                                                             trigger={
                                                                 <Button variant="outline" size="sm" className="rounded-full h-8 text-xs px-3">
-                                                                    <Pencil className="mr-1 size-3" />
+                                                                    <Pencil className="size-3" />
                                                                     Edit
                                                                 </Button>
                                                             }

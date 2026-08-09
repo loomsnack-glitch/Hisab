@@ -66,7 +66,7 @@ const RevealDeviceSecretButton = ({
                     className="rounded-full"
                     onClick={() => setOpen(true)}
                 >
-                    <Eye className="mr-2 size-4" />
+                    <Eye className="size-4" />
                     Show device secret
                 </Button>
             )}

@@ -263,7 +263,7 @@ const PosPurchasesPanel = ({ session, search }: PosPurchasesPanelProps) => {
                 <AlertDialogContent>
                     <AlertDialogHeader><AlertDialogTitle>Void this purchase?</AlertDialogTitle><AlertDialogDescription>This keeps the purchase in history but removes it from totals. {voidTarget?.supplierName ? `Supplier: ${voidTarget.supplierName}.` : ""}</AlertDialogDescription></AlertDialogHeader>
                     <Input value={voidReason} onChange={(event) => setVoidReason(event.target.value)} placeholder="Reason for voiding" aria-label="Reason for voiding" />
-                    <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction disabled={!voidReason.trim() || voidMutation.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { if (voidTarget && voidReason.trim()) voidMutation.mutate({ purchaseId: voidTarget.id, reason: voidReason.trim() }); }}>{voidMutation.isPending ? <><Spinner className="mr-2" />Voiding...</> : "Void purchase"}</AlertDialogAction></AlertDialogFooter>
+                    <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction disabled={!voidReason.trim() || voidMutation.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { if (voidTarget && voidReason.trim()) voidMutation.mutate({ purchaseId: voidTarget.id, reason: voidReason.trim() }); }}>{voidMutation.isPending ? <><Spinner />Voiding...</> : "Void purchase"}</AlertDialogAction></AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
         </div>

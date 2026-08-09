@@ -176,7 +176,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                     variant="outline"
                                     className="rounded-full border-border/60 text-muted-foreground hover:text-foreground h-9 sm:h-11 px-3.5 sm:px-4 text-xs sm:text-sm cursor-pointer"
                                 >
-                                    <Layers3 className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
+                                    <Layers3 className="size-3.5 sm:size-4" />
                                     Manage categories
                                 </Button>
                             }
@@ -189,7 +189,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                     variant="outline"
                                     className="rounded-full border-border/60 text-muted-foreground hover:text-foreground h-9 sm:h-11 px-3.5 sm:px-4 text-xs sm:text-sm cursor-pointer"
                                 >
-                                    <Puzzle className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
+                                    <Puzzle className="size-3.5 sm:size-4" />
                                     Manage add-ons
                                 </Button>
                             }
@@ -204,7 +204,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                     className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
                                     disabled={categories.length === 0}
                                 >
-                                    <PlusCircle className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
+                                    <PlusCircle className="size-3.5 sm:size-4" />
                                     Add product
                                 </Button>
                             }
@@ -221,7 +221,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                     className="rounded-full border-border/60 h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
                                     disabled={categories.length === 0}
                                 >
-                                    <Boxes className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
+                                    <Boxes className="size-3.5 sm:size-4" />
                                     Add Combo
                                 </Button>
                             }
@@ -275,7 +275,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
                                         productsByCategoryId={productsByCategoryId}
                                         trigger={
                                             <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-5">
-                                                <Layers3 className="mr-2 size-4" />
+                                                <Layers3 className="size-4" />
                                                 Manage categories
                                             </Button>
                                         }

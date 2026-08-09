@@ -1696,7 +1696,7 @@ const BillingPage = ({
                     className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
                     render={<Link to={`/organizations/${organizationId}/stores`} />}
                 >
-                    <ArrowLeft className="mr-2 size-4" />
+                    <ArrowLeft className="size-4" />
                     Back to organization
                 </Button>
 

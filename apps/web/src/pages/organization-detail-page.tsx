@@ -82,7 +82,7 @@ const OrganizationDetailPage = () => {
                 className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
                 render={<Link to="/organizations" />}
             >
-                <ArrowLeft className="mr-2 size-4" />
+                <ArrowLeft className="size-4" />
                 Back to organizations
             </Button>
 

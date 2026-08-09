@@ -95,7 +95,7 @@ const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCateg
                 render={
                     trigger ?? (
                         <Button variant={isEditMode ? "outline" : "default"} className="rounded-full">
-                            {isEditMode ? <Pencil className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
+                            {isEditMode ? <Pencil className="size-4" /> : <Plus className="size-4" />}
                             {isEditMode ? "Edit category" : "Add category"}
                         </Button>
                     )

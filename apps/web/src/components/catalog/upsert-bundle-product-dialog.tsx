@@ -446,7 +446,7 @@ const UpsertBundleProductDialog = ({
                             className="rounded-full"
                             disabled={!hasCategories || !hasComponentProducts}
                         >
-                            {isEditMode ? <Pencil className="mr-2 size-4" /> : <PlusCircle className="mr-2 size-4" />}
+                            {isEditMode ? <Pencil className="size-4" /> : <PlusCircle className="size-4" />}
                             {isEditMode ? "Edit bundle" : "Add bundle"}
                         </Button>
                     )
@@ -588,7 +588,7 @@ const UpsertBundleProductDialog = ({
                                     }
                                     disabled={!hasComponentProducts}
                                 >
-                                    <Plus className="mr-1 size-3.5" />
+                                    <Plus className="size-3.5" />
                                     Add product
                                 </Button>
                             </div>
@@ -704,7 +704,7 @@ const UpsertBundleProductDialog = ({
                                                     onClick={() => addNestedAddOn(index)}
                                                     disabled={!productId || availableAddOnOptions.length === 0}
                                                 >
-                                                    <Plus className="mr-1 size-3.5" />
+                                                    <Plus className="size-3.5" />
                                                     Add add-on
                                                 </Button>
                                             </div>

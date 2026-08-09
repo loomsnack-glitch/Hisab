@@ -71,7 +71,7 @@ const DeleteAddOnButton = ({
             <AlertDialogTrigger
                 render={
                     <Button variant="destructive" size="sm" className="rounded-full">
-                        <Trash2 className="mr-1.5 size-3" />
+                        <Trash2 className="size-3" />
                         Delete
                     </Button>
                 }
@@ -122,7 +122,7 @@ const ManageAddOnsDialog = ({ organizationId, trigger }: ManageAddOnsDialogProps
                 render={
                     trigger ?? (
                         <Button variant="outline" className="rounded-full">
-                            <Puzzle className="mr-2 size-4" />
+                            <Puzzle className="size-4" />
                             Manage add-ons
                         </Button>
                     )
@@ -146,7 +146,7 @@ const ManageAddOnsDialog = ({ organizationId, trigger }: ManageAddOnsDialogProps
                                 organizationId={organizationId}
                                 trigger={
                                     <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs">
-                                        <PlusCircle className="mr-2 size-3.5" />
+                                        <PlusCircle className="size-3.5" />
                                         Add add-on
                                     </Button>
                                 }
@@ -224,7 +224,7 @@ const ManageAddOnsDialog = ({ organizationId, trigger }: ManageAddOnsDialogProps
                                                         addOn={addOn}
                                                         trigger={
                                                             <Button variant="outline" size="sm" className="rounded-full">
-                                                                <Pencil className="mr-1.5 size-3" />
+                                                                <Pencil className="size-3" />
                                                                 Edit
                                                             </Button>
                                                         }
