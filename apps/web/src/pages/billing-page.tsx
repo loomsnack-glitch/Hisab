@@ -1,7 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSwipeable } from "react-swipeable";
 import {
     commitSale,
     commitPosSale,
@@ -764,18 +763,6 @@ const BillingPage = ({
         })
         .slice(0, customerPickerOpen ? 40 : 8);
 
-    const selectAdjacentCategory = (direction: -1 | 1) => {
-        const currentIndex = Math.max(
-            0,
-            categoryOptions.findIndex((category) => category.id === activeCategoryFilter),
-        );
-        const nextIndex = Math.min(Math.max(currentIndex + direction, 0), categoryOptions.length - 1);
-        const nextCategory = categoryOptions[nextIndex];
-
-        if (nextCategory && nextCategory.id !== activeCategoryFilter) {
-            setCategoryFilter(nextCategory.id);
-        }
-    };
 
     const bodyOverflowRef = useRef("");
     useEffect(() => {
@@ -800,15 +787,6 @@ const BillingPage = ({
             onPanelTabChange(leftPanelTab);
         }
     }, [isDeviceMode, leftPanelTab, onPanelTabChange]);
-
-    const categorySwipeHandlers = useSwipeable({
-        onSwipedLeft: () => selectAdjacentCategory(1),
-        onSwipedRight: () => selectAdjacentCategory(-1),
-        delta: 30,
-        preventScrollOnSwipe: false,
-        trackMouse: false,
-        trackTouch: true,
-    });
 
     const attachmentsByProductId = useMemo(() => {
         const grouped = new Map<string, typeof selectableAttachments>();
@@ -1963,10 +1941,7 @@ const BillingPage = ({
                                 </div>
 
                                 {/* Product Grid */}
-                                <div
-                                    {...(canMutate ? categorySwipeHandlers : {})}
-                                    className="min-h-[320px] flex-1 touch-pan-y"
-                                >
+                                <div className="min-h-[320px] flex-1">
                                     {productsQuery.isPending ? (
                                         <div className="flex min-h-[320px] items-center justify-center">
                                             <Spinner className="size-8 text-primary" />

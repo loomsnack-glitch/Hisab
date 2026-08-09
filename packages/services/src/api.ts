@@ -3,7 +3,7 @@ import { getAuthToken } from "./auth-token";
 import { getDeviceId } from "./device-id";
 
 // const FALLBACK_BASE_API_URL = "http://localhost:8000/api";
-const FALLBACK_BASE_API_URL = "http://192.168.29.245:8000/api";
+const FALLBACK_BASE_API_URL = "http://192.168.29.128:8000/api";
 // const FALLBACK_BASE_API_URL = "https://ganatri.loomsnack.com/api";
 
 const sanitizeBaseUrl = (value?: string | null): string | undefined => {

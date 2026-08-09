@@ -48,12 +48,7 @@ const ProductsListPage = () => {
     const defaultCategoryIdForNewProduct =
         selectedCategoryFilter !== "all" ? selectedCategoryFilter : undefined;
 
-    const [touchStartX, setTouchStartX] = useState<number | null>(null);
-    const [touchEndX, setTouchEndX] = useState<number | null>(null);
-    const [swipeAnimDirection, setSwipeAnimDirection] = useState<"next" | "prev" | null>(null);
     const categoryPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
-    const allCategoriesList = useMemo(() => [{ id: "all", name: "All" }, ...categories], [categories]);
 
     // Auto-scroll the active category pill into center view whenever selectedCategoryFilter changes
     useEffect(() => {
@@ -62,33 +57,6 @@ const ProductsListPage = () => {
             el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
         }
     }, [selectedCategoryFilter]);
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        setTouchEndX(null);
-        setTouchStartX(e.targetTouches[0].clientX);
-    };
-
-    const handleTouchMove = (e: React.TouchEvent) => {
-        setTouchEndX(e.targetTouches[0].clientX);
-    };
-
-    const handleTouchEnd = () => {
-        if (touchStartX === null || touchEndX === null) return;
-        const distance = touchStartX - touchEndX;
-        const minSwipeDistance = 45;
-
-        const currentIndex = allCategoriesList.findIndex((c) => c.id === selectedCategoryFilter);
-
-        if (distance > minSwipeDistance && currentIndex < allCategoriesList.length - 1) {
-            // Swipe left -> Next category
-            setSwipeAnimDirection("next");
-            setSelectedCategoryFilter(allCategoriesList[currentIndex + 1].id);
-        } else if (distance < -minSwipeDistance && currentIndex > 0) {
-            // Swipe right -> Previous category
-            setSwipeAnimDirection("prev");
-            setSelectedCategoryFilter(allCategoriesList[currentIndex - 1].id);
-        }
-    };
 
     const filteredProducts = useMemo(() => {
         return products.filter((product) => {
@@ -155,12 +123,7 @@ const ProductsListPage = () => {
     }
 
     return (
-        <div
-            className="space-y-5 touch-pan-y"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-        >
+        <div className="space-y-5">
             {/* Search & Actions bar */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative flex-1 max-w-md w-full group/search">
@@ -221,7 +184,7 @@ const ProductsListPage = () => {
 
             {/* Category filter pills - Horizontally scrollable on mobile */}
             {categories.length > 0 && (
-                <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none -mx-1 px-1 sm:flex-wrap sm:overflow-visible touch-pan-x">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
                     <Button
                         ref={(el) => { categoryPillRefs.current["all"] = el; }}
                         variant={selectedCategoryFilter === "all" ? "default" : "outline"}
@@ -300,12 +263,7 @@ const ProductsListPage = () => {
             ) : (
                 <div
                     key={selectedCategoryFilter}
-                    className={cn(
-                        "grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] transition-all duration-300 ease-out animate-in fade-in-40 duration-300",
-                        swipeAnimDirection === "next" && "slide-in-from-right-8",
-                        swipeAnimDirection === "prev" && "slide-in-from-left-8",
-                        !swipeAnimDirection && "slide-in-from-bottom-2"
-                    )}
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2"
                 >
                     {filteredProducts.map((product) => {
                         const categoryName = categoryMap.get(product.categoryId)?.name ?? "Unknown";
