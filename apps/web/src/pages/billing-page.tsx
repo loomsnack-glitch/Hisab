@@ -1,6 +1,7 @@
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSwipeable } from "react-swipeable";
 import {
     commitSale,
     commitPosSale,
@@ -774,6 +775,18 @@ const BillingPage = ({
         })
         .slice(0, customerPickerOpen ? 40 : 8);
 
+    const selectAdjacentCategory = (direction: -1 | 1) => {
+        const currentIndex = Math.max(
+            0,
+            categoryOptions.findIndex((category) => category.id === activeCategoryFilter),
+        );
+        const nextIndex = Math.min(Math.max(currentIndex + direction, 0), categoryOptions.length - 1);
+        const nextCategory = categoryOptions[nextIndex];
+
+        if (nextCategory && nextCategory.id !== activeCategoryFilter) {
+            setCategoryFilter(nextCategory.id);
+        }
+    };
 
     const bodyOverflowRef = useRef("");
     useEffect(() => {
@@ -798,6 +811,15 @@ const BillingPage = ({
             onPanelTabChange(leftPanelTab);
         }
     }, [isDeviceMode, leftPanelTab, onPanelTabChange]);
+
+    const categorySwipeHandlers = useSwipeable({
+        onSwipedLeft: () => selectAdjacentCategory(1),
+        onSwipedRight: () => selectAdjacentCategory(-1),
+        delta: 30,
+        preventScrollOnSwipe: false,
+        trackMouse: false,
+        trackTouch: true,
+    });
 
     const attachmentsByProductId = useMemo(() => {
         const grouped = new Map<string, typeof selectableAttachments>();
@@ -1991,7 +2013,10 @@ const BillingPage = ({
                                 </div>
 
                                 {/* Product Grid */}
-                                <div className="min-h-[320px] flex-1">
+                                <div
+                                    {...(canMutate ? categorySwipeHandlers : {})}
+                                    className="min-h-[320px] flex-1 touch-[pan-y_pinch-zoom]"
+                                >
                                     {productsQuery.isPending ? (
                                         <div className="flex min-h-[320px] items-center justify-center">
                                             <Spinner className="size-8 text-primary" />
@@ -2045,7 +2070,7 @@ const BillingPage = ({
                                                         }}
                                                         aria-label={`${cardActionLabel} ${product.name}`}
                                                         className={cn(
-                                                            "group relative flex min-h-[76px] w-full touch-pan-y items-center gap-2 rounded-xl border px-2 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
+                                                            "group relative flex min-h-[76px] w-full touch-[pan-y_pinch-zoom] items-center gap-2 rounded-xl border px-2 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
                                                             isInCart
                                                                 ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
                                                                 : "border-border/50 bg-card/80 hover:border-primary/30 hover:bg-card",
