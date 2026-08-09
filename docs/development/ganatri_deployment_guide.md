@@ -182,6 +182,29 @@ rsync -avz --delete --progress `
   root@216.158.228.89:/var/www/ganatri.loomsnack.com/frontend/
 ```
 
+### Update nginx configuration (only when the nginx file changes)
+
+Frontend deployments do not require an nginx reload. Update nginx only when
+`docs/development/ganatri.loomsnack.com` changes, such as cache headers or the
+API proxy configuration.
+
+From the local project root:
+
+```bash
+scp docs/development/ganatri.loomsnack.com \
+  root@216.158.228.89:/etc/nginx/sites-available/ganatri.loomsnack.com
+
+ssh root@216.158.228.89 "nginx -t && systemctl reload nginx"
+```
+
+`nginx -t` must pass before the reload is applied. Verify the cache behavior
+afterward:
+
+```bash
+curl -fsSI "https://ganatri.loomsnack.com/version.json?check=nginx" | grep -i cache-control
+curl -fsSI https://ganatri.loomsnack.com/index.html | grep -i cache-control
+```
+
 ---
 
 ## 3. Deploy backend (pruned, without node_modules)

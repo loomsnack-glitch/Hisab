@@ -16,12 +16,12 @@ server {
     }
 
     location = /version.json {
-        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
         try_files $uri =404;
     }
 
     location = /index.html {
-        add_header Cache-Control "no-cache, must-revalidate";
+        add_header Cache-Control "no-cache, must-revalidate" always;
         try_files $uri =404;
     }
 
@@ -30,8 +30,8 @@ server {
     }
 
     listen 443 ssl http2;
-    ssl_certificate /etc/letsencrypt/live/loomsnack.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/loomsnack.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/ganatri.loomsnack.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ganatri.loomsnack.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 }
