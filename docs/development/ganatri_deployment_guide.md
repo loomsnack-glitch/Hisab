@@ -1,4 +1,4 @@
-# Ganatri (Hisab) Deployment Guide
+# Ganatri Deployment Guide
 
 Deploy **ganatri.loomsnack.com** on the Ubuntu VPS at `216.158.228.89` (same machine as `loomsnack.com` and `boxmap.loomsnack.com`).
 
@@ -133,7 +133,7 @@ bun run build
 # Pruned backend bundle (smaller deploy, same pattern as TenderSense)
 bun turbo prune --scope=backend
 cd out
-bun install --ignore-scripts --ignore-scripts
+bun install --ignore-scripts
 cd apps/backend
 bun run build
 cd ../../..
@@ -144,6 +144,22 @@ Build outputs:
 - Frontend: `apps/web/dist/`
 - Backend: `out/` (pruned monorepo with compiled `out/apps/backend/dist/`)
 
+The frontend build generates `apps/web/dist/version.json` from the root
+`package.json` version and the current Git commit. For a user-facing release,
+bump the `version` field in the root `package.json` (for example, `0.0.1` to
+`0.0.2`) before building. The root package is the version source; do not use a
+manually edited `version.json` in `apps/web/public/`.
+
+Verify the generated metadata before uploading:
+
+```bash
+cat apps/web/dist/version.json
+test -f apps/web/dist/version.json
+```
+
+The nginx config keeps `version.json` and `index.html` revalidated so open
+browser tabs can detect a new frontend build.
+
 `apps/web/.env.production` sets `BASE_API_URL=/api` so the built frontend talks to nginx same-origin.
 
 ---
@@ -153,7 +169,7 @@ Build outputs:
 ### Windows (WSL)
 
 ```bash
-rsync -avz --progress \
+rsync -avz --delete --progress \
   /mnt/c/Users/smarty/Desktop/loomsnack/Hisab/apps/web/dist/ \
   root@216.158.228.89:/var/www/ganatri.loomsnack.com/frontend/
 ```
@@ -161,7 +177,7 @@ rsync -avz --progress \
 ### PowerShell (if rsync is installed)
 
 ```powershell
-rsync -avz --progress `
+rsync -avz --delete --progress `
   "C:/Users/smarty/Desktop/loomsnack/Hisab/apps/web/dist/" `
   root@216.158.228.89:/var/www/ganatri.loomsnack.com/frontend/
 ```
@@ -212,6 +228,15 @@ curl -s http://127.0.0.1:8001/api/
 
 Then open `https://ganatri.loomsnack.com` in the browser.
 
+Verify that the deployed frontend exposes the new build metadata:
+
+```bash
+curl -fsS https://ganatri.loomsnack.com/version.json
+```
+
+The returned `version` should match the root `package.json`, and `build` should
+match the Git commit used for the deployment.
+
 ---
 
 ## 5. Optional: seed data
@@ -228,7 +253,7 @@ bun run add-initial-data
 | Task | Command |
 |------|---------|
 | Full local build | `bun i && bun run build && bun turbo prune --scope=backend && cd out && bun install --ignore-scripts && cd apps/backend && bun run build` |
-| Sync frontend | rsync `apps/web/dist/` → `.../frontend/` |
+| Sync frontend | rsync `--delete` `apps/web/dist/` → `.../frontend/` |
 | Sync backend | rsync `out/` → `.../backend/` (exclude `node_modules`) |
 | Install on server | `cd .../backend/apps/backend && bun install --ignore-scripts` |
 | Migrations | `bunx dbmate -d db/migrations up` |
@@ -278,7 +303,7 @@ bun i && bun run build
 bun turbo prune --scope=backend
 cd out && bun install --ignore-scripts && cd apps/backend && bun run build && cd ../../..
 
-rsync -avz --progress apps/web/dist/ root@216.158.228.89:/var/www/ganatri.loomsnack.com/frontend/
+rsync -avz --delete --progress apps/web/dist/ root@216.158.228.89:/var/www/ganatri.loomsnack.com/frontend/
 rsync -avz --delete --progress --exclude=node_modules out/ root@216.158.228.89:/var/www/ganatri.loomsnack.com/backend/
 ```
 

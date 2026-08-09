@@ -102,6 +102,7 @@ import {
 import { toast } from "sonner";
 
 import CustomerDirectory from "@/components/customers/customer-directory";
+import AppVersionBadge from "@/components/app-version-badge";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
@@ -1854,6 +1855,7 @@ const BillingPage = ({
                             </button>
                         </>
                     )}
+                    {canMutate ? <AppVersionBadge className="mt-auto max-w-full px-1 text-[9px]" /> : null}
                 </nav>
 
                 {/* ─── LEFT PANEL: Product Grid ─── */}
