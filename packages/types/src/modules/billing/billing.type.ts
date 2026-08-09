@@ -27,6 +27,7 @@ import type {
     SaleItemInputSchema,
     SaleNumberResetPeriodSchema,
     SaleNumberSettingsDTOSchema,
+    TokenNumberResetPeriodSchema,
     SaleSummaryDTOSchema,
     SalesListPageInfoSchema,
     SalesListSummarySchema,
@@ -49,6 +50,7 @@ export type SaleDeviceAuditDTO = z.infer<typeof SaleDeviceAuditDTOSchema>;
 export type SaleSummaryDTO = z.infer<typeof SaleSummaryDTOSchema>;
 export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema>;
 export type SaleNumberResetPeriod = z.infer<typeof SaleNumberResetPeriodSchema>;
+export type TokenNumberResetPeriod = z.infer<typeof TokenNumberResetPeriodSchema>;
 export type SaleNumberSettingsDTO = z.infer<typeof SaleNumberSettingsDTOSchema>;
 export type ParentScopedAddOnSalesRollupDTO = z.infer<typeof ParentScopedAddOnSalesRollupDTOSchema>;
 export type AddOnScopedSalesRollupDTO = z.infer<typeof AddOnScopedSalesRollupDTOSchema>;
@@ -120,6 +122,9 @@ export type CreateSaleREPO = Pick<
     saleNumber?: string | null;
     saleSequenceNumber?: number | null;
     salePeriodKey?: string | null;
+    tokenNumber?: string | null;
+    tokenSequenceNumber?: number | null;
+    tokenPeriodKey?: string | null;
     voidedAt?: string | Date | null;
     voidReason?: string | null;
 };
@@ -135,6 +140,9 @@ export type UpdateSaleREPO = Pick<
     saleNumber?: string | null;
     saleSequenceNumber?: number | null;
     salePeriodKey?: string | null;
+    tokenNumber?: string | null;
+    tokenSequenceNumber?: number | null;
+    tokenPeriodKey?: string | null;
     voidedAt?: string | Date | null;
     voidReason?: string | null;
 };

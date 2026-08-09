@@ -1,4 +1,4 @@
-import type { SaleNumberResetPeriod } from "@repo/types";
+import type { SaleNumberResetPeriod, TokenNumberResetPeriod } from "@repo/types";
 
 export const DEFAULT_SALE_NUMBER_TIMEZONE = "Asia/Kolkata";
 
@@ -77,6 +77,10 @@ export const getSaleNumberPeriodKey = (
             return `${parts.year}-H${parts.month <= 6 ? 1 : 2}`;
         case "yearly":
             return String(parts.year);
+        case "financial_yearly": {
+            const startYear = parts.month >= 4 ? parts.year : parts.year - 1;
+            return `FY${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)}`;
+        }
     }
 };
 
@@ -87,3 +91,11 @@ export const formatSaleNumber = (resetPeriod: SaleNumberResetPeriod, periodKey: 
 
     return `${periodKey}-${String(sequenceNumber).padStart(4, "0")}`;
 };
+
+export const getTokenNumberPeriodKey = (
+    resetPeriod: TokenNumberResetPeriod,
+    date: Date,
+    timezone: string,
+): string => getSaleNumberPeriodKey(resetPeriod, date, timezone);
+
+export const formatTokenNumber = (sequenceNumber: number) => String(sequenceNumber).padStart(3, "0");

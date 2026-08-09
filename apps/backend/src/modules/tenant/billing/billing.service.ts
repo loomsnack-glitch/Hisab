@@ -406,6 +406,8 @@ export const getSaleNumberSettings = async (
             storeId,
             "never",
             DEFAULT_SALE_NUMBER_TIMEZONE,
+            false,
+            "daily",
         ));
 
     if (!settings) {
@@ -441,6 +443,8 @@ export const updateSaleNumberSettings = async (
         storeId,
         settingsData.resetPeriod,
         DEFAULT_SALE_NUMBER_TIMEZONE,
+        settingsData.tokenNumberEnabled,
+        settingsData.tokenNumberResetPeriod,
     );
 
     if (!settings) {
@@ -2020,6 +2024,9 @@ const commitSaleInStore = async (
                 saleNumber: saleNumber.saleNumber,
                 saleSequenceNumber: saleNumber.saleSequenceNumber,
                 salePeriodKey: saleNumber.salePeriodKey,
+                tokenNumber: saleNumber.tokenNumber,
+                tokenSequenceNumber: saleNumber.tokenSequenceNumber,
+                tokenPeriodKey: saleNumber.tokenPeriodKey,
             },
             tx,
         );
@@ -2151,6 +2158,9 @@ const persistCompletedSale = async (
             saleNumber: saleNumber.saleNumber,
             saleSequenceNumber: saleNumber.saleSequenceNumber,
             salePeriodKey: saleNumber.salePeriodKey,
+            tokenNumber: saleNumber.tokenNumber,
+            tokenSequenceNumber: saleNumber.tokenSequenceNumber,
+            tokenPeriodKey: saleNumber.tokenPeriodKey,
             createdByDeviceId: params.actor.deviceId ?? null,
             updatedByDeviceId: params.actor.deviceId ?? null,
             userId: params.actor.userId ?? null,
@@ -2442,6 +2452,9 @@ const replaceSaleInStore = async (
                     saleNumber: originalSale.saleNumber ?? null,
                     saleSequenceNumber: originalSale.saleSequenceNumber ?? null,
                     salePeriodKey: originalSale.salePeriodKey ?? null,
+                    tokenNumber: originalSale.tokenNumber ?? null,
+                    tokenSequenceNumber: originalSale.tokenSequenceNumber ?? null,
+                    tokenPeriodKey: originalSale.tokenPeriodKey ?? null,
                     voidedAt: new Date(),
                     voidReason: replacementReason,
                 },
@@ -2614,6 +2627,9 @@ const collectPaymentInStore = async (
                 saleNumber: existingSale.saleNumber ?? null,
                 saleSequenceNumber: existingSale.saleSequenceNumber ?? null,
                 salePeriodKey: existingSale.salePeriodKey ?? null,
+                tokenNumber: existingSale.tokenNumber ?? null,
+                tokenSequenceNumber: existingSale.tokenSequenceNumber ?? null,
+                tokenPeriodKey: existingSale.tokenPeriodKey ?? null,
                 voidedAt: existingSale.voidedAt ?? null,
                 voidReason: existingSale.voidReason ?? null,
             },
@@ -2709,6 +2725,9 @@ const voidSaleInStore = async (
                 saleNumber: existingSale.saleNumber ?? null,
                 saleSequenceNumber: existingSale.saleSequenceNumber ?? null,
                 salePeriodKey: existingSale.salePeriodKey ?? null,
+                tokenNumber: existingSale.tokenNumber ?? null,
+                tokenSequenceNumber: existingSale.tokenSequenceNumber ?? null,
+                tokenPeriodKey: existingSale.tokenPeriodKey ?? null,
                 voidedAt: new Date(),
                 voidReason: normalizeOptionalText(voidData.reason),
             },

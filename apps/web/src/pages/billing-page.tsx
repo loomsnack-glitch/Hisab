@@ -1461,8 +1461,8 @@ const BillingPage = ({
             }
             toast.success(
                 wasReplacing
-                    ? `Bill #${sale.saleNumber ?? ""} edited`
-                    : `Bill #${sale.saleNumber ?? ""} completed`,
+                    ? `Bill ${sale.saleNumber ?? ""} edited`
+                    : `Bill ${sale.saleNumber ?? ""} completed`,
             );
         },
         onError: (error: { message?: string }) => {
@@ -1609,12 +1609,21 @@ const BillingPage = ({
             return response.data.sale;
         },
         onSuccess: (sale) => {
+            if (isDeviceMode && onPanelTabChange) {
+                onPanelTabChange("products", { sale, editSaleId: null });
+                return;
+            }
+
             loadSaleIntoComposer(sale, null);
+            setMobileCartOpen(true);
             window.scrollTo({ top: 0, behavior: "smooth" });
             toast.success("Draft loaded into the composer");
         },
         onError: (error: { message?: string }) => {
             toast.error(error?.message || "Failed to load draft");
+        },
+        onSettled: () => {
+            setResumingDraftId(null);
         },
     });
 
@@ -2438,7 +2447,8 @@ const BillingPage = ({
                                                         <div className="min-w-0 flex-1 pr-2">
                                                             <div className="flex min-w-0 items-center gap-2">
                                                                 <p className="shrink-0 whitespace-nowrap text-xs font-bold text-amber-500 dark:text-amber-400">
-                                                                    {sale.saleNumber ? `#${sale.saleNumber}` : "Draft"}
+                                                                    {sale.tokenNumber ? `Token ${sale.tokenNumber} · ` : ""}
+                                                                    {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft"}
                                                                 </p>
                                                                 <p className="min-w-0 truncate text-xs font-semibold text-foreground/80">
                                                                     {sale.customer?.name || "Walk-in customer"}
@@ -2502,11 +2512,16 @@ const BillingPage = ({
                                                                                 resumeDraftMutation.isPending ||
                                                                                 deleteDraftMutation.isPending
                                                                             }
-                                                                            onClick={() =>
-                                                                                resumeDraftMutation.mutate(sale.id)
-                                                                            }
+                                                                            aria-busy={resumingDraftId === sale.id}
+                                                                            onClick={() => {
+                                                                                setResumingDraftId(sale.id);
+                                                                                resumeDraftMutation.mutate(sale.id);
+                                                                            }}
                                                                         >
-                                                                            Resume
+                                                                            {resumingDraftId === sale.id ? (
+                                                                                <Spinner className="size-3.5" />
+                                                                            ) : null}
+                                                                            {resumingDraftId === sale.id ? null : "Resume"}
                                                                         </Button>
                                                                         <Button
                                                                             type="button"

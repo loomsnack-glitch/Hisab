@@ -243,23 +243,32 @@ const SaleDetailDialog = ({
                         <div className="border-b border-border/60 px-6 py-5 sm:px-8">
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <DialogHeader className="space-y-3">
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <DialogTitle className="whitespace-nowrap font-display text-3xl font-semibold tracking-tight">
-                                            {sale.saleNumber ? `Bill #${sale.saleNumber}` : "Draft bill"}
-                                        </DialogTitle>
-                                        <Badge
-                                            className={cn("rounded-full border text-xs", saleStatusStyles[sale.status])}
-                                        >
-                                            {sale.status}
-                                        </Badge>
-                                        <Badge
-                                            className={cn(
-                                                "rounded-full border text-xs",
-                                                paymentStatusStyles[sale.paymentStatus],
-                                            )}
-                                        >
-                                            {sale.paymentStatus}
-                                        </Badge>
+                                    <div className="flex flex-wrap items-end gap-3">
+                                        <div className="min-w-0">
+                                            {sale.tokenNumber ? (
+                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+                                                    Token {sale.tokenNumber}
+                                                </p>
+                                            ) : null}
+                                            <DialogTitle className="whitespace-nowrap font-display text-3xl font-semibold tracking-tight">
+                                                {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft bill"}
+                                            </DialogTitle>
+                                        </div>
+                                        <div className="flex items-center gap-2 pb-1">
+                                            <Badge
+                                                className={cn("rounded-full border text-xs", saleStatusStyles[sale.status])}
+                                            >
+                                                {sale.status}
+                                            </Badge>
+                                            <Badge
+                                                className={cn(
+                                                    "rounded-full border text-xs",
+                                                    paymentStatusStyles[sale.paymentStatus],
+                                                )}
+                                            >
+                                                {sale.paymentStatus}
+                                            </Badge>
+                                        </div>
                                     </div>
                                     <DialogDescription className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-muted-foreground mt-2">
                                         <div className="flex items-center gap-1.5">
@@ -295,7 +304,7 @@ const SaleDetailDialog = ({
                                                 <span>
                                                     Edited from:{" "}
                                                     {sale.replacementOfSaleNumber
-                                                        ? `#${sale.replacementOfSaleNumber}`
+                                                        ? `Bill ${sale.replacementOfSaleNumber}`
                                                         : "linked bill"}
                                                 </span>
                                             </div>
@@ -305,7 +314,7 @@ const SaleDetailDialog = ({
                                                 <span>
                                                     Edited as:{" "}
                                                     {sale.replacementSaleNumber
-                                                        ? `#${sale.replacementSaleNumber}`
+                                                        ? `Bill ${sale.replacementSaleNumber}`
                                                         : "linked bill"}
                                                 </span>
                                             </div>

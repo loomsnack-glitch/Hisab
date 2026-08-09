@@ -123,7 +123,24 @@ CREATE TYPE public.sale_number_reset_period_enum AS ENUM (
     'monthly',
     'quarterly',
     'half_yearly',
-    'yearly'
+    'yearly',
+    'financial_yearly'
+);
+
+
+--
+-- Name: token_number_reset_period_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.token_number_reset_period_enum AS ENUM (
+    'daily',
+    'weekly',
+    'monthly',
+    'quarterly',
+    'half_yearly',
+    'yearly',
+    'financial_yearly',
+    'never'
 );
 
 
@@ -203,8 +220,11 @@ BEGIN
            NEW.sale_number IS DISTINCT FROM OLD.sale_number
            OR NEW.sale_sequence_number IS DISTINCT FROM OLD.sale_sequence_number
            OR NEW.sale_period_key IS DISTINCT FROM OLD.sale_period_key
+           OR NEW.token_number IS DISTINCT FROM OLD.token_number
+           OR NEW.token_sequence_number IS DISTINCT FROM OLD.token_sequence_number
+           OR NEW.token_period_key IS DISTINCT FROM OLD.token_period_key
        ) THEN
-        RAISE EXCEPTION 'committed Sale Numbers are immutable';
+        RAISE EXCEPTION 'committed Sale Numbers and Token Numbers are immutable';
     END IF;
 
     RETURN NEW;
@@ -670,6 +690,9 @@ CREATE TABLE public.sales (
     replacement_of_sale_id uuid,
     sale_sequence_number bigint,
     sale_period_key character varying(32),
+    token_number character varying(64),
+    token_sequence_number bigint,
+    token_period_key character varying(32),
     CONSTRAINT sales_discount_total_check CHECK (((discount_total >= (0)::numeric) AND (discount_total <= subtotal))),
     CONSTRAINT sales_draft_commit_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (committed_at IS NULL) AND (payment_status = 'pending'::public.payment_status_enum)) OR ((status <> 'draft'::public.sale_status_enum) AND (committed_at IS NOT NULL)))),
     CONSTRAINT sales_draft_sale_number_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL)))),
@@ -679,6 +702,8 @@ CREATE TABLE public.sales (
     CONSTRAINT sales_sale_number_metadata_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL) AND (sale_sequence_number IS NULL) AND (sale_period_key IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL) AND (sale_sequence_number IS NOT NULL) AND (sale_period_key IS NOT NULL) AND (length(TRIM(BOTH FROM sale_period_key)) > 0)))),
     CONSTRAINT sales_sale_sequence_number_check CHECK (((sale_sequence_number IS NULL) OR (sale_sequence_number > 0))),
     CONSTRAINT sales_subtotal_check CHECK ((subtotal >= (0)::numeric)),
+    CONSTRAINT sales_token_number_metadata_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (token_number IS NULL) AND (token_sequence_number IS NULL) AND (token_period_key IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (((token_number IS NULL) AND (token_sequence_number IS NULL) AND (token_period_key IS NULL)) OR ((token_number IS NOT NULL) AND (token_sequence_number IS NOT NULL) AND (token_sequence_number > 0) AND (token_period_key IS NOT NULL) AND (length(TRIM(BOTH FROM token_period_key)) > 0))))),
+    CONSTRAINT sales_token_sequence_number_check CHECK (((token_sequence_number IS NULL) OR (token_sequence_number > 0))),
     CONSTRAINT sales_void_metadata_check CHECK (((status <> 'voided'::public.sale_status_enum) OR ((voided_at IS NOT NULL) AND (void_reason IS NOT NULL)))),
     CONSTRAINT sales_walk_in_payment_check CHECK (((status = 'draft'::public.sale_status_enum) OR (customer_id IS NOT NULL) OR (payment_status = 'paid'::public.payment_status_enum)))
 );
@@ -702,6 +727,8 @@ CREATE TABLE public.store_billing_settings (
     organization_id uuid NOT NULL,
     sale_number_reset_period public.sale_number_reset_period_enum DEFAULT 'never'::public.sale_number_reset_period_enum NOT NULL,
     sale_number_timezone character varying(64) DEFAULT 'Asia/Kolkata'::character varying NOT NULL,
+    token_number_enabled boolean DEFAULT false NOT NULL,
+    token_number_reset_period public.token_number_reset_period_enum DEFAULT 'daily'::public.token_number_reset_period_enum NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT store_billing_settings_timezone_check CHECK ((length(TRIM(BOTH FROM sale_number_timezone)) > 0))
@@ -741,6 +768,21 @@ CREATE TABLE public.store_sale_sequences (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT store_sale_sequences_next_number_check CHECK ((next_sequence_number > 0)),
     CONSTRAINT store_sale_sequences_period_key_check CHECK ((length(TRIM(BOTH FROM period_key)) > 0))
+);
+
+
+--
+-- Name: store_token_sequences; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.store_token_sequences (
+    store_id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    period_key character varying(32) NOT NULL,
+    next_sequence_number bigint DEFAULT 1 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT store_token_sequences_next_number_check CHECK ((next_sequence_number > 0)),
+    CONSTRAINT store_token_sequences_period_key_check CHECK ((length(TRIM(BOTH FROM period_key)) > 0))
 );
 
 
@@ -1112,6 +1154,14 @@ ALTER TABLE ONLY public.sales
 
 ALTER TABLE ONLY public.sales
     ADD CONSTRAINT sales_store_id_sale_number_key UNIQUE (store_id, sale_number);
+
+
+--
+-- Name: store_token_sequences store_token_sequences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_token_sequences
+    ADD CONSTRAINT store_token_sequences_pkey PRIMARY KEY (store_id, period_key);
 
 
 --
@@ -1596,6 +1646,13 @@ CREATE UNIQUE INDEX sales_store_completion_request_id_key ON public.sales USING 
 
 
 --
+-- Name: sales_store_token_period_sequence_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX sales_store_token_period_sequence_key ON public.sales USING btree (store_id, token_period_key, token_sequence_number) WHERE ((token_period_key IS NOT NULL) AND (token_sequence_number IS NOT NULL));
+
+
+--
 -- Name: payments trg_payments_require_completed_sale; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1613,7 +1670,7 @@ CREATE TRIGGER trg_sales_prevent_void_with_payments BEFORE UPDATE ON public.sale
 -- Name: sales trg_sales_sale_number_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_sales_sale_number_immutable BEFORE UPDATE OF sale_number, sale_sequence_number, sale_period_key ON public.sales FOR EACH ROW EXECUTE FUNCTION public.prevent_sale_number_mutation();
+CREATE TRIGGER trg_sales_sale_number_immutable BEFORE UPDATE OF sale_number, sale_sequence_number, sale_period_key, token_number, token_sequence_number, token_period_key ON public.sales FOR EACH ROW EXECUTE FUNCTION public.prevent_sale_number_mutation();
 
 
 --
@@ -2305,6 +2362,14 @@ ALTER TABLE ONLY public.store_sale_sequences
 
 
 --
+-- Name: store_token_sequences store_token_sequences_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_token_sequences
+    ADD CONSTRAINT store_token_sequences_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+
+--
 -- Name: stores stores_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2363,4 +2428,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260731140000'),
     ('20260802120000'),
     ('20260806120000'),
-    ('20260807120000');
+    ('20260807120000'),
+    ('20260809120000');

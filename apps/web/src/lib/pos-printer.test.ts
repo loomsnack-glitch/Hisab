@@ -36,10 +36,19 @@ describe("80mm ESC/POS receipt payload", () => {
 
     expect(Array.from(payload.slice(0, 2))).toEqual([0x1b, 0x40]);
     expect(output).toContain("INVOICE / RECEIPT");
-    expect(output).toContain("Bill #: INV-1042");
+    expect(output).toContain("Bill No: INV-1042");
     expect(Array.from(payload.slice(-6))).toEqual([
       0x1b, 0x64, 0x04, 0x1d, 0x56, 0x00,
     ]);
+  });
+
+  test("prints a simple token number when the sale has one", () => {
+    const output = new TextDecoder().decode(
+      build80mmEscPosPayload({ ...sale, tokenNumber: "001" }),
+    );
+
+    expect(output).toContain("Token No: 001");
+    expect(output.indexOf("Token No: 001")).toBeLessThan(output.indexOf("Bill No: INV-1042"));
   });
 
   test("uses an ASCII-safe fallback for unsupported printer characters", () => {

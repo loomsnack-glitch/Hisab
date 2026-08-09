@@ -9,7 +9,6 @@ export type ReceiptContext = {
   storeAddress?: string | null;
   storePhone?: string | null;
 };
-
 export const RECEIPT_WIDTH = 42;
 const defaultReceiptWidth = 48;
 const quantityColumnWidth = 5;
@@ -183,9 +182,12 @@ export const buildReceiptText = (
     storePhone
   )
     lines.push(separator);
+  if (sale.tokenNumber) {
+    appendWrappedText(lines, `Token No: ${sale.tokenNumber}`, width);
+  }
   appendWrappedText(
     lines,
-    `Bill #: ${sale.saleNumber ? sale.saleNumber : "Draft"}`,
+    `Bill No: ${sale.saleNumber ? sale.saleNumber : "Draft"}`,
     width,
   );
   appendWrappedText(lines, `Date: ${formatDateTime(sale.createdAt)}`, width);

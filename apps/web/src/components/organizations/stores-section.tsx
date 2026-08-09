@@ -152,7 +152,7 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                         store={store}
                                         trigger={
                                             <Button variant="outline" className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4">
-                                                <Pencil className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
+                                                <Pencil className="size-3.5 sm:size-4" />
                                                 Edit store
                                             </Button>
                                         }
@@ -164,7 +164,7 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                         storeName={store.name}
                                         trigger={
                                             <Button variant="outline" className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4">
-                                                <PlusCircle className="mr-1.5 sm:mr-2 size-3.5 sm:size-4" />
+                                                <PlusCircle className="size-3.5 sm:size-4" />
                                                 Add device
                                             </Button>
                                         }

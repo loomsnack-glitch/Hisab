@@ -33,8 +33,10 @@ import type {
 import { decodeSalesCursor, encodeSalesCursor } from "./sales-pagination";
 import {
     DEFAULT_SALE_NUMBER_TIMEZONE,
+    formatTokenNumber,
     formatSaleNumber,
     getSaleNumberPeriodKey,
+    getTokenNumberPeriodKey,
 } from "./sale-numbering";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
@@ -99,6 +101,14 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
 
     return {
         ...(summary as Omit<SaleSummaryDTO, "customer">),
+        saleSequenceNumber:
+            summary.saleSequenceNumber === null || summary.saleSequenceNumber === undefined
+                ? null
+                : Number(summary.saleSequenceNumber),
+        tokenSequenceNumber:
+            summary.tokenSequenceNumber === null || summary.tokenSequenceNumber === undefined
+                ? null
+                : Number(summary.tokenSequenceNumber),
         paidTotal: Number(summary.paidTotal ?? 0),
         dueTotal: Number(summary.dueTotal ?? 0),
         subtotal: Number(summary.subtotal ?? 0),
@@ -243,6 +253,9 @@ export const updateSale = async (saleData: UpdateSaleREPO, tx?: Bun.TransactionS
             sale_number = ${saleData.saleNumber ?? null},
             sale_sequence_number = ${saleData.saleSequenceNumber ?? null},
             sale_period_key = ${saleData.salePeriodKey ?? null},
+            token_number = ${saleData.tokenNumber ?? null},
+            token_sequence_number = ${saleData.tokenSequenceNumber ?? null},
+            token_period_key = ${saleData.tokenPeriodKey ?? null},
             voided_at = ${saleData.voidedAt ?? null},
             void_reason = ${saleData.voidReason ?? null},
             updated_at = NOW()
@@ -893,6 +906,8 @@ export const getSaleNumberSettings = async (
             organization_id,
             sale_number_reset_period AS reset_period,
             sale_number_timezone AS timezone,
+            token_number_enabled AS token_number_enabled,
+            token_number_reset_period AS token_number_reset_period,
             created_at,
             updated_at
         FROM store_billing_settings
@@ -908,29 +923,39 @@ export const upsertSaleNumberSettings = async (
     storeId: string,
     resetPeriod: SaleNumberSettingsDTO["resetPeriod"],
     timezone: string,
+    tokenNumberEnabled = false,
+    tokenNumberResetPeriod: SaleNumberSettingsDTO["tokenNumberResetPeriod"] = "daily",
 ): Promise<SaleNumberSettingsDTO | null> => {
     const [result] = await pg`
         INSERT INTO store_billing_settings (
             store_id,
             organization_id,
             sale_number_reset_period,
-            sale_number_timezone
+            sale_number_timezone,
+            token_number_enabled,
+            token_number_reset_period
         ) VALUES (
             ${storeId},
             ${organizationId},
             ${resetPeriod},
-            ${timezone}
+            ${timezone},
+            ${tokenNumberEnabled},
+            ${tokenNumberResetPeriod}
         )
         ON CONFLICT (store_id)
         DO UPDATE SET
             sale_number_reset_period = EXCLUDED.sale_number_reset_period,
             sale_number_timezone = EXCLUDED.sale_number_timezone,
+            token_number_enabled = EXCLUDED.token_number_enabled,
+            token_number_reset_period = EXCLUDED.token_number_reset_period,
             updated_at = NOW()
         RETURNING
             store_id,
             organization_id,
             sale_number_reset_period AS reset_period,
             sale_number_timezone AS timezone,
+            token_number_enabled,
+            token_number_reset_period,
             created_at,
             updated_at
     `;
@@ -943,11 +968,23 @@ export const allocateSaleNumber = async (
     storeId: string,
     committedAt: Date,
     tx?: Bun.TransactionSQL,
-): Promise<{ saleNumber: string; saleSequenceNumber: number; salePeriodKey: string }> => {
+): Promise<{
+    saleNumber: string;
+    saleSequenceNumber: number;
+    salePeriodKey: string;
+    tokenNumber: string | null;
+    tokenSequenceNumber: number | null;
+    tokenPeriodKey: string | null;
+}> => {
     const db = tx || pg;
     const settings =
         (await getSaleNumberSettings(organizationId, storeId, tx)) ??
-        ({ resetPeriod: "never", timezone: DEFAULT_SALE_NUMBER_TIMEZONE } as const);
+        ({
+            resetPeriod: "never",
+            timezone: DEFAULT_SALE_NUMBER_TIMEZONE,
+            tokenNumberEnabled: false,
+            tokenNumberResetPeriod: "daily",
+        } as const);
     const periodKey = getSaleNumberPeriodKey(settings.resetPeriod, committedAt, settings.timezone);
     const [result] = await db`
         INSERT INTO store_sale_sequences (
@@ -969,10 +1006,41 @@ export const allocateSaleNumber = async (
     `;
 
     const saleSequenceNumber = Number(result?.sequence_number ?? 1);
+    let tokenNumber: string | null = null;
+    let tokenSequenceNumber: number | null = null;
+    let tokenPeriodKey: string | null = null;
+
+    if (settings.tokenNumberEnabled) {
+        tokenPeriodKey = getTokenNumberPeriodKey(settings.tokenNumberResetPeriod, committedAt, settings.timezone);
+        const [tokenResult] = await db`
+            INSERT INTO store_token_sequences (
+                store_id,
+                organization_id,
+                period_key,
+                next_sequence_number
+            ) VALUES (
+                ${storeId},
+                ${organizationId},
+                ${tokenPeriodKey},
+                2
+            )
+            ON CONFLICT (store_id, period_key)
+            DO UPDATE SET
+                next_sequence_number = store_token_sequences.next_sequence_number + 1,
+                updated_at = NOW()
+            RETURNING next_sequence_number - 1 AS sequence_number
+        `;
+        tokenSequenceNumber = Number(tokenResult?.sequence_number ?? 1);
+        tokenNumber = formatTokenNumber(tokenSequenceNumber);
+    }
+
     return {
         saleNumber: formatSaleNumber(settings.resetPeriod, periodKey, saleSequenceNumber),
         saleSequenceNumber,
         salePeriodKey: periodKey,
+        tokenNumber,
+        tokenSequenceNumber,
+        tokenPeriodKey,
     };
 };
 

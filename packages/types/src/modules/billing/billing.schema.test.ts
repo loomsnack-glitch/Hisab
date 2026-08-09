@@ -13,14 +13,33 @@ describe("Configured sale billing contracts", () => {
             storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
             organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
             timezone: "Asia/Kolkata",
+            tokenNumberEnabled: false,
+            tokenNumberResetPeriod: "daily",
             createdAt: new Date("2026-08-07T12:00:00.000Z"),
             updatedAt: new Date("2026-08-07T12:00:00.000Z"),
         };
-        const periods = ["never", "daily", "weekly", "monthly", "quarterly", "half_yearly", "yearly"] as const;
+        const periods = [
+            "never",
+            "daily",
+            "weekly",
+            "monthly",
+            "quarterly",
+            "half_yearly",
+            "yearly",
+            "financial_yearly",
+        ] as const;
 
         for (const resetPeriod of periods) {
             expect(SaleNumberSettingsDTOSchema.safeParse({ ...base, resetPeriod }).success).toBe(true);
-            expect(UpdateSaleNumberSettingsSchema.safeParse({ resetPeriod }).success).toBe(true);
+            for (const tokenNumberResetPeriod of periods) {
+                expect(
+                    UpdateSaleNumberSettingsSchema.safeParse({
+                        resetPeriod,
+                        tokenNumberEnabled: true,
+                        tokenNumberResetPeriod,
+                    }).success,
+                ).toBe(true);
+            }
         }
     });
 

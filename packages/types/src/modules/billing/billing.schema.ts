@@ -9,19 +9,26 @@ export const SaleNumberResetPeriodSchema = z.enum([
     "quarterly",
     "half_yearly",
     "yearly",
+    "financial_yearly",
 ]);
+
+export const TokenNumberResetPeriodSchema = SaleNumberResetPeriodSchema;
 
 export const SaleNumberSettingsDTOSchema = z.object({
     storeId: z.uuid("Invalid store id"),
     organizationId: z.uuid("Invalid organization id"),
     resetPeriod: SaleNumberResetPeriodSchema,
     timezone: z.string().min(1).max(64),
+    tokenNumberEnabled: z.boolean(),
+    tokenNumberResetPeriod: TokenNumberResetPeriodSchema,
     createdAt: dtoDateSchema,
     updatedAt: dtoDateSchema,
 });
 
 export const UpdateSaleNumberSettingsSchema = z.object({
     resetPeriod: SaleNumberResetPeriodSchema,
+    tokenNumberEnabled: z.boolean(),
+    tokenNumberResetPeriod: TokenNumberResetPeriodSchema,
 });
 
 const nameSchema = z.string().trim().min(1, "Name is required").max(255, "Name must be at most 255 characters");
@@ -191,6 +198,9 @@ export const SaleSummaryDTOSchema = z.object({
     saleNumber: z.string().nullable().optional(),
     saleSequenceNumber: z.number().int().nullable().optional(),
     salePeriodKey: z.string().nullable().optional(),
+    tokenNumber: z.string().nullable().optional(),
+    tokenSequenceNumber: z.number().int().nullable().optional(),
+    tokenPeriodKey: z.string().nullable().optional(),
     customerId: z.uuid("Invalid customer id").nullable().optional(),
     userId: z.uuid("Invalid user id").nullable().optional(),
     createdByDeviceId: z.uuid("Invalid creator device id").nullable().optional(),

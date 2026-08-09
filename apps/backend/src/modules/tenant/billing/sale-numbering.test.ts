@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+    formatTokenNumber,
     formatSaleNumber,
     getSaleNumberPeriodKey,
+    getTokenNumberPeriodKey,
     isValidSaleNumberTimezone,
 } from "./sale-numbering";
 
@@ -14,12 +16,16 @@ describe("sale numbering periods", () => {
         expect(getSaleNumberPeriodKey("daily", date, "America/New_York")).toBe("20260806");
     });
 
-    test("creates calendar period keys", () => {
+    test("creates calendar and financial period keys", () => {
         expect(getSaleNumberPeriodKey("weekly", date, "Asia/Kolkata")).toBe("2026-W32");
         expect(getSaleNumberPeriodKey("monthly", date, "Asia/Kolkata")).toBe("2026-08");
         expect(getSaleNumberPeriodKey("quarterly", date, "Asia/Kolkata")).toBe("2026-Q3");
         expect(getSaleNumberPeriodKey("half_yearly", date, "Asia/Kolkata")).toBe("2026-H2");
         expect(getSaleNumberPeriodKey("yearly", date, "Asia/Kolkata")).toBe("2026");
+        expect(getSaleNumberPeriodKey("financial_yearly", date, "Asia/Kolkata")).toBe("FY26-27");
+        expect(getSaleNumberPeriodKey("financial_yearly", new Date("2026-03-31T18:29:59.000Z"), "Asia/Kolkata")).toBe(
+            "FY25-26",
+        );
         expect(getSaleNumberPeriodKey("never", date, "Asia/Kolkata")).toBe("continuous");
     });
 
@@ -27,6 +33,18 @@ describe("sale numbering periods", () => {
         expect(formatSaleNumber("never", "continuous", 123)).toBe("123");
         expect(formatSaleNumber("monthly", "2026-08", 1)).toBe("2026-08-0001");
         expect(formatSaleNumber("quarterly", "2026-Q3", 42)).toBe("2026-Q3-0042");
+        expect(formatSaleNumber("financial_yearly", "FY26-27", 1)).toBe("FY26-27-0001");
+        expect(formatSaleNumber("financial_yearly", "FY26-27", 10000)).toBe("FY26-27-10000");
+    });
+
+    test("formats simple token numbers and reset periods", () => {
+        expect(getTokenNumberPeriodKey("daily", date, "Asia/Kolkata")).toBe("20260807");
+        expect(getTokenNumberPeriodKey("weekly", date, "Asia/Kolkata")).toBe("2026-W32");
+        expect(getTokenNumberPeriodKey("monthly", date, "Asia/Kolkata")).toBe("2026-08");
+        expect(getTokenNumberPeriodKey("financial_yearly", date, "Asia/Kolkata")).toBe("FY26-27");
+        expect(getTokenNumberPeriodKey("never", date, "Asia/Kolkata")).toBe("continuous");
+        expect(formatTokenNumber(1)).toBe("001");
+        expect(formatTokenNumber(1000)).toBe("1000");
     });
 
     test("validates IANA timezones", () => {
