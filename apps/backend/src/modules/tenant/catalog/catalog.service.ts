@@ -22,6 +22,7 @@ import {
   type ProductResponse,
   type ProductResponseDTO,
   type ProductsListResponse,
+  type ReuseInternalProductCodeJSON,
   type ServiceResponse,
   type UpdateAddOnSVC,
   type UpdateBundleProductSVC,
@@ -111,6 +112,30 @@ const duplicateProductCodeMessage = (
   productCode: string,
   productName: string,
 ) => `Product code ${productCode} is already assigned to "${productName}".`;
+
+const INTERNAL_PRODUCT_CODE_SEQUENCE_LIMIT = 10_000_000_000;
+
+const calculateEan13CheckDigit = (body: string): string => {
+  const weightedSum = [...body]
+    .reverse()
+    .reduce(
+      (sum, digit, index) => sum + Number(digit) * (index % 2 === 0 ? 3 : 1),
+      0,
+    );
+  return String((10 - (weightedSum % 10)) % 10);
+};
+
+const buildInternalProductCode = (sequence: number): string => {
+  const body = `04${sequence.toString().padStart(10, "0")}`;
+  return `${body}${calculateEan13CheckDigit(body)}`;
+};
+
+const isValidInternalProductCode = (productCode: string): boolean =>
+  /^04\d{11}$/.test(productCode) &&
+  calculateEan13CheckDigit(productCode.slice(0, -1)) === productCode.at(-1);
+
+const releasedInternalProductCodeMessage = (productCode: string) =>
+  `Internal Product Code ${productCode} was released and must be reused through the dedicated administrator action.`;
 
 const isProductCodeAssignmentError = (
   value: ResolvedProductCode | ServiceResponse<null>,
@@ -206,6 +231,30 @@ const mapProductCodeUniqueViolation = async (
       : `Product code ${productCode} is already assigned to another product.`,
     data: null,
     code: STATUS_CODES.CONFLICT,
+  };
+};
+
+const ensureNotReleasedInternalProductCode = async (
+  organizationId: string,
+  productCode: string | null,
+): Promise<ServiceResponse<null> | null> => {
+  if (!productCode) {
+    return null;
+  }
+
+  const isReleased = await catalogRepository.isReleasedInternalProductCode(
+    organizationId,
+    productCode,
+  );
+  if (!isReleased) {
+    return null;
+  }
+
+  return {
+    status: "error",
+    message: releasedInternalProductCodeMessage(productCode),
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
   };
 };
 
@@ -674,7 +723,15 @@ export const createProduct = async (
     return duplicateCodeError;
   }
 
-  let product: ProductDTO | null;
+  const releasedInternalCodeError = await ensureNotReleasedInternalProductCode(
+    organizationId,
+    codeAssignment.productCode,
+  );
+  if (releasedInternalCodeError) {
+    return releasedInternalCodeError;
+  }
+
+  let product: ProductDTO | null = null;
   try {
     product = await catalogRepository.createProduct({
       id: crypto.randomUUID(),
@@ -874,6 +931,15 @@ export const updateProduct = async (
     if (duplicateCodeError) {
       return duplicateCodeError;
     }
+
+    const releasedInternalCodeError =
+      await ensureNotReleasedInternalProductCode(
+        organizationId,
+        nextProductCode,
+      );
+    if (releasedInternalCodeError) {
+      return releasedInternalCodeError;
+    }
   }
 
   if (existingProduct.status === "active" && nextStatus === "inactive") {
@@ -898,9 +964,9 @@ export const updateProduct = async (
     }
   }
 
-  let product: ProductDTO | null;
+  let product: ProductDTO | null = null;
   try {
-    product = await catalogRepository.updateProduct({
+    const updateData = {
       id: productId,
       organizationId,
       categoryId: nextCategoryId,
@@ -912,7 +978,26 @@ export const updateProduct = async (
       productCodeKind: nextProductCodeKind,
       status: nextStatus,
       updatedBy: userId,
-    });
+    };
+    if (
+      existingProduct.productCodeKind === "internal_rcn" &&
+      existingProduct.productCode &&
+      nextProductCode !== existingProduct.productCode
+    ) {
+      await pg.begin(async (tx) => {
+        product = await catalogRepository.updateProduct(updateData, tx);
+        if (!product) {
+          throw new Error("Failed to update product");
+        }
+        await catalogRepository.releaseInternalProductCode(
+          organizationId,
+          existingProduct.productCode!,
+          tx,
+        );
+      });
+    } else {
+      product = await catalogRepository.updateProduct(updateData);
+    }
   } catch (error) {
     if (isProductCodeUniqueViolation(error)) {
       return mapProductCodeUniqueViolation(
@@ -947,6 +1032,257 @@ export const updateProduct = async (
     status: "success",
     data: { product: await resolveProduct(product) },
     message: "Product updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const generateInternalProductCode = async (
+  userId: string,
+  organizationId: string,
+  productId: string,
+): Promise<ServiceResponse<ProductResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const existingProduct = await getProductForOrganization(
+    organizationId,
+    productId,
+  );
+  if (!existingProduct) {
+    return {
+      status: "error",
+      message: "Product not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  if (existingProduct.productType !== "single") {
+    return {
+      status: "error",
+      message:
+        "Internal Product Codes are available only for fixed-count products",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  if (existingProduct.productCode) {
+    return {
+      status: "error",
+      message: "Product already has a Product Code",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  let generatedProduct: ProductDTO | null = null;
+  let generatedCode: string | null = null;
+  try {
+    await pg.begin(async (tx) => {
+      const sequence =
+        await catalogRepository.allocateNextInternalProductCodeSequence(
+          organizationId,
+          tx,
+        );
+      if (
+        sequence === null ||
+        sequence >= INTERNAL_PRODUCT_CODE_SEQUENCE_LIMIT
+      ) {
+        throw new Error("Internal Product Code sequence exhausted");
+      }
+
+      generatedCode = buildInternalProductCode(sequence);
+      generatedProduct =
+        await catalogRepository.assignInternalProductCodeToUncodedProduct(
+          organizationId,
+          existingProduct.id,
+          generatedCode,
+          userId,
+          tx,
+        );
+      if (!generatedProduct) {
+        throw new Error("Product already has a Product Code");
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Internal Product Code sequence exhausted"
+    ) {
+      return {
+        status: "error",
+        message:
+          "Internal Product Code sequence is exhausted and cannot be restarted automatically",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+    if (
+      error instanceof Error &&
+      error.message === "Product already has a Product Code"
+    ) {
+      return {
+        status: "error",
+        message: error.message,
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+    if (isProductCodeUniqueViolation(error)) {
+      return mapProductCodeUniqueViolation(organizationId, generatedCode);
+    }
+    throw error;
+  }
+
+  if (!generatedProduct || !generatedCode) {
+    return {
+      status: "error",
+      message: "Failed to generate Internal Product Code",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { product: await resolveProduct(generatedProduct) },
+    message: `Store-only Internal Product Code ${generatedCode} generated. It is not a globally registered identifier.`,
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const reuseInternalProductCode = async (
+  userId: string,
+  organizationId: string,
+  productId: string,
+  input: ReuseInternalProductCodeJSON,
+): Promise<ServiceResponse<ProductResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const existingProduct = await getProductForOrganization(
+    organizationId,
+    productId,
+  );
+  if (!existingProduct) {
+    return {
+      status: "error",
+      message: "Product not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  if (existingProduct.productType !== "single") {
+    return {
+      status: "error",
+      message:
+        "Internal Product Codes are available only for fixed-count products",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  if (existingProduct.productCode) {
+    return {
+      status: "error",
+      message: "Product already has a Product Code",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  if (!isValidInternalProductCode(input.productCode)) {
+    return {
+      status: "error",
+      message: "Internal Product Code has an invalid check digit",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  let reusedProduct: ProductDTO | null = null;
+  try {
+    await pg.begin(async (tx) => {
+      const claimed = await catalogRepository.claimReleasedInternalProductCode(
+        organizationId,
+        input.productCode,
+        tx,
+      );
+      if (!claimed) {
+        throw new Error("Internal Product Code is not available for reuse");
+      }
+
+      reusedProduct =
+        await catalogRepository.assignInternalProductCodeToUncodedProduct(
+          organizationId,
+          existingProduct.id,
+          input.productCode,
+          userId,
+          tx,
+        );
+      if (!reusedProduct) {
+        throw new Error("Product already has a Product Code");
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Internal Product Code is not available for reuse"
+    ) {
+      return {
+        status: "error",
+        message:
+          "Internal Product Code is not a released value available for reuse",
+        data: null,
+        code: STATUS_CODES.BAD_REQUEST,
+      };
+    }
+    if (
+      error instanceof Error &&
+      error.message === "Product already has a Product Code"
+    ) {
+      return {
+        status: "error",
+        message: error.message,
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+    if (isProductCodeUniqueViolation(error)) {
+      return mapProductCodeUniqueViolation(organizationId, input.productCode);
+    }
+    throw error;
+  }
+
+  if (!reusedProduct) {
+    return {
+      status: "error",
+      message: "Failed to reuse Internal Product Code",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { product: await resolveProduct(reusedProduct) },
+    message: `Released store-only Internal Product Code ${input.productCode} reused. Old labels may now identify a different product.`,
     code: STATUS_CODES.SUCCESS,
   };
 };
@@ -1029,10 +1365,29 @@ export const deleteProduct = async (
     };
   }
 
-  const product = await catalogRepository.deleteProduct(
-    organizationId,
-    productId,
-  );
+  let product: ProductDTO | null = null;
+  if (
+    existingProduct.productCodeKind === "internal_rcn" &&
+    existingProduct.productCode
+  ) {
+    await pg.begin(async (tx) => {
+      product = await catalogRepository.deleteProduct(
+        organizationId,
+        productId,
+        tx,
+      );
+      if (!product) {
+        throw new Error("Failed to delete product");
+      }
+      await catalogRepository.releaseInternalProductCode(
+        organizationId,
+        existingProduct.productCode!,
+        tx,
+      );
+    });
+  } else {
+    product = await catalogRepository.deleteProduct(organizationId, productId);
+  }
   if (!product) {
     return {
       status: "error",

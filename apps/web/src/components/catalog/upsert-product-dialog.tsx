@@ -4,10 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import {
   createProduct,
+  generateInternalProductCode,
   getOrganizationCatalogSettings,
   getSignedURLForUpload,
   updateProduct,
   uploadFileToSignedURL,
+  reuseInternalProductCode,
 } from "@repo/services";
 import {
   CreateProductObjectSchema,
@@ -151,6 +153,9 @@ const UpsertProductDialog = ({
     useState(false);
   const [pendingPayload, setPendingPayload] =
     useState<CreateProductJSON | null>(null);
+  const [reuseCodeConfirmationOpen, setReuseCodeConfirmationOpen] =
+    useState(false);
+  const [releasedInternalCode, setReleasedInternalCode] = useState("");
 
   const queryClient = useQueryClient();
   const catalogSettingsQuery = useQuery({
@@ -168,7 +173,7 @@ const UpsertProductDialog = ({
     defaultValues,
   });
 
-  const watchedProductCode = form.watch("productCode") ?? "";
+  const watchedProductCode = String(form.watch("productCode") ?? "");
   const existingProductCode = product?.productCode ?? null;
   const codeKindLabel = productCodeKindLabel(product?.productCodeKind ?? null);
 
@@ -222,6 +227,8 @@ const UpsertProductDialog = ({
       setRemoveCurrentImage(false);
       setPendingPayload(null);
       setCodeChangeConfirmationOpen(false);
+      setReuseCodeConfirmationOpen(false);
+      setReleasedInternalCode("");
     }
   }, [categories, defaultCategoryId, form, open, product]);
 
@@ -333,6 +340,43 @@ const UpsertProductDialog = ({
     },
   });
 
+  const internalCodeMutation = useMutation({
+    mutationFn: async (
+      action: { type: "generate" } | { type: "reuse"; productCode: string },
+    ) => {
+      if (!product) {
+        throw new Error(
+          "Save the product before managing an Internal Product Code",
+        );
+      }
+
+      return action.type === "generate"
+        ? generateInternalProductCode(organizationId, product.id)
+        : reuseInternalProductCode(
+            organizationId,
+            product.id,
+            action.productCode,
+          );
+    },
+    onSuccess: (response) => {
+      if (response.status !== "success") {
+        toast.error(response.message);
+        return;
+      }
+
+      toast.success(response.message);
+      queryClient.invalidateQueries({
+        queryKey: catalogKeys.products(organizationId),
+      });
+      setReuseCodeConfirmationOpen(false);
+      setReleasedInternalCode("");
+      setOpen(false);
+    },
+    onError: (error: { message?: string }) => {
+      toast.error(error.message ?? "Failed to manage Internal Product Code");
+    },
+  });
+
   const requiresCodeChangeWarning = (nextCode: string | null | undefined) => {
     if (!existingProductCode) {
       return false;
@@ -374,6 +418,11 @@ const UpsertProductDialog = ({
     : (selectedFilePreview ?? product?.imageSignedUrl ?? null);
   const isClearingCode =
     Boolean(existingProductCode) && watchedProductCode.length === 0;
+  const canManageInternalCode =
+    isEditMode &&
+    product?.productType === "single" &&
+    !existingProductCode &&
+    barcodeScanningEnabled;
 
   return (
     <>
@@ -524,6 +573,35 @@ const UpsertProductDialog = ({
                     </p>
                   ) : null}
                   <FieldError errors={[form.formState.errors.productCode]} />
+                  {canManageInternalCode ? (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={internalCodeMutation.isPending}
+                        onClick={() =>
+                          internalCodeMutation.mutate({ type: "generate" })
+                        }
+                      >
+                        Generate store-only code
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={internalCodeMutation.isPending}
+                        onClick={() => setReuseCodeConfirmationOpen(true)}
+                      >
+                        Reuse released code
+                      </Button>
+                    </div>
+                  ) : null}
+                  {canManageInternalCode ? (
+                    <p className="text-xs text-muted-foreground">
+                      Store-only codes are not globally registered identifiers.
+                    </p>
+                  ) : null}
                 </FieldContent>
               </Field>
             ) : null}
@@ -670,6 +748,49 @@ const UpsertProductDialog = ({
               disabled={mutation.isPending}
             >
               {isClearingCode ? "Clear code" : "Replace code"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={reuseCodeConfirmationOpen}
+        onOpenChange={setReuseCodeConfirmationOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Reuse a released store-only code?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Old labels carrying this code may now identify a different
+              product. Enter a released 13-digit Internal Product Code to
+              continue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            className="font-mono"
+            inputMode="numeric"
+            maxLength={13}
+            placeholder="04XXXXXXXXXXX"
+            value={releasedInternalCode}
+            onChange={(event) => setReleasedInternalCode(event.target.value)}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                internalCodeMutation.isPending ||
+                releasedInternalCode.length !== 13
+              }
+              onClick={() =>
+                internalCodeMutation.mutate({
+                  type: "reuse",
+                  productCode: releasedInternalCode,
+                })
+              }
+            >
+              Reuse code
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -7,6 +7,7 @@ import {
     CreateCategorySchema,
     CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
+    ReuseInternalProductCodeSchema,
     STATUS_CODES,
     UpdateAddOnSchema,
     UpdateBundleProductSchema,
@@ -196,6 +197,51 @@ router.post("/:organizationId/products", validateSchema("json", CreateProductSch
     }
 });
 
+router.post("/:organizationId/products/:productId/generate-internal-product-code", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const productId = c.req.param("productId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        const invalidProductId = validateUuidParam(productId, "Invalid product id");
+        if (invalidProductId) return c.json(invalidProductId, invalidProductId.code);
+
+        const serviceResponse = await catalogService.generateInternalProductCode(
+            c.get("authUser").id,
+            organizationId,
+            productId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "generateInternalProductCode", c, error);
+    }
+});
+
+router.post(
+    "/:organizationId/products/:productId/reuse-internal-product-code",
+    validateSchema("json", ReuseInternalProductCodeSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const productId = c.req.param("productId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            const invalidProductId = validateUuidParam(productId, "Invalid product id");
+            if (invalidProductId) return c.json(invalidProductId, invalidProductId.code);
+
+            const serviceResponse = await catalogService.reuseInternalProductCode(
+                c.get("authUser").id,
+                organizationId,
+                productId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "reuseInternalProductCode", c, error);
+        }
+    },
+);
+
 router.get("/:organizationId/products/:productId", async (c) => {
     try {
         const organizationId = c.req.param("organizationId");
@@ -295,11 +341,7 @@ router.get("/:organizationId/bundle-products/:productId", async (c) => {
         }
 
         const authUser = c.get("authUser");
-        const serviceResponse = await catalogService.getBundleProductDetails(
-            authUser.id,
-            organizationId,
-            productId,
-        );
+        const serviceResponse = await catalogService.getBundleProductDetails(authUser.id, organizationId, productId);
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "getBundleProductDetails", c, error);
@@ -527,11 +569,7 @@ router.get("/:organizationId/products/:productId/add-on-attachments", async (c) 
         }
 
         const authUser = c.get("authUser");
-        const serviceResponse = await catalogService.getProductAddOnAttachments(
-            authUser.id,
-            organizationId,
-            productId,
-        );
+        const serviceResponse = await catalogService.getProductAddOnAttachments(authUser.id, organizationId, productId);
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "getProductAddOnAttachments", c, error);

@@ -21,6 +21,7 @@ import type {
     ProductAddOnAttachmentResponseDTOSchema,
     ProductDTOSchema,
     ProductResponseDTOSchema,
+    ReuseInternalProductCodeSchema,
     UpdateAddOnSchema,
     UpdateBundleProductSchema,
     UpdateComboProductSchema,
@@ -59,10 +60,7 @@ export type CreateCategoryREPO = Pick<CategoryDTO, "id" | "organizationId" | "na
 
 export type UpdateCategoryJSON = z.infer<typeof UpdateCategorySchema>;
 export type UpdateCategorySVC = UpdateCategoryJSON;
-export type UpdateCategoryREPO = Pick<
-    CategoryDTO,
-    "id" | "organizationId" | "name" | "status" | "updatedBy"
->;
+export type UpdateCategoryREPO = Pick<CategoryDTO, "id" | "organizationId" | "name" | "status" | "updatedBy">;
 
 export type CreateProductJSON = z.infer<typeof CreateProductSchema>;
 export type CreateProductSVC = CreateProductJSON;
@@ -86,6 +84,7 @@ export type CreateProductREPO = Pick<
 
 export type UpdateProductJSON = z.infer<typeof UpdateProductSchema>;
 export type UpdateProductSVC = UpdateProductJSON;
+export type ReuseInternalProductCodeJSON = z.infer<typeof ReuseInternalProductCodeSchema>;
 export type UpdateProductREPO = Pick<
     ProductDTO,
     | "id"
@@ -134,7 +133,14 @@ export type CreateComboChoiceGroupREPO = Pick<
 
 export type CreateComboChoiceOptionREPO = Pick<
     ComboChoiceOptionDTO,
-    "id" | "organizationId" | "choiceGroupId" | "optionProductId" | "maxQuantity" | "priceAdjustment" | "sortOrder" | "createdBy"
+    | "id"
+    | "organizationId"
+    | "choiceGroupId"
+    | "optionProductId"
+    | "maxQuantity"
+    | "priceAdjustment"
+    | "sortOrder"
+    | "createdBy"
 >;
 
 export type CreateAddOnJSON = z.infer<typeof CreateAddOnSchema>;

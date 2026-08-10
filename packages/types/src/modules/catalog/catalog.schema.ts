@@ -347,6 +347,15 @@ export const UpdateProductSchema = UpdateProductObjectSchema.refine(
   },
 ).refine(productCodeFieldsRefine, productCodeFieldsRefineMessage);
 
+export const ReuseInternalProductCodeSchema = z.object({
+  productCode: z
+    .string()
+    .regex(
+      /^04\d{11}$/,
+      "Internal Product Code must be a 13-digit code beginning with 04",
+    ),
+});
+
 export const CreateBundleProductSchema = z.object({
   categoryId: z.uuid("Invalid category id"),
   name: nameSchema,

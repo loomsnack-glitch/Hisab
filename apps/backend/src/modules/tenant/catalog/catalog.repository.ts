@@ -222,10 +222,7 @@ export const getProductsByOrganizationId = async (organizationId: string): Promi
     return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
 };
 
-export const getProductsByIds = async (
-    organizationId: string,
-    productIds: string[],
-): Promise<ProductDTO[]> => {
+export const getProductsByIds = async (organizationId: string, productIds: string[]): Promise<ProductDTO[]> => {
     if (productIds.length === 0) return [];
 
     const results = await pg`
@@ -276,9 +273,11 @@ export const getProductByCode = async (
     organizationId: string,
     productCode: string,
     excludeId?: string,
+    tx?: Bun.TransactionSQL,
 ): Promise<ProductDTO | null> => {
+    const db = tx || pg;
     const [result] = excludeId
-        ? await pg`
+        ? await db`
             SELECT *
             FROM products
             WHERE organization_id = ${organizationId}
@@ -286,13 +285,96 @@ export const getProductByCode = async (
               AND id <> ${excludeId}
             LIMIT 1
         `
-        : await pg`
+        : await db`
             SELECT *
             FROM products
             WHERE organization_id = ${organizationId}
               AND product_code = ${productCode}
             LIMIT 1
         `;
+
+    return result ? snakeToCamel(result) : null;
+};
+
+export const allocateNextInternalProductCodeSequence = async (
+    organizationId: string,
+    tx: Bun.TransactionSQL,
+): Promise<number | null> => {
+    await tx`
+        INSERT INTO internal_product_code_sequences (organization_id)
+        VALUES (${organizationId})
+        ON CONFLICT (organization_id) DO NOTHING
+    `;
+
+    const [result] = await tx`
+        UPDATE internal_product_code_sequences
+        SET next_sequence = next_sequence + 1
+        WHERE organization_id = ${organizationId}
+          AND next_sequence < 10000000000
+        RETURNING next_sequence - 1 AS allocated_sequence
+    `;
+
+    return result ? Number(result.allocated_sequence) : null;
+};
+
+export const isReleasedInternalProductCode = async (organizationId: string, productCode: string): Promise<boolean> => {
+    const [result] = await pg`
+        SELECT 1
+        FROM released_internal_product_codes
+        WHERE organization_id = ${organizationId}
+          AND product_code = ${productCode}
+        LIMIT 1
+    `;
+
+    return Boolean(result);
+};
+
+export const releaseInternalProductCode = async (
+    organizationId: string,
+    productCode: string,
+    tx: Bun.TransactionSQL,
+): Promise<void> => {
+    await tx`
+        INSERT INTO released_internal_product_codes (organization_id, product_code)
+        VALUES (${organizationId}, ${productCode})
+        ON CONFLICT (organization_id, product_code) DO UPDATE
+        SET released_at = NOW()
+    `;
+};
+
+export const claimReleasedInternalProductCode = async (
+    organizationId: string,
+    productCode: string,
+    tx: Bun.TransactionSQL,
+): Promise<boolean> => {
+    const [result] = await tx`
+        DELETE FROM released_internal_product_codes
+        WHERE organization_id = ${organizationId}
+          AND product_code = ${productCode}
+        RETURNING product_code
+    `;
+
+    return Boolean(result);
+};
+
+export const assignInternalProductCodeToUncodedProduct = async (
+    organizationId: string,
+    productId: string,
+    productCode: string,
+    updatedBy: string,
+    tx: Bun.TransactionSQL,
+): Promise<ProductDTO | null> => {
+    const [result] = await tx`
+        UPDATE products
+        SET product_code = ${productCode},
+            product_code_kind = 'internal_rcn',
+            updated_by = ${updatedBy},
+            updated_at = NOW()
+        WHERE id = ${productId}
+          AND organization_id = ${organizationId}
+          AND product_code IS NULL
+        RETURNING *
+    `;
 
     return result ? snakeToCamel(result) : null;
 };
@@ -350,8 +432,13 @@ export const updateProduct = async (
     return result ? snakeToCamel(result) : null;
 };
 
-export const deleteProduct = async (organizationId: string, productId: string): Promise<ProductDTO | null> => {
-    const [result] = await pg`
+export const deleteProduct = async (
+    organizationId: string,
+    productId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<ProductDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
         DELETE FROM products
         WHERE id = ${productId}
           AND organization_id = ${organizationId}

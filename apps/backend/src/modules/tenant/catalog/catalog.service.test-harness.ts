@@ -160,10 +160,10 @@ export const sauceAttachment = {
     addOn: sauceAddOn,
 };
 
-export const getOrganizationByIdForUser = mock(async () => organization);
+export const getOrganizationByIdForUser = mock(async (): Promise<typeof organization | null> => organization);
 export const getCategoryById = mock(async () => category);
 export const productNameExistsInCategory = mock(async () => false);
-export const getProductById = mock(async () => product);
+export const getProductById = mock(async (): Promise<typeof product | null> => product);
 export const getProductByCode = mock(
     async (
         _organizationId?: string,
@@ -186,6 +186,18 @@ export const getProductByCode = mock(
         createdAt: Date;
         updatedAt: Date;
     } | null> => null,
+);
+export const allocateNextInternalProductCodeSequence = mock(async (): Promise<number | null> => 0);
+export const isReleasedInternalProductCode = mock(async () => false);
+export const releaseInternalProductCode = mock(async () => undefined);
+export const claimReleasedInternalProductCode = mock(async () => false);
+export const assignInternalProductCodeToUncodedProduct = mock(
+    async (_organizationId: string, _productId: string, productCode: string) => ({
+        ...product,
+        productCode,
+        productCodeKind: "internal_rcn" as const,
+        updatedBy: userId,
+    }),
 );
 export const createProductRepo = mock(async (data: typeof product) => data);
 export const updateProductRepo = mock(async (data: typeof product) => data);
@@ -321,6 +333,11 @@ mock.module("./catalog.repository", () => ({
     productNameExistsInCategory,
     getProductById,
     getProductByCode,
+    allocateNextInternalProductCodeSequence,
+    isReleasedInternalProductCode,
+    releaseInternalProductCode,
+    claimReleasedInternalProductCode,
+    assignInternalProductCodeToUncodedProduct,
     createProduct: createProductRepo,
     updateProduct: updateProductRepo,
     deleteProduct: deleteProductRepo,

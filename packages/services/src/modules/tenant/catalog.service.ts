@@ -86,9 +86,7 @@ export const deleteCategory = async (
     }
 };
 
-export const getProducts = async (
-    organizationId: string,
-): Promise<ServiceResponse<ProductsListResponse | null>> => {
+export const getProducts = async (organizationId: string): Promise<ServiceResponse<ProductsListResponse | null>> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/products`);
         return response.data;
@@ -146,6 +144,36 @@ export const updateProduct = async (
     }
 };
 
+export const generateInternalProductCode = async (
+    organizationId: string,
+    productId: string,
+): Promise<ServiceResponse<ProductResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/products/${productId}/generate-internal-product-code`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const reuseInternalProductCode = async (
+    organizationId: string,
+    productId: string,
+    productCode: string,
+): Promise<ServiceResponse<ProductResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/products/${productId}/reuse-internal-product-code`,
+            { productCode },
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const deleteProduct = async (
     organizationId: string,
     productId: string,
@@ -188,10 +216,7 @@ export const updateBundleProduct = async (
     data: UpdateBundleProductJSON,
 ): Promise<ServiceResponse<BundleProductResponse | null>> => {
     try {
-        const response = await api.patch(
-            `/organizations/${organizationId}/bundle-products/${productId}`,
-            data,
-        );
+        const response = await api.patch(`/organizations/${organizationId}/bundle-products/${productId}`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);
@@ -246,9 +271,7 @@ export const updateComboProduct = async (
     }
 };
 
-export const getAddOns = async (
-    organizationId: string,
-): Promise<ServiceResponse<AddOnsListResponse | null>> => {
+export const getAddOns = async (organizationId: string): Promise<ServiceResponse<AddOnsListResponse | null>> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/add-ons`);
         return response.data;
@@ -311,9 +334,7 @@ export const getProductAddOnAttachments = async (
     productId: string,
 ): Promise<ServiceResponse<ProductAddOnAttachmentsListResponse | null>> => {
     try {
-        const response = await api.get(
-            `/organizations/${organizationId}/products/${productId}/add-on-attachments`,
-        );
+        const response = await api.get(`/organizations/${organizationId}/products/${productId}/add-on-attachments`);
         return response.data;
     } catch (error) {
         return handleApiError(error);
