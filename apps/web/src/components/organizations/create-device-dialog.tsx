@@ -19,6 +19,7 @@ import { MonitorSmartphone, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
+import { createDefaultDeviceValues } from "@/lib/device-defaults";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import RevealDeviceSecretButton from "@/components/organizations/reveal-device-secret-button";
 
@@ -27,12 +28,13 @@ type CreateDeviceDialogProps = {
     organizationUsername: string;
     storeId: string;
     storeName: string;
+    deviceNumber: number;
     trigger?: React.ReactElement;
 };
 
 const defaultValues: CreateStoreDeviceJSON = { name: "", loginUsername: "", deviceSecret: "" };
 
-const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, storeName, trigger }: CreateDeviceDialogProps) => {
+const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, storeName, deviceNumber, trigger }: CreateDeviceDialogProps) => {
     const [open, setOpen] = useState(false);
     const [setupOpen, setSetupOpen] = useState(false);
     const [setupDevice, setSetupDevice] = useState<StoreDeviceDTO | null>(null);
@@ -98,6 +100,7 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
                 form.reset(defaultValues);
             });
         } else {
+            form.reset(createDefaultDeviceValues(storeName, deviceNumber));
             setOpen(true);
         }
     };
@@ -208,6 +211,15 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
                     </div>
 
                     <DialogFooter className="mt-4 border-t border-border/30">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="mr-auto rounded-xl px-5 font-semibold text-muted-foreground hover:text-foreground transition-all duration-200"
+                            onClick={() => form.reset(defaultValues)}
+                            disabled={createMutation.isPending}
+                        >
+                            Clear
+                        </Button>
                         <Button
                             type="button"
                             variant="outline"
