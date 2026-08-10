@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import {
   createProduct,
+  getOrganizationCatalogSettings,
   getSignedURLForUpload,
   updateProduct,
   uploadFileToSignedURL,
@@ -47,7 +48,7 @@ import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Plus, UploadCloud, Pencil, ImageOff, Package2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { catalogKeys } from "@/lib/query-keys";
+import { catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { safeRandomUUID } from "@/lib/uuid";
 
 type UpsertProductDialogProps = {
@@ -152,7 +153,15 @@ const UpsertProductDialog = ({
     useState<CreateProductJSON | null>(null);
 
   const queryClient = useQueryClient();
+  const catalogSettingsQuery = useQuery({
+    queryKey: organizationKeys.catalogSettings(organizationId),
+    queryFn: () => getOrganizationCatalogSettings(organizationId),
+    enabled: Boolean(organizationId),
+  });
   const isEditMode = Boolean(product);
+  const barcodeScanningEnabled =
+    catalogSettingsQuery.data?.status === "success" &&
+    catalogSettingsQuery.data.data?.settings.barcodeScanningEnabled === true;
 
   const form = useForm<UpsertProductFormInput, unknown, CreateProductJSON>({
     resolver: zodResolver(UpsertProductFormSchema),
@@ -265,10 +274,11 @@ const UpsertProductDialog = ({
         nextImagePath = product.imagePath;
       }
 
-      const nextProductCode =
-        typeof data.productCode === "string" && data.productCode.length > 0
+      const nextProductCode = barcodeScanningEnabled
+        ? typeof data.productCode === "string" && data.productCode.length > 0
           ? data.productCode
-          : null;
+          : null
+        : (product?.productCode ?? null);
 
       const nextProductCodeKind = (() => {
         if (!nextProductCode) {
@@ -493,28 +503,30 @@ const UpsertProductDialog = ({
               />
             </div>
 
-            <Field data-invalid={!!form.formState.errors.productCode}>
-              <FieldLabel>
-                Product code{" "}
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              </FieldLabel>
-              <FieldContent>
-                <Input
-                  className="h-11 rounded-xl font-mono"
-                  placeholder="Scan or type manufacturer code"
-                  autoComplete="off"
-                  {...form.register("productCode")}
-                />
-                {codeKindLabel && existingProductCode ? (
-                  <p className="text-xs text-muted-foreground">
-                    {codeKindLabel}
-                  </p>
-                ) : null}
-                <FieldError errors={[form.formState.errors.productCode]} />
-              </FieldContent>
-            </Field>
+            {barcodeScanningEnabled ? (
+              <Field data-invalid={!!form.formState.errors.productCode}>
+                <FieldLabel>
+                  Product code{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    className="h-11 rounded-xl font-mono"
+                    placeholder="Scan or type manufacturer code"
+                    autoComplete="off"
+                    {...form.register("productCode")}
+                  />
+                  {codeKindLabel && existingProductCode ? (
+                    <p className="text-xs text-muted-foreground">
+                      {codeKindLabel}
+                    </p>
+                  ) : null}
+                  <FieldError errors={[form.formState.errors.productCode]} />
+                </FieldContent>
+              </Field>
+            ) : null}
 
             {isEditMode && (
               <Controller

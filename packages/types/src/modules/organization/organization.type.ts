@@ -1,19 +1,29 @@
 import type z from "zod";
 import type {
-    CreateOrganizationSchema,
-    CreateStoreDeviceSchema,
-    CreateStoreSchema,
-    OrganizationDTOSchema,
-    StoreDeviceDTOSchema,
-    StoreDTOSchema,
-    UpdateOrganizationSchema,
-    UpdateStoreDeviceSchema,
-    UpdateStoreSchema,
+  CreateOrganizationSchema,
+  CreateStoreDeviceSchema,
+  CreateStoreSchema,
+  OrganizationCatalogSettingsDTOSchema,
+  OrganizationDTOSchema,
+  StoreDevicePosSettingsDTOSchema,
+  StoreDeviceDTOSchema,
+  StoreDTOSchema,
+  UpdateOrganizationSchema,
+  UpdateOrganizationCatalogSettingsSchema,
+  UpdateStoreDeviceSchema,
+  UpdateStoreDevicePosSettingsSchema,
+  UpdateStoreSchema,
 } from "./organization.schema";
 
 export type OrganizationDTO = z.infer<typeof OrganizationDTOSchema>;
 export type StoreDTO = z.infer<typeof StoreDTOSchema>;
 export type StoreDeviceDTO = z.infer<typeof StoreDeviceDTOSchema>;
+export type OrganizationCatalogSettingsDTO = z.infer<
+  typeof OrganizationCatalogSettingsDTOSchema
+>;
+export type StoreDevicePosSettingsDTO = z.infer<
+  typeof StoreDevicePosSettingsDTOSchema
+>;
 export type StoreDeviceStatus = StoreDeviceDTO["status"];
 
 export type CreateOrganizationJSON = z.infer<typeof CreateOrganizationSchema>;
@@ -21,6 +31,12 @@ export type CreateOrganizationSVC = CreateOrganizationJSON;
 
 export type UpdateOrganizationJSON = z.infer<typeof UpdateOrganizationSchema>;
 export type UpdateOrganizationSVC = UpdateOrganizationJSON;
+
+export type UpdateOrganizationCatalogSettingsJSON = z.infer<
+  typeof UpdateOrganizationCatalogSettingsSchema
+>;
+export type UpdateOrganizationCatalogSettingsSVC =
+  UpdateOrganizationCatalogSettingsJSON;
 
 export type CreateStoreJSON = z.infer<typeof CreateStoreSchema>;
 export type CreateStoreSVC = CreateStoreJSON;
@@ -34,75 +50,101 @@ export type CreateStoreDeviceSVC = CreateStoreDeviceJSON;
 export type UpdateStoreDeviceJSON = z.infer<typeof UpdateStoreDeviceSchema>;
 export type UpdateStoreDeviceSVC = UpdateStoreDeviceJSON;
 
-export type CreateOrganizationREPO = Pick<OrganizationDTO, "id" | "name" | "username" | "createdBy"> & {
-    updatedBy?: string | null;
+export type UpdateStoreDevicePosSettingsJSON = z.infer<
+  typeof UpdateStoreDevicePosSettingsSchema
+>;
+export type UpdateStoreDevicePosSettingsSVC = UpdateStoreDevicePosSettingsJSON;
+
+export type CreateOrganizationREPO = Pick<
+  OrganizationDTO,
+  "id" | "name" | "username" | "createdBy"
+> & {
+  updatedBy?: string | null;
 };
 
-export type UpdateOrganizationREPO = Pick<OrganizationDTO, "id" | "name" | "username"> & {
-    tagline: string | null;
-    updatedBy: string;
+export type UpdateOrganizationREPO = Pick<
+  OrganizationDTO,
+  "id" | "name" | "username"
+> & {
+  tagline: string | null;
+  updatedBy: string;
 };
 
-export type CreateStoreREPO = Pick<StoreDTO, "id" | "organizationId" | "name" | "createdBy"> & {
-    address?: string | null;
-    updatedBy?: string | null;
+export type CreateStoreREPO = Pick<
+  StoreDTO,
+  "id" | "organizationId" | "name" | "createdBy"
+> & {
+  address?: string | null;
+  updatedBy?: string | null;
 };
 
 export type UpdateStoreREPO = Pick<StoreDTO, "id" | "name"> & {
-    address: string | null;
-    updatedBy: string;
+  address: string | null;
+  updatedBy: string;
 };
 
 export type CreateStoreDeviceREPO = Pick<
-    StoreDeviceDTO,
-    "id" | "storeId" | "organizationId" | "name" | "loginUsername" | "createdBy"
+  StoreDeviceDTO,
+  "id" | "storeId" | "organizationId" | "name" | "loginUsername" | "createdBy"
 > & {
-    deviceSecretEncrypted: string;
-    updatedBy?: string | null;
+  deviceSecretEncrypted: string;
+  updatedBy?: string | null;
 };
 
-export type UpdateStoreDeviceREPO = Pick<StoreDeviceDTO, "id" | "name" | "status"> & {
-    loginUsername?: string;
-    updatedBy: string;
-    deviceSecretEncrypted?: string;
+export type UpdateStoreDeviceREPO = Pick<
+  StoreDeviceDTO,
+  "id" | "name" | "status"
+> & {
+  loginUsername?: string;
+  updatedBy: string;
+  deviceSecretEncrypted?: string;
 };
 
 export type StoreWithDevicesDTO = StoreDTO & {
-    devices: StoreDeviceDTO[];
+  devices: StoreDeviceDTO[];
 };
 
 export type OrganizationDetailsDTO = OrganizationDTO & {
-    stores: StoreWithDevicesDTO[];
+  stores: StoreWithDevicesDTO[];
 };
 
 export type OrganizationsListResponse = {
-    organizations: OrganizationDTO[];
+  organizations: OrganizationDTO[];
 };
 
 export type OrganizationDetailsResponse = {
-    organization: OrganizationDetailsDTO;
+  organization: OrganizationDetailsDTO;
 };
 
 export type OrganizationResponse = {
-    organization: OrganizationDTO;
+  organization: OrganizationDTO;
 };
 
 export type StoresListResponse = {
-    stores: StoreDTO[];
+  stores: StoreDTO[];
 };
 
 export type StoreResponse = {
-    store: StoreDTO;
+  store: StoreDTO;
 };
 
 export type StoreDevicesListResponse = {
-    devices: StoreDeviceDTO[];
+  devices: StoreDeviceDTO[];
 };
 
 export type StoreDeviceResponse = {
-    device: StoreDeviceDTO;
+  device: StoreDeviceDTO;
 };
 
 export type StoreDeviceSecretResponse = {
-    deviceSecret: string;
+  deviceSecret: string;
+};
+
+export type OrganizationCatalogSettingsResponse = {
+  settings: OrganizationCatalogSettingsDTO;
+};
+
+export type PosSettingsResponse = {
+  organizationCatalogSettings: OrganizationCatalogSettingsDTO;
+  storeDevicePosSettings: StoreDevicePosSettingsDTO;
 };

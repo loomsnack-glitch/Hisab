@@ -1,435 +1,587 @@
 import {
-    STATUS_CODES,
-    type CreateOrganizationSVC,
-    type CreateStoreDeviceSVC,
-    type CreateStoreSVC,
-    type UpdateOrganizationSVC,
-    type UpdateStoreDeviceSVC,
-    type UpdateStoreSVC,
-    type OrganizationDetailsResponse,
-    type OrganizationResponse,
-    type OrganizationsListResponse,
-    type ServiceResponse,
-    type StoreDeviceResponse,
-    type StoreDeviceSecretResponse,
-    type StoreDevicesListResponse,
-    type StoreResponse,
-    type StoresListResponse,
+  STATUS_CODES,
+  type CreateOrganizationSVC,
+  type CreateStoreDeviceSVC,
+  type CreateStoreSVC,
+  type DeviceSessionDTO,
+  type OrganizationCatalogSettingsResponse,
+  type UpdateOrganizationSVC,
+  type UpdateOrganizationCatalogSettingsSVC,
+  type UpdateStoreDeviceSVC,
+  type UpdateStoreDevicePosSettingsSVC,
+  type UpdateStoreSVC,
+  type OrganizationDetailsResponse,
+  type OrganizationResponse,
+  type OrganizationsListResponse,
+  type ServiceResponse,
+  type StoreDeviceResponse,
+  type PosSettingsResponse,
+  type StoreDeviceSecretResponse,
+  type StoreDevicesListResponse,
+  type StoreResponse,
+  type StoresListResponse,
 } from "@repo/types";
-import { decryptDeviceSecret, encryptDeviceSecret } from "@/helpers/deviceSecret.helper";
+import { pg } from "@/config/db";
+import {
+  decryptDeviceSecret,
+  encryptDeviceSecret,
+} from "@/helpers/deviceSecret.helper";
 import * as organizationRepository from "./organization.repository";
 
 const normalizeOptionalText = (value?: string) => {
-    const trimmed = value?.trim();
-    return trimmed ? trimmed : null;
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 };
 
-const getOrganizationForUser = async (organizationId: string, userId: string) => {
-    return organizationRepository.getOrganizationByIdForUser(organizationId, userId);
+const getOrganizationForUser = async (
+  organizationId: string,
+  userId: string,
+) => {
+  return organizationRepository.getOrganizationByIdForUser(
+    organizationId,
+    userId,
+  );
 };
 
-const getStoreForOrganization = async (organizationId: string, storeId: string) => {
-    return organizationRepository.getStoreById(organizationId, storeId);
+const getStoreForOrganization = async (
+  organizationId: string,
+  storeId: string,
+) => {
+  return organizationRepository.getStoreById(organizationId, storeId);
 };
 
-const getStoreDeviceForOrganization = async (organizationId: string, storeId: string, deviceId: string) => {
-    return organizationRepository.getStoreDeviceById(organizationId, storeId, deviceId);
+const getStoreDeviceForOrganization = async (
+  organizationId: string,
+  storeId: string,
+  deviceId: string,
+) => {
+  return organizationRepository.getStoreDeviceById(
+    organizationId,
+    storeId,
+    deviceId,
+  );
 };
 
-export const getOrganizations = async (userId: string): Promise<ServiceResponse<OrganizationsListResponse>> => {
-    const organizations = await organizationRepository.getOrganizationsByUserId(userId);
+export const getOrganizations = async (
+  userId: string,
+): Promise<ServiceResponse<OrganizationsListResponse>> => {
+  const organizations =
+    await organizationRepository.getOrganizationsByUserId(userId);
 
-    return {
-        status: "success",
-        data: { organizations },
-        message: "Organizations fetched successfully",
-        code: STATUS_CODES.SUCCESS,
-    };
+  return {
+    status: "success",
+    data: { organizations },
+    message: "Organizations fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const createOrganization = async (
-    userId: string,
-    organizationData: CreateOrganizationSVC,
+  userId: string,
+  organizationData: CreateOrganizationSVC,
 ): Promise<ServiceResponse<OrganizationResponse | null>> => {
-    const alreadyExists = await organizationRepository.organizationNameExistsForUser(userId, organizationData.name);
-    if (alreadyExists) {
-        return {
-            status: "error",
-            message: "Organization with the same name already exists",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
+  const alreadyExists =
+    await organizationRepository.organizationNameExistsForUser(
+      userId,
+      organizationData.name,
+    );
+  if (alreadyExists) {
+    return {
+      status: "error",
+      message: "Organization with the same name already exists",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
 
-    const usernameExists = await organizationRepository.organizationUsernameExists(organizationData.username);
-    if (usernameExists) {
-        return {
-            status: "error",
-            message: "Organization username is already taken",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
+  const usernameExists =
+    await organizationRepository.organizationUsernameExists(
+      organizationData.username,
+    );
+  if (usernameExists) {
+    return {
+      status: "error",
+      message: "Organization username is already taken",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
 
-    const organization = await organizationRepository.createOrganization({
+  let organization = null;
+  await pg.begin(async (tx) => {
+    organization = await organizationRepository.createOrganization(
+      {
         id: crypto.randomUUID(),
         name: organizationData.name,
         username: organizationData.username,
         createdBy: userId,
-    });
+      },
+      tx,
+    );
+    if (!organization) throw new Error("Failed to create organization");
 
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Failed to create organization",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-        };
-    }
+    const settings =
+      await organizationRepository.createOrganizationCatalogSettings(
+        organization.id,
+        tx,
+      );
+    if (!settings)
+      throw new Error("Failed to create organization catalog settings");
+  });
 
+  if (!organization) {
     return {
-        status: "success",
-        data: { organization },
-        message: "Organization created successfully",
-        code: STATUS_CODES.CREATED,
+      status: "error",
+      message: "Failed to create organization",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
     };
+  }
+
+  return {
+    status: "success",
+    data: { organization },
+    message: "Organization created successfully",
+    code: STATUS_CODES.CREATED,
+  };
+};
+
+export const getOrganizationCatalogSettings = async (
+  userId: string,
+  organizationId: string,
+): Promise<ServiceResponse<OrganizationCatalogSettingsResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const settings =
+    await organizationRepository.getOrganizationCatalogSettingsByOrganizationId(
+      organizationId,
+    );
+  if (!settings) {
+    return {
+      status: "error",
+      message: "Organization catalog settings not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { settings },
+    message: "Organization catalog settings fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const updateOrganizationCatalogSettings = async (
+  userId: string,
+  organizationId: string,
+  settingsData: UpdateOrganizationCatalogSettingsSVC,
+): Promise<ServiceResponse<OrganizationCatalogSettingsResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const settings =
+    await organizationRepository.updateOrganizationCatalogSettings(
+      organizationId,
+      settingsData.barcodeScanningEnabled,
+    );
+  if (!settings) {
+    return {
+      status: "error",
+      message: "Failed to update organization catalog settings",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { settings },
+    message: "Organization catalog settings updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const updateOrganization = async (
-    userId: string,
-    organizationId: string,
-    organizationData: UpdateOrganizationSVC,
+  userId: string,
+  organizationId: string,
+  organizationData: UpdateOrganizationSVC,
 ): Promise<ServiceResponse<OrganizationResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const nextName = organizationData.name.trim();
-    const nextUsername = organizationData.username.trim().toLowerCase();
-
-    if (nextName.toLowerCase() !== organization.name.toLowerCase()) {
-        const alreadyExists = await organizationRepository.organizationNameExistsForUser(
-            userId,
-            nextName,
-            organizationId,
-        );
-        if (alreadyExists) {
-            return {
-                status: "error",
-                message: "Organization with the same name already exists",
-                data: null,
-                code: STATUS_CODES.CONFLICT,
-            };
-        }
-    }
-
-    if (nextUsername !== organization.username) {
-        const usernameExists = await organizationRepository.organizationUsernameExists(nextUsername, organizationId);
-        if (usernameExists) {
-            return {
-                status: "error",
-                message: "Organization username is already taken",
-                data: null,
-                code: STATUS_CODES.CONFLICT,
-            };
-        }
-    }
-
-    const updatedOrganization = await organizationRepository.updateOrganization({
-        id: organizationId,
-        name: nextName,
-        username: nextUsername,
-        tagline: normalizeOptionalText(organizationData.tagline),
-        updatedBy: userId,
-    });
-
-    if (!updatedOrganization) {
-        return {
-            status: "error",
-            message: "Failed to update organization",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-        };
-    }
-
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
     return {
-        status: "success",
-        data: { organization: updatedOrganization },
-        message: "Organization updated successfully",
-        code: STATUS_CODES.SUCCESS,
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
     };
+  }
+
+  const nextName = organizationData.name.trim();
+  const nextUsername = organizationData.username.trim().toLowerCase();
+
+  if (nextName.toLowerCase() !== organization.name.toLowerCase()) {
+    const alreadyExists =
+      await organizationRepository.organizationNameExistsForUser(
+        userId,
+        nextName,
+        organizationId,
+      );
+    if (alreadyExists) {
+      return {
+        status: "error",
+        message: "Organization with the same name already exists",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+  }
+
+  if (nextUsername !== organization.username) {
+    const usernameExists =
+      await organizationRepository.organizationUsernameExists(
+        nextUsername,
+        organizationId,
+      );
+    if (usernameExists) {
+      return {
+        status: "error",
+        message: "Organization username is already taken",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+  }
+
+  const updatedOrganization = await organizationRepository.updateOrganization({
+    id: organizationId,
+    name: nextName,
+    username: nextUsername,
+    tagline: normalizeOptionalText(organizationData.tagline),
+    updatedBy: userId,
+  });
+
+  if (!updatedOrganization) {
+    return {
+      status: "error",
+      message: "Failed to update organization",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { organization: updatedOrganization },
+    message: "Organization updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const getOrganizationDetails = async (
-    userId: string,
-    organizationId: string,
+  userId: string,
+  organizationId: string,
 ): Promise<ServiceResponse<OrganizationDetailsResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const stores = await organizationRepository.getStoresByOrganizationId(organizationId);
-    const devices = await organizationRepository.getStoreDevicesByOrganizationId(organizationId);
-
-    const devicesByStoreId = new Map<string, typeof devices>();
-    for (const device of devices) {
-        const existingDevices = devicesByStoreId.get(device.storeId) ?? [];
-        existingDevices.push(device);
-        devicesByStoreId.set(device.storeId, existingDevices);
-    }
-
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
     return {
-        status: "success",
-        data: {
-            organization: {
-                ...organization,
-                stores: stores.map((store) => ({
-                    ...store,
-                    devices: devicesByStoreId.get(store.id) ?? [],
-                })),
-            },
-        },
-        message: "Organization details fetched successfully",
-        code: STATUS_CODES.SUCCESS,
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
     };
+  }
+
+  const stores =
+    await organizationRepository.getStoresByOrganizationId(organizationId);
+  const devices =
+    await organizationRepository.getStoreDevicesByOrganizationId(
+      organizationId,
+    );
+
+  const devicesByStoreId = new Map<string, typeof devices>();
+  for (const device of devices) {
+    const existingDevices = devicesByStoreId.get(device.storeId) ?? [];
+    existingDevices.push(device);
+    devicesByStoreId.set(device.storeId, existingDevices);
+  }
+
+  return {
+    status: "success",
+    data: {
+      organization: {
+        ...organization,
+        stores: stores.map((store) => ({
+          ...store,
+          devices: devicesByStoreId.get(store.id) ?? [],
+        })),
+      },
+    },
+    message: "Organization details fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const getStores = async (
-    userId: string,
-    organizationId: string,
+  userId: string,
+  organizationId: string,
 ): Promise<ServiceResponse<StoresListResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const stores = await organizationRepository.getStoresByOrganizationId(organizationId);
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
     return {
-        status: "success",
-        data: { stores },
-        message: "Stores fetched successfully",
-        code: STATUS_CODES.SUCCESS,
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
     };
+  }
+
+  const stores =
+    await organizationRepository.getStoresByOrganizationId(organizationId);
+  return {
+    status: "success",
+    data: { stores },
+    message: "Stores fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const createStore = async (
-    userId: string,
-    organizationId: string,
-    storeData: CreateStoreSVC,
+  userId: string,
+  organizationId: string,
+  storeData: CreateStoreSVC,
 ): Promise<ServiceResponse<StoreResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const alreadyExists = await organizationRepository.storeNameExistsInOrganization(organizationId, storeData.name);
-    if (alreadyExists) {
-        return {
-            status: "error",
-            message: "Store with the same name already exists in this organization",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
-
-    const store = await organizationRepository.createStore({
-        id: crypto.randomUUID(),
-        organizationId,
-        name: storeData.name,
-        address: normalizeOptionalText(storeData.address),
-        createdBy: userId,
-    });
-
-    if (!store) {
-        return {
-            status: "error",
-            message: "Failed to create store",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-        };
-    }
-
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
     return {
-        status: "success",
-        data: { store },
-        message: "Store created successfully",
-        code: STATUS_CODES.CREATED,
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
     };
+  }
+
+  const alreadyExists =
+    await organizationRepository.storeNameExistsInOrganization(
+      organizationId,
+      storeData.name,
+    );
+  if (alreadyExists) {
+    return {
+      status: "error",
+      message: "Store with the same name already exists in this organization",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  const store = await organizationRepository.createStore({
+    id: crypto.randomUUID(),
+    organizationId,
+    name: storeData.name,
+    address: normalizeOptionalText(storeData.address),
+    createdBy: userId,
+  });
+
+  if (!store) {
+    return {
+      status: "error",
+      message: "Failed to create store",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { store },
+    message: "Store created successfully",
+    code: STATUS_CODES.CREATED,
+  };
 };
 
 export const updateStore = async (
-    userId: string,
-    organizationId: string,
-    storeId: string,
-    storeData: UpdateStoreSVC,
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  storeData: UpdateStoreSVC,
 ): Promise<ServiceResponse<StoreResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const store = await getStoreForOrganization(organizationId, storeId);
-    if (!store) {
-        return {
-            status: "error",
-            message: "Store not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const nextName = storeData.name.trim();
-
-    if (nextName.toLowerCase() !== store.name.toLowerCase()) {
-        const alreadyExists = await organizationRepository.storeNameExistsInOrganization(
-            organizationId,
-            nextName,
-            storeId,
-        );
-        if (alreadyExists) {
-            return {
-                status: "error",
-                message: "Store with the same name already exists in this organization",
-                data: null,
-                code: STATUS_CODES.CONFLICT,
-            };
-        }
-    }
-
-    const updatedStore = await organizationRepository.updateStore({
-        id: storeId,
-        name: nextName,
-        address: normalizeOptionalText(storeData.address),
-        updatedBy: userId,
-    });
-
-    if (!updatedStore) {
-        return {
-            status: "error",
-            message: "Failed to update store",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-        };
-    }
-
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
     return {
-        status: "success",
-        data: { store: updatedStore },
-        message: "Store updated successfully",
-        code: STATUS_CODES.SUCCESS,
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
     };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const nextName = storeData.name.trim();
+
+  if (nextName.toLowerCase() !== store.name.toLowerCase()) {
+    const alreadyExists =
+      await organizationRepository.storeNameExistsInOrganization(
+        organizationId,
+        nextName,
+        storeId,
+      );
+    if (alreadyExists) {
+      return {
+        status: "error",
+        message: "Store with the same name already exists in this organization",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+  }
+
+  const updatedStore = await organizationRepository.updateStore({
+    id: storeId,
+    name: nextName,
+    address: normalizeOptionalText(storeData.address),
+    updatedBy: userId,
+  });
+
+  if (!updatedStore) {
+    return {
+      status: "error",
+      message: "Failed to update store",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { store: updatedStore },
+    message: "Store updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const getStoreDevices = async (
-    userId: string,
-    organizationId: string,
-    storeId: string,
+  userId: string,
+  organizationId: string,
+  storeId: string,
 ): Promise<ServiceResponse<StoreDevicesListResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const store = await getStoreForOrganization(organizationId, storeId);
-    if (!store) {
-        return {
-            status: "error",
-            message: "Store not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const devices = await organizationRepository.getStoreDevicesByStoreId(organizationId, storeId);
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
     return {
-        status: "success",
-        data: { devices },
-        message: "Devices fetched successfully",
-        code: STATUS_CODES.SUCCESS,
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
     };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const devices = await organizationRepository.getStoreDevicesByStoreId(
+    organizationId,
+    storeId,
+  );
+  return {
+    status: "success",
+    data: { devices },
+    message: "Devices fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const createStoreDevice = async (
-    userId: string,
-    organizationId: string,
-    storeId: string,
-    deviceData: CreateStoreDeviceSVC,
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  deviceData: CreateStoreDeviceSVC,
 ): Promise<ServiceResponse<StoreDeviceResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
 
-    const store = await getStoreForOrganization(organizationId, storeId);
-    if (!store) {
-        return {
-            status: "error",
-            message: "Store not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
 
-    const alreadyExists = await organizationRepository.deviceNameExistsInStore(storeId, deviceData.name);
-    if (alreadyExists) {
-        return {
-            status: "error",
-            message: "Device with the same name already exists in this store",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
+  const alreadyExists = await organizationRepository.deviceNameExistsInStore(
+    storeId,
+    deviceData.name,
+  );
+  if (alreadyExists) {
+    return {
+      status: "error",
+      message: "Device with the same name already exists in this store",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
 
-    const loginUsername = deviceData.loginUsername.trim().toLowerCase();
-    const usernameExists = await organizationRepository.loginUsernameExistsInOrg(organizationId, loginUsername);
-    if (usernameExists) {
-        return {
-            status: "error",
-            message: "Device login username is already taken in this organization",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
+  const loginUsername = deviceData.loginUsername.trim().toLowerCase();
+  const usernameExists = await organizationRepository.loginUsernameExistsInOrg(
+    organizationId,
+    loginUsername,
+  );
+  if (usernameExists) {
+    return {
+      status: "error",
+      message: "Device login username is already taken in this organization",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
 
-    const deviceSecretEncrypted = await encryptDeviceSecret(deviceData.deviceSecret);
-    const device = await organizationRepository.createStoreDevice({
+  const deviceSecretEncrypted = await encryptDeviceSecret(
+    deviceData.deviceSecret,
+  );
+  let device = null;
+  await pg.begin(async (tx) => {
+    device = await organizationRepository.createStoreDevice(
+      {
         id: crypto.randomUUID(),
         organizationId,
         storeId,
@@ -437,188 +589,299 @@ export const createStoreDevice = async (
         loginUsername,
         deviceSecretEncrypted,
         createdBy: userId,
-    });
+      },
+      tx,
+    );
+    if (!device) throw new Error("Failed to create device");
 
-    if (!device) {
-        return {
-            status: "error",
-            message: "Failed to create device",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-        };
-    }
+    const settings = await organizationRepository.createStoreDevicePosSettings(
+      device.id,
+      organizationId,
+      storeId,
+      tx,
+    );
+    if (!settings)
+      throw new Error("Failed to create Store Device POS settings");
+  });
 
+  if (!device) {
     return {
-        status: "success",
-        data: {
-            device,
-        },
-        message: "Device created successfully",
-        code: STATUS_CODES.CREATED,
+      status: "error",
+      message: "Failed to create device",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
     };
+  }
+
+  return {
+    status: "success",
+    data: {
+      device,
+    },
+    message: "Device created successfully",
+    code: STATUS_CODES.CREATED,
+  };
+};
+
+export const getPosSettingsForDevice = async (
+  session: DeviceSessionDTO,
+): Promise<ServiceResponse<PosSettingsResponse | null>> => {
+  const [organizationCatalogSettings, storeDevicePosSettings] =
+    await Promise.all([
+      organizationRepository.getOrganizationCatalogSettingsByOrganizationId(
+        session.organization.id,
+      ),
+      organizationRepository.getStoreDevicePosSettingsByDeviceId(
+        session.organization.id,
+        session.store.id,
+        session.device.id,
+      ),
+    ]);
+  if (!organizationCatalogSettings || !storeDevicePosSettings) {
+    return {
+      status: "error",
+      message: "POS settings not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { organizationCatalogSettings, storeDevicePosSettings },
+    message: "POS settings fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const updatePosSettingsForDevice = async (
+  session: DeviceSessionDTO,
+  settingsData: UpdateStoreDevicePosSettingsSVC,
+): Promise<ServiceResponse<PosSettingsResponse | null>> => {
+  const storeDevicePosSettings =
+    await organizationRepository.updateStoreDevicePosSettings(
+      session.device.id,
+      session.organization.id,
+      session.store.id,
+      settingsData.directBarcodeScanEnabled,
+    );
+  if (!storeDevicePosSettings) {
+    return {
+      status: "error",
+      message: "POS settings not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const organizationCatalogSettings =
+    await organizationRepository.getOrganizationCatalogSettingsByOrganizationId(
+      session.organization.id,
+    );
+  if (!organizationCatalogSettings) {
+    return {
+      status: "error",
+      message: "Organization catalog settings not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { organizationCatalogSettings, storeDevicePosSettings },
+    message: "POS settings updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const updateStoreDevice = async (
-    userId: string,
-    organizationId: string,
-    storeId: string,
-    deviceId: string,
-    deviceData: UpdateStoreDeviceSVC,
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  deviceId: string,
+  deviceData: UpdateStoreDeviceSVC,
 ): Promise<ServiceResponse<StoreDeviceResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const store = await getStoreForOrganization(organizationId, storeId);
-    if (!store) {
-        return {
-            status: "error",
-            message: "Store not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const device = await getStoreDeviceForOrganization(organizationId, storeId, deviceId);
-    if (!device) {
-        return {
-            status: "error",
-            message: "Device not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const nextName = deviceData.name.trim();
-
-    if (nextName.toLowerCase() !== device.name.toLowerCase()) {
-        const alreadyExists = await organizationRepository.deviceNameExistsInStore(storeId, nextName, deviceId);
-        if (alreadyExists) {
-            return {
-                status: "error",
-                message: "Device with the same name already exists in this store",
-                data: null,
-                code: STATUS_CODES.CONFLICT,
-            };
-        }
-    }
-
-    const nextLoginUsername = deviceData.loginUsername?.trim().toLowerCase();
-    if (nextLoginUsername && nextLoginUsername !== device.loginUsername) {
-        const usernameExists = await organizationRepository.loginUsernameExistsInOrg(organizationId, nextLoginUsername, deviceId);
-        if (usernameExists) {
-            return {
-                status: "error",
-                message: "Device login username is already taken in this organization",
-                data: null,
-                code: STATUS_CODES.CONFLICT,
-            };
-        }
-    }
-
-    const trimmedSecret = deviceData.deviceSecret?.trim();
-    const updatePayload: Parameters<typeof organizationRepository.updateStoreDevice>[0] = {
-        id: deviceId,
-        name: nextName,
-        status: deviceData.status,
-        updatedBy: userId,
-    };
-
-    if (nextLoginUsername) {
-        updatePayload.loginUsername = nextLoginUsername;
-    }
-
-    if (trimmedSecret) {
-        updatePayload.deviceSecretEncrypted = await encryptDeviceSecret(trimmedSecret);
-    }
-
-    const updatedDevice = await organizationRepository.updateStoreDevice(updatePayload);
-
-    if (!updatedDevice) {
-        return {
-            status: "error",
-            message: "Failed to update device",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-        };
-    }
-
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
     return {
-        status: "success",
-        data: { device: updatedDevice },
-        message: "Device updated successfully",
-        code: STATUS_CODES.SUCCESS,
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
     };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const device = await getStoreDeviceForOrganization(
+    organizationId,
+    storeId,
+    deviceId,
+  );
+  if (!device) {
+    return {
+      status: "error",
+      message: "Device not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const nextName = deviceData.name.trim();
+
+  if (nextName.toLowerCase() !== device.name.toLowerCase()) {
+    const alreadyExists = await organizationRepository.deviceNameExistsInStore(
+      storeId,
+      nextName,
+      deviceId,
+    );
+    if (alreadyExists) {
+      return {
+        status: "error",
+        message: "Device with the same name already exists in this store",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+  }
+
+  const nextLoginUsername = deviceData.loginUsername?.trim().toLowerCase();
+  if (nextLoginUsername && nextLoginUsername !== device.loginUsername) {
+    const usernameExists =
+      await organizationRepository.loginUsernameExistsInOrg(
+        organizationId,
+        nextLoginUsername,
+        deviceId,
+      );
+    if (usernameExists) {
+      return {
+        status: "error",
+        message: "Device login username is already taken in this organization",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+  }
+
+  const trimmedSecret = deviceData.deviceSecret?.trim();
+  const updatePayload: Parameters<
+    typeof organizationRepository.updateStoreDevice
+  >[0] = {
+    id: deviceId,
+    name: nextName,
+    status: deviceData.status,
+    updatedBy: userId,
+  };
+
+  if (nextLoginUsername) {
+    updatePayload.loginUsername = nextLoginUsername;
+  }
+
+  if (trimmedSecret) {
+    updatePayload.deviceSecretEncrypted =
+      await encryptDeviceSecret(trimmedSecret);
+  }
+
+  const updatedDevice =
+    await organizationRepository.updateStoreDevice(updatePayload);
+
+  if (!updatedDevice) {
+    return {
+      status: "error",
+      message: "Failed to update device",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { device: updatedDevice },
+    message: "Device updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const getStoreDeviceSecret = async (
-    userId: string,
-    organizationId: string,
-    storeId: string,
-    deviceId: string,
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  deviceId: string,
 ): Promise<ServiceResponse<StoreDeviceSecretResponse | null>> => {
-    const organization = await getOrganizationForUser(organizationId, userId);
-    if (!organization) {
-        return {
-            status: "error",
-            message: "Organization not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const store = await getStoreForOrganization(organizationId, storeId);
-    if (!store) {
-        return {
-            status: "error",
-            message: "Store not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const device = await getStoreDeviceForOrganization(organizationId, storeId, deviceId);
-    if (!device) {
-        return {
-            status: "error",
-            message: "Device not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    const encryptedSecret = await organizationRepository.getStoreDeviceSecretById(organizationId, storeId, deviceId);
-    if (!encryptedSecret) {
-        return {
-            status: "error",
-            message: "Device secret is not available",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    let deviceSecret: string;
-    try {
-        deviceSecret = await decryptDeviceSecret(encryptedSecret);
-    } catch {
-        return {
-            status: "error",
-            message: "This device secret cannot be displayed because it was created before secret reveal was enabled",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
-
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
     return {
-        status: "success",
-        data: { deviceSecret },
-        message: "Device secret fetched successfully",
-        code: STATUS_CODES.SUCCESS,
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
     };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const device = await getStoreDeviceForOrganization(
+    organizationId,
+    storeId,
+    deviceId,
+  );
+  if (!device) {
+    return {
+      status: "error",
+      message: "Device not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const encryptedSecret = await organizationRepository.getStoreDeviceSecretById(
+    organizationId,
+    storeId,
+    deviceId,
+  );
+  if (!encryptedSecret) {
+    return {
+      status: "error",
+      message: "Device secret is not available",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  let deviceSecret: string;
+  try {
+    deviceSecret = await decryptDeviceSecret(encryptedSecret);
+  } catch {
+    return {
+      status: "error",
+      message:
+        "This device secret cannot be displayed because it was created before secret reveal was enabled",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { deviceSecret },
+    message: "Device secret fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
