@@ -105,6 +105,7 @@ import {
     User,
     Users,
     X,
+    Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -2626,7 +2627,7 @@ const BillingPage = ({
                                                         }}
                                                         aria-label={`${cardActionLabel} ${product.name}`}
                                                         className={cn(
-                                                            "group relative flex min-h-[76px] w-full touch-[pan-y_pinch-zoom] items-center gap-2 rounded-xl border px-2 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
+                                                            "group relative flex min-h-[76px] w-full cursor-pointer touch-[pan-y_pinch-zoom] items-center gap-2 rounded-xl border px-2 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
                                                             isInCart
                                                                 ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
                                                                 : "border-border/50 bg-card/80 hover:border-primary/30 hover:bg-card",
@@ -2650,17 +2651,29 @@ const BillingPage = ({
                                                                 <ShoppingCart className="size-5 text-muted-foreground/50" />
                                                             )}
                                                         </div>
-                                                        <div className="min-w-0 flex-1">
+                                                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                                                             <p className="whitespace-normal break-words text-base font-semibold leading-snug text-foreground">
                                                                 {product.name}
                                                             </p>
-                                                            <ProductPriceDisplay
-                                                                className="mt-0.5"
-                                                                price={product.price}
-                                                                discount={product.discount}
-                                                                size="sm"
-                                                                align="left"
-                                                            />
+                                                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                                <ProductPriceDisplay
+                                                                    price={product.price}
+                                                                    discount={product.discount}
+                                                                    size="sm"
+                                                                    align="left"
+                                                                />
+                                                                {productAttachments.length > 0 ? (
+                                                                    <span
+                                                                        title="Click the product to customize add-ons"
+                                                                        className="inline-flex min-w-0 items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[11px] font-semibold leading-tight text-primary/80 transition-colors group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
+                                                                    >
+                                                                        <Link2 className="size-3 shrink-0" aria-hidden="true" />
+                                                                        <span className="truncate">
+                                                                            {productAttachments.length} add-ons
+                                                                        </span>
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
                                                         </div>
                                                     </button>
                                                 );

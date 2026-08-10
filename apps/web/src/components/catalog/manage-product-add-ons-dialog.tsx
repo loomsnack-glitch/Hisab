@@ -111,6 +111,9 @@ const ManageProductAddOnsDialog = ({
         queryClient.invalidateQueries({
             queryKey: catalogKeys.productAttachments(organizationId, product.id),
         });
+        queryClient.invalidateQueries({
+            queryKey: catalogKeys.products(organizationId),
+        });
     };
 
     const createMutation = useMutation({

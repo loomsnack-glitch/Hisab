@@ -141,6 +141,7 @@ export const ProductDTOSchema = ProductDTOObjectSchema.refine(
 
 export const ProductResponseDTOSchema = ProductDTOObjectSchema.extend({
   imageSignedUrl: z.string().nullable(),
+  activeAddOnCount: z.number().int().nonnegative().optional(),
 }).refine(
   productCodeAndKindConsistencyRefine,
   productCodeAndKindConsistencyRefineOptions,

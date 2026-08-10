@@ -222,6 +222,31 @@ export const getProductsByOrganizationId = async (organizationId: string): Promi
     return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
 };
 
+export const getActiveProductAddOnCountsByOrganizationId = async (
+    organizationId: string,
+): Promise<Map<string, number>> => {
+    const results = await pg`
+        SELECT
+            a.product_id,
+            COUNT(*)::int AS active_add_on_count
+        FROM product_add_on_attachments a
+        INNER JOIN add_ons ao
+            ON ao.id = a.add_on_id
+           AND ao.organization_id = a.organization_id
+        WHERE a.organization_id = ${organizationId}
+          AND a.status = 'active'
+          AND ao.status = 'active'
+        GROUP BY a.product_id
+    `;
+
+    return new Map(
+        results.map((result: Record<string, unknown>) => [
+            String(result.product_id),
+            Number(result.active_add_on_count),
+        ]),
+    );
+};
+
 export const getProductsByIds = async (organizationId: string, productIds: string[]): Promise<ProductDTO[]> => {
     if (productIds.length === 0) return [];
 

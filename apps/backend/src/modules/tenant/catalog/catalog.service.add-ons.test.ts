@@ -16,6 +16,7 @@ import {
   createProductAddOnAttachmentRepo,
   deleteAddOnRepo,
   getActiveAddOnsByOrganizationId,
+  getActiveProductAddOnCountsByOrganizationId,
   getActiveProductsByOrganizationId,
   getAddOnById,
   getOrganizationByIdForUser,
@@ -47,6 +48,7 @@ describe("Add-On catalog service", () => {
     updateProductAddOnAttachmentRepo.mockClear();
     getSelectableProductAddOnAttachmentsByOrganizationId.mockClear();
     getActiveAddOnsByOrganizationId.mockClear();
+    getActiveProductAddOnCountsByOrganizationId.mockClear();
     getActiveProductsByOrganizationId.mockClear();
     getProductsByOrganizationId.mockClear();
     countAttachmentsByAddOnId.mockClear();
@@ -67,6 +69,7 @@ describe("Add-On catalog service", () => {
       attachmentResponse,
     ]);
     getActiveAddOnsByOrganizationId.mockResolvedValue([addOn]);
+    getActiveProductAddOnCountsByOrganizationId.mockResolvedValue(new Map());
     getActiveProductsByOrganizationId.mockResolvedValue([product]);
     getProductsByOrganizationId.mockResolvedValue([product]);
     countAttachmentsByAddOnId.mockResolvedValue(0);
@@ -279,6 +282,22 @@ describe("Add-On catalog service", () => {
     ]);
     expect(response.data?.inactiveProductCodes).toEqual([]);
     expect(getActiveProductsByOrganizationId).toHaveBeenCalledWith(
+      organizationId,
+    );
+  });
+
+  test("Admin product reads include active add-on counts", async () => {
+    getActiveProductAddOnCountsByOrganizationId.mockResolvedValue(
+      new Map([[productId, 3]]),
+    );
+
+    const response = await catalogService.getProducts(userId, organizationId);
+
+    expect(response.status).toBe("success");
+    expect(response.data?.products).toEqual([
+      { ...product, imageSignedUrl: null, activeAddOnCount: 3 },
+    ]);
+    expect(getActiveProductAddOnCountsByOrganizationId).toHaveBeenCalledWith(
       organizationId,
     );
   });

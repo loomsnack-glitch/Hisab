@@ -586,11 +586,20 @@ export const getProducts = async (
     };
   }
 
-  const products =
-    await catalogRepository.getProductsByOrganizationId(organizationId);
+  const [products, activeAddOnCounts] = await Promise.all([
+    catalogRepository.getProductsByOrganizationId(organizationId),
+    catalogRepository.getActiveProductAddOnCountsByOrganizationId(
+      organizationId,
+    ),
+  ]);
   return {
     status: "success",
-    data: { products: await resolveProducts(products) },
+    data: {
+      products: (await resolveProducts(products)).map((product) => ({
+        ...product,
+        activeAddOnCount: activeAddOnCounts.get(product.id) ?? 0,
+      })),
+    },
     message: "Products fetched successfully",
     code: STATUS_CODES.SUCCESS,
   };

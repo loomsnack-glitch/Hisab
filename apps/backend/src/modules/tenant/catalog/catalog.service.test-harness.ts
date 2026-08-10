@@ -293,6 +293,7 @@ export const getSelectableProductAddOnAttachmentsByOrganizationId = mock(async (
 export const getActiveAddOnsByOrganizationId = mock(async () => [addOn]);
 export const getActiveProductsByOrganizationId = mock(async () => [product]);
 export const getProductsByOrganizationId = mock(async () => [product]);
+export const getActiveProductAddOnCountsByOrganizationId = mock(async () => new Map<string, number>());
 export const getProductsByIds = mock(async () => [product]);
 export const getAddOnsByOrganizationId = mock(async () => [addOn]);
 export const getProductAddOnAttachmentsByProductId = mock(async () => [attachmentResponse]);
@@ -364,6 +365,7 @@ mock.module("./catalog.repository", () => ({
     getActiveAddOnsByOrganizationId,
     getActiveProductsByOrganizationId,
     getProductsByOrganizationId,
+    getActiveProductAddOnCountsByOrganizationId,
     getProductsByIds,
     getAddOnsByOrganizationId,
     getProductAddOnAttachmentsByProductId,

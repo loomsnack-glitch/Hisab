@@ -302,7 +302,7 @@ const ProductsListPage = () => {
                                             <h4 className="font-display text-sm sm:text-[15px] font-semibold leading-snug tracking-tight text-foreground truncate" title={product.name}>
                                                 {product.name}
                                             </h4>
-                                            <div className="flex flex-wrap items-center gap-1.5">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                                 <span className="text-[11px] sm:text-xs font-medium capitalize text-muted-foreground">
                                                     {categoryName}
                                                 </span>
@@ -310,6 +310,14 @@ const ProductsListPage = () => {
                                                 {product.status === "inactive" && (
                                                     <ProductStatusBadge status={product.status} />
                                                 )}
+                                                {product.productType === "single" && product.activeAddOnCount ? (
+                                                    <>
+                                                        <span aria-hidden="true" className="text-muted-foreground/60">·</span>
+                                                        <span className="text-[11px] sm:text-xs font-medium text-muted-foreground">
+                                                            {product.activeAddOnCount} add-ons
+                                                        </span>
+                                                    </>
+                                                ) : null}
                                             </div>
                                         </div>
 
