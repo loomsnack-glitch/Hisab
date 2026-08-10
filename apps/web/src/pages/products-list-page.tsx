@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
-import { getCategories, getProducts } from "@repo/services";
+import { getCategories, getOrganizationCatalogSettings, getProducts } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
-import { cn } from "@repo/ui/lib/utils";
-import { Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Barcode, Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, RefreshCw, Search, Trash2 } from "lucide-react";
 
 import DeleteProductButton from "@/components/catalog/delete-product-button";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
@@ -16,8 +15,11 @@ import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertComboProductDialog from "@/components/catalog/upsert-combo-product-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
+import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
-import { catalogKeys } from "@/lib/query-keys";
+import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+
+const EMPTY_CATALOG_ITEMS: never[] = [];
 
 const ProductsListPage = () => {
     const { organizationId = "" } = useParams();
@@ -37,8 +39,17 @@ const ProductsListPage = () => {
         enabled: Boolean(organizationId),
     });
 
-    const categories = categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? [] : [];
-    const products = productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? [] : [];
+    const catalogSettingsQuery = useQuery({
+        queryKey: organizationKeys.catalogSettings(organizationId),
+        queryFn: () => getOrganizationCatalogSettings(organizationId),
+        enabled: Boolean(organizationId),
+    });
+
+    const categories = categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
+    const products = productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
+    const barcodeScanningEnabled =
+        catalogSettingsQuery.data?.status === "success"
+        && catalogSettingsQuery.data.data?.settings.barcodeScanningEnabled === true;
 
     const categoryMap = useMemo(
         () => new Map(categories.map((category) => [category.id, category])),
@@ -324,6 +335,21 @@ const ProductsListPage = () => {
                                                                 className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
                                                             >
                                                                 <Link2 className="size-3.5" />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                ) : null}
+                                                {barcodeScanningEnabled && product.productCodeKind === "internal_rcn" ? (
+                                                    <InternalProductLabelDialog
+                                                        product={product}
+                                                        trigger={
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                aria-label={`Preview and print labels for ${product.name}`}
+                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
+                                                            >
+                                                                <Barcode className="size-3.5" />
                                                             </Button>
                                                         }
                                                     />
