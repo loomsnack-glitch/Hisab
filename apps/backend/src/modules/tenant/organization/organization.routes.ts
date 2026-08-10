@@ -4,6 +4,7 @@ import {
   CreateOrganizationSchema,
   CreateStoreDeviceSchema,
   CreateStoreSchema,
+  OrganizationUsernameAvailabilityQuerySchema,
   STATUS_CODES,
   UpdateOrganizationCatalogSettingsSchema,
   UpdateOrganizationSchema,
@@ -47,6 +48,28 @@ router.get("/", async (c) => {
     return handleError(FILE_NAME, "getOrganizations", c, error);
   }
 });
+
+router.get(
+  "/username-availability",
+  validateSchema("query", OrganizationUsernameAvailabilityQuerySchema),
+  async (c) => {
+    try {
+      const { username } = c.req.valid("query");
+      const serviceResponse =
+        await organizationService.checkOrganizationUsernameAvailability(
+          username,
+        );
+      return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+      return handleError(
+        FILE_NAME,
+        "checkOrganizationUsernameAvailability",
+        c,
+        error,
+      );
+    }
+  },
+);
 
 router.post(
   "/",

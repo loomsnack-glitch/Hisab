@@ -5,6 +5,7 @@ import type {
   CreateStoreSchema,
   OrganizationCatalogSettingsDTOSchema,
   OrganizationDTOSchema,
+  OrganizationUsernameAvailabilityQuerySchema,
   StoreDevicePosSettingsDTOSchema,
   StoreDeviceDTOSchema,
   StoreDTOSchema,
@@ -28,6 +29,9 @@ export type StoreDeviceStatus = StoreDeviceDTO["status"];
 
 export type CreateOrganizationJSON = z.infer<typeof CreateOrganizationSchema>;
 export type CreateOrganizationSVC = CreateOrganizationJSON;
+export type OrganizationUsernameAvailabilityQuery = z.infer<
+  typeof OrganizationUsernameAvailabilityQuerySchema
+>;
 
 export type UpdateOrganizationJSON = z.infer<typeof UpdateOrganizationSchema>;
 export type UpdateOrganizationSVC = UpdateOrganizationJSON;
@@ -118,6 +122,11 @@ export type OrganizationDetailsResponse = {
 
 export type OrganizationResponse = {
   organization: OrganizationDTO;
+};
+
+export type OrganizationUsernameAvailabilityResponse = {
+  username: string;
+  available: boolean;
 };
 
 export type StoresListResponse = {

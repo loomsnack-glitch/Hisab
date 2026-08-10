@@ -12,6 +12,7 @@ import {
   type UpdateStoreSVC,
   type OrganizationDetailsResponse,
   type OrganizationResponse,
+  type OrganizationUsernameAvailabilityResponse,
   type OrganizationsListResponse,
   type ServiceResponse,
   type StoreDeviceResponse,
@@ -72,6 +73,20 @@ export const getOrganizations = async (
     status: "success",
     data: { organizations },
     message: "Organizations fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const checkOrganizationUsernameAvailability = async (
+  username: string,
+): Promise<ServiceResponse<OrganizationUsernameAvailabilityResponse>> => {
+  const exists =
+    await organizationRepository.organizationUsernameExists(username);
+
+  return {
+    status: "success",
+    data: { username, available: !exists },
+    message: "Organization username availability checked successfully",
     code: STATUS_CODES.SUCCESS,
   };
 };

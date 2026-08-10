@@ -9,6 +9,8 @@ export const deviceAuthKeys = {
 export const organizationKeys = {
   all: ["organizations"] as const,
   list: () => [...organizationKeys.all, "list"] as const,
+  usernameAvailability: (username: string) =>
+    [...organizationKeys.all, "username-availability", username] as const,
   detail: (organizationId: string) =>
     [...organizationKeys.all, "detail", organizationId] as const,
   catalogSettings: (organizationId: string) =>

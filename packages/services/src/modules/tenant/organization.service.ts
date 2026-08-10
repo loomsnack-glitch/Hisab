@@ -3,6 +3,7 @@ import type {
   CreateStoreDeviceJSON,
   CreateStoreJSON,
   OrganizationCatalogSettingsResponse,
+  OrganizationUsernameAvailabilityResponse,
   UpdateOrganizationJSON,
   UpdateOrganizationCatalogSettingsJSON,
   UpdateStoreDeviceJSON,
@@ -35,6 +36,19 @@ export const createOrganization = async (
 ): Promise<ServiceResponse<OrganizationResponse | null>> => {
   try {
     const response = await api.post("/organizations", data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const checkOrganizationUsernameAvailability = async (
+  username: string,
+): Promise<ServiceResponse<OrganizationUsernameAvailabilityResponse>> => {
+  try {
+    const response = await api.get("/organizations/username-availability", {
+      params: { username },
+    });
     return response.data;
   } catch (error) {
     return handleApiError(error);

@@ -105,6 +105,10 @@ export const CreateOrganizationSchema = z.object({
   username: usernameSchema,
 });
 
+export const OrganizationUsernameAvailabilityQuerySchema = z.object({
+  username: usernameSchema,
+});
+
 export const UpdateOrganizationSchema = z.object({
   name: nameSchema,
   username: usernameSchema,
