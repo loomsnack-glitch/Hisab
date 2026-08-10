@@ -9,7 +9,6 @@ import {
 } from "@repo/services";
 import {
   CreateOrganizationSchema,
-  OrganizationUsernameAvailabilityQuerySchema,
   type CreateOrganizationJSON,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
@@ -75,9 +74,7 @@ const CreateOrganizationDialog = ({
   }, [normalizedUsername]);
 
   const usernameSyntaxResult =
-    OrganizationUsernameAvailabilityQuerySchema.safeParse({
-      username: normalizedUsername,
-    });
+    CreateOrganizationSchema.shape.username.safeParse(normalizedUsername);
   const usernameCheckReady =
     normalizedUsername === debouncedUsername && usernameSyntaxResult.success;
   const usernameAvailabilityQuery = useQuery({

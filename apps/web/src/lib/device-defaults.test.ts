@@ -17,4 +17,24 @@ describe("device defaults", () => {
         expect(values.loginUsername).toHaveLength(64);
         expect(values.loginUsername).toMatch(/^[a-z0-9][a-z0-9_-]{1,63}$/);
     });
+
+    test("falls back when randomUUID is unavailable on insecure origins", () => {
+        const originalRandomUUID = crypto.randomUUID;
+        Object.defineProperty(crypto, "randomUUID", {
+            configurable: true,
+            value: () => {
+                throw new DOMException("randomUUID is only available in secure contexts.");
+            },
+        });
+
+        try {
+            const values = createDefaultDeviceValues("Main Branch", 1);
+            expect(values.deviceSecret).toHaveLength(8);
+        } finally {
+            Object.defineProperty(crypto, "randomUUID", {
+                configurable: true,
+                value: originalRandomUUID,
+            });
+        }
+    });
 });

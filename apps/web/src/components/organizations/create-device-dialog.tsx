@@ -100,7 +100,11 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
                 form.reset(defaultValues);
             });
         } else {
-            form.reset(createDefaultDeviceValues(storeName, deviceNumber));
+            try {
+                form.reset(createDefaultDeviceValues(storeName, deviceNumber));
+            } catch {
+                form.reset(defaultValues);
+            }
             setOpen(true);
         }
     };

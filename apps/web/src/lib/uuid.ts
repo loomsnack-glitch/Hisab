@@ -1,6 +1,10 @@
 export const safeRandomUUID = (): string => {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-        return crypto.randomUUID();
+        try {
+            return crypto.randomUUID();
+        } catch {
+            // randomUUID throws on non-secure origins (e.g. LAN HTTP) in some browsers.
+        }
     }
 
     // Fallback using crypto.getRandomValues if available

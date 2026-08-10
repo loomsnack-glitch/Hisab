@@ -1,5 +1,7 @@
 import type { CreateStoreDeviceJSON } from "@repo/types";
 
+import { safeRandomUUID } from "@/lib/uuid";
+
 const DEVICE_USERNAME_MAX_LENGTH = 64;
 
 const toUsernameSegment = (value: string): string => {
@@ -12,7 +14,7 @@ const toUsernameSegment = (value: string): string => {
     return segment || "store";
 };
 
-const generateDeviceSecret = (): string => crypto.randomUUID().replaceAll("-", "").slice(0, 8);
+const generateDeviceSecret = (): string => safeRandomUUID().replaceAll("-", "").slice(0, 8);
 
 export const createDefaultDeviceValues = (
     storeName: string,
