@@ -93,7 +93,7 @@ const PosPage = () => {
                 searchValue={headerSearch}
                 searchPlaceholder={posPanelConfig[activePanelTab].searchPlaceholder}
                 onSearchChange={setHeaderSearch}
-                showSearch={activePanelTab !== "products"}
+                showSearch={activePanelTab !== "products" && activePanelTab !== "reports"}
             >
                 <Outlet context={context} />
             </PosLayout>

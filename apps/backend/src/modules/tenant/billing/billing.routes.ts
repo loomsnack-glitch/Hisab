@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
     CreateCustomerSchema,
     CustomerListQuerySchema,
+    ProductSalesSummaryAdminQuerySchema,
     STATUS_CODES,
     SalesListQuerySchema,
     UpdateSaleNumberSettingsSchema,
@@ -200,6 +201,30 @@ router.get(
             return handleServiceResponse(c, serviceResponse);
         } catch (error) {
             return handleError(FILE_NAME, "getSales", c, error);
+        }
+    },
+);
+
+router.get(
+    "/:organizationId/product-sales-summary",
+    validateSchema("query", ProductSalesSummaryAdminQuerySchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalidParams = validateOrgAndStoreParams(organizationId);
+            if (invalidParams) {
+                return c.json(invalidParams, invalidParams.code);
+            }
+
+            const authUser = c.get("authUser");
+            const serviceResponse = await billingService.getProductSalesSummary(
+                authUser.id,
+                organizationId,
+                c.req.valid("query"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "getProductSalesSummary", c, error);
         }
     },
 );

@@ -9,6 +9,8 @@ import type {
     CustomerResponse,
     CustomersListResponse,
     PaymentResponse,
+    ProductSalesSummaryAdminQuery,
+    ProductSalesSummaryListResponse,
     SaleResponse,
     SalesListQuery,
     SalesListResponse,
@@ -105,6 +107,18 @@ export const getSales = async (
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/sales`, { params });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getProductSalesSummary = async (
+    organizationId: string,
+    params?: ProductSalesSummaryAdminQuery,
+): Promise<ServiceResponse<ProductSalesSummaryListResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/product-sales-summary`, { params });
         return response.data;
     } catch (error) {
         return handleApiError(error);

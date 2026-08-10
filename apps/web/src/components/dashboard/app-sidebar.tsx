@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
     Bell,
+    BarChart3,
     Building2,
     ChevronLeft,
     ChevronRight,
@@ -116,6 +117,12 @@ const AppSidebar = ({
                     label: "Billing",
                     icon: ReceiptText,
                     isActive: /\/organizations\/[^/]+\/billing/.test(location.pathname),
+                },
+                {
+                    to: `/organizations/${effectiveOrgId}/reports`,
+                    label: "Reports",
+                    icon: BarChart3,
+                    isActive: /\/organizations\/[^/]+\/reports/.test(location.pathname),
                 },
                 {
                     to: `/organizations/${effectiveOrgId}/customers`,

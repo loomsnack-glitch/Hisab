@@ -11,12 +11,14 @@ describe("POS route context", () => {
     test("maps each POS panel to its canonical route", () => {
         expect(getPosPanelPath("products")).toBe(posPanelConfig.products.path);
         expect(getPosPanelPath("bills")).toBe(posPanelConfig.bills.path);
+        expect(getPosPanelPath("reports")).toBe(posPanelConfig.reports.path);
         expect(getPosPanelPath("customers")).toBe(posPanelConfig.customers.path);
         expect(getPosPanelPath("purchases")).toBe(posPanelConfig.purchases.path);
     });
 
     test("falls back to products for the POS root and unknown paths", () => {
         expect(getPosPanelTabFromPath("/pos")).toBe("products");
+        expect(getPosPanelTabFromPath("/pos/reports")).toBe("reports");
         expect(getPosPanelTabFromPath("/pos/unknown")).toBe("products");
     });
 

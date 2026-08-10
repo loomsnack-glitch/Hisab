@@ -23,6 +23,8 @@ import CategoriesPage from "@/pages/categories-page";
 import CustomersPage from "@/pages/customers-page";
 import AddOnsPage from "@/pages/add-ons-page";
 import LandingPage from "@/pages/landing-page";
+import ReportsPage from "@/pages/reports-page";
+import PosReportsPage from "@/pages/pos-reports-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
@@ -105,6 +107,7 @@ const App = () => {
                             <Route path="/pos" element={<PosPage />}>
                                 <Route index element={<PosProductsPage />} />
                                 <Route path="bills" element={<PosBillsPage />} />
+                                <Route path="reports" element={<PosReportsPage />} />
                                 <Route path="customers" element={<PosCustomersPage />} />
                                 <Route path="purchases" element={<PosPurchasesPage />} />
                             </Route>
@@ -122,6 +125,7 @@ const App = () => {
                                     <Route path="add-ons" element={<AddOnsPage />} />
                                 </Route>
                                 <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
+                                <Route path="/organizations/:organizationId/reports" element={<ReportsPage />} />
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                                 <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                             </Route>

@@ -16,6 +16,10 @@ import type {
     CustomerListQuerySchema,
     ParentScopedAddOnSalesRollupDTOSchema,
     PaymentDTOSchema,
+    ProductSalesSummaryAdminQuerySchema,
+    ProductSalesSummaryDTOSchema,
+    ProductSalesSummaryQuerySchema,
+    ProductSalesSummaryResponseSchema,
     ReplaceSaleSchema,
     SaleDeviceAuditDTOSchema,
     SaleDetailDTOSchema,
@@ -86,6 +90,10 @@ export type SalesListQuery = z.infer<typeof SalesListQuerySchema>;
 export type SalesSort = z.infer<typeof SalesSortSchema>;
 export type SalesListSummary = z.infer<typeof SalesListSummarySchema>;
 export type SalesListPageInfo = z.infer<typeof SalesListPageInfoSchema>;
+export type ProductSalesSummaryQuery = z.infer<typeof ProductSalesSummaryQuerySchema>;
+export type ProductSalesSummaryAdminQuery = z.infer<typeof ProductSalesSummaryAdminQuerySchema>;
+export type ProductSalesSummaryDTO = z.infer<typeof ProductSalesSummaryDTOSchema>;
+export type ProductSalesSummaryResponse = z.infer<typeof ProductSalesSummaryResponseSchema>;
 
 export type SaleItemAddOnInput = z.infer<typeof SaleItemAddOnInputSchema>;
 export type SaleItemInput = z.infer<typeof SaleItemInputSchema>;
@@ -267,4 +275,8 @@ export type AddOnSalesRollupsListResponse = {
 
 export type BundleSalesRollupsListResponse = {
     rollups: BundleSalesRollupsResponse;
+};
+
+export type ProductSalesSummaryListResponse = {
+    summary: ProductSalesSummaryResponse;
 };

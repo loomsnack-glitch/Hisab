@@ -12,6 +12,8 @@ import type {
   CustomerResponse,
   CustomersListResponse,
   PaymentResponse,
+  ProductSalesSummaryListResponse,
+  ProductSalesSummaryQuery,
   ProductAddOnAttachmentsListResponse,
   PosSettingsResponse,
   ProductsListResponse,
@@ -158,6 +160,17 @@ export const getPosSales = async (
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
   try {
     const response = await api.get("/pos/sales", { params });
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosProductSalesSummary = async (
+  params?: ProductSalesSummaryQuery,
+): Promise<ServiceResponse<ProductSalesSummaryListResponse | null>> => {
+  try {
+    const response = await api.get("/pos/product-sales-summary", { params });
     return response.data;
   } catch (error) {
     return handleApiError(error);

@@ -8,6 +8,7 @@ import {
   CreateDraftSaleSchema,
   CreatePaymentSchema,
   CustomerListQuerySchema,
+  ProductSalesSummaryQuerySchema,
   SalesListQuerySchema,
   STATUS_CODES,
   UpdateCustomerSchema,
@@ -239,6 +240,22 @@ router.get(
       return handleServiceResponse(c, serviceResponse);
     } catch (error) {
       return handleError(FILE_NAME, "getSalesForDevice", c, error);
+    }
+  },
+);
+
+router.get(
+  "/product-sales-summary",
+  validateSchema("query", ProductSalesSummaryQuerySchema),
+  async (c) => {
+    try {
+      const serviceResponse = await billingService.getProductSalesSummaryForDevice(
+        c.get("authDevice"),
+        c.req.valid("query"),
+      );
+      return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+      return handleError(FILE_NAME, "getProductSalesSummaryForDevice", c, error);
     }
   },
 );

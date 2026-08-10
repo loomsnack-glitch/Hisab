@@ -65,6 +65,12 @@ export const billingKeys = {
       storeId,
       filters ?? {},
     ] as const,
+  productSales: (organizationId: string, filters?: Record<string, unknown>) =>
+    [
+      ...billingKeys.organization(organizationId),
+      "product-sales-summary",
+      filters ?? {},
+    ] as const,
   sale: (organizationId: string, storeId: string, saleId: string) =>
     [...billingKeys.sales(organizationId, storeId), "detail", saleId] as const,
   saleNumberSettings: (organizationId: string, storeId: string) =>
@@ -73,6 +79,8 @@ export const billingKeys = {
       "sale-number-settings",
       storeId,
     ] as const,
+  posProductSales: (filters?: Record<string, unknown>) =>
+    [...billingKeys.all, "pos-product-sales-summary", filters ?? {}] as const,
 };
 
 export const purchaseKeys = {

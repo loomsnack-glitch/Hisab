@@ -18,6 +18,8 @@ import type {
     CustomerLedgerEntryDTO,
     ParentScopedAddOnSalesRollupDTO,
     PaymentDTO,
+    ProductSalesSummaryDTO,
+    ProductSalesSummaryQuery,
     SaleItemAddOnDTO,
     SaleItemBundleComponentAddOnDTO,
     SaleItemBundleComponentDTO,
@@ -555,6 +557,48 @@ export const getSalesSummaryByStore = async (
         collectedTotal: Number(result?.collected_total ?? 0),
         dueTotal: Number(result?.due_total ?? 0),
     };
+};
+
+export const getProductSalesSummary = async (
+    organizationId: string,
+    storeId: string | undefined,
+    query: ProductSalesSummaryQuery,
+): Promise<ProductSalesSummaryDTO[]> => {
+    const createdFrom = query.createdFrom ?? null;
+    const createdTo = query.createdTo ?? null;
+
+    const results = await pg`
+        SELECT
+            si.product_id,
+            p.name AS product_name,
+            c.name AS category_name,
+            SUM(si.quantity)::int AS quantity_sold
+        FROM sale_items si
+        INNER JOIN sales s
+            ON s.id = si.sale_id
+            AND s.organization_id = si.organization_id
+            AND s.store_id = si.store_id
+        INNER JOIN products p
+            ON p.id = si.product_id
+            AND p.organization_id = si.organization_id
+        LEFT JOIN categories c
+            ON c.id = p.category_id
+            AND c.organization_id = p.organization_id
+        WHERE s.organization_id = ${organizationId}
+          AND (${storeId ?? null}::uuid IS NULL OR s.store_id = ${storeId ?? null}::uuid)
+          AND s.status = 'completed'
+          AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
+          AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)
+        GROUP BY si.product_id, p.name, c.name
+        ORDER BY quantity_sold DESC, product_name ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => ({
+        productId: String(result.product_id),
+        productName: String(result.product_name),
+        categoryName: result.category_name ? String(result.category_name) : null,
+        quantitySold: Number(result.quantity_sold ?? 0),
+    }));
 };
 
 export const getSaleById = async (

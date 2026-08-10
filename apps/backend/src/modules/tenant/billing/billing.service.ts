@@ -21,6 +21,9 @@ import {
     type CustomersListResponse,
     type DeviceSessionDTO,
     type PaymentResponse,
+    type ProductSalesSummaryAdminQuery,
+    type ProductSalesSummaryListResponse,
+    type ProductSalesSummaryQuery,
     type SaleDetailDTO,
     type SaleItemDTO,
     type SaleItemInput,
@@ -1502,6 +1505,26 @@ const getSaleDetailsInStore = async (
     };
 };
 
+const getProductSalesSummaryInOrganization = async (
+    userId: string,
+    organizationId: string,
+    query: ProductSalesSummaryAdminQuery,
+): Promise<ServiceResponse<ProductSalesSummaryListResponse | null>> => {
+    const scopeError = await verifyOrganizationAndStore(userId, organizationId, query.storeId);
+    if (scopeError) {
+        return scopeError;
+    }
+
+    const products = await billingRepository.getProductSalesSummary(organizationId, query.storeId, query);
+
+    return {
+        status: "success",
+        data: { summary: { products } },
+        message: "Product sales summary fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
 type SaleWriteActor = {
     userId?: string | null;
     deviceId?: string | null;
@@ -2931,6 +2954,14 @@ export const getSales = async (
     return getSalesInStore(organizationId, storeId, query);
 };
 
+export const getProductSalesSummary = async (
+    userId: string,
+    organizationId: string,
+    query: ProductSalesSummaryAdminQuery,
+): Promise<ServiceResponse<ProductSalesSummaryListResponse | null>> => {
+    return getProductSalesSummaryInOrganization(userId, organizationId, query);
+};
+
 export const createDraftSale = async (
     userId: string,
     organizationId: string,
@@ -3138,6 +3169,20 @@ export const getSalesForDevice = async (
     query: SalesListQuery,
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
     return getSalesInStore(session.organization.id, session.store.id, query);
+};
+
+export const getProductSalesSummaryForDevice = async (
+    session: DeviceSessionDTO,
+    query: ProductSalesSummaryQuery,
+): Promise<ServiceResponse<ProductSalesSummaryListResponse | null>> => {
+    const products = await billingRepository.getProductSalesSummary(session.organization.id, session.store.id, query);
+
+    return {
+        status: "success",
+        data: { summary: { products } },
+        message: "Product sales summary fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
 };
 
 export const getSaleDetailsForDevice = async (

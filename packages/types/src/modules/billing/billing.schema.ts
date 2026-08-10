@@ -365,6 +365,26 @@ export const SalesListSummarySchema = z.object({
     dueTotal: moneySchema,
 });
 
+export const ProductSalesSummaryQuerySchema = z.object({
+    createdFrom: z.iso.datetime().optional(),
+    createdTo: z.iso.datetime().optional(),
+});
+
+export const ProductSalesSummaryAdminQuerySchema = ProductSalesSummaryQuerySchema.extend({
+    storeId: z.uuid("Invalid store id").optional(),
+});
+
+export const ProductSalesSummaryDTOSchema = z.object({
+    productId: z.uuid("Invalid product id"),
+    productName: nameSchema,
+    categoryName: nameSchema.nullable(),
+    quantitySold: z.number().int().min(0),
+});
+
+export const ProductSalesSummaryResponseSchema = z.object({
+    products: z.array(ProductSalesSummaryDTOSchema),
+});
+
 export const SalesListPageInfoSchema = z.object({
     hasMore: z.boolean(),
     nextCursor: z.string().nullable(),

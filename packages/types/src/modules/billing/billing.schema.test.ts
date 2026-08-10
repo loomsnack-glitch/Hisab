@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
     AddOnSalesRollupsResponseSchema,
+    ProductSalesSummaryAdminQuerySchema,
+    ProductSalesSummaryResponseSchema,
     SaleItemInputSchema,
     SaleDetailDTOSchema,
     SaleNumberSettingsDTOSchema,
@@ -316,5 +318,26 @@ describe("Configured sale billing contracts", () => {
             expect(result.data.parentScoped[0]?.productNameSnapshot).toBe("Burger");
             expect(result.data.addOnScoped[0]?.parentProductCount).toBe(2);
         }
+    });
+
+    test("product sales summary supports date filters and sorted product totals", () => {
+        const query = ProductSalesSummaryAdminQuerySchema.safeParse({
+            storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            createdFrom: "2026-08-11T00:00:00.000Z",
+            createdTo: "2026-08-12T00:00:00.000Z",
+        });
+        const response = ProductSalesSummaryResponseSchema.safeParse({
+            products: [
+                {
+                    productId: "11111111-1111-4111-8111-111111111111",
+                    productName: "Masala Tea",
+                    categoryName: "Beverages",
+                    quantitySold: 24,
+                },
+            ],
+        });
+
+        expect(query.success).toBe(true);
+        expect(response.success).toBe(true);
     });
 });

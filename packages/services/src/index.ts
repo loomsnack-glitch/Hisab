@@ -19,6 +19,7 @@ export {
   updatePosCustomer,
   getPosProductAddOnAttachments,
   getPosProducts,
+  getPosProductSalesSummary,
   getPosSettings,
   getPosSale,
   getPosSales,

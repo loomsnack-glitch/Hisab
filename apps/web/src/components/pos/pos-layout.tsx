@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { deviceLogout } from "@repo/services";
 import type { DeviceSessionDTO } from "@repo/types";
@@ -15,7 +15,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@repo/ui/components/alert-dialog";
-import { Expand, LoaderCircle, LogOut, Minimize, Printer, Search, X } from "lucide-react";
+import { BarChart3, Expand, LoaderCircle, LogOut, Minimize, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ThemeToggle from "@/components/dashboard/theme-toggle";
@@ -84,6 +84,7 @@ const PosLayout = ({
   showSearch = true,
 }: PosLayoutProps) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const queryClient = useQueryClient();
     const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
     const posPrinter = useOptionalPosPrinter();
@@ -187,7 +188,7 @@ const PosLayout = ({
           </div>
         ) : null}
 
-        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 sm:flex-nowrap sm:gap-3">
                     <div className="hidden min-w-0 max-w-[min(100vw-12rem,280px)] text-right sm:block">
                         <p className="truncate text-sm font-medium text-foreground">
                             {session.organization.name}
@@ -196,6 +197,17 @@ const PosLayout = ({
                             {session.store.name} · {formatLongDate()}
                         </p>
                     </div>
+
+                    <Button
+                        variant="outline"
+                        className={`h-9 shrink-0 rounded-full px-3 ${location.pathname === "/pos/reports" ? "border-primary/50 bg-primary/10 text-primary" : ""}`}
+                        aria-label="Product sales reports"
+                        title="Product sales reports"
+                        render={<Link to="/pos/reports" />}
+                    >
+                        <BarChart3 className="size-4" />
+                        <span className="hidden text-xs font-semibold sm:inline">Reports</span>
+                    </Button>
 
                     <DisplayScaleControl />
                     <ThemeToggle />

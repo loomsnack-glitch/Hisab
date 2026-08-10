@@ -83,6 +83,7 @@ import {
     ArrowLeft,
     ArrowUpDown,
     Barcode,
+    BarChart3,
     Calendar,
     Check,
     ChevronLeft,
@@ -117,6 +118,7 @@ import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
+import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import type { PosComposerHandoff } from "@/pages/pos-route-context";
 import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
@@ -247,7 +249,7 @@ type SaleSort = "newest" | "oldest" | "highest" | "lowest";
 type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
 type SalesDateMode = "date" | "range";
 type SalesDatePreset = "today" | "yesterday" | "this-week" | "this-month" | "custom" | "all";
-type BillingPanelTab = "products" | "bills" | "purchases" | "customers";
+type BillingPanelTab = "products" | "bills" | "reports" | "purchases" | "customers";
 type InvoiceAction = "print" | "whatsapp";
 
 const salesSortOptions: Array<{ value: SaleSort; label: string }> = [
@@ -403,13 +405,13 @@ const discountPresetPercentages = [5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 75, 10
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
-    initialPanelTab?: "products" | "bills" | "customers" | "purchases";
+    initialPanelTab?: "products" | "bills" | "reports" | "customers" | "purchases";
     productSearch?: string;
     salesSearch?: string;
     purchaseSearch?: string;
     customerSearch?: string;
     onPanelTabChange?: (
-        tab: "products" | "bills" | "customers" | "purchases",
+        tab: "products" | "bills" | "reports" | "customers" | "purchases",
         composerHandoff?: PosComposerHandoff,
     ) => void;
     onProductSearchChange?: (value: string) => void;
@@ -924,7 +926,13 @@ const BillingPage = ({
             return;
         }
 
-        if (leftPanelTab === "products" || leftPanelTab === "bills" || leftPanelTab === "customers" || leftPanelTab === "purchases") {
+        if (
+            leftPanelTab === "products" ||
+            leftPanelTab === "bills" ||
+            leftPanelTab === "reports" ||
+            leftPanelTab === "customers" ||
+            leftPanelTab === "purchases"
+        ) {
             onPanelTabChange(leftPanelTab);
         }
     }, [isDeviceMode, leftPanelTab, onPanelTabChange]);
@@ -2113,6 +2121,20 @@ const BillingPage = ({
                             </button>
                             <button
                                 type="button"
+                                onClick={() => changePanelTab("reports")}
+                                className={cn(
+                                    "flex size-10 items-center justify-center rounded-xl transition-all",
+                                    leftPanelTab === "reports"
+                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                                aria-label="Product sales reports"
+                                title="Product sales reports"
+                            >
+                                <BarChart3 className="size-4" />
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => changePanelTab("customers")}
                                 className={cn(
                                     "relative flex size-10 items-center justify-center rounded-xl transition-all",
@@ -2172,12 +2194,12 @@ const BillingPage = ({
                 >
                     {/* Tab Switcher */}
                     {canMutate ? (
-                        <div className="-mt-2 mb-3 flex gap-1 rounded-lg border border-border/40 bg-muted/30 p-1 lg:hidden">
+                        <div className="-mt-2 mb-3 flex min-w-0 gap-1 rounded-lg border border-border/40 bg-muted/30 p-1 lg:hidden">
                             <button
                                 type="button"
                                 onClick={() => changePanelTab("products")}
                                 className={cn(
-                                    "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-all duration-200",
+                                    "flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-all duration-200 sm:px-2.5",
                                     leftPanelTab === "products"
                                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                                         : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -2190,7 +2212,7 @@ const BillingPage = ({
                                 type="button"
                                 onClick={() => changePanelTab("bills")}
                                 className={cn(
-                                    "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-all duration-200",
+                                    "flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-all duration-200 sm:px-2.5",
                                     leftPanelTab === "bills"
                                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                                         : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -2211,6 +2233,19 @@ const BillingPage = ({
                                     </span>
                                 )}
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => changePanelTab("reports")}
+                                className={cn(
+                                    "flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-all duration-200 sm:px-2.5",
+                                    leftPanelTab === "reports"
+                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                            >
+                                <BarChart3 className="size-3.5" />
+                                Reports
+                            </button>
                             <DropdownMenu>
                                 <DropdownMenuTrigger
                                     render={
@@ -2218,7 +2253,7 @@ const BillingPage = ({
                                             type="button"
                                             variant="ghost"
                                             className={cn(
-                                                "h-8 flex-1 gap-1.5 rounded-md px-2.5 text-xs font-semibold",
+                                                "h-8 min-w-0 flex-1 gap-1.5 rounded-md px-1.5 text-xs font-semibold sm:px-2.5",
                                                 leftPanelTab === "customers" || leftPanelTab === "purchases"
                                                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
                                                     : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -2259,7 +2294,11 @@ const BillingPage = ({
                         </div>
                     )}
 
-                    {canMutate && leftPanelTab === "purchases" ? (
+                    {canMutate && leftPanelTab === "reports" ? (
+                        <div className="min-h-full p-4 pb-24 lg:p-6 lg:pb-6">
+                            {session ? <ProductSalesSummary mode="pos" storeName={session.store.name} /> : null}
+                        </div>
+                    ) : canMutate && leftPanelTab === "purchases" ? (
                         session ? (
                             <PosPurchasesPanel session={session} search={purchaseSearch} />
                         ) : null
