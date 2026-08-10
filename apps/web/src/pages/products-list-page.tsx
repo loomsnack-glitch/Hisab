@@ -7,7 +7,7 @@ import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
-import { Barcode, Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Barcode, Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 import DeleteProductButton from "@/components/catalog/delete-product-button";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";

@@ -2,9 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { ProductResponseDTO } from "@repo/types";
 
 import {
+    appendScanDiagnostic,
     consumeDirectBarcodeScanKey,
+    formatScanDiagnostics,
     incrementPlainProductQuantity,
     resolveProductCodeScan,
+    SCAN_DIAGNOSTIC_LIMIT,
     shouldCaptureDirectBarcodeScan,
 } from "./barcode-scanning";
 import { getProductCardAction } from "./product-card-interaction";
@@ -117,5 +120,34 @@ describe("barcode scanning", () => {
 
         expect(firstComplete).toEqual({ buffer: "", scannedCode: "001" });
         expect(secondComplete).toEqual({ buffer: "", scannedCode: "002" });
+    });
+
+    test("keeps a bounded, copyable session diagnostic trail for rollout follow-up", () => {
+        const firstDiagnostic = {
+            kind: "unknown" as const,
+            productCode: "missing-code",
+            message: "No Product is linked to this code.",
+            occurredAt: "2026-08-10T10:00:00.000Z",
+        };
+        const bounded = Array.from({ length: SCAN_DIAGNOSTIC_LIMIT + 1 }).reduce(
+            (current, _, index) =>
+                appendScanDiagnostic(current, {
+                    ...firstDiagnostic,
+                    productCode: `code-${index}`,
+                }),
+            [],
+        );
+
+        expect(bounded).toHaveLength(SCAN_DIAGNOSTIC_LIMIT);
+        expect(bounded[0]?.productCode).toBe("code-1");
+        expect(formatScanDiagnostics([
+            firstDiagnostic,
+            { ...firstDiagnostic, kind: "duplicate-assignment", productCode: "conflicting-code" },
+            { ...firstDiagnostic, kind: "scan-to-cart-failure", productCode: "inactive-code" },
+        ])).toBe(
+            "2026-08-10T10:00:00.000Z\tunknown\tmissing-code\tNo Product is linked to this code.\n" +
+                "2026-08-10T10:00:00.000Z\tduplicate-assignment\tconflicting-code\tNo Product is linked to this code.\n" +
+                "2026-08-10T10:00:00.000Z\tscan-to-cart-failure\tinactive-code\tNo Product is linked to this code.",
+        );
     });
 });

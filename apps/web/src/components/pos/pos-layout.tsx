@@ -72,6 +72,7 @@ type PosLayoutProps = {
   searchValue: string;
   searchPlaceholder: string;
   onSearchChange: (value: string) => void;
+  showSearch?: boolean;
 };
 
 const PosLayout = ({
@@ -80,6 +81,7 @@ const PosLayout = ({
   searchValue,
   searchPlaceholder,
   onSearchChange,
+  showSearch = true,
 }: PosLayoutProps) => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -160,28 +162,30 @@ const PosLayout = ({
                     <WorkspaceBrand workspace="pos" />
                 </Link>
 
-        <div className="order-3 flex w-full min-w-0 items-center sm:order-none sm:flex-1 sm:px-4 lg:max-w-xl">
-          <div className="relative w-full">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="h-9 rounded-xl bg-background/80 pl-10 pr-10 text-sm"
-              placeholder={searchPlaceholder}
-              value={searchValue}
-              onChange={(event) => onSearchChange(event.target.value)}
-              aria-label={searchPlaceholder}
-            />
-            {searchValue ? (
-              <button
-                type="button"
-                onClick={() => onSearchChange("")}
-                className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Clear search"
-              >
-                <X className="size-4" />
-              </button>
-            ) : null}
+        {showSearch ? (
+          <div className="order-3 flex w-full min-w-0 items-center sm:order-none sm:flex-1 sm:px-4 lg:max-w-xl">
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-9 rounded-xl bg-background/80 pl-10 pr-10 text-sm"
+                placeholder={searchPlaceholder}
+                value={searchValue}
+                onChange={(event) => onSearchChange(event.target.value)}
+                aria-label={searchPlaceholder}
+              />
+              {searchValue ? (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange("")}
+                  className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Clear search"
+                >
+                  <X className="size-4" />
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
                     <div className="hidden min-w-0 max-w-[min(100vw-12rem,280px)] text-right sm:block">
