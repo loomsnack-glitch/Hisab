@@ -39,6 +39,8 @@ export const product = {
     discount: 0,
     imagePath: null,
     productType: "single" as const,
+    productCode: null as string | null,
+    productCodeKind: null as "manufacturer" | "internal_rcn" | null,
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -61,6 +63,8 @@ export const coffee = {
     discount: 0,
     imagePath: null,
     productType: "single" as const,
+    productCode: null as string | null,
+    productCodeKind: null as "manufacturer" | "internal_rcn" | null,
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -77,6 +81,8 @@ export const existingBundle = {
     discount: 0,
     imagePath: null,
     productType: "bundle" as const,
+    productCode: null as string | null,
+    productCodeKind: null as "manufacturer" | "internal_rcn" | null,
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -158,6 +164,29 @@ export const getOrganizationByIdForUser = mock(async () => organization);
 export const getCategoryById = mock(async () => category);
 export const productNameExistsInCategory = mock(async () => false);
 export const getProductById = mock(async () => product);
+export const getProductByCode = mock(
+    async (
+        _organizationId?: string,
+        _productCode?: string,
+        _excludeId?: string,
+    ): Promise<{
+        id: string;
+        organizationId: string;
+        categoryId: string;
+        name: string;
+        price: number;
+        discount: number;
+        imagePath: string | null;
+        productType: "single" | "bundle" | "combo";
+        productCode: string | null;
+        productCodeKind: "manufacturer" | "internal_rcn" | null;
+        status: "active" | "inactive";
+        createdBy: string;
+        updatedBy: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    } | null> => null,
+);
 export const createProductRepo = mock(async (data: typeof product) => data);
 export const updateProductRepo = mock(async (data: typeof product) => data);
 export const deleteProductRepo = mock(async () => product);
@@ -291,6 +320,7 @@ mock.module("./catalog.repository", () => ({
     getCategoryById,
     productNameExistsInCategory,
     getProductById,
+    getProductByCode,
     createProduct: createProductRepo,
     updateProduct: updateProductRepo,
     deleteProduct: deleteProductRepo,

@@ -47,6 +47,7 @@ export type ProductAddOnAttachmentResponseDTO = z.infer<typeof ProductAddOnAttac
 export type CategoryStatus = CategoryDTO["status"];
 export type ProductStatus = ProductDTO["status"];
 export type ProductType = ProductDTO["productType"];
+export type ProductCodeKind = NonNullable<ProductDTO["productCodeKind"]>;
 export type AddOnStatus = AddOnDTO["status"];
 export type ProductAddOnAttachmentStatus = ProductAddOnAttachmentDTO["status"];
 
@@ -67,7 +68,17 @@ export type CreateProductJSON = z.infer<typeof CreateProductSchema>;
 export type CreateProductSVC = CreateProductJSON;
 export type CreateProductREPO = Pick<
     ProductDTO,
-    "id" | "organizationId" | "categoryId" | "name" | "price" | "discount" | "productType" | "status" | "createdBy"
+    | "id"
+    | "organizationId"
+    | "categoryId"
+    | "name"
+    | "price"
+    | "discount"
+    | "productType"
+    | "productCode"
+    | "productCodeKind"
+    | "status"
+    | "createdBy"
 > & {
     imagePath?: string | null;
     updatedBy?: string | null;
@@ -77,7 +88,16 @@ export type UpdateProductJSON = z.infer<typeof UpdateProductSchema>;
 export type UpdateProductSVC = UpdateProductJSON;
 export type UpdateProductREPO = Pick<
     ProductDTO,
-    "id" | "organizationId" | "categoryId" | "name" | "price" | "discount" | "status" | "updatedBy"
+    | "id"
+    | "organizationId"
+    | "categoryId"
+    | "name"
+    | "price"
+    | "discount"
+    | "productCode"
+    | "productCodeKind"
+    | "status"
+    | "updatedBy"
 > & {
     imagePath?: string | null;
 };

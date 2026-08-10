@@ -272,6 +272,31 @@ export const getProductById = async (organizationId: string, productId: string):
     return result ? snakeToCamel(result) : null;
 };
 
+export const getProductByCode = async (
+    organizationId: string,
+    productCode: string,
+    excludeId?: string,
+): Promise<ProductDTO | null> => {
+    const [result] = excludeId
+        ? await pg`
+            SELECT *
+            FROM products
+            WHERE organization_id = ${organizationId}
+              AND product_code = ${productCode}
+              AND id <> ${excludeId}
+            LIMIT 1
+        `
+        : await pg`
+            SELECT *
+            FROM products
+            WHERE organization_id = ${organizationId}
+              AND product_code = ${productCode}
+            LIMIT 1
+        `;
+
+    return result ? snakeToCamel(result) : null;
+};
+
 export const productNameExistsInCategory = async (
     organizationId: string,
     categoryId: string,
@@ -312,6 +337,8 @@ export const updateProduct = async (
             price = ${productData.price},
             discount = ${productData.discount},
             image_path = ${productData.imagePath ?? null},
+            product_code = ${productData.productCode},
+            product_code_kind = ${productData.productCodeKind},
             status = ${productData.status},
             updated_by = ${productData.updatedBy},
             updated_at = NOW()

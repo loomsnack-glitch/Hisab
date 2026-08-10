@@ -28,6 +28,8 @@ const product = {
     discount: 10,
     imagePath: null,
     productType: "single" as const,
+    productCode: null,
+    productCodeKind: null,
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,

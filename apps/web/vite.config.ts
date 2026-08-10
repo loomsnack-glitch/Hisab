@@ -38,11 +38,11 @@ export default defineConfig(({ mode }) => {
                 "react-select",
                 "@emotion/react",
                 "hoist-non-react-statics",
+                "@repo/types",
             ],
             exclude: [
                 "@repo/assets",
                 "@repo/services",
-                "@repo/types",
                 "@repo/ui",
             ],
         },
@@ -53,6 +53,10 @@ export default defineConfig(({ mode }) => {
                 {
                     find: "@repo/services",
                     replacement: path.resolve(__dirname, "../../packages/services/src/index.ts"),
+                },
+                {
+                    find: "@repo/types",
+                    replacement: path.resolve(__dirname, "../../packages/types/src/index.ts"),
                 },
                 {
                     find: /^hoist-non-react-statics$/,

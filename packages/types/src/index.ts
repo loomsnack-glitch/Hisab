@@ -5,6 +5,7 @@ export * from "./common";
 export * from "./modules/common";
 // Catalog includes Add-On and Product Add-On Attachment contracts
 export * from "./modules/catalog";
+export { CreateProductObjectSchema, normalizeProductCodeInput } from "./modules/catalog/catalog.schema";
 export * from "./modules/billing";
 export * from "./modules/purchase";
 export * from "./modules/auth";
