@@ -22,6 +22,7 @@ import ProductsListPage from "@/pages/products-list-page";
 import CategoriesPage from "@/pages/categories-page";
 import CustomersPage from "@/pages/customers-page";
 import AddOnsPage from "@/pages/add-ons-page";
+import LandingPage from "@/pages/landing-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
@@ -38,8 +39,8 @@ const App = () => {
     const isPosRoute = location.pathname.startsWith("/pos");
 
     useEffect(() => {
-        document.title = isPosRoute ? "Ganatri POS" : "Ganatri Admin";
-    }, [isPosRoute]);
+        document.title = isPosRoute ? "Ganatri POS" : location.pathname === "/" ? "Ganatri" : "Ganatri Admin";
+    }, [isPosRoute, location.pathname]);
 
     const authQuery = useQuery({
         queryKey: authKeys.me,
@@ -94,7 +95,7 @@ const App = () => {
                 ) : (
                     <>
                         <Routes>
-                            <Route path="/" element={<Navigate to={authenticatedUser ? "/organizations" : "/login"} replace />} />
+                            <Route path="/" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LandingPage />} />
                             <Route path="/login" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LoginPage />} />
                             <Route
                                 path="/register"
