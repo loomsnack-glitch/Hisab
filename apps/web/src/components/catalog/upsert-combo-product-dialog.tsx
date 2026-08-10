@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
-import { Boxes, Minus, Pencil, Plus, PlusCircle, Trash2 } from "lucide-react";
+import { Boxes, Pencil, Plus, PlusCircle, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import ComboProductPickerDialog from "@/components/catalog/combo-product-picker-dialog";
 import { catalogKeys } from "@/lib/query-keys";
@@ -63,7 +63,7 @@ const defaultValues: FormInput = {
     price: 0,
     discount: 0,
     status: "active",
-    choiceGroups: [{ name: "Choose an option", minSelections: 1, maxSelections: 1, options: [{ productId: "", maxQuantity: 1, priceAdjustment: 0 }] }],
+    choiceGroups: [{ name: "", minSelections: 1, maxSelections: 1, options: [] }],
 };
 
 const UpsertComboProductDialog = ({ organizationId, categories, products, product, defaultCategoryId, trigger }: Props) => {
@@ -93,7 +93,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
             : categories[0]?.id ?? "";
         const details = detailsQuery.data?.status === "success" ? detailsQuery.data.data : null;
         if (!product) {
-            form.reset({ ...defaultValues, categoryId, choiceGroups: [{ ...defaultValues.choiceGroups[0], options: [{ productId: optionProducts[0]?.id ?? "", maxQuantity: 1, priceAdjustment: 0 }] }] });
+            form.reset({ ...defaultValues, categoryId, choiceGroups: [{ ...defaultValues.choiceGroups[0], options: [] }] });
             return;
         }
         form.reset({
@@ -128,16 +128,17 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
         const current = form.getValues(`choiceGroups.${index}`);
         form.setValue(`choiceGroups.${index}`, { ...current, ...patch }, { shouldDirty: true, shouldValidate: true });
     };
-    const updateOption = (groupIndex: number, optionIndex: number, patch: Partial<GroupInput["options"][number]>) => {
-        const current = form.getValues(`choiceGroups.${groupIndex}.options.${optionIndex}`);
-        form.setValue(`choiceGroups.${groupIndex}.options.${optionIndex}`, { ...current, ...patch }, { shouldDirty: true, shouldValidate: true });
+    const updateGroupProducts = (groupIndex: number, productIds: string[]) => {
+        const currentOptions = form.getValues(`choiceGroups.${groupIndex}.options`) ?? [];
+        const existingOptions = new Map(currentOptions.map((option) => [option.productId, option]));
+        updateGroup(groupIndex, {
+            options: productIds.map((productId) => existingOptions.get(productId) ?? ({
+                productId,
+                maxQuantity: 1,
+                priceAdjustment: 0,
+            })),
+        });
     };
-    const addOption = (groupIndex: number) => {
-        const used = new Set((form.getValues(`choiceGroups.${groupIndex}.options`) ?? []).map((item) => item.productId));
-        const next = optionProducts.find((item) => !used.has(item.id));
-        if (next) updateGroup(groupIndex, { options: [...form.getValues(`choiceGroups.${groupIndex}.options`), { productId: next.id, maxQuantity: 1, priceAdjustment: 0 }] });
-    };
-
     const onSubmit: SubmitHandler<FormInput> = (values) => mutation.mutate({
         categoryId: values.categoryId,
         name: values.name.trim(),
@@ -154,7 +155,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
 
     return <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
         <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[calc(100vw-2rem)] lg:!max-w-[50vw] max-h-[90dvh] overflow-x-hidden overflow-y-auto">
             <DialogHeader
                 icon={<Boxes className="size-5" />}
                 title={isEdit ? "Edit Combo" : "Create Combo"}
@@ -168,33 +169,85 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                     <p className="text-sm text-muted-foreground">Unable to load this Combo details.</p>
                     <Button type="button" variant="outline" onClick={() => detailsQuery.refetch()}>Try again</Button>
                 </div>
-            ) : <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-                <div className="grid gap-3 sm:grid-cols-2">
-                    <Field><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="Select category" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
-                    <Field><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} placeholder="Burger Combo" /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
-                    <Field><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
-                    <Field><FieldLabel>Discount</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
+            ) : <form className="min-w-0 space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                    <Field className="min-w-0"><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="Select category" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
+                    <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} placeholder="Burger Combo" /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
+                    <Field className="min-w-0"><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
+                    <Field className="min-w-0"><FieldLabel>Discount</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
                 </div>
-                {isEdit && <Field><FieldLabel>Status</FieldLabel><FieldContent><ReactSelect options={statusOptions} value={statusOptions.find((item) => item.value === form.watch("status")) ?? null} onChange={(item) => form.setValue("status", item?.value ?? "active")} /></FieldContent></Field>}
+                {isEdit && <Field className="min-w-0"><FieldLabel>Status</FieldLabel><FieldContent><ReactSelect options={statusOptions} value={statusOptions.find((item) => item.value === form.watch("status")) ?? null} onChange={(item) => form.setValue("status", item?.value ?? "active")} /></FieldContent></Field>}
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between"><div><p className="font-medium">Choice groups</p><p className="text-xs text-muted-foreground">Example: Choose 1 burger, then choose up to 2 drinks.</p></div><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "Choose an option", minSelections: 1, maxSelections: 1, options: [{ productId: optionProducts[0]?.id ?? "", maxQuantity: 1, priceAdjustment: 0 }] })}><Plus className="size-3.5" />Add group</Button></div>
+                    <div className="flex items-center justify-between"><div><p className="font-medium">Choice groups</p><p className="text-xs text-muted-foreground">Example: Choose 1 burger, then choose up to 2 drinks.</p></div><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>
                     {fields.map((field, groupIndex) => {
                         const group = watchedGroups[groupIndex];
-                        return <div key={field.id} className="space-y-3 rounded-xl border border-border/60 p-3">
-                            <div className="grid gap-2 sm:grid-cols-[1fr_110px_110px_auto] sm:items-end">
-                                <Field><FieldLabel>Group name</FieldLabel><FieldContent><Input {...form.register(`choiceGroups.${groupIndex}.name`)} placeholder="Main item" /></FieldContent></Field>
-                                <Field><FieldLabel>Min</FieldLabel><FieldContent><Input type="number" min="0" {...form.register(`choiceGroups.${groupIndex}.minSelections`)} /></FieldContent></Field>
-                                <Field><FieldLabel>Max</FieldLabel><FieldContent><Input type="number" min="0" {...form.register(`choiceGroups.${groupIndex}.maxSelections`)} /></FieldContent></Field>
-                                <Button type="button" variant="ghost" size="icon" disabled={fields.length === 1} onClick={() => remove(groupIndex)} aria-label="Remove group"><Trash2 className="size-4" /></Button>
+                        return <div key={field.id} className="min-w-0 space-y-3 rounded-xl border border-border/60 p-3">
+                            <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-[minmax(0,1fr)_8rem_8rem_auto] md:items-end">
+                                <Field className="col-span-2 min-w-0 md:col-span-1"><FieldLabel>Group name</FieldLabel><FieldContent><Input {...form.register(`choiceGroups.${groupIndex}.name`)} placeholder="e.g. Drinks, sides, or toppings" /></FieldContent></Field>
+                                <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 md:contents">
+                                    <Field className="min-w-0"><FieldLabel>Minimum</FieldLabel><FieldContent><Input type="number" min="0" {...form.register(`choiceGroups.${groupIndex}.minSelections`)} /></FieldContent></Field>
+                                    <Field className="min-w-0"><FieldLabel>Maximum</FieldLabel><FieldContent><Input type="number" min="0" {...form.register(`choiceGroups.${groupIndex}.maxSelections`)} /></FieldContent></Field>
+                                    <Button type="button" variant="ghost" size="icon" className="self-end" disabled={fields.length === 1} onClick={() => remove(groupIndex)} aria-label="Remove group"><Trash2 className="size-4" /></Button>
+                                </div>
                             </div>
-                            <div className="space-y-2 pl-2">
-                                {group?.options?.map((option, optionIndex) => <div key={`${field.id}-${optionIndex}`} className="grid gap-2 sm:grid-cols-[1fr_110px_130px_auto] sm:items-end">
-                                    <Field><FieldLabel>Product</FieldLabel><FieldContent><ComboProductPickerDialog categories={categories} products={optionProducts} value={option.productId} onChange={(productId) => updateOption(groupIndex, optionIndex, { productId })} /><FieldError errors={[form.formState.errors.choiceGroups?.[groupIndex]?.options?.[optionIndex]?.productId]} /></FieldContent></Field>
-                                    <Field><FieldLabel>Max qty</FieldLabel><FieldContent><Input type="number" min="1" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.maxQuantity`)} /></FieldContent></Field>
-                                    <Field><FieldLabel>Price + / -</FieldLabel><FieldContent><Input type="number" step="0.01" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.priceAdjustment`)} /></FieldContent></Field>
-                                    <Button type="button" variant="ghost" size="icon" disabled={group.options.length === 1} onClick={() => updateGroup(groupIndex, { options: group.options.filter((_, index) => index !== optionIndex) })} aria-label="Remove option"><Minus className="size-4" /></Button>
-                                </div>)}
-                                <Button type="button" variant="ghost" size="sm" onClick={() => addOption(groupIndex)} disabled={optionProducts.length <= (group?.options?.length ?? 0)}><Plus className="size-3.5" />Add option</Button>
+                            <div className="min-w-0 space-y-3 pl-2">
+                                <Field className="min-w-0">
+                                    <FieldLabel className="w-full items-center justify-between">
+                                        <span>Products</span>
+                                        <span className="text-xs font-normal text-muted-foreground">{group?.options?.length ?? 0} selected</span>
+                                    </FieldLabel>
+                                    <FieldContent>
+                                        <ComboProductPickerDialog
+                                            categories={categories}
+                                            products={optionProducts}
+                                            values={(group?.options ?? []).map((option) => option.productId).filter(Boolean)}
+                                            onChange={(productIds) => updateGroupProducts(groupIndex, productIds)}
+                                        />
+                                        <FieldError errors={[form.formState.errors.choiceGroups?.[groupIndex]?.options]} />
+                                    </FieldContent>
+                                </Field>
+                                {(group?.options?.length ?? 0) === 0 ? (
+                                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+                                        Select one or more products above to add them to this group.
+                                    </div>
+                                ) : (
+                                    <div className="min-w-0 space-y-2">
+                                        <div className="hidden min-w-0 grid-cols-[minmax(0,1fr)_7rem_8rem_auto] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+                                            <span>Product</span>
+                                            <span>Max qty</span>
+                                            <span>Price +/-</span>
+                                            <span className="sr-only">Remove</span>
+                                        </div>
+                                        {group?.options?.map((option, optionIndex) => {
+                                        const selectedProduct = optionProducts.find((item) => item.id === option.productId);
+                                        return <div key={`${field.id}-${option.productId}`} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 md:grid-cols-[minmax(0,1fr)_7rem_8rem_auto] md:items-end">
+                                            <div className="col-span-3 min-w-0 space-y-1 md:col-span-1">
+                                                <p className="text-sm font-medium leading-none md:sr-only">Product</p>
+                                                <div className="flex h-9 min-w-0 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-sm">
+                                                    <span className="truncate">{selectedProduct?.name ?? "Select a product"}</span>
+                                                </div>
+                                            </div>
+                                            <Field className="min-w-0"><FieldLabel className="md:sr-only">Max qty</FieldLabel><FieldContent><Input type="number" min="1" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.maxQuantity`)} /></FieldContent></Field>
+                                            <Field className="min-w-0"><FieldLabel className="md:sr-only">Price + / -</FieldLabel><FieldContent><Input type="number" step="0.01" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.priceAdjustment`)} /></FieldContent></Field>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="self-end md:mb-0"
+                                                aria-label={`Remove ${selectedProduct?.name ?? "product"} from group`}
+                                                onClick={() => updateGroupProducts(
+                                                    groupIndex,
+                                                    group.options
+                                                        .filter((currentOption) => currentOption.productId !== option.productId)
+                                                        .map((currentOption) => currentOption.productId),
+                                                )}
+                                            >
+                                                <X className="size-4" />
+                                            </Button>
+                                        </div>;
+                                        })}
+                                    </div>
+                                )}
                             </div>
                             <FieldError errors={[form.formState.errors.choiceGroups?.[groupIndex]?.options, form.formState.errors.choiceGroups?.[groupIndex]?.maxSelections]} />
                         </div>;
