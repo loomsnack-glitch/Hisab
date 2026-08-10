@@ -179,12 +179,18 @@ export type CategoriesListResponse = {
     categories: CategoryDTO[];
 };
 
+export type InactiveProductCode = {
+    productCode: string;
+    productName: string;
+};
+
 export type CategoryResponse = {
     category: CategoryDTO;
 };
 
 export type ProductsListResponse = {
     products: ProductResponseDTO[];
+    inactiveProductCodes?: InactiveProductCode[];
 };
 
 export type ProductResponse = {

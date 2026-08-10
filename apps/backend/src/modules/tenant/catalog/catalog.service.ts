@@ -613,12 +613,24 @@ export const getCategoriesForDevice = async (
 export const getProductsForDevice = async (
   session: DeviceSessionDTO,
 ): Promise<ServiceResponse<ProductsListResponse | null>> => {
-  const products = await catalogRepository.getActiveProductsByOrganizationId(
-    session.organization.id,
+  const [products, productsForInactiveCodeLookup] = await Promise.all([
+    catalogRepository.getActiveProductsByOrganizationId(
+      session.organization.id,
+    ),
+    catalogRepository.getProductsByOrganizationId(session.organization.id),
+  ]);
+  const inactiveProductCodes = productsForInactiveCodeLookup.flatMap(
+    (product) =>
+      product.status === "inactive" && product.productCode
+        ? [{ productCode: product.productCode, productName: product.name }]
+        : [],
   );
   return {
     status: "success",
-    data: { products: await resolveProducts(products) },
+    data: {
+      products: await resolveProducts(products),
+      inactiveProductCodes,
+    },
     message: "Products fetched successfully",
     code: STATUS_CODES.SUCCESS,
   };

@@ -20,6 +20,7 @@ import {
   getAddOnById,
   getOrganizationByIdForUser,
   getProductAddOnAttachmentById,
+  getProductsByOrganizationId,
   getProductById,
   getSelectableProductAddOnAttachmentsByOrganizationId,
   organization,
@@ -47,6 +48,7 @@ describe("Add-On catalog service", () => {
     getSelectableProductAddOnAttachmentsByOrganizationId.mockClear();
     getActiveAddOnsByOrganizationId.mockClear();
     getActiveProductsByOrganizationId.mockClear();
+    getProductsByOrganizationId.mockClear();
     countAttachmentsByAddOnId.mockClear();
     countSaleItemAddOnsByAddOnId.mockClear();
     countBundleProductComponentAddOnsByAddOnId.mockClear();
@@ -66,6 +68,7 @@ describe("Add-On catalog service", () => {
     ]);
     getActiveAddOnsByOrganizationId.mockResolvedValue([addOn]);
     getActiveProductsByOrganizationId.mockResolvedValue([product]);
+    getProductsByOrganizationId.mockResolvedValue([product]);
     countAttachmentsByAddOnId.mockResolvedValue(0);
     countSaleItemAddOnsByAddOnId.mockResolvedValue(0);
     countBundleProductComponentAddOnsByAddOnId.mockResolvedValue(0);
@@ -274,6 +277,7 @@ describe("Add-On catalog service", () => {
     expect(response.data?.products).toEqual([
       { ...product, imageSignedUrl: null },
     ]);
+    expect(response.data?.inactiveProductCodes).toEqual([]);
     expect(getActiveProductsByOrganizationId).toHaveBeenCalledWith(
       organizationId,
     );
@@ -311,10 +315,34 @@ describe("Add-On catalog service", () => {
         imageSignedUrl: null,
       },
     ]);
+    expect(response.data?.inactiveProductCodes).toEqual([]);
     expect(otherTenantResponse.data?.products).toEqual([]);
     expect(getActiveProductsByOrganizationId).toHaveBeenLastCalledWith(
       "other-organization",
     );
+  });
+
+  test("POS catalog exposes inactive Product Codes only for safe scan recovery", async () => {
+    const inactiveProduct = {
+      ...product,
+      name: "Retired Burger",
+      status: "inactive" as const,
+      productCode: "retired-burger",
+      productCodeKind: "manufacturer" as const,
+    };
+    getActiveProductsByOrganizationId.mockResolvedValue([product]);
+    getProductsByOrganizationId.mockResolvedValue([product, inactiveProduct] as never);
+
+    const response = await catalogService.getProductsForDevice({
+      organization: { id: organizationId },
+      store: { id: "store-1" },
+      device: { id: "device-1" },
+    } as never);
+
+    expect(response.data?.products).toEqual([{ ...product, imageSignedUrl: null }]);
+    expect(response.data?.inactiveProductCodes).toEqual([
+      { productCode: "retired-burger", productName: "Retired Burger" },
+    ]);
   });
 
 });

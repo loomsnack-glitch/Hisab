@@ -17,6 +17,7 @@ import {
     getPosCustomers,
     getPosProductAddOnAttachments,
     getPosComboProducts,
+    getPosSettings,
     getComboProducts,
     deletePosDraftSale,
     getProductAddOnAttachments,
@@ -80,15 +81,19 @@ import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
     ArrowUpDown,
+    Barcode,
     Calendar,
     Check,
     ChevronLeft,
     ChevronRight,
+    Copy,
     Filter,
     LayoutGrid,
     MoreHorizontal,
     Minus,
+    Pause,
     Plus,
+    Play,
     Printer,
     ReceiptText,
     Search,
@@ -122,6 +127,13 @@ import {
     getProductCardActionLabel,
     type ProductCardAction,
 } from "@/lib/product-card-interaction";
+import {
+    consumeDirectBarcodeScanKey,
+    incrementPlainProductQuantity,
+    resolveProductCodeScan,
+    shouldCaptureDirectBarcodeScan,
+    type InactiveProductCode,
+} from "@/lib/barcode-scanning";
 import { safeRandomUUID } from "@/lib/uuid";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
@@ -158,6 +170,20 @@ type ComposerItem = {
     bundleComponents: ComposerBundleComponent[];
     comboSelections: ComposerComboSelection[];
 };
+
+type ScanFeedback =
+    | { kind: "success"; message: string }
+    | { kind: "unknown"; productCode: string }
+    | { kind: "inactive"; productCode: string; productName: string }
+    | { kind: "ambiguous"; productCode: string }
+    | { kind: "unavailable"; message: string };
+
+const isEditableFocusTarget = (element: Element | null) =>
+    Boolean(
+        element?.closest(
+            'input, textarea, select, [contenteditable="true"], [role="combobox"], [role="textbox"]',
+        ),
+    );
 
 const buildComposerConfigurationSignature = (addOns: ComposerAddOn[]) => {
     const selected = addOns.filter((addOn) => addOn.quantity > 0);
@@ -365,6 +391,7 @@ type BillingPageProps = {
         tab: "products" | "bills" | "customers" | "purchases",
         composerHandoff?: PosComposerHandoff,
     ) => void;
+    onProductSearchChange?: (value: string) => void;
     onCustomerSearchChange?: (value: string) => void;
     pendingComposerHandoff?: PosComposerHandoff | null;
     onComposerHandoffConsumed?: () => void;
@@ -379,6 +406,7 @@ const BillingPage = ({
     purchaseSearch: purchaseSearchProp,
     customerSearch: customerSearchProp,
     onPanelTabChange,
+    onProductSearchChange,
     onCustomerSearchChange,
     pendingComposerHandoff = null,
     onComposerHandoffConsumed,
@@ -448,6 +476,11 @@ const BillingPage = ({
     const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
     const [configureComboProductId, setConfigureComboProductId] = useState<string | null>(null);
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
+    const [scanValue, setScanValue] = useState("");
+    const [directScanPaused, setDirectScanPaused] = useState(false);
+    const [scanFeedback, setScanFeedback] = useState<ScanFeedback | null>(null);
+    const scanInputRef = useRef<HTMLInputElement | null>(null);
+    const directScanBufferRef = useRef("");
 
     const productSearch = productSearchProp ?? "";
     const salesSearch = salesSearchProp ?? "";
@@ -586,6 +619,12 @@ const BillingPage = ({
         enabled: Boolean(organizationId),
     });
 
+    const posSettingsQuery = useQuery({
+        queryKey: ["pos", "settings", session?.device.id],
+        queryFn: () => getPosSettings(),
+        enabled: isDeviceMode && Boolean(session?.device.id),
+    });
+
     const selectableAttachmentsQuery = useQuery({
         queryKey: catalogKeys.selectableProductAttachments(organizationId),
         queryFn: () => getPosProductAddOnAttachments(),
@@ -663,6 +702,17 @@ const BillingPage = ({
     }, [isDeviceMode, organization, selectedStoreId, session]);
     const categories = categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : [];
     const products = productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : [];
+    const inactiveProductCodes =
+        productsQuery.data?.status === "success"
+            ? ((productsQuery.data.data?.inactiveProductCodes ?? []) as InactiveProductCode[])
+            : [];
+    const barcodeScanningEnabled =
+        posSettingsQuery.data?.status === "success" &&
+        posSettingsQuery.data.data?.organizationCatalogSettings.barcodeScanningEnabled === true;
+    const directBarcodeScanEnabled =
+        barcodeScanningEnabled &&
+        posSettingsQuery.data?.status === "success" &&
+        posSettingsQuery.data.data?.storeDevicePosSettings.directBarcodeScanEnabled === true;
     const getComposerUnitDiscountFromSaleItem = useCallback((item: SaleDetailDTO["items"][number]) => {
         const quantity = Number(item.quantity);
         if (quantity <= 0) return 0;
@@ -1107,7 +1157,7 @@ const BillingPage = ({
         };
     }, [receiptContext, receiptToPrint]);
 
-    const addPlainProductToBill = (product: ProductResponseDTO) => {
+    const addPlainProductToBill = (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
         setItems((current) => {
             const existingPlainItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
@@ -1116,11 +1166,12 @@ const BillingPage = ({
                 }),
             );
             if (existingPlainItem) {
-                return current.map((item) =>
-                    item.key === existingPlainItem.key ? { ...item, quantity: item.quantity + 1 } : item,
-                );
+                const nextQuantity = existingPlainItem.quantity + 1;
+                onAdded?.(nextQuantity);
+                return incrementPlainProductQuantity(current, existingPlainItem.key) ?? current;
             }
 
+            onAdded?.(1);
             return [
                 ...current,
                 {
@@ -1139,9 +1190,9 @@ const BillingPage = ({
         });
     };
 
-    const addProductToBill = (product: ProductResponseDTO) => {
+    const addProductToBill = (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
         if (product.productType !== "combo") {
-            addPlainProductToBill(product);
+            addPlainProductToBill(product, onAdded);
             return;
         }
 
@@ -1162,7 +1213,7 @@ const BillingPage = ({
             return;
         }
 
-        addPlainProductToBill(product);
+        addPlainProductToBill(product, onAdded);
     };
 
     const handleProductCardClick = (product: ProductResponseDTO, action: ProductCardAction) => {
@@ -1180,6 +1231,139 @@ const BillingPage = ({
             addProductToBill(product);
         }
     };
+
+    const focusScanField = useCallback(() => {
+        window.setTimeout(() => scanInputRef.current?.focus(), 0);
+    }, []);
+
+    const handleProductCodeScan = useCallback(
+        (productCode: string) => {
+            if (productCode.length === 0) {
+                return;
+            }
+
+            setScanValue("");
+            const result = resolveProductCodeScan(productCode, products, inactiveProductCodes);
+            if (result.kind === "unknown") {
+                setScanFeedback({ kind: "unknown", productCode: result.productCode });
+                focusScanField();
+                return;
+            }
+
+            if (result.kind === "inactive") {
+                setScanFeedback({
+                    kind: "inactive",
+                    productCode: result.productCode,
+                    productName: result.productName,
+                });
+                focusScanField();
+                return;
+            }
+
+            if (result.kind === "ambiguous") {
+                setScanFeedback({ kind: "ambiguous", productCode: result.productCode });
+                focusScanField();
+                return;
+            }
+
+            const productAttachments = attachmentsByProductId.get(result.product.id) ?? [];
+            const combo = preloadedCombos.find((item) => item.product.id === result.product.id);
+            const action = getProductCardAction(result.product, {
+                hasAddOns: productAttachments.length > 0,
+                comboAvailable: Boolean(combo),
+                comboHasSettings: Boolean(combo?.choiceGroups.length),
+                comboLoading: result.product.productType === "combo" && comboProductsQuery.isPending,
+                comboHasError: comboProductsQuery.isError || comboProductsQuery.data?.status === "error",
+            });
+
+            if (action === "disabled" || action === "loading") {
+                setScanFeedback({ kind: "unavailable", message: `${result.product.name} cannot be added right now.` });
+                focusScanField();
+                return;
+            }
+
+            if (action === "add" || action === "retry") {
+                addProductToBill(result.product, (quantity) => {
+                    window.setTimeout(() => {
+                        setScanFeedback({
+                            kind: "success",
+                            message: `${result.product.name} added. Quantity ${quantity}.`,
+                        });
+                        focusScanField();
+                    }, 0);
+                });
+                return;
+            } else {
+                handleProductCardClick(result.product, action);
+            }
+            if (action === "customize" || action === "configure") {
+                setScanFeedback({ kind: "success", message: `Choose options for ${result.product.name}.` });
+                return;
+            }
+        },
+        [
+            addProductToBill,
+            attachmentsByProductId,
+            comboProductsQuery.data?.status,
+            comboProductsQuery.isError,
+            comboProductsQuery.isPending,
+            focusScanField,
+            handleProductCardClick,
+            inactiveProductCodes,
+            preloadedCombos,
+            products,
+        ],
+    );
+
+    useEffect(() => {
+        const captureEnabled =
+            isDeviceMode &&
+            leftPanelTab === "products" &&
+            directBarcodeScanEnabled &&
+            !directScanPaused;
+        if (!captureEnabled) {
+            directScanBufferRef.current = "";
+            return;
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const activeElement = document.activeElement;
+            const scanFieldOwnsFocus = activeElement === scanInputRef.current;
+            const dialogOwnsFocus = Boolean(document.querySelector('[role="dialog"]'));
+            const canCapture = shouldCaptureDirectBarcodeScan({
+                enabled: captureEnabled,
+                scanFieldOwnsFocus,
+                unrelatedEditableFieldOwnsFocus: isEditableFocusTarget(activeElement),
+                dialogOwnsFocus,
+            });
+
+            if (!canCapture) {
+                directScanBufferRef.current = "";
+                return;
+            }
+
+            if (event.key === "Enter") {
+                const result = consumeDirectBarcodeScanKey(directScanBufferRef.current, event.key);
+                directScanBufferRef.current = result.buffer;
+                if (result.scannedCode) {
+                    event.preventDefault();
+                    handleProductCodeScan(result.scannedCode);
+                }
+                return;
+            }
+
+            if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                event.preventDefault();
+                directScanBufferRef.current = consumeDirectBarcodeScanKey(directScanBufferRef.current, event.key).buffer;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown, true);
+        return () => {
+            directScanBufferRef.current = "";
+            window.removeEventListener("keydown", handleKeyDown, true);
+        };
+    }, [directBarcodeScanEnabled, directScanPaused, handleProductCodeScan, isDeviceMode, leftPanelTab]);
 
     const addConfiguredProductToBill = (product: ProductResponseDTO, addOns: CustomizeAddOnSelection[]) => {
         if (addOns.length === 0) {
@@ -1985,6 +2169,128 @@ const BillingPage = ({
                     ) : canMutate && leftPanelTab === "products" ? (
                         <>
                             <div className="flex min-h-full min-w-0 flex-col">
+                                {barcodeScanningEnabled ? (
+                                    <div className="mb-4 rounded-xl border border-border/60 bg-card/80 p-3 shadow-sm">
+                                        <div className="flex flex-wrap items-end gap-2">
+                                            <form
+                                                className="min-w-[min(100%,16rem)] flex-1"
+                                                onSubmit={(event) => {
+                                                    event.preventDefault();
+                                                    handleProductCodeScan(scanValue);
+                                                }}
+                                            >
+                                                <label
+                                                    htmlFor="product-code-scan"
+                                                    className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-foreground"
+                                                >
+                                                    <Barcode className="size-3.5 text-primary" />
+                                                    Scan Product Code
+                                                </label>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        ref={scanInputRef}
+                                                        id="product-code-scan"
+                                                        value={scanValue}
+                                                        onChange={(event) => setScanValue(event.target.value)}
+                                                        placeholder="Scan or type a Product Code"
+                                                        autoComplete="off"
+                                                        className="h-9 rounded-lg"
+                                                    />
+                                                    <Button type="submit" size="sm" className="h-9 rounded-lg">
+                                                        Add
+                                                    </Button>
+                                                </div>
+                                            </form>
+                                            {directBarcodeScanEnabled ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-9 rounded-lg"
+                                                    aria-pressed={!directScanPaused}
+                                                    onClick={() => setDirectScanPaused((paused) => !paused)}
+                                                >
+                                                    {directScanPaused ? (
+                                                        <>
+                                                            <Play className="size-3.5" /> Resume direct scan
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Pause className="size-3.5" /> Pause direct scan
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            ) : null}
+                                        </div>
+                                        {directBarcodeScanEnabled ? (
+                                            <p className="mt-2 text-xs text-muted-foreground">
+                                                Direct scanner capture is {directScanPaused ? "paused" : "ready"}. It pauses while you type in another field or use a dialog.
+                                            </p>
+                                        ) : null}
+                                        {scanFeedback ? (
+                                            <div
+                                                className={cn(
+                                                    "mt-3 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm",
+                                                    scanFeedback.kind === "success"
+                                                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                                        : "bg-amber-500/10 text-amber-800 dark:text-amber-200",
+                                                )}
+                                                role="status"
+                                            >
+                                                {scanFeedback.kind === "success" || scanFeedback.kind === "unavailable" ? (
+                                                    <span>{scanFeedback.message}</span>
+                                                ) : scanFeedback.kind === "inactive" ? (
+                                                    <span>
+                                                        {scanFeedback.productName} is inactive. Product Code: <code>{scanFeedback.productCode}</code>
+                                                    </span>
+                                                ) : scanFeedback.kind === "ambiguous" ? (
+                                                    <span>
+                                                        Product Code <code>{scanFeedback.productCode}</code> has conflicting catalog assignments. Ask an administrator to resolve it.
+                                                    </span>
+                                                ) : (
+                                                    <span>
+                                                        No Product is linked to <code>{scanFeedback.productCode}</code>.
+                                                    </span>
+                                                )}
+                                                {scanFeedback.kind === "unknown" ? (
+                                                    <>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-7 rounded-md bg-background/70"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await navigator.clipboard.writeText(scanFeedback.productCode);
+                                                                    toast.success("Product Code copied for your administrator");
+                                                                } catch {
+                                                                    toast.error("Could not copy the Product Code");
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Copy className="size-3" /> Copy for administrator
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-7 rounded-md"
+                                                            onClick={() => {
+                                                                setScanFeedback(null);
+                                                                onProductSearchChange?.("");
+                                                                window.setTimeout(() => {
+                                                                    document.querySelector<HTMLInputElement>('[aria-label="Search products..."]')?.focus();
+                                                                }, 0);
+                                                            }}
+                                                        >
+                                                            Search products manually
+                                                        </Button>
+                                                    </>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                ) : null}
                                 {/* Category Filter Pills */}
                                 <div className="sticky top-0 z-10 -mx-4 mb-4 bg-background/95 px-4 pt-1 pb-2 backdrop-blur-md sm:-mx-4 sm:px-4">
                                     <div className="mb-2 flex items-center justify-between gap-3">
@@ -3712,6 +4018,7 @@ const BillingPage = ({
                 onOpenChange={(open) => {
                     if (!open) {
                         setCustomizeProductId(null);
+                        focusScanField();
                     }
                 }}
                 product={customizeProduct}
@@ -3723,7 +4030,10 @@ const BillingPage = ({
                 key={`${configureComboProductId ?? "combo-dialog"}-${configureCombo ? "loaded" : "loading"}`}
                 open={Boolean(configureComboProductId && !comboUnavailable)}
                 onOpenChange={(open) => {
-                    if (!open) setConfigureComboProductId(null);
+                    if (!open) {
+                        setConfigureComboProductId(null);
+                        focusScanField();
+                    }
                 }}
                 combo={configureCombo}
                 attachmentsByProductId={attachmentsByProductId}

@@ -7,6 +7,7 @@ const PosProductsPage = () => {
     const {
         session,
         searchValue,
+        onSearchChange,
         onPanelTabChange,
         pendingComposerHandoff,
         clearPendingComposerHandoff,
@@ -18,6 +19,7 @@ const PosProductsPage = () => {
             session={session}
             initialPanelTab="products"
             productSearch={searchValue}
+            onProductSearchChange={onSearchChange}
             onPanelTabChange={onPanelTabChange}
             pendingComposerHandoff={pendingComposerHandoff}
             onComposerHandoffConsumed={clearPendingComposerHandoff}
