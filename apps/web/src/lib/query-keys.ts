@@ -111,3 +111,9 @@ export const purchaseKeys = {
     [...purchaseKeys.all, "pos", "detail", purchaseId] as const,
   posSummary: () => [...purchaseKeys.all, "pos", "summary"] as const,
 };
+
+export const whatsappKeys = {
+  all: ["whatsapp"] as const,
+  account: (organizationId: string, storeId: string) =>
+    [...whatsappKeys.all, "account", organizationId, storeId] as const,
+};

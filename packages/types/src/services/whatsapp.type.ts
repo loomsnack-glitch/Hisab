@@ -1,6 +1,7 @@
 import type z from "zod";
 import {
     WhatsAppAccountDTOSchema,
+    WhatsAppAccountStatusResponseSchema,
     WhatsAppAccountStatusSchema,
     WhatsAppConversationDTOSchema,
     WhatsAppConversationMessageDirectionSchema,
@@ -10,8 +11,12 @@ import {
     WhatsAppOutboxKindSchema,
     WhatsAppOutboxStatusSchema,
     WhatsAppProviderSchema,
+    WhatsAppCreateAccountSchema,
     WhatsAppSendInvoiceSchema,
     WhatsAppSendTextSchema,
+    WhatsAppWorkerAccountSchema,
+    WhatsAppWorkerStatusResponseSchema,
+    WhatsAppWorkerStatusUpdateSchema,
 } from "./whatsapp.schema";
 
 export type OTPRequestData = {
@@ -40,5 +45,10 @@ export type WhatsAppOutboxStatus = z.infer<typeof WhatsAppOutboxStatusSchema>;
 export type WhatsAppAccountDTO = z.infer<typeof WhatsAppAccountDTOSchema>;
 export type WhatsAppConversationDTO = z.infer<typeof WhatsAppConversationDTOSchema>;
 export type WhatsAppMessageDTO = z.infer<typeof WhatsAppMessageDTOSchema>;
+export type WhatsAppCreateAccountJSON = z.infer<typeof WhatsAppCreateAccountSchema>;
+export type WhatsAppAccountStatusResponseDTO = z.infer<typeof WhatsAppAccountStatusResponseSchema>;
+export type WhatsAppWorkerAccountDTO = z.infer<typeof WhatsAppWorkerAccountSchema>;
+export type WhatsAppWorkerStatusUpdateJSON = z.infer<typeof WhatsAppWorkerStatusUpdateSchema>;
+export type WhatsAppWorkerStatusResponseDTO = z.infer<typeof WhatsAppWorkerStatusResponseSchema>;
 export type WhatsAppSendTextJSON = z.infer<typeof WhatsAppSendTextSchema>;
 export type WhatsAppSendInvoiceJSON = z.infer<typeof WhatsAppSendInvoiceSchema>;

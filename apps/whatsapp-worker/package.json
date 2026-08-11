@@ -1,0 +1,21 @@
+{
+    "name": "whatsapp-worker",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "bun build src/index.ts --outdir dist --target node --format esm --minify --external link-preview-js --external jimp --external sharp",
+        "dev": "bun --watch src/index.ts",
+        "start": "node dist/index.js",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@whiskeysockets/baileys": "6.7.18",
+        "qrcode": "1.5.4"
+    },
+    "devDependencies": {
+        "@types/node": "^24.10.1",
+        "@types/bun": "latest",
+        "@types/qrcode": "^1.5.5",
+        "typescript": "5.9.3"
+    }
+}

@@ -6,7 +6,7 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
-import { ExternalLink, MonitorSmartphone, Pencil, PlusCircle, Store, Search, X } from "lucide-react";
+import { ExternalLink, MessageCircle, MonitorSmartphone, Pencil, PlusCircle, Store, Search, X } from "lucide-react";
 
 import CreateDeviceDialog from "@/components/organizations/create-device-dialog";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
@@ -147,6 +147,14 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                         organizationId={organizationId}
                                         store={store}
                                     />
+                                    <Button
+                                        variant="outline"
+                                        className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4"
+                                        render={<Link to={"/organizations/" + organizationId + "/stores/" + store.id + "/whatsapp"} />}
+                                    >
+                                        <MessageCircle className="size-3.5 sm:size-4" />
+                                        WhatsApp
+                                    </Button>
                                     <EditStoreDialog
                                         organizationId={organizationId}
                                         store={store}

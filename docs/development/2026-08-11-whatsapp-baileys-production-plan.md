@@ -365,3 +365,44 @@ Known validation boundary:
 
 Phase 1 implementation and review are complete. Stop here pending approval for
 Phase 2; no worker, route, PDF, or UI implementation has started.
+
+Phase 2 plan review: PASS on 2026-08-11.
+
+Phase 2 implementation decisions:
+
+- The worker will use the stable @whiskeysockets/baileys 6.7.18 line, pinned explicitly. The current Baileys 7 line has documented breaking changes, so the worker will not consume an unpinned release candidate.
+- The worker is a separate Node 20 ESM deployable. The API remains the system of record for tenancy and account metadata; the worker receives only scoped internal commands and reports connection state back through authenticated internal endpoints.
+- Baileys authentication state will use an encrypted custom file store. Raw auth keys, QR values, and provider errors will not be logged or returned in error responses.
+- The first linking flow is admin-only and one account per Store. The worker will support connect, reconnect, disconnect, QR/status retrieval, and provider-neutral text/document send primitives; invoice outbox wiring remains Phase 4.
+- Account status callbacks and startup reconciliation are part of this phase so a worker restart does not silently lose connected accounts.
+
+Phase 2 review boundary:
+
+- No customer messaging route, PDF generation, invoice outbox dispatch, or conversation UI is included in this phase.
+
+Phase 2 implementation review: PASS on 2026-08-11.
+
+Review findings fixed:
+
+- Worker bundle now leaves Baileys optional media peers external instead of failing the production bundle.
+- Worker reconnect callbacks ignore stale sockets and clear queued reconnect timers before a manual retry.
+- Encrypted auth-state file locks are cleaned up after each operation.
+- Worker responses are validated at the API boundary, and account-linking API errors return their correct HTTP status.
+- Existing account state remains visible in the admin linking screen when the worker is temporarily unavailable.
+- Session references are non-secret logical paths; raw auth files remain encrypted and outside API DTOs.
+
+Focused validation:
+
+- Worker encrypted-state test and shared WhatsApp schema tests — 4 passed, 8 expectations.
+- Worker typecheck — passed.
+- Worker Node-targeted production bundle — passed; 3.83 MB bundled with optional Baileys peers externalized.
+- Backend production bundle — passed.
+- Web TypeScript check — passed.
+- Scoped whitespace checks — passed.
+
+Known validation boundary:
+
+- A live WhatsApp account was not linked in this environment. QR scan, reconnect-after-restart, logout, and WhatsApp-side account behavior remain deployment/pilot checks and are not claimed as verified.
+
+Phase 2 implementation and review are complete. Stop here pending approval for
+Phase 3; PDF generation, invoice dispatch, and conversation work has not started.

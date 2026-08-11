@@ -73,6 +73,31 @@ export const WhatsAppMessageDTOSchema = z.object({
     readAt: dtoDateSchema.nullable().optional(),
 });
 
+export const WhatsAppCreateAccountSchema = z.object({
+    phoneNumber: phoneSchema,
+});
+
+export const WhatsAppAccountStatusResponseSchema = z.object({
+    account: WhatsAppAccountDTOSchema,
+    qrImageDataUrl: z.string().startsWith("data:image/png;base64,").max(200_000).nullable(),
+});
+
+export const WhatsAppWorkerAccountSchema = z.object({
+    id: z.uuid("Invalid WhatsApp account id"),
+    phoneNumber: phoneSchema,
+    status: WhatsAppAccountStatusSchema,
+});
+
+export const WhatsAppWorkerStatusUpdateSchema = z.object({
+    status: WhatsAppAccountStatusSchema,
+    qrImageDataUrl: z.string().startsWith("data:image/png;base64,").max(200_000).nullable(),
+    lastErrorCode: z.string().regex(/^[a-z0-9_]+$/).max(100).nullable(),
+});
+
+export const WhatsAppWorkerStatusResponseSchema = WhatsAppWorkerStatusUpdateSchema.extend({
+    accountId: z.uuid("Invalid WhatsApp account id"),
+});
+
 export const WhatsAppSendTextSchema = z.object({
     customerId: z.uuid("Invalid customer id"),
     body: z.string().trim().min(1, "Message cannot be empty").max(4096, "Message is too long"),

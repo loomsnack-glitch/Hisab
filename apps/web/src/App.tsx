@@ -25,6 +25,7 @@ import AddOnsPage from "@/pages/add-ons-page";
 import LandingPage from "@/pages/landing-page";
 import ReportsPage from "@/pages/reports-page";
 import PosReportsPage from "@/pages/pos-reports-page";
+import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
@@ -128,6 +129,7 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/reports" element={<ReportsPage />} />
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                                 <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
+                                <Route path="/organizations/:organizationId/stores/:storeId/whatsapp" element={<WhatsAppAccountPage />} />
                             </Route>
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
