@@ -22,6 +22,9 @@ export const getObject = (bucketName: string, key: string) =>
 export const uploadObject = (bucketName: string, key: string, body: string, mimetype: string) =>
     storageService.uploadObject(bucketName, key, body, mimetype);
 
+export const uploadBuffer = (bucketName: string, key: string, body: Uint8Array, mimetype: string) =>
+    storageService.uploadBuffer(bucketName, key, body, mimetype);
+
 export const generateSignedUrl = (bucketName: string, key: string, expiresIn?: number) =>
     storageService.generateSignedUrl(bucketName, key, expiresIn);
 

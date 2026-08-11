@@ -10,6 +10,7 @@ import { redis } from "@/config/redis";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as repository from "./whatsapp.repository";
 import * as workerClient from "./whatsapp.worker-client";
+import * as invoiceService from "./invoice";
 
 const QR_KEY_PREFIX = "whatsapp:account:qr:";
 const QR_TTL_SECONDS = 120;
@@ -203,3 +204,5 @@ export const getWorkerAccounts = async () => repository.getAccountsForWorker();
 
 export const receiveWorkerStatus = async (accountId: string, update: WhatsAppWorkerStatusUpdateJSON) =>
     saveWorkerStatus(accountId, update);
+
+export const queueInvoice = invoiceService.queueInvoice;

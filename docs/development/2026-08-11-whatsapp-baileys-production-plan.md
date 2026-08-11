@@ -406,3 +406,50 @@ Known validation boundary:
 
 Phase 2 implementation and review are complete. Stop here pending approval for
 Phase 3; PDF generation, invoice dispatch, and conversation work has not started.
+
+Phase 3 plan review: PASS on 2026-08-11.
+
+Phase 3 implementation boundary:
+
+- The cashier explicitly requests an invoice send through an authenticated backend route for an already committed Sale. The POS WhatsApp action and send-status presentation remain Phase 4 UI work.
+- The API will load the committed Sale Detail and its Sale Item Snapshots from the billing repository. It will never rebuild the PDF from current catalog or customer values.
+- PDFKit will be pinned as a backend dependency and wrapped behind a small renderer module. Generated PDFs will be uploaded as private MinIO objects; no public or permanent URL will be created.
+- The request requires a connected Baileys account for the Store and a Customer phone matching the existing international phone contract. Walk-in sales and malformed or missing phone numbers are rejected without creating a message or outbox row.
+- Conversation creation is limited to the persistence needed by an outbound invoice. Inbound ingestion, conversation listing, text messaging, and thread UI remain Phase 5.
+- PDF generation and object upload happen after the Sale transaction has committed. Failures return a visible error and leave the Sale completed. A deterministic object key plus database uniqueness and idempotency constraints make retries safe; an orphaned object is deleted when the database write fails.
+- The API creates the message and outbox rows in one database transaction. Phase 4 owns consuming that outbox and sending through the worker; this phase will not dispatch WhatsApp messages.
+
+Phase 3 review boundary:
+
+- No Baileys send operation, retry/dead-letter worker loop, POS WhatsApp button, bill-detail status UI, inbound message ingestion, or text conversation feature is included in this phase.
+
+Phase 3 implementation review: PASS on 2026-08-11.
+
+Review findings fixed:
+
+- Sale customer name and phone snapshots are persisted at Sale creation/commit time, so later Customer edits do not change the invoice artifact.
+- PDF generation is isolated behind a backend renderer and uses Sale Item Snapshot values rather than live catalog data.
+- Private PDF upload uses the existing MinIO boundary with a deterministic tenant-scoped key. The API does not expose a public URL.
+- Conversation, document message, and invoice outbox rows are created in one database transaction with both an idempotency key and a database uniqueness constraint.
+- Duplicate requests return the existing queued/sent state. A failed database write attempts to remove the newly uploaded object, while a concurrent successful request is preserved.
+- The endpoint verifies authenticated organization/store scope, rejects walk-in or invalid-phone invoices, and leaves the committed Sale unchanged on PDF/storage failure.
+- The first formatter pass rewrote unrelated legacy whitespace; those changes were removed before review. The final diff is limited to Phase 3 files and the dependency lock entries required by PDFKit.
+
+Focused validation:
+
+- bun install --frozen-lockfile --offline — passed.
+- bun test apps/backend/src/modules/tenant/whatsapp/invoice-pdf.test.ts packages/types/src/services/whatsapp.schema.test.ts — 5 passed, 9 expectations.
+- bun test apps/backend/src/modules/tenant/billing/billing.service.configured.test.ts — 30 passed, 188 expectations.
+- bun run --cwd packages/types build — passed.
+- bun run --cwd apps/backend build — passed.
+- Focused backend TypeScript check found no errors in the Phase 3 files.
+- git diff --check — passed.
+
+Known validation boundary:
+
+- The migration was statically reviewed but not applied to a live database in this environment.
+- MinIO upload, private-bucket policy, retention lifecycle, and a real WhatsApp account send remain deployment/pilot checks for the later worker phase.
+
+Phase 3 implementation and review are complete. Stop here pending approval for
+Phase 4; the Baileys sender, POS WhatsApp action, and send-status UI have not
+started.

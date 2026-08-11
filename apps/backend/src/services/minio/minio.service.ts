@@ -93,6 +93,23 @@ export const uploadObject = async (bucketName: string, key: string, file: string
     }
 }
 
+export const uploadBuffer = async (bucketName: string, key: string, file: Uint8Array, mimetype: string) => {
+    try {
+        const fileStream = new PassThrough();
+        fileStream.end(Buffer.from(file));
+
+        const metaData = {
+            'Content-Type': mimetype
+        }
+
+        return await minioClient.putObject(bucketName, key, fileStream, file.byteLength, metaData)
+    }
+    catch (e) {
+        console.log("Error in uploadBuffer: ", e)
+        throw e;
+    }
+}
+
 // get signed url for downloading
 export const generateSignedUrl = async (bucketName: string, key: string, expiresIn: number = 24 * 60 * 60) => {
     try {

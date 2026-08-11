@@ -244,6 +244,8 @@ export const updateSale = async (saleData: UpdateSaleREPO, tx?: Bun.TransactionS
     const [result] = await db`
         UPDATE sales
         SET customer_id = ${saleData.customerId ?? null},
+            customer_name_snapshot = ${saleData.customerNameSnapshot ?? null},
+            customer_phone_snapshot = ${saleData.customerPhoneSnapshot ?? null},
             status = ${saleData.status},
             payment_status = ${saleData.paymentStatus},
             updated_by_device_id = ${saleData.updatedByDeviceId ?? null},

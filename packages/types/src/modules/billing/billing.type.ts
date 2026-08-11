@@ -125,6 +125,8 @@ export type CreateSaleREPO = Pick<
     createdByDeviceId?: string | null;
     updatedByDeviceId?: string | null;
     customerId?: string | null;
+    customerNameSnapshot?: string | null;
+    customerPhoneSnapshot?: string | null;
     notes?: string | null;
     committedAt?: string | Date | null;
     saleNumber?: string | null;
@@ -143,6 +145,8 @@ export type UpdateSaleREPO = Pick<
 > & {
     updatedByDeviceId?: string | null;
     customerId?: string | null;
+    customerNameSnapshot?: string | null;
+    customerPhoneSnapshot?: string | null;
     notes?: string | null;
     committedAt?: string | Date | null;
     saleNumber?: string | null;

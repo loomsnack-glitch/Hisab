@@ -106,3 +106,12 @@ export const WhatsAppSendTextSchema = z.object({
 export const WhatsAppSendInvoiceSchema = z.object({
     saleId: z.uuid("Invalid sale id"),
 });
+
+export const WhatsAppInvoiceQueueResponseSchema = z.object({
+    saleId: z.uuid("Invalid sale id"),
+    messageId: z.uuid("Invalid message id"),
+    outboxId: z.uuid("Invalid outbox id"),
+    messageStatus: WhatsAppMessageStatusSchema,
+    outboxStatus: WhatsAppOutboxStatusSchema,
+    alreadyQueued: z.boolean(),
+});
