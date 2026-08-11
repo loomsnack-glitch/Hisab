@@ -197,6 +197,22 @@ export class BaileysAccountManager {
         return this.snapshot(account);
     }
 
+    public async shutdown(): Promise<void> {
+        const accounts = [...this.accounts.values()];
+        for (const account of accounts) {
+            account.intentionalDisconnect = true;
+            if (account.reconnectTimer) {
+                clearTimeout(account.reconnectTimer);
+                account.reconnectTimer = null;
+            }
+            account.socket?.end(new Error("WhatsApp worker shutting down"));
+            account.socket = null;
+            account.status = "disconnected";
+            account.qrImageDataUrl = null;
+        }
+        await Promise.all(accounts.map(account => this.report(account)));
+    }
+
     public async sendText(accountId: string, phoneNumber: string, body: string): Promise<string> {
         const socket = this.requireConnectedSocket(accountId);
         const result = await socket.sendMessage(phoneToJid(phoneNumber), { text: body });

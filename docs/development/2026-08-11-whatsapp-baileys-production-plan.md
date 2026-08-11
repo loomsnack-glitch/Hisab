@@ -288,6 +288,99 @@ Acceptance criteria:
 - queue age and failed-account alerts are actionable
 - measured resource usage is recorded before selecting the 50-account deployment size
 
+Phase 6 plan review: PASS on 2026-08-12.
+
+Phase 6 implementation decisions:
+
+- Worker replicas use an explicit partition count and zero-based partition
+  index. The API applies the same deterministic account hash to startup
+  reconciliation and outbox claiming, so a replica does not open sessions or
+  claim work for another replica's partition.
+- The database remains the source of truth for outbox leases. Each account
+  has at most one active processing lease, while a worker process may dispatch
+  several different accounts concurrently through a bounded configuration.
+  Expired leases remain recoverable after process or host failure.
+- Pending/retryable outbox work is bounded per account by a backend
+  configuration limit. The limit is enforced inside the creation transaction,
+  and the existing idempotency paths remain allowed to return an already
+  queued message.
+- Shutdown stops new claims, waits for in-flight dispatch calls to finish
+  within a bounded window, closes provider sockets without deleting encrypted
+  auth state, and leaves queued work recoverable by another worker.
+- Health and metrics endpoints expose only operational aggregates. Logs use
+  structured account/outbox identifiers and never include message bodies,
+  phone numbers, QR values, tokens, or session material.
+- The load harness is a bounded dry-run of account partitioning and dispatch
+  capacity; it does not create or connect real WhatsApp accounts. The agreed
+  pilot account count and real resource measurements remain a human/deployment
+  decision before selecting the 50-account size.
+
+Phase 6 review boundary:
+
+- Include deterministic worker partitioning, bounded dispatch concurrency and
+  queue limits, lease recovery behavior, graceful shutdown, operational health
+  and metrics, a bounded dry-run harness, and backup/session-loss recovery
+  documentation.
+- Exclude live load testing, production backup execution, deployment changes,
+  pilot rollout, and the release/rollback gate reserved for Phase 7.
+
+Phase 6 implementation review: PASS on 2026-08-12.
+
+Review findings fixed:
+
+- Account reconciliation and outbox claiming use the same deterministic
+  PostgreSQL account partition expression. The existing database lease still
+  serializes active work per account, while configurable worker concurrency
+  allows independent accounts to progress in parallel.
+- The per-account outbox limit locks the account row before counting active
+  work, preserves concurrent invoice idempotency, and returns a clear 429
+  response instead of an opaque server error when the queue is full.
+- SIGTERM/SIGINT stop new claims, drain in-flight dispatch loops within a
+  bounded timeout, close provider sockets, and preserve encrypted auth state
+  for restart recovery.
+- Health, readiness, Prometheus metrics, and API operations metrics expose
+  queue age, dead-letter counts, account health, dispatch activity, and
+  failure counters without message content, phone numbers, QR values, or
+  session material.
+- The bounded load harness is explicitly provider-free and reports the
+  simulated 50-account partition distribution and local process deltas. The
+  recovery runbook separates documented procedure from unexecuted production
+  backup, restore, and pilot evidence.
+
+Standards/spec review result:
+
+- Standards: PASS. No repository coding-standard file was present; the diff
+  passes the documented TypeScript/build conventions, whitespace checks, and
+  the review smell baseline after extracting duplicated account mapping.
+- Spec: PASS for the Phase 6 implementation boundary. Live worker-pool
+  routing, real Baileys resource usage, database execution, and backup/restore
+  evidence remain deployment decisions or Phase 7 evidence rather than being
+  claimed as locally verified.
+
+Focused validation:
+
+- bun test — 243 passed, 882 expectations across 30 files.
+- Worker metrics/auth-state tests — 2 passed, 11 expectations.
+- Worker, backend, and services production bundles — passed.
+- Worker, web, and shared-types TypeScript checks — passed.
+- Bounded load dry-run: 50 simulated accounts across 2 partitions, 25/25
+  distribution, 2.38 ms runtime, and 1.75 MB RSS delta in this process.
+- git diff --check — passed.
+
+Known validation boundary:
+
+- The WhatsApp migration was not applied to a live database. PostgreSQL
+  partition queries, queue limits, MinIO/session backup policy, real socket
+  resource usage, worker-pool routing, and recovery execution remain
+  deployment/pilot checks.
+- A project-wide backend TypeScript check still reports pre-existing unrelated
+  billing-test, catalog-test, catalog-service, and seed-script errors; no
+  Phase 6 file appears in that error set.
+
+Phase 6 implementation and review are complete. Stop here pending approval for
+Phase 7; deployment, pilot rollout, and production release work have not
+started.
+
 ### Phase 7 — Rollout and production release
 
 Deliverables:

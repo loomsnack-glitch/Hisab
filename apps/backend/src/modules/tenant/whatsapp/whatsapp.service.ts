@@ -201,7 +201,10 @@ export const disconnectAccount = async (
     }
 };
 
-export const getWorkerAccounts = async () => repository.getAccountsForWorker();
+export const getWorkerAccounts = async (partition?: repository.WorkerPartition) =>
+    partition ? repository.getAccountsForWorkerPartition(partition) : repository.getAccountsForWorker();
+
+export const getOperationsMetrics = repository.getOperationsMetrics;
 
 export const receiveWorkerStatus = async (accountId: string, update: WhatsAppWorkerStatusUpdateJSON) =>
     saveWorkerStatus(accountId, update);

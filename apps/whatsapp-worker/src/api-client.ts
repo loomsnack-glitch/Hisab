@@ -7,6 +7,7 @@ import {
     type WhatsAppWorkerInboundMessageJSON,
 } from "@repo/types";
 import type { AccountStatusSnapshot, WorkerAccountStatus } from "./provider/baileys-account-manager.js";
+import type { OperationsMetrics } from "./metrics.js";
 
 type BootstrapAccount = {
     id: string;
@@ -24,6 +25,7 @@ const request = async (path: string, init: RequestInit = {}, timeoutMs = 10_000)
             headers: {
                 Authorization: "Bearer " + workerConfig.workerToken,
                 "Content-Type": "application/json",
+                "X-WhatsApp-Worker-ID": workerConfig.workerId,
                 ...(init.headers ?? {}),
             },
         });
@@ -38,8 +40,13 @@ const assertOk = async (response: Response): Promise<void> => {
     }
 };
 
+const partitionQuery = () => new URLSearchParams({
+    partitionCount: String(workerConfig.partitionCount),
+    partitionIndex: String(workerConfig.partitionIndex),
+}).toString();
+
 export const listAccounts = async (): Promise<BootstrapAccount[]> => {
-    const response = await request("/internal/whatsapp/accounts");
+    const response = await request("/internal/whatsapp/accounts?" + partitionQuery());
     await assertOk(response);
     const data = await response.json() as { accounts?: BootstrapAccount[] };
     return Array.isArray(data.accounts) ? data.accounts : [];
@@ -58,13 +65,21 @@ export const reportStatus = async (snapshot: AccountStatusSnapshot): Promise<voi
 };
 
 export const claimNextInvoice = async (): Promise<WhatsAppWorkerOutboundJobDTO | null> => {
-    const response = await request("/internal/whatsapp/outbox/next", {}, 30_000);
+    const response = await request("/internal/whatsapp/outbox/next?" + partitionQuery(), {}, 30_000);
     await assertOk(response);
     const data = await response.json() as { job?: unknown };
     if (!data.job) return null;
     const parsed = WhatsAppWorkerOutboundJobSchema.safeParse(data.job);
     if (!parsed.success) throw new Error("Ganatri API returned an invalid WhatsApp outbound job");
     return parsed.data;
+};
+
+export const getOperationsMetrics = async (): Promise<OperationsMetrics> => {
+    const response = await request("/internal/whatsapp/operations/metrics?" + partitionQuery());
+    await assertOk(response);
+    const data = await response.json() as { metrics?: OperationsMetrics };
+    if (!data.metrics) throw new Error("Ganatri API returned invalid WhatsApp operations metrics");
+    return data.metrics;
 };
 
 export const reportInvoiceResult = async (
@@ -98,10 +113,12 @@ export const reportMessageStatus = async (
 export const reportInboundMessage = async (
     accountId: string,
     message: WhatsAppWorkerInboundMessageJSON,
-): Promise<void> => {
+): Promise<{ stored: boolean }> => {
     const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/messages/inbound", {
         method: "POST",
         body: JSON.stringify(message),
     }, 30_000);
     await assertOk(response);
+    const data = await response.json() as { stored?: unknown };
+    return { stored: data.stored === true };
 };

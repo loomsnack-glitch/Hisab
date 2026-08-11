@@ -6,7 +6,8 @@
         "build": "bun build src/index.ts --outdir dist --target node --format esm --minify --external link-preview-js --external jimp --external sharp",
         "dev": "bun --watch src/index.ts",
         "start": "node dist/index.js",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "load-test": "bun src/operations/load-test.ts"
     },
     "dependencies": {
         "@repo/types": "workspace:*",

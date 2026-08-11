@@ -29,7 +29,7 @@ const success = <T>(data: T, message: string): ServiceResponse<T> => ({
     code: STATUS_CODES.SUCCESS,
 });
 
-const error = <T>(message: string, code: 400 | 404 | 409 | 500 | 503): ServiceResponse<T | null> => ({
+const error = <T>(message: string, code: 400 | 404 | 409 | 429 | 500 | 503): ServiceResponse<T | null> => ({
     status: "error",
     message,
     data: null,
@@ -109,7 +109,10 @@ const sendTextForScope = async (
         const messages = await repository.getConversationMessages(scope.organizationId, scope.storeId, scope.account.id, conversationId);
         const message = messages.find(item => item.id === outbox.messageId) ?? null;
         return message ? success(message, "Message queued for WhatsApp") : error("Message could not be loaded", STATUS_CODES.INTERNAL_SERVER_ERROR);
-    } catch {
+    } catch (cause) {
+        if (cause instanceof repository.WhatsAppOutboxLimitError) {
+            return error("WhatsApp account queue is full; retry shortly", STATUS_CODES.TOO_MANY_REQUESTS);
+        }
         return error("Message could not be queued for WhatsApp", STATUS_CODES.INTERNAL_SERVER_ERROR);
     }
 };

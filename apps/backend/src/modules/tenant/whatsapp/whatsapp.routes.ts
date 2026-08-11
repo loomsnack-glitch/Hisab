@@ -35,6 +35,13 @@ const unexpectedError = (c: Context) => {
     );
 };
 
+const workerPartitionFromQuery = (c: Context): { count: number; index: number } | null => {
+    const count = Number(c.req.query("partitionCount") ?? 1);
+    const index = Number(c.req.query("partitionIndex") ?? 0);
+    if (!Number.isInteger(count) || count < 1 || !Number.isInteger(index) || index < 0 || index >= count) return null;
+    return { count, index };
+};
+
 userRouter.use("*", authMiddleware);
 
 userRouter.get("/:organizationId/stores/:storeId/whatsapp/account", async c => {
@@ -236,7 +243,9 @@ whatsappInternalRoutes.use("*", whatsappWorkerMiddleware);
 
 whatsappInternalRoutes.get("/accounts", async c => {
     try {
-        return c.json({ accounts: await service.getWorkerAccounts() });
+        const partition = workerPartitionFromQuery(c);
+        if (!partition) return c.json({ status: "error", message: "Invalid worker partition" }, STATUS_CODES.BAD_REQUEST);
+        return c.json({ accounts: await service.getWorkerAccounts(partition) });
     } catch {
         return c.json({ status: "error", message: "Worker reconciliation failed" }, 500);
     }
@@ -264,9 +273,23 @@ whatsappInternalRoutes.post(
 
 whatsappInternalRoutes.get("/outbox/next", async c => {
     try {
-        return c.json(await service.claimInvoiceForWorker());
+        const partition = workerPartitionFromQuery(c);
+        if (!partition) return c.json({ status: "error", message: "Invalid worker partition" }, STATUS_CODES.BAD_REQUEST);
+        const workerId = c.req.header("x-whatsapp-worker-id")?.trim() || "worker";
+        if (!/^[a-zA-Z0-9._-]{1,100}$/.test(workerId)) {
+            return c.json({ status: "error", message: "Invalid worker id" }, STATUS_CODES.BAD_REQUEST);
+        }
+        return c.json(await service.claimInvoiceForWorker(workerId, partition));
     } catch {
         return c.json({ status: "error", message: "WhatsApp outbox claim failed" }, 500);
+    }
+});
+
+whatsappInternalRoutes.get("/operations/metrics", async c => {
+    try {
+        return c.json({ metrics: await service.getOperationsMetrics() });
+    } catch {
+        return c.json({ status: "error", message: "WhatsApp operations metrics failed" }, 500);
     }
 });
 

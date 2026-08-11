@@ -1,34 +1,53 @@
 import { workerConfig } from "./config.js";
 import {
     claimNextInvoice,
+    getOperationsMetrics,
     listAccounts,
-    reportInvoiceResult,
     reportInboundMessage,
+    reportInvoiceResult,
     reportMessageStatus,
     reportStatus,
 } from "./api-client.js";
 import { startHttpServer } from "./http-server.js";
 import { logger } from "./logger.js";
+import { WorkerMetrics } from "./metrics.js";
 import { BaileysAccountManager } from "./provider/baileys-account-manager.js";
 
-const manager = new BaileysAccountManager(reportStatus, reportMessageStatus, reportInboundMessage);
-const server = startHttpServer(manager);
+const metrics = new WorkerMetrics();
+const reportStatusWithMetrics = async (snapshot: Parameters<typeof reportStatus>[0]): Promise<void> => {
+    metrics.setAccountStatus(snapshot.accountId, snapshot.status);
+    await reportStatus(snapshot);
+};
+const reportInboundWithMetrics = async (...args: Parameters<typeof reportInboundMessage>): Promise<void> => {
+    try {
+        const result = await reportInboundMessage(...args);
+        metrics.recordInboundMessage(result.stored);
+    } catch (error) {
+        metrics.recordInboundFailure();
+        throw error;
+    }
+};
+
+const manager = new BaileysAccountManager(reportStatusWithMetrics, reportMessageStatus, reportInboundWithMetrics);
+const server = startHttpServer(manager, metrics);
 
 const wait = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
 
 const classifySendFailure = (error: unknown): { code: string; message: string; retryable: boolean } => {
-    const message = error instanceof Error ? error.message : "WhatsApp document send failed";
+    const message = error instanceof Error ? error.message : "WhatsApp message send failed";
     const normalized = message.toLowerCase();
     const retryable = /connect|socket|network|timeout|temporar|not connected/.test(normalized);
     return {
         code: retryable ? "provider_unavailable" : "provider_rejected",
-        message: retryable ? "WhatsApp provider is temporarily unavailable" : "WhatsApp provider rejected the invoice",
+        message: retryable ? "WhatsApp provider is temporarily unavailable" : "WhatsApp provider rejected the message",
         retryable,
     };
 };
 
-const dispatchInvoices = async (): Promise<void> => {
-    for (;;) {
+let stopping = false;
+
+const dispatchInvoices = async (slot: number): Promise<void> => {
+    while (!stopping) {
         try {
             const job = await claimNextInvoice();
             if (!job) {
@@ -36,6 +55,7 @@ const dispatchInvoices = async (): Promise<void> => {
                 continue;
             }
 
+            metrics.recordClaim();
             try {
                 const providerMessageId = job.messageType === "text"
                     ? await manager.sendText(job.accountId, job.phoneNumber, job.body ?? "")
@@ -56,7 +76,9 @@ const dispatchInvoices = async (): Promise<void> => {
                     failureMessage: null,
                     retryable: false,
                 });
+                metrics.recordDispatchSuccess();
             } catch (error) {
+                metrics.recordDispatchFailure();
                 const failure = classifySendFailure(error);
                 await reportInvoiceResult(job.outboxId, {
                     leaseOwner: job.leaseOwner,
@@ -67,9 +89,25 @@ const dispatchInvoices = async (): Promise<void> => {
                 });
             }
         } catch {
-            logger.warn("WhatsApp invoice dispatch cycle failed");
+            logger.warn("WhatsApp dispatch cycle failed", { slot });
             await wait(workerConfig.dispatchErrorDelayMs);
         }
+    }
+};
+
+const refreshOperationsMetrics = async (): Promise<void> => {
+    try {
+        metrics.recordOperationsRefresh(await getOperationsMetrics());
+    } catch {
+        metrics.recordOperationsRefreshFailure();
+        logger.warn("Unable to refresh WhatsApp operations metrics");
+    }
+};
+
+const operationsLoop = async (): Promise<void> => {
+    while (!stopping) {
+        await refreshOperationsMetrics();
+        await wait(workerConfig.operationsRefreshIntervalMs);
     }
 };
 
@@ -77,6 +115,7 @@ const bootstrap = async (): Promise<void> => {
     try {
         const accounts = await listAccounts();
         for (const account of accounts) {
+            metrics.setAccountStatus(account.id, account.status);
             void manager.connect({
                 accountId: account.id,
                 phoneNumber: account.phoneNumber,
@@ -84,18 +123,34 @@ const bootstrap = async (): Promise<void> => {
                 logger.warn("Unable to restore WhatsApp account", { accountId: account.id });
             });
         }
-        logger.info("WhatsApp account reconciliation completed", { accountCount: accounts.length });
+        logger.info("WhatsApp account reconciliation completed", {
+            accountCount: accounts.length,
+            partitionIndex: workerConfig.partitionIndex,
+            partitionCount: workerConfig.partitionCount,
+        });
     } catch {
         logger.warn("WhatsApp account reconciliation failed");
     }
 };
 
-const shutdown = () => {
-    server.close(() => process.exit(0));
+const dispatchLoops = Array.from({ length: workerConfig.dispatchConcurrency }, (_, index) => dispatchInvoices(index));
+const operations = operationsLoop();
+
+let shutdownPromise: Promise<void> | null = null;
+const shutdown = async (): Promise<void> => {
+    if (shutdownPromise) return shutdownPromise;
+    shutdownPromise = (async () => {
+        stopping = true;
+        const drain = Promise.all([...dispatchLoops, operations]);
+        await Promise.race([drain, wait(workerConfig.shutdownTimeoutMs)]);
+        await manager.shutdown();
+        await new Promise<void>(resolve => server.close(() => resolve()));
+        logger.info("WhatsApp worker stopped", { workerId: workerConfig.workerId });
+    })();
+    return shutdownPromise;
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.once("SIGINT", () => { void shutdown(); });
+process.once("SIGTERM", () => { void shutdown(); });
 
 void bootstrap();
-void dispatchInvoices();

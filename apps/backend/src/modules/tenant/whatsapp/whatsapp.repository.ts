@@ -111,6 +111,33 @@ const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
 type WhatsAppMessageStatus = "queued" | "sending" | "sent" | "delivered" | "read" | "failed";
 type WhatsAppOutboxStatus = "pending" | "processing" | "sent" | "retryable" | "dead_letter" | "cancelled";
 
+export type WorkerPartition = {
+    count: number;
+    index: number;
+};
+
+export type WhatsAppOperationsMetrics = {
+    pendingCount: number;
+    processingCount: number;
+    retryableCount: number;
+    deadLetterCount: number;
+    oldestPendingAgeSeconds: number;
+    connectedAccountCount: number;
+    accountCount: number;
+};
+
+export class WhatsAppOutboxLimitError extends Error {
+    public constructor() {
+        super("WhatsApp account outbox limit reached");
+        this.name = "WhatsAppOutboxLimitError";
+    }
+}
+
+const pendingOutboxLimit = (): number => {
+    const value = Number(process.env.WHATSAPP_MAX_PENDING_OUTBOX_PER_ACCOUNT ?? 1_000);
+    return Number.isInteger(value) && value > 0 ? value : 1_000;
+};
+
 const mapAccount = (row: AccountRow): WhatsAppAccountDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     return {
@@ -181,6 +208,32 @@ export const getInvoiceOutbox = async (
 
 export const createInvoiceOutbox = async (params: InvoiceOutboxParams): Promise<InvoiceOutboxRecord> => {
     return pg.begin(async tx => {
+        const [account] = await tx`
+            SELECT id
+            FROM whatsapp_accounts
+            WHERE id = ${params.whatsappAccountId}
+            FOR UPDATE
+        `;
+        if (!account) throw new Error("WhatsApp account not found");
+        const [existingOutbox] = await tx`
+            SELECT o.id
+            FROM whatsapp_outbox o
+            INNER JOIN whatsapp_messages m ON m.id = o.message_id
+            WHERE o.whatsapp_account_id = ${params.whatsappAccountId}
+              AND m.idempotency_key = ${params.idempotencyKey}
+            LIMIT 1
+        `;
+        if (!existingOutbox) {
+            const [queued] = await tx`
+                SELECT COUNT(*) AS count
+                FROM whatsapp_outbox
+                WHERE whatsapp_account_id = ${params.whatsappAccountId}
+                  AND status IN ('pending', 'processing', 'retryable')
+            `;
+            if (Number(queued?.count ?? 0) >= pendingOutboxLimit()) {
+                throw new WhatsAppOutboxLimitError();
+            }
+        }
         const externalChatId = `${params.customerPhone.slice(1)}@s.whatsapp.net`;
         const [conversation] = await tx`
             INSERT INTO whatsapp_conversations (
@@ -508,6 +561,22 @@ export const createTextOutbox = async (
     body: string,
 ): Promise<InvoiceOutboxRecord> => {
     return pg.begin(async tx => {
+        const [account] = await tx`
+            SELECT id
+            FROM whatsapp_accounts
+            WHERE id = ${accountId}
+            FOR UPDATE
+        `;
+        if (!account) throw new Error("WhatsApp account not found");
+        const [queued] = await tx`
+            SELECT COUNT(*) AS count
+            FROM whatsapp_outbox
+            WHERE whatsapp_account_id = ${accountId}
+              AND status IN ('pending', 'processing', 'retryable')
+        `;
+        if (Number(queued?.count ?? 0) >= pendingOutboxLimit()) {
+            throw new WhatsAppOutboxLimitError();
+        }
         const [conversation] = await tx`
             SELECT id, contact_phone_number
             FROM whatsapp_conversations
@@ -555,6 +624,7 @@ export const createTextOutbox = async (
 export const claimNextInvoiceOutbox = async (
     leaseOwner: string,
     leaseSeconds: number,
+    partition: WorkerPartition = { count: 1, index: 0 },
 ): Promise<InvoiceOutboxJobRecord | null> => {
     return pg.begin(async tx => {
         await tx`
@@ -576,6 +646,7 @@ export const claimNextInvoiceOutbox = async (
               AND o.status IN ('pending', 'retryable')
               AND o.next_attempt_at <= NOW()
               AND a.status = 'connected'
+              AND (((hashtext(a.id::text)::bigint % ${partition.count}) + ${partition.count}) % ${partition.count}) = ${partition.index}
               AND NOT EXISTS (
                   SELECT 1
                   FROM whatsapp_outbox active
@@ -820,6 +891,15 @@ export const retryInvoiceOutbox = async (
     });
 };
 
+const mapWorkerAccount = (row: Record<string, unknown>): WhatsAppWorkerAccountDTO => {
+    const mapped = snakeToCamel(row) as Record<string, unknown>;
+    return {
+        id: String(mapped.id),
+        phoneNumber: String(mapped.phoneNumber),
+        status: mapped.status as WhatsAppWorkerAccountDTO["status"],
+    };
+};
+
 export const getAccountsForWorker = async (): Promise<WhatsAppWorkerAccountDTO[]> => {
     const rows = await pg`
         SELECT id, phone_number, status
@@ -827,14 +907,41 @@ export const getAccountsForWorker = async (): Promise<WhatsAppWorkerAccountDTO[]
         WHERE status IN ('pending_qr', 'connecting', 'connected', 'failed')
         ORDER BY created_at ASC
     `;
-    return rows.map((row: Record<string, unknown>) => {
-        const mapped = snakeToCamel(row) as Record<string, unknown>;
-        return {
-            id: String(mapped.id),
-            phoneNumber: String(mapped.phoneNumber),
-            status: mapped.status as WhatsAppWorkerAccountDTO["status"],
-        };
-    });
+    return rows.map(mapWorkerAccount);
+};
+
+export const getAccountsForWorkerPartition = async (partition: WorkerPartition): Promise<WhatsAppWorkerAccountDTO[]> => {
+    const rows = await pg`
+        SELECT id, phone_number, status
+        FROM whatsapp_accounts
+        WHERE status IN ('pending_qr', 'connecting', 'connected', 'failed')
+          AND (((hashtext(id::text)::bigint % ${partition.count}) + ${partition.count}) % ${partition.count}) = ${partition.index}
+        ORDER BY created_at ASC
+    `;
+    return rows.map(mapWorkerAccount);
+};
+
+export const getOperationsMetrics = async (): Promise<WhatsAppOperationsMetrics> => {
+    const [row] = await pg`
+        SELECT
+            COUNT(*) FILTER (WHERE status = 'pending') AS pending_count,
+            COUNT(*) FILTER (WHERE status = 'processing') AS processing_count,
+            COUNT(*) FILTER (WHERE status = 'retryable') AS retryable_count,
+            COUNT(*) FILTER (WHERE status = 'dead_letter') AS dead_letter_count,
+            COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(created_at) FILTER (WHERE status IN ('pending', 'retryable')))), 0) AS oldest_pending_age_seconds,
+            (SELECT COUNT(*) FROM whatsapp_accounts WHERE status = 'connected') AS connected_account_count,
+            (SELECT COUNT(*) FROM whatsapp_accounts) AS account_count
+        FROM whatsapp_outbox
+    `;
+    return {
+        pendingCount: Number(row?.pending_count ?? 0),
+        processingCount: Number(row?.processing_count ?? 0),
+        retryableCount: Number(row?.retryable_count ?? 0),
+        deadLetterCount: Number(row?.dead_letter_count ?? 0),
+        oldestPendingAgeSeconds: Number(row?.oldest_pending_age_seconds ?? 0),
+        connectedAccountCount: Number(row?.connected_account_count ?? 0),
+        accountCount: Number(row?.account_count ?? 0),
+    };
 };
 
 export const createAccount = async (

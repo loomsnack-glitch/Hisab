@@ -205,6 +205,14 @@ export const queueInvoiceForStore = async (
         );
       }
     }
+    if (error instanceof repository.WhatsAppOutboxLimitError) {
+      return {
+        status: "error",
+        message: "WhatsApp account queue is full; retry shortly",
+        data: null,
+        code: STATUS_CODES.TOO_MANY_REQUESTS,
+      };
+    }
     console.error(
       "[whatsapp] invoice preparation failed",
       error instanceof Error ? error.message : "unknown",
@@ -307,8 +315,11 @@ export const retryInvoiceForDevice = async (
     : { status: "error", message: "This invoice is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
 };
 
-export const claimInvoiceForWorker = async (): Promise<{ job: WhatsAppWorkerOutboundJobDTO | null }> => {
-  const claimed = await repository.claimNextInvoiceOutbox(`worker-${crypto.randomUUID()}`, 120);
+export const claimInvoiceForWorker = async (
+  workerId = "worker",
+  partition: repository.WorkerPartition = { count: 1, index: 0 },
+): Promise<{ job: WhatsAppWorkerOutboundJobDTO | null }> => {
+  const claimed = await repository.claimNextInvoiceOutbox(`${workerId}-${crypto.randomUUID()}`, 120, partition);
   if (!claimed) return { job: null };
 
   try {

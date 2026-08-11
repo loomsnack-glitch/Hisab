@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { timingSafeEqual } from "node:crypto";
 import { workerConfig } from "./config.js";
 import { logger } from "./logger.js";
+import { WorkerMetrics } from "./metrics.js";
 import {
     BaileysAccountManager,
     type AccountConnectionInput,
@@ -44,14 +45,38 @@ const accountIdFromPath = (path: string): string | null => {
     return match?.[1] ?? null;
 };
 
-export const createHttpServer = (manager: BaileysAccountManager) =>
+export const createHttpServer = (manager: BaileysAccountManager, metrics: WorkerMetrics) =>
     createServer(async (request, response) => {
         try {
             const method = request.method ?? "GET";
             const path = new URL(request.url ?? "/", "http://localhost").pathname;
 
             if (method === "GET" && path === "/health") {
-                json(response, 200, { status: "ok" });
+                json(response, 200, {
+                    status: "ok",
+                    ...metrics.snapshot(workerConfig.workerId, workerConfig.partitionCount, workerConfig.partitionIndex),
+                });
+                return;
+            }
+
+            if (method === "GET" && path === "/health/ready") {
+                json(response, 200, {
+                    status: "ready",
+                    workerId: workerConfig.workerId,
+                    partitionCount: workerConfig.partitionCount,
+                    partitionIndex: workerConfig.partitionIndex,
+                });
+                return;
+            }
+
+            if (method === "GET" && path === "/metrics") {
+                if (!authenticated(request)) {
+                    json(response, 401, { status: "error", message: "Unauthorized" });
+                    return;
+                }
+                response.statusCode = 200;
+                response.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+                response.end(metrics.prometheus(workerConfig.workerId, workerConfig.partitionCount, workerConfig.partitionIndex));
                 return;
             }
 
@@ -96,8 +121,8 @@ export const createHttpServer = (manager: BaileysAccountManager) =>
         }
     });
 
-export const startHttpServer = (manager: BaileysAccountManager) => {
-    const server = createHttpServer(manager);
+export const startHttpServer = (manager: BaileysAccountManager, metrics: WorkerMetrics) => {
+    const server = createHttpServer(manager, metrics);
     server.listen(workerConfig.port, workerConfig.host, () => {
         logger.info("WhatsApp worker listening", { port: workerConfig.port });
     });
