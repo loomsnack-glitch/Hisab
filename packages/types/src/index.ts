@@ -13,3 +13,4 @@ export * from "./modules/device-auth";
 export * from "./modules/organization";
 export * from "./modules/user";
 export * from "./services/whatsapp.type";
+export * from "./services/whatsapp.schema";
