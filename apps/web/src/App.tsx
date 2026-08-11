@@ -26,6 +26,7 @@ import LandingPage from "@/pages/landing-page";
 import ReportsPage from "@/pages/reports-page";
 import PosReportsPage from "@/pages/pos-reports-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
+import WhatsAppInboxPage, { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
@@ -111,6 +112,7 @@ const App = () => {
                                 <Route path="reports" element={<PosReportsPage />} />
                                 <Route path="customers" element={<PosCustomersPage />} />
                                 <Route path="purchases" element={<PosPurchasesPage />} />
+                                <Route path="whatsapp" element={<PosWhatsAppInboxPage />} />
                             </Route>
                             <Route
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
@@ -130,6 +132,7 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                                 <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp" element={<WhatsAppAccountPage />} />
+                                <Route path="/organizations/:organizationId/stores/:storeId/whatsapp/inbox" element={<WhatsAppInboxPage />} />
                             </Route>
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>

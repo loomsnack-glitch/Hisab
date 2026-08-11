@@ -1,4 +1,7 @@
 import type {
+    CustomerDTO,
+    WhatsAppConversationDTO,
+    WhatsAppMessageDTO,
     WhatsAppAccountDTO,
     WhatsAppAccountStatus,
     WhatsAppWorkerAccountDTO,
@@ -26,7 +29,7 @@ type InvoiceOutboxParams = {
     customerName: string;
     messageId: string;
     idempotencyKey: string;
-    attachmentStorageKey: string;
+    attachmentStorageKey: string | null;
     attachmentFileName: string;
 };
 
@@ -35,12 +38,74 @@ export type InvoiceOutboxJobRecord = {
     outboxId: string;
     messageId: string;
     phoneNumber: string;
-    attachmentStorageKey: string;
-    attachmentFileName: string;
-    attachmentMimeType: string;
+    messageType: "text" | "document";
+    body: string | null;
     caption: string | null;
+    attachmentStorageKey: string | null;
+    attachmentFileName: string | null;
+    attachmentMimeType: string | null;
     attemptCount: number;
     leaseOwner: string;
+};
+
+export type InboundMessageParams = {
+    organizationId: string;
+    storeId: string;
+    whatsappAccountId: string;
+    customerId: string | null;
+    externalChatId: string;
+    contactPhoneNumber: string;
+    displayName: string;
+    providerMessageId: string;
+    messageType: "text" | "document";
+    body: string | null;
+    caption: string | null;
+    attachmentStorageKey: string | null;
+    attachmentFileName: string | null;
+    attachmentMimeType: string | null;
+    occurredAt: string;
+};
+
+const mapConversation = (row: Record<string, unknown>): WhatsAppConversationDTO => {
+    const mapped = snakeToCamel(row) as Record<string, unknown>;
+    return {
+        id: String(mapped.id),
+        organizationId: String(mapped.organizationId),
+        storeId: String(mapped.storeId),
+        whatsappAccountId: String(mapped.whatsappAccountId),
+        customerId: (mapped.customerId as string | null | undefined) ?? null,
+        contactPhoneNumber: String(mapped.contactPhoneNumber),
+        displayName: String(mapped.displayName),
+        lastMessageAt: (mapped.lastMessageAt as string | null | undefined) ?? null,
+        unreadCount: Number(mapped.unreadCount ?? 0),
+        isArchived: Boolean(mapped.isArchived),
+        createdAt: String(mapped.createdAt),
+        updatedAt: String(mapped.updatedAt),
+    };
+};
+
+const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
+    const mapped = snakeToCamel(row) as Record<string, unknown>;
+    return {
+        id: String(mapped.id),
+        organizationId: String(mapped.organizationId),
+        storeId: String(mapped.storeId),
+        whatsappAccountId: String(mapped.whatsappAccountId),
+        conversationId: String(mapped.conversationId),
+        direction: mapped.direction as WhatsAppMessageDTO["direction"],
+        messageType: mapped.messageType as WhatsAppMessageDTO["messageType"],
+        body: (mapped.body as string | null | undefined) ?? null,
+        caption: (mapped.caption as string | null | undefined) ?? null,
+        attachmentFileName: (mapped.attachmentFileName as string | null | undefined) ?? null,
+        attachmentMimeType: (mapped.attachmentMimeType as string | null | undefined) ?? null,
+        status: mapped.status as WhatsAppMessageDTO["status"],
+        providerMessageId: (mapped.providerMessageId as string | null | undefined) ?? null,
+        failureCode: (mapped.failureCode as string | null | undefined) ?? null,
+        createdAt: String(mapped.createdAt),
+        sentAt: (mapped.sentAt as string | null | undefined) ?? null,
+        deliveredAt: (mapped.deliveredAt as string | null | undefined) ?? null,
+        readAt: (mapped.readAt as string | null | undefined) ?? null,
+    };
 };
 
 type WhatsAppMessageStatus = "queued" | "sending" | "sent" | "delivered" | "read" | "failed";
@@ -236,6 +301,257 @@ export const createInvoiceOutbox = async (params: InvoiceOutboxParams): Promise<
     });
 };
 
+export const getCustomerByPhone = async (organizationId: string, phoneNumber: string): Promise<CustomerDTO | null> => {
+    const [row] = await pg`
+        SELECT *
+        FROM customers
+        WHERE organization_id = ${organizationId}
+          AND regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') = regexp_replace(${phoneNumber}, '[^0-9]', '', 'g')
+        LIMIT 1
+    `;
+    return row ? (snakeToCamel(row) as CustomerDTO) : null;
+};
+
+export const getConversations = async (
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+): Promise<WhatsAppConversationDTO[]> => {
+    const rows = await pg`
+        SELECT *
+        FROM whatsapp_conversations
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND whatsapp_account_id = ${accountId}
+        ORDER BY last_message_at DESC NULLS LAST, updated_at DESC
+        LIMIT 200
+    `;
+    return rows.map((row: Record<string, unknown>) => mapConversation(row));
+};
+
+export const getConversation = async (
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+    conversationId: string,
+): Promise<WhatsAppConversationDTO | null> => {
+    const [row] = await pg`
+        SELECT *
+        FROM whatsapp_conversations
+        WHERE id = ${conversationId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND whatsapp_account_id = ${accountId}
+    `;
+    return row ? mapConversation(row) : null;
+};
+
+export const getConversationMessages = async (
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+    conversationId: string,
+): Promise<WhatsAppMessageDTO[]> => {
+    const rows = await pg`
+        SELECT *
+        FROM whatsapp_messages
+        WHERE conversation_id = ${conversationId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND whatsapp_account_id = ${accountId}
+        ORDER BY created_at ASC
+        LIMIT 500
+    `;
+    return rows.map((row: Record<string, unknown>) => mapMessage(row));
+};
+
+export const getMessageAttachmentKey = async (
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+    conversationId: string,
+    messageId: string,
+): Promise<{ key: string; fileName: string } | null> => {
+    const [row] = await pg`
+        SELECT attachment_storage_key, attachment_file_name
+        FROM whatsapp_messages
+        WHERE id = ${messageId}
+          AND conversation_id = ${conversationId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND whatsapp_account_id = ${accountId}
+          AND attachment_storage_key IS NOT NULL
+          AND attachment_file_name IS NOT NULL
+    `;
+    return row
+        ? { key: String(row.attachment_storage_key), fileName: String(row.attachment_file_name) }
+        : null;
+};
+
+export const hasProviderMessage = async (accountId: string, providerMessageId: string): Promise<boolean> => {
+    const [row] = await pg`
+        SELECT id
+        FROM whatsapp_messages
+        WHERE whatsapp_account_id = ${accountId}
+          AND provider_message_id = ${providerMessageId}
+        LIMIT 1
+    `;
+    return Boolean(row);
+};
+
+export const markConversationRead = async (
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+    conversationId: string,
+): Promise<void> => {
+    await pg`
+        UPDATE whatsapp_conversations
+        SET unread_count = 0,
+            updated_at = NOW()
+        WHERE id = ${conversationId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND whatsapp_account_id = ${accountId}
+    `;
+};
+
+export const attachConversationCustomer = async (
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+    conversationId: string,
+    customerId: string,
+): Promise<WhatsAppConversationDTO | null> => {
+    const [row] = await pg`
+        UPDATE whatsapp_conversations conversation
+        SET customer_id = ${customerId},
+            display_name = customer.name,
+            updated_at = NOW()
+        FROM customers customer
+        WHERE conversation.id = ${conversationId}
+          AND conversation.organization_id = ${organizationId}
+          AND conversation.store_id = ${storeId}
+          AND conversation.whatsapp_account_id = ${accountId}
+          AND customer.id = ${customerId}
+          AND customer.organization_id = ${organizationId}
+          AND regexp_replace(COALESCE(customer.phone, ''), '[^0-9]', '', 'g') = regexp_replace(conversation.contact_phone_number, '[^0-9]', '', 'g')
+        RETURNING conversation.*
+    `;
+    return row ? mapConversation(row) : null;
+};
+
+export const createInboundMessage = async (params: InboundMessageParams): Promise<{ message: WhatsAppMessageDTO; created: boolean }> => {
+    return pg.begin(async tx => {
+        const [conversation] = await tx`
+            INSERT INTO whatsapp_conversations (
+                organization_id, store_id, whatsapp_account_id, customer_id,
+                external_chat_id, contact_phone_number, display_name, last_message_at
+            )
+            VALUES (
+                ${params.organizationId}, ${params.storeId}, ${params.whatsappAccountId}, ${params.customerId},
+                ${params.externalChatId}, ${params.contactPhoneNumber}, ${params.displayName}, ${params.occurredAt}::timestamptz
+            )
+            ON CONFLICT (whatsapp_account_id, external_chat_id)
+            DO UPDATE SET
+                customer_id = COALESCE(whatsapp_conversations.customer_id, EXCLUDED.customer_id),
+                contact_phone_number = EXCLUDED.contact_phone_number,
+                display_name = CASE WHEN whatsapp_conversations.customer_id IS NULL THEN EXCLUDED.display_name ELSE whatsapp_conversations.display_name END,
+                updated_at = NOW()
+            RETURNING id
+        `;
+        if (!conversation) throw new Error("Failed to create WhatsApp conversation");
+
+        const [createdMessage] = await tx`
+            INSERT INTO whatsapp_messages (
+                organization_id, store_id, whatsapp_account_id, conversation_id,
+                direction, message_type, body, caption, attachment_storage_key,
+                attachment_file_name, attachment_mime_type, status, provider_message_id,
+                idempotency_key, created_at, delivered_at
+            )
+            VALUES (
+                ${params.organizationId}, ${params.storeId}, ${params.whatsappAccountId}, ${conversation.id},
+                'inbound', ${params.messageType}, ${params.body}, ${params.caption}, ${params.attachmentStorageKey},
+                ${params.attachmentFileName}, ${params.attachmentMimeType}, 'delivered', ${params.providerMessageId},
+                ${"inbound:" + params.providerMessageId}, ${params.occurredAt}::timestamptz, ${params.occurredAt}::timestamptz
+            )
+            ON CONFLICT (whatsapp_account_id, provider_message_id) WHERE provider_message_id IS NOT NULL DO NOTHING
+            RETURNING *
+        `;
+        if (!createdMessage) {
+            const [existing] = await tx`
+                SELECT *
+                FROM whatsapp_messages
+                WHERE whatsapp_account_id = ${params.whatsappAccountId}
+                  AND provider_message_id = ${params.providerMessageId}
+            `;
+            if (!existing) throw new Error("Failed to load existing WhatsApp message");
+            return { message: mapMessage(existing), created: false };
+        }
+
+        await tx`
+            UPDATE whatsapp_conversations
+            SET last_message_at = GREATEST(COALESCE(last_message_at, ${params.occurredAt}::timestamptz), ${params.occurredAt}::timestamptz),
+                unread_count = unread_count + 1,
+                updated_at = NOW()
+            WHERE id = ${conversation.id}
+        `;
+        return { message: mapMessage(createdMessage), created: true };
+    });
+};
+
+export const createTextOutbox = async (
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+    conversationId: string,
+    body: string,
+): Promise<InvoiceOutboxRecord> => {
+    return pg.begin(async tx => {
+        const [conversation] = await tx`
+            SELECT id, contact_phone_number
+            FROM whatsapp_conversations
+            WHERE id = ${conversationId}
+              AND organization_id = ${organizationId}
+              AND store_id = ${storeId}
+              AND whatsapp_account_id = ${accountId}
+        `;
+        if (!conversation) throw new Error("WhatsApp conversation not found");
+        const messageId = crypto.randomUUID();
+        const [message] = await tx`
+            INSERT INTO whatsapp_messages (
+                id, organization_id, store_id, whatsapp_account_id, conversation_id,
+                direction, message_type, body, status, idempotency_key
+            )
+            VALUES (
+                ${messageId}, ${organizationId}, ${storeId}, ${accountId}, ${conversation.id},
+                'outbound', 'text', ${body}, 'queued', ${"text:" + messageId}
+            )
+            RETURNING id, status
+        `;
+        if (!message) throw new Error("Failed to create WhatsApp text message");
+        const [outbox] = await tx`
+            INSERT INTO whatsapp_outbox (
+                organization_id, store_id, whatsapp_account_id, message_id, kind, status
+            )
+            VALUES (${organizationId}, ${storeId}, ${accountId}, ${message.id}, 'text', 'pending')
+            RETURNING id, status
+        `;
+        if (!outbox) throw new Error("Failed to create WhatsApp text outbox");
+        await tx`
+            UPDATE whatsapp_conversations
+            SET last_message_at = NOW(), updated_at = NOW()
+            WHERE id = ${conversation.id}
+        `;
+        return {
+            messageId: String(message.id),
+            outboxId: String(outbox.id),
+            messageStatus: message.status as InvoiceOutboxRecord["messageStatus"],
+            outboxStatus: outbox.status as InvoiceOutboxRecord["outboxStatus"],
+        };
+    });
+};
+
 export const claimNextInvoiceOutbox = async (
     leaseOwner: string,
     leaseSeconds: number,
@@ -256,7 +572,7 @@ export const claimNextInvoiceOutbox = async (
             SELECT o.id
             FROM whatsapp_outbox o
             INNER JOIN whatsapp_accounts a ON a.id = o.whatsapp_account_id
-            WHERE o.kind = 'invoice'
+            WHERE o.kind IN ('invoice', 'text', 'document')
               AND o.status IN ('pending', 'retryable')
               AND o.next_attempt_at <= NOW()
               AND a.status = 'connected'
@@ -304,6 +620,8 @@ export const claimNextInvoiceOutbox = async (
                 m.attachment_storage_key,
                 m.attachment_file_name,
                 m.attachment_mime_type,
+                m.message_type,
+                m.body,
                 m.caption,
                 c.contact_phone_number
             FROM whatsapp_outbox o
@@ -311,8 +629,8 @@ export const claimNextInvoiceOutbox = async (
             INNER JOIN whatsapp_conversations c ON c.id = m.conversation_id
             WHERE o.id = ${claimed.id}
         `;
-        if (!job || !job.attachment_storage_key || !job.attachment_file_name || !job.attachment_mime_type) {
-            throw new Error("Claimed WhatsApp invoice has no document attachment");
+        if (!job) {
+            throw new Error("Claimed WhatsApp outbox entry could not be loaded");
         }
 
         return {
@@ -320,9 +638,11 @@ export const claimNextInvoiceOutbox = async (
             outboxId: String(job.outbox_id),
             messageId: String(job.message_id),
             phoneNumber: String(job.contact_phone_number),
-            attachmentStorageKey: String(job.attachment_storage_key),
-            attachmentFileName: String(job.attachment_file_name),
-            attachmentMimeType: String(job.attachment_mime_type),
+            messageType: job.message_type as InvoiceOutboxJobRecord["messageType"],
+            body: (job.body as string | null | undefined) ?? null,
+            attachmentStorageKey: (job.attachment_storage_key as string | null | undefined) ?? null,
+            attachmentFileName: (job.attachment_file_name as string | null | undefined) ?? null,
+            attachmentMimeType: (job.attachment_mime_type as string | null | undefined) ?? null,
             caption: (job.caption as string | null | undefined) ?? null,
             attemptCount: Number(job.attempt_count),
             leaseOwner: String(job.lease_owner),
@@ -421,7 +741,6 @@ export const updateInvoiceMessageStatus = async (
         WHERE whatsapp_account_id = ${accountId}
           AND provider_message_id = ${providerMessageId}
           AND direction = 'outbound'
-          AND message_type = 'document'
         RETURNING id
     `;
     return Boolean(row);

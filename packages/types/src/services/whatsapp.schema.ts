@@ -103,6 +103,14 @@ export const WhatsAppSendTextSchema = z.object({
     body: z.string().trim().min(1, "Message cannot be empty").max(4096, "Message is too long"),
 });
 
+export const WhatsAppSendConversationTextSchema = z.object({
+    body: z.string().trim().min(1, "Message cannot be empty").max(4096, "Message is too long"),
+});
+
+export const WhatsAppAttachConversationCustomerSchema = z.object({
+    customerId: z.uuid("Invalid customer id"),
+});
+
 export const WhatsAppSendInvoiceSchema = z.object({
     saleId: z.uuid("Invalid sale id"),
 });
@@ -140,4 +148,54 @@ export const WhatsAppWorkerInvoiceResultSchema = z.object({
 export const WhatsAppWorkerMessageStatusSchema = z.object({
     providerMessageId: z.string().trim().min(1).max(255),
     status: z.enum(["delivered", "read"]),
+});
+
+export const WhatsAppWorkerOutboundJobSchema = z.object({
+    accountId: z.uuid("Invalid WhatsApp account id"),
+    outboxId: z.uuid("Invalid outbox id"),
+    messageId: z.uuid("Invalid message id"),
+    phoneNumber: phoneSchema,
+    messageType: WhatsAppMessageTypeSchema,
+    body: z.string().nullable(),
+    caption: z.string().max(4096).nullable(),
+    attachmentFileName: z.string().trim().min(1).max(255).nullable(),
+    attachmentMimeType: z.string().trim().min(1).max(255).nullable(),
+    documentBase64: z.string().max(14_000_000).nullable(),
+    attemptCount: z.number().int().positive(),
+    leaseOwner: z.string().trim().min(1).max(255),
+});
+
+export const WhatsAppWorkerInboundMessageSchema = z.object({
+    providerMessageId: z.string().trim().min(1).max(255),
+    externalChatId: z.string().trim().min(1).max(255),
+    contactPhoneNumber: phoneSchema,
+    displayName: z.string().trim().min(1).max(255),
+    messageType: WhatsAppMessageTypeSchema,
+    body: z.string().max(4096).nullable(),
+    caption: z.string().max(4096).nullable(),
+    attachmentFileName: z.string().trim().min(1).max(255).nullable(),
+    attachmentMimeType: z.string().trim().min(1).max(255).nullable(),
+    documentBase64: z.string().max(14_000_000).nullable(),
+    occurredAt: dtoDateSchema,
+}).superRefine((value, context) => {
+    if (value.messageType === "text" && !value.body?.trim()) {
+        context.addIssue({ code: "custom", path: ["body"], message: "Text message body is required" });
+    }
+    if (value.messageType === "document" && !value.documentBase64) {
+        context.addIssue({ code: "custom", path: ["documentBase64"], message: "Document content is required" });
+    }
+});
+
+export const WhatsAppConversationListResponseSchema = z.object({
+    accountStatus: WhatsAppAccountStatusSchema,
+    conversations: z.array(WhatsAppConversationDTOSchema),
+});
+
+export const WhatsAppConversationMessagesResponseSchema = z.object({
+    conversation: WhatsAppConversationDTOSchema,
+    messages: z.array(WhatsAppMessageDTOSchema),
+});
+
+export const WhatsAppAttachmentResponseSchema = z.object({
+    url: z.string().url(),
 });

@@ -5,6 +5,9 @@ import {
     WhatsAppSendTextSchema,
     WhatsAppWorkerInvoiceJobSchema,
     WhatsAppWorkerInvoiceResultSchema,
+    WhatsAppWorkerInboundMessageSchema,
+    WhatsAppWorkerOutboundJobSchema,
+    WhatsAppConversationListResponseSchema,
 } from "./whatsapp.schema";
 
 const uuid = "11111111-1111-4111-8111-111111111111";
@@ -86,5 +89,55 @@ describe("WhatsApp schemas", () => {
             failureMessage: null,
             retryable: false,
         }).success).toBe(false);
+    });
+
+    test("validates inbound events and text outbound jobs", () => {
+        expect(WhatsAppWorkerInboundMessageSchema.safeParse({
+            providerMessageId: "wamid-inbound-1",
+            externalChatId: "919876543210@s.whatsapp.net",
+            contactPhoneNumber: "+919876543210",
+            displayName: "Customer",
+            messageType: "text",
+            body: "Is my order ready?",
+            caption: null,
+            attachmentFileName: null,
+            attachmentMimeType: null,
+            documentBase64: null,
+            occurredAt: "2026-08-12T10:00:00.000Z",
+        }).success).toBe(true);
+
+        expect(WhatsAppWorkerInboundMessageSchema.safeParse({
+            providerMessageId: "wamid-inbound-2",
+            externalChatId: "919876543210@s.whatsapp.net",
+            contactPhoneNumber: "+919876543210",
+            displayName: "Customer",
+            messageType: "document",
+            body: null,
+            caption: "Payment proof",
+            attachmentFileName: "proof.pdf",
+            attachmentMimeType: "application/pdf",
+            documentBase64: "cGRm",
+            occurredAt: new Date(),
+        }).success).toBe(true);
+
+        expect(WhatsAppWorkerOutboundJobSchema.safeParse({
+            accountId: uuid,
+            outboxId: uuid,
+            messageId: uuid,
+            phoneNumber: "+919876543210",
+            messageType: "text",
+            body: "Thanks, we are checking.",
+            caption: null,
+            attachmentFileName: null,
+            attachmentMimeType: null,
+            documentBase64: null,
+            attemptCount: 1,
+            leaseOwner: "worker-lease",
+        }).success).toBe(true);
+
+        expect(WhatsAppConversationListResponseSchema.safeParse({
+            accountStatus: "connected",
+            conversations: [],
+        }).success).toBe(true);
     });
 });

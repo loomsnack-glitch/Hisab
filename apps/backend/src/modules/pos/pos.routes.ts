@@ -19,6 +19,8 @@ import {
   UpdatePurchaseSchema,
   UpdateStoreDevicePosSettingsSchema,
   VoidPurchaseSchema,
+  WhatsAppAttachConversationCustomerSchema,
+  WhatsAppSendConversationTextSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { deviceAuthMiddleware } from "@/middlewares/device-auth.middleware";
@@ -300,6 +302,67 @@ router.post("/sales/:saleId/whatsapp/retry", async (c) => {
     );
   } catch (error) {
     return handleError(FILE_NAME, "retryInvoiceForDevice", c, error);
+  }
+});
+
+router.get("/whatsapp/conversations", async (c) => {
+  try {
+    return handleServiceResponse(c, await whatsappService.listConversationsForDevice(c.get("authDevice")));
+  } catch (error) {
+    return handleError(FILE_NAME, "listConversationsForDevice", c, error);
+  }
+});
+
+router.get("/whatsapp/conversations/:conversationId", async (c) => {
+  try {
+    const conversationId = c.req.param("conversationId");
+    const invalid = validateUuidParam(conversationId, "Invalid conversation id");
+    if (invalid) return c.json(invalid, invalid.code);
+    return handleServiceResponse(c, await whatsappService.getConversationForDevice(c.get("authDevice"), conversationId));
+  } catch (error) {
+    return handleError(FILE_NAME, "getConversationForDevice", c, error);
+  }
+});
+
+router.post(
+  "/whatsapp/conversations/:conversationId/messages",
+  validateSchema("json", WhatsAppSendConversationTextSchema),
+  async (c) => {
+    try {
+      const conversationId = c.req.param("conversationId");
+      const invalid = validateUuidParam(conversationId, "Invalid conversation id");
+      if (invalid) return c.json(invalid, invalid.code);
+      return handleServiceResponse(c, await whatsappService.sendTextForDevice(c.get("authDevice"), conversationId, c.req.valid("json")));
+    } catch (error) {
+      return handleError(FILE_NAME, "sendTextForDevice", c, error);
+    }
+  },
+);
+
+router.post(
+  "/whatsapp/conversations/:conversationId/customer",
+  validateSchema("json", WhatsAppAttachConversationCustomerSchema),
+  async (c) => {
+    try {
+      const conversationId = c.req.param("conversationId");
+      const invalid = validateUuidParam(conversationId, "Invalid conversation id");
+      if (invalid) return c.json(invalid, invalid.code);
+      return handleServiceResponse(c, await whatsappService.attachCustomerForDevice(c.get("authDevice"), conversationId, c.req.valid("json")));
+    } catch (error) {
+      return handleError(FILE_NAME, "attachCustomerForDevice", c, error);
+    }
+  },
+);
+
+router.get("/whatsapp/conversations/:conversationId/messages/:messageId/attachment", async (c) => {
+  try {
+    const conversationId = c.req.param("conversationId");
+    const messageId = c.req.param("messageId");
+    const invalid = validateUuidParam(conversationId, "Invalid conversation id") ?? validateUuidParam(messageId, "Invalid message id");
+    if (invalid) return c.json(invalid, invalid.code);
+    return handleServiceResponse(c, await whatsappService.getAttachmentForDevice(c.get("authDevice"), conversationId, messageId));
+  } catch (error) {
+    return handleError(FILE_NAME, "getAttachmentForDevice", c, error);
   }
 });
 

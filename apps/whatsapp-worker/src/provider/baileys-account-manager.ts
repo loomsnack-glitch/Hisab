@@ -1,4 +1,14 @@
-import { DisconnectReason, makeWASocket, Browsers, WAMessageStatus, type WASocket } from "@whiskeysockets/baileys";
+import {
+    DisconnectReason,
+    makeWASocket,
+    Browsers,
+    WAMessageStatus,
+    normalizeMessageContent,
+    downloadMediaMessage,
+    type WASocket,
+    type WAMessage,
+} from "@whiskeysockets/baileys";
+import type { WhatsAppWorkerInboundMessageJSON } from "@repo/types";
 import { toDataURL } from "qrcode";
 import { join } from "node:path";
 import { clearEncryptedAuthState, useEncryptedAuthState } from "../session/encrypted-auth-state.js";
@@ -28,6 +38,7 @@ export type AccountStatusSnapshot = {
 type StatusReporter = (snapshot: AccountStatusSnapshot) => Promise<void>;
 export type MessageStatus = "delivered" | "read";
 type MessageStatusReporter = (accountId: string, providerMessageId: string, status: MessageStatus) => Promise<void>;
+type InboundMessageReporter = (accountId: string, message: WhatsAppWorkerInboundMessageJSON) => Promise<void>;
 
 type ManagedAccount = {
     input: AccountConnectionInput;
@@ -64,6 +75,7 @@ export class BaileysAccountManager {
     public constructor(
         private readonly reportStatus: StatusReporter,
         private readonly reportMessageStatus?: MessageStatusReporter,
+        private readonly reportInboundMessage?: InboundMessageReporter,
     ) {}
 
     public getStatus(accountId: string): AccountStatusSnapshot {
@@ -122,6 +134,13 @@ export class BaileysAccountManager {
         });
         account.socket = socket;
         socket.ev.on("creds.update", saveCreds);
+        socket.ev.on("messages.upsert", event => {
+            for (const message of event.messages) {
+                void this.handleInboundMessage(account, message).catch(() => {
+                    logger.warn("Unable to process inbound WhatsApp message", { accountId: account.input.accountId });
+                });
+            }
+        });
         socket.ev.on("messages.update", updates => {
             for (const update of updates) {
                 const providerMessageId = update.key.id;
@@ -206,6 +225,40 @@ export class BaileysAccountManager {
             throw new Error("WhatsApp provider did not return a message id");
         }
         return result.key.id;
+    }
+
+    private async handleInboundMessage(account: ManagedAccount, message: WAMessage): Promise<void> {
+        if (!this.reportInboundMessage || message.key.fromMe || !message.key.id) return;
+        const externalChatId = message.key.remoteJid ?? "";
+        if (!externalChatId.endsWith("@s.whatsapp.net")) return;
+        const phoneDigits = externalChatId.slice(0, -"@s.whatsapp.net".length).split(":")[0];
+        if (!/^\d{8,15}$/.test(phoneDigits)) return;
+        const content = normalizeMessageContent(message.message);
+        if (!content) return;
+
+        const body = content.conversation ?? content.extendedTextMessage?.text ?? null;
+        const document = content.documentMessage;
+        if (!body && !document) return;
+
+        let documentBase64: string | null = null;
+        if (document) {
+            const buffer = await downloadMediaMessage(message, "buffer", {});
+            documentBase64 = buffer.toString("base64");
+        }
+
+        await this.reportInboundMessage(account.input.accountId, {
+            providerMessageId: message.key.id,
+            externalChatId,
+            contactPhoneNumber: "+" + phoneDigits,
+            displayName: message.pushName?.trim() || "+" + phoneDigits,
+            messageType: document ? "document" : "text",
+            body: body?.trim() || null,
+            caption: document?.caption ?? null,
+            attachmentFileName: document?.fileName ?? null,
+            attachmentMimeType: document?.mimetype ?? null,
+            documentBase64,
+            occurredAt: new Date(Number(message.messageTimestamp ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+        });
     }
 
     private requireConnectedSocket(accountId: string): WASocket {

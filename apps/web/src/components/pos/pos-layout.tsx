@@ -15,7 +15,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@repo/ui/components/alert-dialog";
-import { BarChart3, Expand, LoaderCircle, LogOut, Minimize, Printer, Search, X } from "lucide-react";
+import { BarChart3, Expand, LoaderCircle, LogOut, MessageCircle, Minimize, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ThemeToggle from "@/components/dashboard/theme-toggle";
@@ -207,6 +207,17 @@ const PosLayout = ({
                     >
                         <BarChart3 className="size-4" />
                         <span className="hidden text-xs font-semibold sm:inline">Reports</span>
+                    </Button>
+
+                    <Button
+                        variant="outline"
+                        className={`h-9 shrink-0 rounded-full px-3 ${location.pathname === "/pos/whatsapp" ? "border-primary/50 bg-primary/10 text-primary" : ""}`}
+                        aria-label="WhatsApp conversations"
+                        title="WhatsApp conversations"
+                        render={<Link to="/pos/whatsapp" />}
+                    >
+                        <MessageCircle className="size-4" />
+                        <span className="hidden text-xs font-semibold sm:inline">WhatsApp</span>
                     </Button>
 
                     <DisplayScaleControl />

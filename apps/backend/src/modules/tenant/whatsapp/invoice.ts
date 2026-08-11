@@ -5,7 +5,7 @@ import {
   type SaleDetailDTO,
   type ServiceResponse,
   type WhatsAppInvoiceQueueResponseDTO,
-  type WhatsAppWorkerInvoiceJobDTO,
+  type WhatsAppWorkerOutboundJobDTO,
   type WhatsAppWorkerInvoiceResultJSON,
   type WhatsAppWorkerMessageStatusJSON,
 } from "@repo/types";
@@ -307,24 +307,27 @@ export const retryInvoiceForDevice = async (
     : { status: "error", message: "This invoice is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
 };
 
-export const claimInvoiceForWorker = async (): Promise<{ job: WhatsAppWorkerInvoiceJobDTO | null }> => {
+export const claimInvoiceForWorker = async (): Promise<{ job: WhatsAppWorkerOutboundJobDTO | null }> => {
   const claimed = await repository.claimNextInvoiceOutbox(`worker-${crypto.randomUUID()}`, 120);
   if (!claimed) return { job: null };
 
   try {
     const bucket = privateBucket();
-    if (!bucket) throw new Error("Private invoice storage is not configured");
-    const document = await storage.getObjectBuffer(bucket, claimed.attachmentStorageKey, MAX_INVOICE_BYTES);
+    const document = claimed.attachmentStorageKey
+      ? await storage.getObjectBuffer(bucket, claimed.attachmentStorageKey, MAX_INVOICE_BYTES)
+      : null;
     return {
       job: {
         accountId: claimed.accountId,
         outboxId: claimed.outboxId,
         messageId: claimed.messageId,
         phoneNumber: claimed.phoneNumber,
+        messageType: claimed.messageType,
+        body: claimed.body,
         attachmentFileName: claimed.attachmentFileName,
         attachmentMimeType: claimed.attachmentMimeType,
         caption: claimed.caption,
-        documentBase64: document.toString("base64"),
+        documentBase64: document?.toString("base64") ?? null,
         attemptCount: claimed.attemptCount,
         leaseOwner: claimed.leaseOwner,
       },

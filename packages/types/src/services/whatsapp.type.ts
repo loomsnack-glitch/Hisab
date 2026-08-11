@@ -15,10 +15,17 @@ import {
     WhatsAppSendInvoiceSchema,
     WhatsAppInvoiceQueueResponseSchema,
     WhatsAppSendTextSchema,
+    WhatsAppSendConversationTextSchema,
+    WhatsAppAttachConversationCustomerSchema,
     WhatsAppWorkerAccountSchema,
     WhatsAppWorkerInvoiceJobSchema,
     WhatsAppWorkerInvoiceResultSchema,
     WhatsAppWorkerMessageStatusSchema,
+    WhatsAppWorkerOutboundJobSchema,
+    WhatsAppWorkerInboundMessageSchema,
+    WhatsAppConversationListResponseSchema,
+    WhatsAppConversationMessagesResponseSchema,
+    WhatsAppAttachmentResponseSchema,
     WhatsAppWorkerStatusResponseSchema,
     WhatsAppWorkerStatusUpdateSchema,
 } from "./whatsapp.schema";
@@ -55,8 +62,15 @@ export type WhatsAppWorkerAccountDTO = z.infer<typeof WhatsAppWorkerAccountSchem
 export type WhatsAppWorkerStatusUpdateJSON = z.infer<typeof WhatsAppWorkerStatusUpdateSchema>;
 export type WhatsAppWorkerStatusResponseDTO = z.infer<typeof WhatsAppWorkerStatusResponseSchema>;
 export type WhatsAppSendTextJSON = z.infer<typeof WhatsAppSendTextSchema>;
+export type WhatsAppSendConversationTextJSON = z.infer<typeof WhatsAppSendConversationTextSchema>;
+export type WhatsAppAttachConversationCustomerJSON = z.infer<typeof WhatsAppAttachConversationCustomerSchema>;
 export type WhatsAppSendInvoiceJSON = z.infer<typeof WhatsAppSendInvoiceSchema>;
 export type WhatsAppInvoiceQueueResponseDTO = z.infer<typeof WhatsAppInvoiceQueueResponseSchema>;
 export type WhatsAppWorkerInvoiceJobDTO = z.infer<typeof WhatsAppWorkerInvoiceJobSchema>;
 export type WhatsAppWorkerInvoiceResultJSON = z.infer<typeof WhatsAppWorkerInvoiceResultSchema>;
 export type WhatsAppWorkerMessageStatusJSON = z.infer<typeof WhatsAppWorkerMessageStatusSchema>;
+export type WhatsAppWorkerOutboundJobDTO = z.infer<typeof WhatsAppWorkerOutboundJobSchema>;
+export type WhatsAppWorkerInboundMessageJSON = z.infer<typeof WhatsAppWorkerInboundMessageSchema>;
+export type WhatsAppConversationListResponse = z.infer<typeof WhatsAppConversationListResponseSchema>;
+export type WhatsAppConversationMessagesResponse = z.infer<typeof WhatsAppConversationMessagesResponseSchema>;
+export type WhatsAppAttachmentResponse = z.infer<typeof WhatsAppAttachmentResponseSchema>;

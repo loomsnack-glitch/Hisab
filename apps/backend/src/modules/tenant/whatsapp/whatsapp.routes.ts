@@ -3,8 +3,11 @@ import type { Context } from "hono";
 import { z } from "zod";
 import {
     STATUS_CODES,
+    WhatsAppAttachConversationCustomerSchema,
     WhatsAppCreateAccountSchema,
+    WhatsAppSendConversationTextSchema,
     WhatsAppSendInvoiceSchema,
+    WhatsAppWorkerInboundMessageSchema,
     WhatsAppWorkerInvoiceResultSchema,
     WhatsAppWorkerMessageStatusSchema,
     WhatsAppWorkerStatusUpdateSchema,
@@ -95,6 +98,88 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId/retry
             ?? invalidUuid(saleId, "Invalid sale id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.retryInvoice(c.get("authUser").id, organizationId, storeId, saleId));
+    } catch {
+        return unexpectedError(c);
+    }
+});
+
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/conversations", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await service.listConversations(c.get("authUser").id, organizationId, storeId));
+    } catch {
+        return unexpectedError(c);
+    }
+});
+
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/conversations/:conversationId", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const conversationId = c.req.param("conversationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id")
+            ?? invalidUuid(storeId, "Invalid store id")
+            ?? invalidUuid(conversationId, "Invalid conversation id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await service.getConversation(c.get("authUser").id, organizationId, storeId, conversationId));
+    } catch {
+        return unexpectedError(c);
+    }
+});
+
+userRouter.post(
+    "/:organizationId/stores/:storeId/whatsapp/conversations/:conversationId/messages",
+    validateSchema("json", WhatsAppSendConversationTextSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const conversationId = c.req.param("conversationId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id")
+                ?? invalidUuid(storeId, "Invalid store id")
+                ?? invalidUuid(conversationId, "Invalid conversation id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await service.sendText(c.get("authUser").id, organizationId, storeId, conversationId, c.req.valid("json")));
+        } catch {
+            return unexpectedError(c);
+        }
+    },
+);
+
+userRouter.post(
+    "/:organizationId/stores/:storeId/whatsapp/conversations/:conversationId/customer",
+    validateSchema("json", WhatsAppAttachConversationCustomerSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const conversationId = c.req.param("conversationId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id")
+                ?? invalidUuid(storeId, "Invalid store id")
+                ?? invalidUuid(conversationId, "Invalid conversation id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await service.attachCustomer(c.get("authUser").id, organizationId, storeId, conversationId, c.req.valid("json")));
+        } catch {
+            return unexpectedError(c);
+        }
+    },
+);
+
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/conversations/:conversationId/messages/:messageId/attachment", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const conversationId = c.req.param("conversationId");
+        const messageId = c.req.param("messageId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id")
+            ?? invalidUuid(storeId, "Invalid store id")
+            ?? invalidUuid(conversationId, "Invalid conversation id")
+            ?? invalidUuid(messageId, "Invalid message id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await service.getAttachment(c.get("authUser").id, organizationId, storeId, conversationId, messageId));
     } catch {
         return unexpectedError(c);
     }
@@ -213,6 +298,21 @@ whatsappInternalRoutes.post("/accounts/:accountId/messages/status", async c => {
         return c.json({ status: accepted ? "success" : "ignored" });
     } catch {
         return c.json({ status: "error", message: "WhatsApp message status failed" }, 500);
+    }
+});
+
+whatsappInternalRoutes.post("/accounts/:accountId/messages/inbound", async c => {
+    try {
+        const accountId = c.req.param("accountId");
+        if (!uuidSchema.safeParse(accountId).success) {
+            return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
+        }
+        const parsed = WhatsAppWorkerInboundMessageSchema.safeParse(await c.req.json());
+        if (!parsed.success) return c.json({ status: "error", message: "Invalid inbound message" }, STATUS_CODES.BAD_REQUEST);
+        const result = await service.ingestInboundMessage(accountId, parsed.data);
+        return c.json({ status: "success", ...result });
+    } catch {
+        return c.json({ status: "error", message: "Inbound WhatsApp message failed" }, 500);
     }
 });
 

@@ -1,9 +1,10 @@
 import { workerConfig } from "./config.js";
 import {
-    WhatsAppWorkerInvoiceJobSchema,
+    WhatsAppWorkerOutboundJobSchema,
     WhatsAppWorkerInvoiceResultSchema,
-    type WhatsAppWorkerInvoiceJobDTO,
+    type WhatsAppWorkerOutboundJobDTO,
     type WhatsAppWorkerInvoiceResultJSON,
+    type WhatsAppWorkerInboundMessageJSON,
 } from "@repo/types";
 import type { AccountStatusSnapshot, WorkerAccountStatus } from "./provider/baileys-account-manager.js";
 
@@ -56,13 +57,13 @@ export const reportStatus = async (snapshot: AccountStatusSnapshot): Promise<voi
     await assertOk(response);
 };
 
-export const claimNextInvoice = async (): Promise<WhatsAppWorkerInvoiceJobDTO | null> => {
+export const claimNextInvoice = async (): Promise<WhatsAppWorkerOutboundJobDTO | null> => {
     const response = await request("/internal/whatsapp/outbox/next", {}, 30_000);
     await assertOk(response);
     const data = await response.json() as { job?: unknown };
     if (!data.job) return null;
-    const parsed = WhatsAppWorkerInvoiceJobSchema.safeParse(data.job);
-    if (!parsed.success) throw new Error("Ganatri API returned an invalid WhatsApp invoice job");
+    const parsed = WhatsAppWorkerOutboundJobSchema.safeParse(data.job);
+    if (!parsed.success) throw new Error("Ganatri API returned an invalid WhatsApp outbound job");
     return parsed.data;
 };
 
@@ -92,4 +93,15 @@ export const reportMessageStatus = async (
         if (data.status !== "ignored") return;
         await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
     }
+};
+
+export const reportInboundMessage = async (
+    accountId: string,
+    message: WhatsAppWorkerInboundMessageJSON,
+): Promise<void> => {
+    const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/messages/inbound", {
+        method: "POST",
+        body: JSON.stringify(message),
+    }, 30_000);
+    await assertOk(response);
 };

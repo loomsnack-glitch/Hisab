@@ -11,6 +11,7 @@ import * as organizationRepository from "@/modules/tenant/organization/organizat
 import * as repository from "./whatsapp.repository";
 import * as workerClient from "./whatsapp.worker-client";
 import * as invoiceService from "./invoice";
+import * as conversationService from "./conversation";
 
 const QR_KEY_PREFIX = "whatsapp:account:qr:";
 const QR_TTL_SECONDS = 120;
@@ -214,3 +215,14 @@ export const retryInvoice = invoiceService.retryInvoice;
 export const claimInvoiceForWorker = invoiceService.claimInvoiceForWorker;
 export const receiveInvoiceResult = invoiceService.receiveInvoiceResult;
 export const receiveInvoiceMessageStatus = invoiceService.receiveInvoiceMessageStatus;
+export const listConversations = conversationService.listConversations;
+export const listConversationsForDevice = conversationService.listConversationsForDevice;
+export const getConversation = conversationService.getConversation;
+export const getConversationForDevice = conversationService.getConversationForDevice;
+export const sendText = conversationService.sendText;
+export const sendTextForDevice = conversationService.sendTextForDevice;
+export const attachCustomer = conversationService.attachCustomer;
+export const attachCustomerForDevice = conversationService.attachCustomerForDevice;
+export const getAttachment = conversationService.getAttachment;
+export const getAttachmentForDevice = conversationService.getAttachmentForDevice;
+export const ingestInboundMessage = conversationService.ingestInboundMessage;

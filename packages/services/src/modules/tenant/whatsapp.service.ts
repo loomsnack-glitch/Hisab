@@ -3,11 +3,20 @@ import type {
     WhatsAppAccountStatusResponseDTO,
     WhatsAppCreateAccountJSON,
     WhatsAppInvoiceQueueResponseDTO,
+    WhatsAppConversationListResponse,
+    WhatsAppConversationMessagesResponse,
+    WhatsAppConversationDTO,
+    WhatsAppAttachmentResponse,
+    WhatsAppMessageDTO,
+    WhatsAppSendConversationTextJSON,
+    WhatsAppAttachConversationCustomerJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
 type WhatsAppResponse = ServiceResponse<WhatsAppAccountStatusResponseDTO | null>;
 type WhatsAppInvoiceResponse = ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
+type WhatsAppConversationListResponseType = ServiceResponse<WhatsAppConversationListResponse | null>;
+type WhatsAppConversationResponse = ServiceResponse<WhatsAppConversationMessagesResponse | null>;
 const accountPath = (organizationId: string, storeId: string) =>
     "/organizations/" + organizationId + "/stores/" + storeId + "/whatsapp/account";
 
@@ -87,6 +96,78 @@ export const retryWhatsAppInvoice = async (
 ): Promise<WhatsAppInvoiceResponse> => {
     try {
         const response = await api.post(invoicePath(organizationId, storeId, saleId) + "/retry");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+const conversationsPath = (organizationId: string, storeId: string) =>
+    "/organizations/" + organizationId + "/stores/" + storeId + "/whatsapp/conversations";
+
+export const getWhatsAppConversations = async (
+    organizationId: string,
+    storeId: string,
+): Promise<WhatsAppConversationListResponseType> => {
+    try {
+        const response = await api.get(conversationsPath(organizationId, storeId));
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppConversation = async (
+    organizationId: string,
+    storeId: string,
+    conversationId: string,
+): Promise<WhatsAppConversationResponse> => {
+    try {
+        const response = await api.get(conversationsPath(organizationId, storeId) + "/" + conversationId);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const sendWhatsAppConversationText = async (
+    organizationId: string,
+    storeId: string,
+    conversationId: string,
+    data: WhatsAppSendConversationTextJSON,
+): Promise<ServiceResponse<WhatsAppMessageDTO | null>> => {
+    try {
+        const response = await api.post(conversationsPath(organizationId, storeId) + "/" + conversationId + "/messages", data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const attachWhatsAppConversationCustomer = async (
+    organizationId: string,
+    storeId: string,
+    conversationId: string,
+    data: WhatsAppAttachConversationCustomerJSON,
+): Promise<ServiceResponse<WhatsAppConversationDTO | null>> => {
+    try {
+        const response = await api.post(conversationsPath(organizationId, storeId) + "/" + conversationId + "/customer", data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppAttachment = async (
+    organizationId: string,
+    storeId: string,
+    conversationId: string,
+    messageId: string,
+): Promise<ServiceResponse<WhatsAppAttachmentResponse | null>> => {
+    try {
+        const response = await api.get(
+            conversationsPath(organizationId, storeId) + "/" + conversationId + "/messages/" + messageId + "/attachment",
+        );
         return response.data;
     } catch (error) {
         return handleApiError(error);

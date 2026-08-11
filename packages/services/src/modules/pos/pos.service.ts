@@ -30,6 +30,13 @@ import type {
   UpdatePurchaseJSON,
   VoidPurchaseJSON,
   WhatsAppInvoiceQueueResponseDTO,
+  WhatsAppConversationListResponse,
+  WhatsAppConversationMessagesResponse,
+  WhatsAppConversationDTO,
+  WhatsAppAttachmentResponse,
+  WhatsAppMessageDTO,
+  WhatsAppSendConversationTextJSON,
+  WhatsAppAttachConversationCustomerJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -309,6 +316,62 @@ export const retryPosWhatsAppInvoice = async (
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   try {
     const response = await api.post(`/pos/sales/${saleId}/whatsapp/retry`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosWhatsAppConversations = async (): Promise<ServiceResponse<WhatsAppConversationListResponse | null>> => {
+  try {
+    const response = await api.get("/pos/whatsapp/conversations");
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosWhatsAppConversation = async (
+  conversationId: string,
+): Promise<ServiceResponse<WhatsAppConversationMessagesResponse | null>> => {
+  try {
+    const response = await api.get(`/pos/whatsapp/conversations/${conversationId}`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const sendPosWhatsAppConversationText = async (
+  conversationId: string,
+  data: WhatsAppSendConversationTextJSON,
+): Promise<ServiceResponse<WhatsAppMessageDTO | null>> => {
+  try {
+    const response = await api.post(`/pos/whatsapp/conversations/${conversationId}/messages`, data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const attachPosWhatsAppConversationCustomer = async (
+  conversationId: string,
+  data: WhatsAppAttachConversationCustomerJSON,
+): Promise<ServiceResponse<WhatsAppConversationDTO | null>> => {
+  try {
+    const response = await api.post(`/pos/whatsapp/conversations/${conversationId}/customer`, data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosWhatsAppAttachment = async (
+  conversationId: string,
+  messageId: string,
+): Promise<ServiceResponse<WhatsAppAttachmentResponse | null>> => {
+  try {
+    const response = await api.get(`/pos/whatsapp/conversations/${conversationId}/messages/${messageId}/attachment`);
     return response.data;
   } catch (error) {
     return handleApiError(error);

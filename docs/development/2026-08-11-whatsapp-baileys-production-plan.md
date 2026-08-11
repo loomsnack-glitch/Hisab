@@ -534,3 +534,91 @@ Known validation boundary:
 Phase 4 implementation and review are complete. Stop here pending approval for
 Phase 5; inbound messages, text conversations, and WhatsApp-style thread UI
 have not started.
+
+Phase 5 plan review: PASS on 2026-08-12.
+
+Phase 5 implementation decisions:
+
+- The first conversation boundary is direct one-to-one WhatsApp chats with an
+  E.164 phone JID. Group, broadcast, protocol, and unsupported-media events are
+  ignored and never exposed through the tenant UI until a separate policy is
+  approved.
+- Inbound events are idempotent on `(whatsapp_account_id,
+  provider_message_id)`. The API matches a Customer by exact organization and
+  normalized phone. An unmatched contact is stored as a tenant-scoped
+  conversation with no customer; manual attachment is allowed only when the
+  selected Customer has the same phone number.
+- Text and document sends share the existing durable outbox and lease/result
+  callbacks. Retries reuse the existing message/outbox row, and the worker
+  never receives storage credentials.
+- Inbound documents are limited to the same bounded media size as invoice
+  dispatch, uploaded to a private tenant/account key, and exposed only through
+  an authenticated conversation attachment endpoint with a short-lived signed
+  URL. No public media URL is stored or returned.
+- The admin inbox and Device POS inbox use separate auth scopes but the same
+  conversation/message contract. Loading, empty, disconnected, failed, and
+  retry states are explicit. Polling is used for this phase; realtime fanout
+  and multi-worker account partitioning remain later operational work.
+
+Phase 5 review boundary:
+
+- Include direct inbound text/document ingestion, exact customer matching and
+  safe manual attachment, outbound text outbox dispatch, conversation/message
+  APIs, private document download, unread/last-message updates, and the admin
+  plus POS WhatsApp-style thread surfaces.
+- Exclude group chats, broadcast messaging, media types beyond supported text
+  and documents, realtime WebSocket delivery, multi-account scaling, load
+  testing, and rollout/runbook work reserved for later phases.
+
+Phase 5 implementation review: PASS on 2026-08-12.
+
+Review findings fixed:
+
+- The inbound insert targets the existing partial provider-message unique
+  index explicitly, so duplicate provider events remain idempotent under the
+  actual PostgreSQL migration rather than relying on an unmatched conflict
+  target.
+- Customer lookup and manual attachment compare normalized digits within the
+  organization and Store-scoped conversation, allowing harmless phone-format
+  differences without permitting cross-tenant attachment.
+- Text messages use the same leased outbox and result transition as invoice
+  documents. Provider acknowledgement updates now apply to outbound text and
+  document messages, while the UI disables sending for non-connected account
+  states and preserves read-only history.
+- Inbound documents are uploaded privately before persistence, removed on
+  duplicate or failed writes, bounded to 10 MB, and exposed only through the
+  authenticated signed-URL endpoint. The worker receives no storage access.
+- Admin and POS routes use separate existing auth scopes and the same shared
+  schemas. Conversation reads, sends, customer attachment, and document
+  access all re-check organization, Store, account, conversation, and message
+  ownership at the repository boundary.
+- The web inbox has explicit loading, empty, failed, retry, unmatched-contact,
+  disconnected, queued/sent/failed, and attachment-opening states. Polling is
+  bounded to the current conversation/account scope.
+
+Focused validation:
+
+- bun test packages/types/src/services/whatsapp.schema.test.ts
+  apps/web/src/pages/pos-route-context.test.ts — 8 passed, 25 expectations.
+- bun test apps/backend/src/modules/tenant/whatsapp/invoice-pdf.test.ts
+  packages/types/src/services/whatsapp.schema.test.ts — 7 passed, 16
+  expectations.
+- Worker TypeScript check and Node-targeted production bundle — passed.
+- Web TypeScript check — passed.
+- Backend and services production bundles — passed.
+- git diff --check — passed.
+
+Known validation boundary:
+
+- The WhatsApp migration was not applied to a live database in this
+  environment. PostgreSQL query execution, MinIO private-object policy,
+  signed URL behavior, a real inbound/outbound account, provider
+  acknowledgements, and reconnect/restart behavior remain deployment/pilot
+  checks.
+- A project-wide backend TypeScript check still reports pre-existing unrelated
+  billing-test, catalog-test, catalog-service, and seed-script errors; no
+  Phase 5 file appears in that error set.
+
+Phase 5 implementation and review are complete. Stop here pending approval for
+Phase 6; multi-account scaling, realtime delivery, load testing, and rollout
+operations have not started.

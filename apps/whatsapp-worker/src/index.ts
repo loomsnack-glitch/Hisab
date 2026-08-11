@@ -3,6 +3,7 @@ import {
     claimNextInvoice,
     listAccounts,
     reportInvoiceResult,
+    reportInboundMessage,
     reportMessageStatus,
     reportStatus,
 } from "./api-client.js";
@@ -10,7 +11,7 @@ import { startHttpServer } from "./http-server.js";
 import { logger } from "./logger.js";
 import { BaileysAccountManager } from "./provider/baileys-account-manager.js";
 
-const manager = new BaileysAccountManager(reportStatus, reportMessageStatus);
+const manager = new BaileysAccountManager(reportStatus, reportMessageStatus, reportInboundMessage);
 const server = startHttpServer(manager);
 
 const wait = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -36,14 +37,18 @@ const dispatchInvoices = async (): Promise<void> => {
             }
 
             try {
-                const providerMessageId = await manager.sendDocument(
-                    job.accountId,
-                    job.phoneNumber,
-                    Buffer.from(job.documentBase64, "base64"),
-                    job.attachmentFileName,
-                    job.attachmentMimeType,
-                    job.caption ?? undefined,
-                );
+                const providerMessageId = job.messageType === "text"
+                    ? await manager.sendText(job.accountId, job.phoneNumber, job.body ?? "")
+                    : job.documentBase64 && job.attachmentFileName && job.attachmentMimeType
+                      ? await manager.sendDocument(
+                            job.accountId,
+                            job.phoneNumber,
+                            Buffer.from(job.documentBase64, "base64"),
+                            job.attachmentFileName,
+                            job.attachmentMimeType,
+                            job.caption ?? undefined,
+                        )
+                      : (() => { throw new Error("Outbound document payload is incomplete"); })();
                 await reportInvoiceResult(job.outboxId, {
                     leaseOwner: job.leaseOwner,
                     providerMessageId,
