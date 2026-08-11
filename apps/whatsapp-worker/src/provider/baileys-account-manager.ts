@@ -7,6 +7,7 @@ import {
     downloadMediaMessage,
     type WASocket,
     type WAMessage,
+    type WAVersion,
 } from "@whiskeysockets/baileys";
 import type { WhatsAppWorkerInboundMessageJSON } from "@repo/types";
 import { toDataURL } from "qrcode";
@@ -72,7 +73,7 @@ const disconnectCode = (error: unknown): number | null => {
 
 export class BaileysAccountManager {
     private readonly accounts = new Map<string, ManagedAccount>();
-    private versionPromise: Promise<[number, number, number]> | null = null;
+    private versionPromise: Promise<WAVersion> | null = null;
 
     public constructor(
         private readonly reportStatus: StatusReporter,
@@ -80,7 +81,7 @@ export class BaileysAccountManager {
         private readonly reportInboundMessage?: InboundMessageReporter,
     ) {}
 
-    private getBaileysVersion(): Promise<[number, number, number]> {
+    private getBaileysVersion(): Promise<WAVersion> {
         if (!this.versionPromise) {
             this.versionPromise = resolveBaileysVersion();
         }
