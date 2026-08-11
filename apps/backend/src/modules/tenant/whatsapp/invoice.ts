@@ -13,21 +13,10 @@ import * as storage from "@/services/storage";
 import * as billingRepository from "@/modules/tenant/billing/billing.repository";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as repository from "./whatsapp.repository";
-import { renderSalePdf } from "./invoice-pdf";
+import { formatInvoiceText } from "./invoice-text";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
-
-const invoiceObjectKey = (
-  organizationId: string,
-  storeId: string,
-  saleId: string,
-) => `whatsapp-invoices/${organizationId}/${storeId}/${saleId}.pdf`;
-
-const invoiceFileName = (sale: SaleDetailDTO) => {
-  const number = sale.saleNumber?.trim() || sale.id;
-  return `sale-${number.replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf`;
-};
 
 const loadSaleDetail = async (
   organizationId: string,
@@ -149,23 +138,7 @@ export const queueInvoiceForStore = async (
     };
   }
 
-  const bucket = privateBucket();
-  if (!bucket) {
-    return {
-      status: "error",
-      message: "Private invoice storage is not configured",
-      data: null,
-      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-    };
-  }
-
-  const objectKey = invoiceObjectKey(organizationId, storeId, saleId);
-  let uploaded = false;
   try {
-    const pdf = await renderSalePdf(sale);
-    await storage.uploadBuffer(bucket, objectKey, pdf, "application/pdf");
-    uploaded = true;
-
     const request = await repository.createInvoiceOutbox({
       organizationId,
       storeId,
@@ -175,10 +148,9 @@ export const queueInvoiceForStore = async (
       customerPhone: parsedPhone.data,
       customerName:
         sale.customerNameSnapshot ?? sale.customer?.name ?? "Customer",
+      body: formatInvoiceText(sale),
       messageId: crypto.randomUUID(),
       idempotencyKey: `invoice:${saleId}`,
-      attachmentStorageKey: objectKey,
-      attachmentFileName: invoiceFileName(sale),
     });
     return response(saleId, request, false);
   } catch (error) {
@@ -195,16 +167,6 @@ export const queueInvoiceForStore = async (
       // Preserve the original preparation failure when the race check cannot run.
     }
 
-    if (uploaded) {
-      try {
-        await storage.deleteObject(bucket, objectKey);
-      } catch (cleanupError) {
-        console.error(
-          "[whatsapp] invoice object cleanup failed",
-          cleanupError instanceof Error ? cleanupError.message : "unknown",
-        );
-      }
-    }
     if (error instanceof repository.WhatsAppOutboxLimitError) {
       return {
         status: "error",
@@ -219,7 +181,7 @@ export const queueInvoiceForStore = async (
     );
     return {
       status: "error",
-      message: "Invoice PDF could not be prepared. The Sale remains completed.",
+      message: "Invoice text could not be queued. The Sale remains completed.",
       data: null,
       code: STATUS_CODES.INTERNAL_SERVER_ERROR,
     };

@@ -27,10 +27,9 @@ type InvoiceOutboxParams = {
     customerId: string;
     customerPhone: string;
     customerName: string;
+    body: string;
     messageId: string;
     idempotencyKey: string;
-    attachmentStorageKey: string | null;
-    attachmentFileName: string;
 };
 
 export type InvoiceOutboxJobRecord = {
@@ -273,6 +272,7 @@ export const createInvoiceOutbox = async (params: InvoiceOutboxParams): Promise<
                 conversation_id,
                 direction,
                 message_type,
+                body,
                 caption,
                 attachment_storage_key,
                 attachment_file_name,
@@ -287,11 +287,12 @@ export const createInvoiceOutbox = async (params: InvoiceOutboxParams): Promise<
                 ${params.whatsappAccountId},
                 ${conversation.id},
                 'outbound',
-                'document',
-                ${`Sale ${params.saleId}`},
-                ${params.attachmentStorageKey},
-                ${params.attachmentFileName},
-                'application/pdf',
+                'text',
+                ${params.body},
+                NULL,
+                NULL,
+                NULL,
+                NULL,
                 'queued',
                 ${params.idempotencyKey}
             )
