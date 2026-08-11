@@ -206,3 +206,11 @@ export const receiveWorkerStatus = async (accountId: string, update: WhatsAppWor
     saveWorkerStatus(accountId, update);
 
 export const queueInvoice = invoiceService.queueInvoice;
+export const queueInvoiceForDevice = invoiceService.queueInvoiceForDevice;
+export const getInvoiceStatusForDevice = invoiceService.getInvoiceStatusForDevice;
+export const retryInvoiceForDevice = invoiceService.retryInvoiceForDevice;
+export const getInvoiceStatus = invoiceService.getInvoiceStatus;
+export const retryInvoice = invoiceService.retryInvoice;
+export const claimInvoiceForWorker = invoiceService.claimInvoiceForWorker;
+export const receiveInvoiceResult = invoiceService.receiveInvoiceResult;
+export const receiveInvoiceMessageStatus = invoiceService.receiveInvoiceMessageStatus;

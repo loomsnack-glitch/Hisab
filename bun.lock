@@ -117,6 +117,7 @@
     "apps/whatsapp-worker": {
       "name": "whatsapp-worker",
       "dependencies": {
+        "@repo/types": "workspace:*",
         "@whiskeysockets/baileys": "6.7.18",
         "qrcode": "1.5.4",
       },

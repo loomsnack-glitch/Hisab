@@ -453,3 +453,84 @@ Known validation boundary:
 Phase 3 implementation and review are complete. Stop here pending approval for
 Phase 4; the Baileys sender, POS WhatsApp action, and send-status UI have not
 started.
+
+Phase 4 plan review: PASS on 2026-08-12.
+
+Phase 4 implementation decisions:
+
+- The database outbox remains authoritative. The worker polls an authenticated
+  internal API, and the API atomically leases one eligible invoice at a time.
+  A Store WhatsApp account may have only one active processing lease, so its
+  invoices cannot reorder or concurrently duplicate one another. Worker
+  partitioning and multi-account concurrency remain Phase 6 scale work.
+- The API reads the private PDF object and returns a bounded document payload to
+  the worker. The worker does not receive storage credentials, and document
+  bodies, phone numbers, provider errors, and bearer tokens must not be logged.
+- A provider message id marks the document message `sent`. Baileys message
+  acknowledgement events update `delivered` and `read` when the provider
+  supplies them; unavailable acknowledgements do not block successful sending.
+- Transient failures become `retryable` with bounded exponential backoff and
+  jitter. Permanent failures become `dead_letter`. Retrying a bill reuses the
+  existing message and outbox rows, preserving idempotency and avoiding a
+  second invoice document.
+- Admin and Device-scoped POS callers receive the same queue/status contract.
+  POS completion remains successful when invoice queueing or the worker is
+  offline; the UI reports the WhatsApp failure separately.
+
+Phase 4 review boundary:
+
+- Include invoice document dispatch, authenticated worker polling and result
+  callbacks, acknowledgement status mapping, retry/dead-letter transitions,
+  POS/admin queue actions, and bill-detail status/retry presentation.
+- Exclude inbound message ingestion, free-form text messaging, conversation
+  listing/thread UI, multi-worker partitioning, load testing, and production
+  rollout work reserved for later phases.
+
+Phase 4 implementation review: PASS on 2026-08-12.
+
+Review findings fixed:
+
+- The worker uses shared Zod contracts for bounded invoice jobs and sanitized
+  result/status callbacks. Its production package now declares the workspace
+  types dependency explicitly.
+- The API atomically leases eligible outbox rows, serializes active work per
+  WhatsApp account, resets expired leases, and transitions messages/outbox rows
+  through sent, retryable, and dead-letter states without creating duplicate
+  rows on retry.
+- Private PDF bytes are read only by the API and are bounded before being sent
+  over the authenticated worker channel. Storage credentials and document
+  bodies are not exposed in logs.
+- Baileys provider acknowledgements map to delivered/read where available, and
+  the worker briefly retries an acknowledgement callback when it races the
+  initial send-result persistence.
+- Sale completion and invoice queueing are separate UI operations. A WhatsApp
+  queue failure is reported independently and cannot roll back a completed
+  Sale. Admin and Device callers use separate authorization boundaries.
+- The review found no repository coding-standard document to apply beyond the
+  existing module and validation conventions. The diff contains no unrelated
+  formatter churn.
+
+Focused validation:
+
+- bun install --frozen-lockfile --offline — passed.
+- WhatsApp/PDF focused tests — 9 passed, 13 expectations.
+- Configured billing service tests — 30 passed, 188 expectations.
+- Worker typecheck and Node-targeted production bundle — passed; 4.15 MB
+  bundle.
+- Backend production bundle, services bundle, and web TypeScript check —
+  passed.
+- git diff --check — passed.
+
+Known validation boundary:
+
+- The WhatsApp migrations were not applied to a live database in this
+  environment. MinIO private-object behavior, a real account send, provider
+  acknowledgement delivery, restart recovery, and account-scale behavior
+  remain deployment/pilot evidence.
+- A project-wide backend TypeScript check still reports pre-existing unrelated
+  catalog, billing-test, and seed-script errors; no Phase 4 file appears in
+  that error set.
+
+Phase 4 implementation and review are complete. Stop here pending approval for
+Phase 5; inbound messages, text conversations, and WhatsApp-style thread UI
+have not started.

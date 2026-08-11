@@ -29,6 +29,7 @@ import type {
   PurchaseListQuery,
   UpdatePurchaseJSON,
   VoidPurchaseJSON,
+  WhatsAppInvoiceQueueResponseDTO,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -275,6 +276,39 @@ export const voidPosSale = async (
 ): Promise<ServiceResponse<SaleResponse | null>> => {
   try {
     const response = await api.post(`/pos/sales/${saleId}/void`, data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosWhatsAppInvoiceStatus = async (
+  saleId: string,
+): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  try {
+    const response = await api.get(`/pos/sales/${saleId}/whatsapp`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const queuePosWhatsAppInvoice = async (
+  saleId: string,
+): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  try {
+    const response = await api.post(`/pos/sales/${saleId}/whatsapp`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const retryPosWhatsAppInvoice = async (
+  saleId: string,
+): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  try {
+    const response = await api.post(`/pos/sales/${saleId}/whatsapp/retry`);
     return response.data;
   } catch (error) {
     return handleApiError(error);

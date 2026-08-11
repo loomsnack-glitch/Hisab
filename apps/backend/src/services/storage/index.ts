@@ -19,6 +19,9 @@ export const listObjects = (bucketName: string, prefix: string) =>
 export const getObject = (bucketName: string, key: string) =>
     storageService.getObject(bucketName, key);
 
+export const getObjectBuffer = (bucketName: string, key: string, maxBytes: number) =>
+    storageService.getObjectBuffer(bucketName, key, maxBytes);
+
 export const uploadObject = (bucketName: string, key: string, body: string, mimetype: string) =>
     storageService.uploadObject(bucketName, key, body, mimetype);
 

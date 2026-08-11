@@ -1,4 +1,4 @@
-import { DisconnectReason, makeWASocket, Browsers, type WASocket } from "@whiskeysockets/baileys";
+import { DisconnectReason, makeWASocket, Browsers, WAMessageStatus, type WASocket } from "@whiskeysockets/baileys";
 import { toDataURL } from "qrcode";
 import { join } from "node:path";
 import { clearEncryptedAuthState, useEncryptedAuthState } from "../session/encrypted-auth-state.js";
@@ -26,6 +26,8 @@ export type AccountStatusSnapshot = {
 };
 
 type StatusReporter = (snapshot: AccountStatusSnapshot) => Promise<void>;
+export type MessageStatus = "delivered" | "read";
+type MessageStatusReporter = (accountId: string, providerMessageId: string, status: MessageStatus) => Promise<void>;
 
 type ManagedAccount = {
     input: AccountConnectionInput;
@@ -59,7 +61,10 @@ const disconnectCode = (error: unknown): number | null => {
 export class BaileysAccountManager {
     private readonly accounts = new Map<string, ManagedAccount>();
 
-    public constructor(private readonly reportStatus: StatusReporter) {}
+    public constructor(
+        private readonly reportStatus: StatusReporter,
+        private readonly reportMessageStatus?: MessageStatusReporter,
+    ) {}
 
     public getStatus(accountId: string): AccountStatusSnapshot {
         const account = this.accounts.get(accountId);
@@ -117,6 +122,24 @@ export class BaileysAccountManager {
         });
         account.socket = socket;
         socket.ev.on("creds.update", saveCreds);
+        socket.ev.on("messages.update", updates => {
+            for (const update of updates) {
+                const providerMessageId = update.key.id;
+                if (!providerMessageId || !update.key.fromMe || !this.reportMessageStatus) continue;
+                const status = update.update.status;
+                const mappedStatus = status === WAMessageStatus.READ || status === WAMessageStatus.PLAYED
+                    ? "read"
+                    : status === WAMessageStatus.DELIVERY_ACK
+                      ? "delivered"
+                      : null;
+                if (!mappedStatus) continue;
+                void this.reportMessageStatus(account.input.accountId, providerMessageId, mappedStatus).catch(() => {
+                    logger.warn("Unable to report WhatsApp message status", {
+                        accountId: account.input.accountId,
+                    });
+                });
+            }
+        });
         socket.ev.on("connection.update", update => {
             void this.handleConnectionUpdate(account, socket, update).catch(() => {
                 account.status = "failed";

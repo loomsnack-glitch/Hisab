@@ -28,6 +28,7 @@ import * as billingService from "@/modules/tenant/billing/billing.service";
 import * as catalogService from "@/modules/tenant/catalog/catalog.service";
 import * as purchaseService from "@/modules/tenant/purchase/purchase.service";
 import * as organizationService from "@/modules/tenant/organization/organization.service";
+import * as whatsappService from "@/modules/tenant/whatsapp/whatsapp.service";
 
 const FILE_NAME = "pos.routes";
 const uuidSchema = z.uuid("Invalid id");
@@ -259,6 +260,48 @@ router.get(
     }
   },
 );
+
+router.get("/sales/:saleId/whatsapp", async (c) => {
+  try {
+    const saleId = c.req.param("saleId");
+    const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+    if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
+    return handleServiceResponse(
+      c,
+      await whatsappService.getInvoiceStatusForDevice(c.get("authDevice"), saleId),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "getInvoiceStatusForDevice", c, error);
+  }
+});
+
+router.post("/sales/:saleId/whatsapp", async (c) => {
+  try {
+    const saleId = c.req.param("saleId");
+    const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+    if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
+    return handleServiceResponse(
+      c,
+      await whatsappService.queueInvoiceForDevice(c.get("authDevice"), saleId),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "queueInvoiceForDevice", c, error);
+  }
+});
+
+router.post("/sales/:saleId/whatsapp/retry", async (c) => {
+  try {
+    const saleId = c.req.param("saleId");
+    const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+    if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
+    return handleServiceResponse(
+      c,
+      await whatsappService.retryInvoiceForDevice(c.get("authDevice"), saleId),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "retryInvoiceForDevice", c, error);
+  }
+});
 
 router.get(
   "/purchases",

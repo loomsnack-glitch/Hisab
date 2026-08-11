@@ -16,6 +16,9 @@ import {
     WhatsAppInvoiceQueueResponseSchema,
     WhatsAppSendTextSchema,
     WhatsAppWorkerAccountSchema,
+    WhatsAppWorkerInvoiceJobSchema,
+    WhatsAppWorkerInvoiceResultSchema,
+    WhatsAppWorkerMessageStatusSchema,
     WhatsAppWorkerStatusResponseSchema,
     WhatsAppWorkerStatusUpdateSchema,
 } from "./whatsapp.schema";
@@ -54,3 +57,6 @@ export type WhatsAppWorkerStatusResponseDTO = z.infer<typeof WhatsAppWorkerStatu
 export type WhatsAppSendTextJSON = z.infer<typeof WhatsAppSendTextSchema>;
 export type WhatsAppSendInvoiceJSON = z.infer<typeof WhatsAppSendInvoiceSchema>;
 export type WhatsAppInvoiceQueueResponseDTO = z.infer<typeof WhatsAppInvoiceQueueResponseSchema>;
+export type WhatsAppWorkerInvoiceJobDTO = z.infer<typeof WhatsAppWorkerInvoiceJobSchema>;
+export type WhatsAppWorkerInvoiceResultJSON = z.infer<typeof WhatsAppWorkerInvoiceResultSchema>;
+export type WhatsAppWorkerMessageStatusJSON = z.infer<typeof WhatsAppWorkerMessageStatusSchema>;

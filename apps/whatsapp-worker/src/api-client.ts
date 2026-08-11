@@ -1,4 +1,10 @@
 import { workerConfig } from "./config.js";
+import {
+    WhatsAppWorkerInvoiceJobSchema,
+    WhatsAppWorkerInvoiceResultSchema,
+    type WhatsAppWorkerInvoiceJobDTO,
+    type WhatsAppWorkerInvoiceResultJSON,
+} from "@repo/types";
 import type { AccountStatusSnapshot, WorkerAccountStatus } from "./provider/baileys-account-manager.js";
 
 type BootstrapAccount = {
@@ -7,9 +13,9 @@ type BootstrapAccount = {
     status: WorkerAccountStatus;
 };
 
-const request = async (path: string, init: RequestInit = {}): Promise<Response> => {
+const request = async (path: string, init: RequestInit = {}, timeoutMs = 10_000): Promise<Response> => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
         return await fetch(workerConfig.apiUrl + path, {
             ...init,
@@ -48,4 +54,42 @@ export const reportStatus = async (snapshot: AccountStatusSnapshot): Promise<voi
         }),
     });
     await assertOk(response);
+};
+
+export const claimNextInvoice = async (): Promise<WhatsAppWorkerInvoiceJobDTO | null> => {
+    const response = await request("/internal/whatsapp/outbox/next", {}, 30_000);
+    await assertOk(response);
+    const data = await response.json() as { job?: unknown };
+    if (!data.job) return null;
+    const parsed = WhatsAppWorkerInvoiceJobSchema.safeParse(data.job);
+    if (!parsed.success) throw new Error("Ganatri API returned an invalid WhatsApp invoice job");
+    return parsed.data;
+};
+
+export const reportInvoiceResult = async (
+    outboxId: string,
+    result: WhatsAppWorkerInvoiceResultJSON,
+): Promise<void> => {
+    const response = await request("/internal/whatsapp/outbox/" + encodeURIComponent(outboxId) + "/result", {
+        method: "POST",
+        body: JSON.stringify(result),
+    });
+    await assertOk(response);
+};
+
+export const reportMessageStatus = async (
+    accountId: string,
+    providerMessageId: string,
+    status: "delivered" | "read",
+): Promise<void> => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/messages/status", {
+            method: "POST",
+            body: JSON.stringify({ providerMessageId, status }),
+        });
+        await assertOk(response);
+        const data = await response.json() as { status?: string };
+        if (data.status !== "ignored") return;
+        await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+    }
 };

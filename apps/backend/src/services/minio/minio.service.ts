@@ -73,6 +73,26 @@ export const getObject = async (bucketName: string, key: string) => {
     }
 }
 
+export const getObjectBuffer = async (bucketName: string, key: string, maxBytes: number): Promise<Buffer> => {
+    const object = await getObject(bucketName, key);
+    const chunks: Buffer[] = [];
+    let total = 0;
+
+    return new Promise((resolve, reject) => {
+        object.on('data', (chunk: Buffer | Uint8Array) => {
+            const buffer = Buffer.from(chunk);
+            total += buffer.byteLength;
+            if (total > maxBytes) {
+                object.destroy(new Error('Storage object exceeds the configured size limit'));
+                return;
+            }
+            chunks.push(buffer);
+        });
+        object.on('end', () => resolve(Buffer.concat(chunks)));
+        object.on('error', reject);
+    });
+}
+
 // upload an object to a bucket
 export const uploadObject = async (bucketName: string, key: string, file: string, mimetype: string) => {
     try {

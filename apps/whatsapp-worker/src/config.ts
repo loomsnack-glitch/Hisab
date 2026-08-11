@@ -16,6 +16,8 @@ export const workerConfig = {
     reconnectBaseDelayMs: 2_000,
     reconnectMaxDelayMs: 60_000,
     qrTtlMs: 120_000,
+    dispatchPollIntervalMs: 2_000,
+    dispatchErrorDelayMs: 5_000,
 };
 
 if (!Number.isInteger(workerConfig.port) || workerConfig.port < 1 || workerConfig.port > 65_535) {

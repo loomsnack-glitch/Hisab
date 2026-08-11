@@ -115,3 +115,29 @@ export const WhatsAppInvoiceQueueResponseSchema = z.object({
     outboxStatus: WhatsAppOutboxStatusSchema,
     alreadyQueued: z.boolean(),
 });
+
+export const WhatsAppWorkerInvoiceJobSchema = z.object({
+    accountId: z.uuid("Invalid WhatsApp account id"),
+    outboxId: z.uuid("Invalid outbox id"),
+    messageId: z.uuid("Invalid message id"),
+    phoneNumber: phoneSchema,
+    attachmentFileName: z.string().trim().min(1).max(255),
+    attachmentMimeType: z.string().trim().min(1).max(255),
+    caption: z.string().max(4096).nullable(),
+    documentBase64: z.string().min(1).max(14_000_000),
+    attemptCount: z.number().int().positive(),
+    leaseOwner: z.string().trim().min(1).max(255),
+});
+
+export const WhatsAppWorkerInvoiceResultSchema = z.object({
+    leaseOwner: z.string().trim().min(1).max(255),
+    providerMessageId: z.string().trim().min(1).max(255).nullable(),
+    failureCode: z.string().regex(/^[a-z0-9_]+$/).max(100).nullable(),
+    failureMessage: z.string().trim().max(1000).nullable(),
+    retryable: z.boolean(),
+});
+
+export const WhatsAppWorkerMessageStatusSchema = z.object({
+    providerMessageId: z.string().trim().min(1).max(255),
+    status: z.enum(["delivered", "read"]),
+});

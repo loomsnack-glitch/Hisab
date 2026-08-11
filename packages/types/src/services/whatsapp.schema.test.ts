@@ -3,6 +3,8 @@ import {
     WhatsAppAccountDTOSchema,
     WhatsAppSendInvoiceSchema,
     WhatsAppSendTextSchema,
+    WhatsAppWorkerInvoiceJobSchema,
+    WhatsAppWorkerInvoiceResultSchema,
 } from "./whatsapp.schema";
 
 const uuid = "11111111-1111-4111-8111-111111111111";
@@ -54,5 +56,35 @@ describe("WhatsApp schemas", () => {
     test("rejects empty text and malformed invoice requests", () => {
         expect(WhatsAppSendTextSchema.safeParse({ customerId: uuid, body: " " }).success).toBe(false);
         expect(WhatsAppSendInvoiceSchema.safeParse({ saleId: "not-a-uuid" }).success).toBe(false);
+    });
+
+    test("validates bounded worker invoice payloads and result transitions", () => {
+        expect(WhatsAppWorkerInvoiceJobSchema.safeParse({
+            accountId: uuid,
+            outboxId: uuid,
+            messageId: uuid,
+            phoneNumber: "+919876543210",
+            attachmentFileName: "sale-1001.pdf",
+            attachmentMimeType: "application/pdf",
+            caption: "Sale 1001",
+            documentBase64: "cGRm",
+            attemptCount: 1,
+            leaseOwner: "worker-lease",
+        }).success).toBe(true);
+
+        expect(WhatsAppWorkerInvoiceResultSchema.safeParse({
+            leaseOwner: "worker-lease",
+            providerMessageId: null,
+            failureCode: "provider_unavailable",
+            failureMessage: "WhatsApp provider is temporarily unavailable",
+            retryable: true,
+        }).success).toBe(true);
+        expect(WhatsAppWorkerInvoiceResultSchema.safeParse({
+            leaseOwner: "worker-lease",
+            providerMessageId: null,
+            failureCode: "Unsafe provider message",
+            failureMessage: null,
+            retryable: false,
+        }).success).toBe(false);
     });
 });

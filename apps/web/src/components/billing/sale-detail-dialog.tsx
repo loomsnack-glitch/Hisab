@@ -1,6 +1,19 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { collectPayment, collectPosPayment, getPosSale, getSale, voidPosSale, voidSale } from "@repo/services";
+import {
+    collectPayment,
+    collectPosPayment,
+    getPosSale,
+    getPosWhatsAppInvoiceStatus,
+    getSale,
+    getWhatsAppInvoiceStatus,
+    queuePosWhatsAppInvoice,
+    queueWhatsAppInvoice,
+    retryPosWhatsAppInvoice,
+    retryWhatsAppInvoice,
+    voidPosSale,
+    voidSale,
+} from "@repo/services";
 import type { CreatePaymentJSON, PaymentMethod, SaleDetailDTO, VoidSaleJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -29,7 +42,7 @@ import {
 import { toast } from "sonner";
 
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
-import { billingKeys } from "@/lib/query-keys";
+import { billingKeys, whatsappKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatDiscountPercentage } from "@/lib/format";
 import { buildReceiptText, type ReceiptContext } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
@@ -91,6 +104,22 @@ const SaleDetailDialog = ({
     });
 
     const sale = saleQuery.data?.status === "success" ? (saleQuery.data.data?.sale ?? null) : null;
+    const whatsappInvoiceQuery = useQuery({
+        queryKey: saleId
+            ? mode === "device"
+                ? whatsappKeys.posInvoice(saleId)
+                : whatsappKeys.invoice(organizationId, storeId, saleId)
+            : ["whatsapp", "invoice", "idle"],
+        queryFn: () =>
+            mode === "device"
+                ? getPosWhatsAppInvoiceStatus(saleId as string)
+                : getWhatsAppInvoiceStatus(organizationId, storeId, saleId as string),
+        enabled: open && Boolean(saleId),
+    });
+
+    const whatsappInvoice = whatsappInvoiceQuery.data?.status === "success"
+        ? (whatsappInvoiceQuery.data.data ?? null)
+        : null;
     const itemDiscountTotal = sale
         ? sale.items.reduce((total, item) => {
               const parentDiscount = Number(item.discountAmount ?? 0);
@@ -162,6 +191,29 @@ const SaleDetailDialog = ({
         },
         onError: (error: { message?: string }) => {
             setFormError(error?.message || "Failed to void sale");
+        },
+    });
+
+    const whatsappInvoiceMutation = useMutation({
+        mutationFn: () => {
+            const canRetry = whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter";
+            if (mode === "device") {
+                return canRetry ? retryPosWhatsAppInvoice(saleId as string) : queuePosWhatsAppInvoice(saleId as string);
+            }
+            return canRetry
+                ? retryWhatsAppInvoice(organizationId, storeId, saleId as string)
+                : queueWhatsAppInvoice(organizationId, storeId, saleId as string);
+        },
+        onSuccess: response => {
+            if (response.status !== "success") {
+                toast.error(response.message || "Invoice could not be queued for WhatsApp");
+                return;
+            }
+            toast.success("Invoice queued for WhatsApp");
+            void whatsappInvoiceQuery.refetch();
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error?.message || "Invoice could not be queued for WhatsApp");
         },
     });
 
@@ -260,6 +312,11 @@ const SaleDetailDialog = ({
                                             >
                                                 {sale.status}
                                             </Badge>
+                                            {sale.status === "completed" ? (
+                                                <Badge className="rounded-full border border-[#25D366]/25 bg-[#25D366]/10 text-xs text-[#168c45] dark:text-[#6ee7a1]">
+                                                    WhatsApp {whatsappInvoice?.messageStatus ?? "not sent"}
+                                                </Badge>
+                                            ) : null}
                                             <Badge
                                                 className={cn(
                                                     "rounded-full border text-xs",
@@ -346,6 +403,26 @@ const SaleDetailDialog = ({
                                         <Printer className="size-4" />
                                         <span>Print</span>
                                     </Button>
+                                    {sale.status === "completed" ? (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={whatsappInvoiceMutation.isPending || whatsappInvoiceQuery.isPending}
+                                            onClick={() => whatsappInvoiceMutation.mutate()}
+                                            className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
+                                        >
+                                            <Smartphone className="size-4 text-[#25D366]" />
+                                            <span>
+                                                {whatsappInvoiceMutation.isPending
+                                                    ? "Queueing..."
+                                                    : whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter"
+                                                      ? "Retry WhatsApp"
+                                                      : whatsappInvoice?.messageStatus
+                                                        ? "Send again"
+                                                        : "WhatsApp"}
+                                            </span>
+                                        </Button>
+                                    ) : null}
                                     <Button
                                         variant="outline"
                                         size="sm"

@@ -30,6 +30,8 @@ import {
     updatePosSettings,
     updatePosDraftSale,
     updateDraftSale,
+    queuePosWhatsAppInvoice,
+    queueWhatsAppInvoice,
 } from "@repo/services";
 import type {
     CommitSaleJSON,
@@ -121,7 +123,7 @@ import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import type { PosComposerHandoff } from "@/pages/pos-route-context";
-import { billingKeys, catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { billingKeys, catalogKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
@@ -1660,7 +1662,7 @@ const BillingPage = ({
     });
 
     const completeSaleMutation = useMutation({
-        mutationFn: async ({ requestId }: { requestId: string; shouldPrint: boolean }) => {
+        mutationFn: async ({ requestId }: { requestId: string; shouldPrint: boolean; shouldSendWhatsApp: boolean }) => {
             if (!selectedStoreId) {
                 throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
             }
@@ -1771,6 +1773,25 @@ const BillingPage = ({
                     setReceiptToPrint(sale);
                 }
             }
+            if (variables.shouldSendWhatsApp && !wasReplacing) {
+                const queueRequest = isDeviceMode
+                    ? queuePosWhatsAppInvoice(sale.id)
+                    : queueWhatsAppInvoice(organizationId, selectedStoreId, sale.id);
+                void queueRequest.then(response => {
+                    queryClient.invalidateQueries({
+                        queryKey: isDeviceMode
+                            ? whatsappKeys.posInvoice(sale.id)
+                            : whatsappKeys.invoice(organizationId, selectedStoreId, sale.id),
+                    });
+                    if (response.status === "success") {
+                        toast.success("Invoice queued for WhatsApp");
+                    } else {
+                        toast.error(response.message || "Invoice could not be queued for WhatsApp");
+                    }
+                }).catch((error: { message?: string }) => {
+                    toast.error(error?.message || "Invoice could not be queued for WhatsApp");
+                });
+            }
             toast.success(
                 wasReplacing
                     ? `Bill ${sale.saleNumber ?? ""} edited`
@@ -1784,6 +1805,7 @@ const BillingPage = ({
 
     const submitCompleteSale = () => {
         const shouldPrint = invoiceActions.includes("print");
+        const shouldSendWhatsApp = invoiceActions.includes("whatsapp");
         const fingerprint = JSON.stringify({
             ...buildDraftPayload(),
             payments: buildCommitPayload().payments,
@@ -1791,7 +1813,7 @@ const BillingPage = ({
         const existingRequest = completionRequestRef.current;
         const requestId = existingRequest?.fingerprint === fingerprint ? existingRequest.requestId : safeRandomUUID();
         completionRequestRef.current = { requestId, fingerprint };
-        completeSaleMutation.mutate({ requestId, shouldPrint });
+        completeSaleMutation.mutate({ requestId, shouldPrint, shouldSendWhatsApp });
     };
 
     const handleCompleteSale = () => {
@@ -4151,12 +4173,17 @@ const BillingPage = ({
                                 </button>
                                 <button
                                     type="button"
-                                    disabled
-                                    aria-disabled="true"
-                                    title="WhatsApp invoice is coming soon"
-                                    className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border/50 bg-muted/40 px-2 text-xs font-semibold text-muted-foreground/60"
+                                    disabled={completeSaleMutation.isPending}
+                                    aria-pressed={invoiceActions.includes("whatsapp")}
+                                    onClick={() => toggleInvoiceAction("whatsapp")}
+                                    className={cn(
+                                        "flex h-8 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                        invoiceActions.includes("whatsapp")
+                                            ? "border-[#25D366] bg-[#25D366] text-white"
+                                            : "border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
+                                    )}
                                 >
-                                    <WhatsAppIcon className="opacity-60" />
+                                    <WhatsAppIcon />
                                     WhatsApp
                                 </button>
                             </div>
