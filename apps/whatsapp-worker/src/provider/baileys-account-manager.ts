@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { clearEncryptedAuthState, useEncryptedAuthState } from "../session/encrypted-auth-state.js";
 import { workerConfig } from "../config.js";
 import { logger } from "../logger.js";
+import { resolveBaileysVersion } from "./baileys-version.js";
 
 export type WorkerAccountStatus =
     | "pending_qr"
@@ -71,12 +72,20 @@ const disconnectCode = (error: unknown): number | null => {
 
 export class BaileysAccountManager {
     private readonly accounts = new Map<string, ManagedAccount>();
+    private versionPromise: Promise<[number, number, number]> | null = null;
 
     public constructor(
         private readonly reportStatus: StatusReporter,
         private readonly reportMessageStatus?: MessageStatusReporter,
         private readonly reportInboundMessage?: InboundMessageReporter,
     ) {}
+
+    private getBaileysVersion(): Promise<[number, number, number]> {
+        if (!this.versionPromise) {
+            this.versionPromise = resolveBaileysVersion();
+        }
+        return this.versionPromise;
+    }
 
     public getStatus(accountId: string): AccountStatusSnapshot {
         const account = this.accounts.get(accountId);
@@ -125,6 +134,7 @@ export class BaileysAccountManager {
             workerConfig.authEncryptionKey,
         );
         const socket = makeWASocket({
+            version: await this.getBaileysVersion(),
             auth: state,
             browser: Browsers.ubuntu("Ganatri"),
             logger: silentLogger,
@@ -336,6 +346,10 @@ export class BaileysAccountManager {
         }
 
         const code = disconnectCode(update.lastDisconnect?.error);
+        logger.warn("WhatsApp connection closed", {
+            accountId: account.input.accountId,
+            code: code ?? "unknown",
+        });
         account.socket = null;
         if (account.intentionalDisconnect) {
             account.status = "disconnected";
