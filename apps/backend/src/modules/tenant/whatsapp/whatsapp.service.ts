@@ -229,3 +229,4 @@ export const attachCustomerForDevice = conversationService.attachCustomerForDevi
 export const getAttachment = conversationService.getAttachment;
 export const getAttachmentForDevice = conversationService.getAttachmentForDevice;
 export const ingestInboundMessage = conversationService.ingestInboundMessage;
+export const ingestMessageEvent = conversationService.ingestMessageEvent;

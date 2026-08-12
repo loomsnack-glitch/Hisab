@@ -6,6 +6,7 @@ import {
     WhatsAppWorkerInvoiceJobSchema,
     WhatsAppWorkerInvoiceResultSchema,
     WhatsAppWorkerInboundMessageSchema,
+    WhatsAppWorkerMessageEventSchema,
     WhatsAppWorkerOutboundJobSchema,
     WhatsAppConversationListResponseSchema,
 } from "./whatsapp.schema";
@@ -104,6 +105,22 @@ describe("WhatsApp schemas", () => {
             attachmentMimeType: null,
             documentBase64: null,
             occurredAt: "2026-08-12T10:00:00.000Z",
+        }).success).toBe(true);
+
+        expect(WhatsAppWorkerMessageEventSchema.safeParse({
+            providerMessageId: "wamid-phone-1",
+            externalChatId: "919876543210@s.whatsapp.net",
+            contactPhoneNumber: "+919876543210",
+            displayName: "Customer",
+            messageType: "text",
+            body: "Sent from the linked phone",
+            caption: null,
+            attachmentFileName: null,
+            attachmentMimeType: null,
+            documentBase64: null,
+            occurredAt: new Date(),
+            direction: "outbound",
+            source: "realtime",
         }).success).toBe(true);
 
         expect(WhatsAppWorkerInboundMessageSchema.safeParse({

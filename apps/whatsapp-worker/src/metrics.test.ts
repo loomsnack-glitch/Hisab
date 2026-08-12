@@ -8,8 +8,8 @@ describe("worker metrics", () => {
         metrics.setAccountStatus("account-2", "failed");
         metrics.recordClaim();
         metrics.recordDispatchSuccess();
-        metrics.recordInboundMessage(true);
-        metrics.recordInboundFailure();
+        metrics.recordMessageEvent(true);
+        metrics.recordMessageEventFailure();
         metrics.recordOperationsRefresh({
             pendingCount: 3,
             processingCount: 1,
@@ -25,8 +25,8 @@ describe("worker metrics", () => {
         expect(snapshot.connectedAccountCount).toBe(1);
         expect(snapshot.activeDispatches).toBe(0);
         expect(snapshot.dispatchSuccesses).toBe(1);
-        expect(snapshot.inboundMessages).toBe(1);
-        expect(snapshot.inboundFailures).toBe(1);
+        expect(snapshot.messageEvents).toBe(1);
+        expect(snapshot.messageEventFailures).toBe(1);
         expect(snapshot.operations?.oldestPendingAgeSeconds).toBe(42);
 
         const prometheus = metrics.prometheus("worker-1", 2, 0);

@@ -14,6 +14,13 @@ const integer = (name: string, fallback: number, minimum: number): number => {
     return value;
 };
 
+const boolean = (name: string, fallback: boolean): boolean => {
+    const value = (process.env[name] ?? String(fallback)).trim().toLowerCase();
+    if (value === "true") return true;
+    if (value === "false") return false;
+    throw new Error(`${name} must be true or false`);
+};
+
 const workerId = process.env.WHATSAPP_WORKER_ID?.trim() || `worker-${process.pid}`;
 if (!/^[a-zA-Z0-9._-]{1,100}$/.test(workerId)) {
     throw new Error("WHATSAPP_WORKER_ID must contain only letters, numbers, dots, underscores, and hyphens");
@@ -37,6 +44,8 @@ export const workerConfig = {
     dispatchErrorDelayMs: 5_000,
     shutdownTimeoutMs: integer("WHATSAPP_WORKER_SHUTDOWN_TIMEOUT_MS", 30_000, 1_000),
     operationsRefreshIntervalMs: integer("WHATSAPP_WORKER_OPERATIONS_REFRESH_MS", 15_000, 1_000),
+    syncFullHistory: boolean("WHATSAPP_SYNC_FULL_HISTORY", true),
+    messageStoreLimit: integer("WHATSAPP_MESSAGE_STORE_LIMIT", 2_000, 100),
 };
 
 if (!Number.isInteger(workerConfig.port) || workerConfig.port < 1 || workerConfig.port > 65_535) {

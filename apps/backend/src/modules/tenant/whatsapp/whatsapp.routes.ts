@@ -8,6 +8,7 @@ import {
     WhatsAppSendConversationTextSchema,
     WhatsAppSendInvoiceSchema,
     WhatsAppWorkerInboundMessageSchema,
+    WhatsAppWorkerMessageEventSchema,
     WhatsAppWorkerInvoiceResultSchema,
     WhatsAppWorkerMessageStatusSchema,
     WhatsAppWorkerStatusUpdateSchema,
@@ -336,6 +337,21 @@ whatsappInternalRoutes.post("/accounts/:accountId/messages/inbound", async c => 
         return c.json({ status: "success", ...result });
     } catch {
         return c.json({ status: "error", message: "Inbound WhatsApp message failed" }, 500);
+    }
+});
+
+whatsappInternalRoutes.post("/accounts/:accountId/messages/events", async c => {
+    try {
+        const accountId = c.req.param("accountId");
+        if (!uuidSchema.safeParse(accountId).success) {
+            return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
+        }
+        const parsed = WhatsAppWorkerMessageEventSchema.safeParse(await c.req.json());
+        if (!parsed.success) return c.json({ status: "error", message: "Invalid WhatsApp message event" }, STATUS_CODES.BAD_REQUEST);
+        const result = await service.ingestMessageEvent(accountId, parsed.data);
+        return c.json({ status: "success", ...result });
+    } catch {
+        return c.json({ status: "error", message: "WhatsApp message event failed" }, 500);
     }
 });
 

@@ -47,7 +47,7 @@ export type InvoiceOutboxJobRecord = {
     leaseOwner: string;
 };
 
-export type InboundMessageParams = {
+export type MessageEventParams = {
     organizationId: string;
     storeId: string;
     whatsappAccountId: string;
@@ -56,6 +56,8 @@ export type InboundMessageParams = {
     contactPhoneNumber: string;
     displayName: string;
     providerMessageId: string;
+    direction: "inbound" | "outbound";
+    source: "realtime" | "history";
     messageType: "text" | "document";
     body: string | null;
     caption: string | null;
@@ -495,7 +497,7 @@ export const attachConversationCustomer = async (
     return row ? mapConversation(row) : null;
 };
 
-export const createInboundMessage = async (params: InboundMessageParams): Promise<{ message: WhatsAppMessageDTO; created: boolean }> => {
+export const createMessageEvent = async (params: MessageEventParams): Promise<{ message: WhatsAppMessageDTO; created: boolean }> => {
     return pg.begin(async tx => {
         const [conversation] = await tx`
             INSERT INTO whatsapp_conversations (
@@ -516,18 +518,59 @@ export const createInboundMessage = async (params: InboundMessageParams): Promis
         `;
         if (!conversation) throw new Error("Failed to create WhatsApp conversation");
 
+        if (params.direction === "outbound") {
+            const [existingOutbound] = await tx`
+                SELECT *
+                FROM whatsapp_messages
+                WHERE conversation_id = ${conversation.id}
+                  AND direction = 'outbound'
+                  AND provider_message_id IS NULL
+                  AND status IN ('queued', 'sending')
+                  AND message_type = ${params.messageType}
+                  AND body IS NOT DISTINCT FROM ${params.body}
+                  AND caption IS NOT DISTINCT FROM ${params.caption}
+                  AND attachment_file_name IS NOT DISTINCT FROM ${params.attachmentFileName}
+                  AND created_at BETWEEN ${params.occurredAt}::timestamptz - INTERVAL '5 minutes'
+                      AND ${params.occurredAt}::timestamptz + INTERVAL '5 minutes'
+                ORDER BY created_at DESC
+                LIMIT 1
+            `;
+            if (existingOutbound) {
+                const [reconciled] = await tx`
+                    UPDATE whatsapp_messages
+                    SET provider_message_id = ${params.providerMessageId},
+                        status = 'sent',
+                        sent_at = COALESCE(sent_at, ${params.occurredAt}::timestamptz),
+                        failure_code = NULL,
+                        failure_message = NULL
+                    WHERE id = ${existingOutbound.id}
+                    RETURNING *
+                `;
+                if (!reconciled) throw new Error("Failed to reconcile WhatsApp outbound message");
+                await tx`
+                    UPDATE whatsapp_conversations
+                    SET last_message_at = GREATEST(COALESCE(last_message_at, ${params.occurredAt}::timestamptz), ${params.occurredAt}::timestamptz),
+                        updated_at = NOW()
+                    WHERE id = ${conversation.id}
+                `;
+                return { message: mapMessage(reconciled), created: false };
+            }
+        }
+
         const [createdMessage] = await tx`
             INSERT INTO whatsapp_messages (
                 organization_id, store_id, whatsapp_account_id, conversation_id,
                 direction, message_type, body, caption, attachment_storage_key,
                 attachment_file_name, attachment_mime_type, status, provider_message_id,
-                idempotency_key, created_at, delivered_at
+                idempotency_key, created_at, sent_at, delivered_at
             )
             VALUES (
                 ${params.organizationId}, ${params.storeId}, ${params.whatsappAccountId}, ${conversation.id},
-                'inbound', ${params.messageType}, ${params.body}, ${params.caption}, ${params.attachmentStorageKey},
-                ${params.attachmentFileName}, ${params.attachmentMimeType}, 'delivered', ${params.providerMessageId},
-                ${"inbound:" + params.providerMessageId}, ${params.occurredAt}::timestamptz, ${params.occurredAt}::timestamptz
+                ${params.direction}, ${params.messageType}, ${params.body}, ${params.caption}, ${params.attachmentStorageKey},
+                ${params.attachmentFileName}, ${params.attachmentMimeType}, ${params.direction === "inbound" ? "delivered" : "sent"}, ${params.providerMessageId},
+                ${"provider:" + params.providerMessageId}, ${params.occurredAt}::timestamptz,
+                ${params.direction === "outbound" ? params.occurredAt : null}::timestamptz,
+                ${params.direction === "inbound" ? params.occurredAt : null}::timestamptz
             )
             ON CONFLICT (whatsapp_account_id, provider_message_id) WHERE provider_message_id IS NOT NULL DO NOTHING
             RETURNING *
@@ -546,13 +589,15 @@ export const createInboundMessage = async (params: InboundMessageParams): Promis
         await tx`
             UPDATE whatsapp_conversations
             SET last_message_at = GREATEST(COALESCE(last_message_at, ${params.occurredAt}::timestamptz), ${params.occurredAt}::timestamptz),
-                unread_count = unread_count + 1,
+                unread_count = unread_count + ${params.direction === "inbound" && params.source === "realtime" ? 1 : 0},
                 updated_at = NOW()
             WHERE id = ${conversation.id}
         `;
         return { message: mapMessage(createdMessage), created: true };
     });
 };
+
+export const createInboundMessage = createMessageEvent;
 
 export const createTextOutbox = async (
     organizationId: string,

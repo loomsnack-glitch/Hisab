@@ -11,6 +11,7 @@ import {
     type WhatsAppMessageDTO,
     type WhatsAppSendConversationTextJSON,
     type WhatsAppWorkerInboundMessageJSON,
+    type WhatsAppWorkerMessageEventJSON,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as storage from "@/services/storage";
@@ -239,9 +240,9 @@ export const getAttachmentForDevice = async (
     return success({ url: await storage.generateSignedUrlBeta(bucket, attachment.key, SIGNED_URL_SECONDS, attachment.fileName) }, "Attachment URL created");
 };
 
-export const ingestInboundMessage = async (
+export const ingestMessageEvent = async (
     accountId: string,
-    data: WhatsAppWorkerInboundMessageJSON,
+    data: WhatsAppWorkerMessageEventJSON,
 ): Promise<{ stored: boolean }> => {
     const account = await repository.getAccountById(accountId);
     if (!account) throw new Error("WhatsApp account not found");
@@ -253,16 +254,16 @@ export const ingestInboundMessage = async (
     let attachmentStorageKey: string | null = null;
     const bucket = privateBucket();
     if (data.messageType === "document") {
-        if (!bucket || !data.documentBase64) throw new Error("Inbound document storage is not configured");
+        if (!bucket || !data.documentBase64) throw new Error("WhatsApp document storage is not configured");
         const document = Buffer.from(data.documentBase64, "base64");
-        if (document.byteLength > MAX_MEDIA_BYTES) throw new Error("Inbound document is too large");
+        if (document.byteLength > MAX_MEDIA_BYTES) throw new Error("WhatsApp document is too large");
         attachmentStorageKey = attachmentObjectKey(account.organizationId, account.storeId, account.id, data.providerMessageId);
         await storage.uploadBuffer(bucket, attachmentStorageKey, document, data.attachmentMimeType ?? "application/octet-stream");
     }
 
     try {
         const customer = await repository.getCustomerByPhone(account.organizationId, data.contactPhoneNumber);
-        const result = await repository.createInboundMessage({
+        const result = await repository.createMessageEvent({
             organizationId: account.organizationId,
             storeId: account.storeId,
             whatsappAccountId: account.id,
@@ -271,6 +272,8 @@ export const ingestInboundMessage = async (
             contactPhoneNumber: data.contactPhoneNumber,
             displayName: customer?.name ?? data.displayName,
             providerMessageId: data.providerMessageId,
+            direction: data.direction,
+            source: data.source,
             messageType: data.messageType,
             body: data.body,
             caption: data.caption,
@@ -288,3 +291,12 @@ export const ingestInboundMessage = async (
         throw error;
     }
 };
+
+export const ingestInboundMessage = async (
+    accountId: string,
+    data: WhatsAppWorkerInboundMessageJSON,
+): Promise<{ stored: boolean }> => ingestMessageEvent(accountId, {
+    ...data,
+    direction: "inbound",
+    source: "realtime",
+});

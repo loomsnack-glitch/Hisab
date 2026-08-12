@@ -3,7 +3,7 @@ import {
     claimNextInvoice,
     getOperationsMetrics,
     listAccounts,
-    reportInboundMessage,
+    reportMessageEvent,
     reportInvoiceResult,
     reportMessageStatus,
     reportStatus,
@@ -21,17 +21,17 @@ const reportStatusWithMetrics = async (snapshot: Parameters<typeof reportStatus>
     metrics.setAccountStatus(snapshot.accountId, snapshot.status);
     await reportStatus(snapshot);
 };
-const reportInboundWithMetrics = async (...args: Parameters<typeof reportInboundMessage>): Promise<void> => {
+const reportMessageEventWithMetrics = async (...args: Parameters<typeof reportMessageEvent>): Promise<void> => {
     try {
-        const result = await reportInboundMessage(...args);
-        metrics.recordInboundMessage(result.stored);
+        const result = await reportMessageEvent(...args);
+        metrics.recordMessageEvent(result.stored);
     } catch (error) {
-        metrics.recordInboundFailure();
+        metrics.recordMessageEventFailure();
         throw error;
     }
 };
 
-const manager = new BaileysAccountManager(reportStatusWithMetrics, reportMessageStatus, reportInboundWithMetrics);
+const manager = new BaileysAccountManager(reportStatusWithMetrics, reportMessageStatus, reportMessageEventWithMetrics);
 const server = startHttpServer(manager, metrics);
 
 const wait = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));

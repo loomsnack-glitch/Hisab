@@ -1,10 +1,10 @@
 import { workerConfig } from "./config.js";
 import {
     WhatsAppWorkerOutboundJobSchema,
+    type WhatsAppWorkerMessageEventJSON,
     WhatsAppWorkerInvoiceResultSchema,
     type WhatsAppWorkerOutboundJobDTO,
     type WhatsAppWorkerInvoiceResultJSON,
-    type WhatsAppWorkerInboundMessageJSON,
 } from "@repo/types";
 import type { AccountStatusSnapshot, WorkerAccountStatus } from "./provider/baileys-account-manager.js";
 import type { OperationsMetrics } from "./metrics.js";
@@ -110,15 +110,33 @@ export const reportMessageStatus = async (
     }
 };
 
-export const reportInboundMessage = async (
+export const reportMessageEvent = async (
     accountId: string,
-    message: WhatsAppWorkerInboundMessageJSON,
+    message: WhatsAppWorkerMessageEventJSON,
 ): Promise<{ stored: boolean }> => {
-    const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/messages/inbound", {
-        method: "POST",
-        body: JSON.stringify(message),
-    }, 30_000);
-    await assertOk(response);
-    const data = await response.json() as { stored?: unknown };
-    return { stored: data.stored === true };
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+            const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/messages/events", {
+                method: "POST",
+                body: JSON.stringify(message),
+            }, 30_000);
+            if (!response.ok) {
+                if (response.status < 500 && response.status !== 429) {
+                    const error = new Error("Ganatri API rejected the WhatsApp message event");
+                    Object.assign(error, { retryable: false });
+                    throw error;
+                }
+                throw new Error("Ganatri API temporarily rejected the WhatsApp message event");
+            }
+            const data = await response.json() as { stored?: unknown };
+            return { stored: data.stored === true };
+        } catch (error) {
+            lastError = error;
+            if ((error as { retryable?: boolean }).retryable === false) throw error;
+            if (attempt === 3) break;
+            await new Promise(resolve => setTimeout(resolve, 250 * 2 ** attempt));
+        }
+    }
+    throw lastError instanceof Error ? lastError : new Error("Unable to report WhatsApp message event");
 };

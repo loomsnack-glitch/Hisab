@@ -7,15 +7,17 @@ import {
     downloadMediaMessage,
     type WASocket,
     type WAMessage,
+    type WAMessageKey,
     type WAVersion,
 } from "baileys";
-import type { WhatsAppWorkerInboundMessageJSON } from "@repo/types";
+import type { WhatsAppWorkerMessageEventJSON } from "@repo/types";
 import { toDataURL } from "qrcode";
 import { join } from "node:path";
 import { clearEncryptedAuthState, useEncryptedAuthState } from "../session/encrypted-auth-state.js";
 import { workerConfig } from "../config.js";
 import { logger } from "../logger.js";
 import { resolveBaileysVersion } from "./baileys-version.js";
+import { classifyMessageEvent, type MessageEventSource } from "./message-event.js";
 
 export type WorkerAccountStatus =
     | "pending_qr"
@@ -40,7 +42,7 @@ export type AccountStatusSnapshot = {
 type StatusReporter = (snapshot: AccountStatusSnapshot) => Promise<void>;
 export type MessageStatus = "delivered" | "read";
 type MessageStatusReporter = (accountId: string, providerMessageId: string, status: MessageStatus) => Promise<void>;
-type InboundMessageReporter = (accountId: string, message: WhatsAppWorkerInboundMessageJSON) => Promise<void>;
+type MessageEventReporter = (accountId: string, message: WhatsAppWorkerMessageEventJSON) => Promise<void>;
 
 type ManagedAccount = {
     input: AccountConnectionInput;
@@ -51,6 +53,8 @@ type ManagedAccount = {
     reconnectAttempt: number;
     reconnectTimer: NodeJS.Timeout | null;
     intentionalDisconnect: boolean;
+    messageStore: Map<string, WAMessage>;
+    messageEventTail: Promise<void>;
 };
 
 const silentLogger = {
@@ -65,6 +69,7 @@ const silentLogger = {
 
 const accountDirectory = (accountId: string) => join(workerConfig.authStateDirectory, accountId);
 const phoneToJid = (phoneNumber: string) => phoneNumber.replace(/^\+/, "") + "@s.whatsapp.net";
+const messageStoreKey = (key: WAMessageKey): string => `${key.remoteJid ?? ""}:${key.id ?? ""}:${key.fromMe ? "me" : "them"}`;
 
 const disconnectCode = (error: unknown): number | null => {
     const output = (error as { output?: { statusCode?: unknown } } | null)?.output;
@@ -78,7 +83,7 @@ export class BaileysAccountManager {
     public constructor(
         private readonly reportStatus: StatusReporter,
         private readonly reportMessageStatus?: MessageStatusReporter,
-        private readonly reportInboundMessage?: InboundMessageReporter,
+        private readonly reportMessageEvent?: MessageEventReporter,
     ) {}
 
     private getBaileysVersion(): Promise<WAVersion> {
@@ -117,6 +122,8 @@ export class BaileysAccountManager {
             reconnectAttempt: 0,
             reconnectTimer: null,
             intentionalDisconnect: false,
+            messageStore: new Map(),
+            messageEventTail: Promise.resolve(),
         };
         account.input = input;
         account.intentionalDisconnect = false;
@@ -140,16 +147,20 @@ export class BaileysAccountManager {
             browser: Browsers.ubuntu("Ganatri"),
             logger: silentLogger,
             markOnlineOnConnect: false,
-            syncFullHistory: false,
+            syncFullHistory: workerConfig.syncFullHistory,
             printQRInTerminal: false,
+            getMessage: async key => account.messageStore.get(messageStoreKey(key))?.message ?? undefined,
         });
         account.socket = socket;
         socket.ev.on("creds.update", saveCreds);
         socket.ev.on("messages.upsert", event => {
             for (const message of event.messages) {
-                void this.handleInboundMessage(account, message).catch(() => {
-                    logger.warn("Unable to process inbound WhatsApp message", { accountId: account.input.accountId });
-                });
+                this.enqueueMessageEvent(account, message, event.type === "notify" ? "realtime" : "history");
+            }
+        });
+        socket.ev.on("messaging-history.set", event => {
+            for (const message of event.messages) {
+                this.enqueueMessageEvent(account, message, "history");
             }
         });
         socket.ev.on("messages.update", updates => {
@@ -254,8 +265,17 @@ export class BaileysAccountManager {
         return result.key.id;
     }
 
-    private async handleInboundMessage(account: ManagedAccount, message: WAMessage): Promise<void> {
-        if (!this.reportInboundMessage || message.key.fromMe || !message.key.id) return;
+    private enqueueMessageEvent(account: ManagedAccount, message: WAMessage, source: MessageEventSource): void {
+        this.rememberMessage(account, message);
+        account.messageEventTail = account.messageEventTail
+            .then(() => this.handleMessageEvent(account, message, source))
+            .catch(() => {
+                logger.warn("Unable to process WhatsApp message event", { accountId: account.input.accountId });
+            });
+    }
+
+    private async handleMessageEvent(account: ManagedAccount, message: WAMessage, source: MessageEventSource): Promise<void> {
+        if (!this.reportMessageEvent || !message.key.id) return;
         const externalChatId = message.key.remoteJid ?? "";
         if (!externalChatId.endsWith("@s.whatsapp.net")) return;
         const phoneDigits = externalChatId.slice(0, -"@s.whatsapp.net".length).split(":")[0];
@@ -273,7 +293,7 @@ export class BaileysAccountManager {
             documentBase64 = buffer.toString("base64");
         }
 
-        await this.reportInboundMessage(account.input.accountId, {
+        await this.reportMessageEvent(account.input.accountId, {
             providerMessageId: message.key.id,
             externalChatId,
             contactPhoneNumber: "+" + phoneDigits,
@@ -285,7 +305,18 @@ export class BaileysAccountManager {
             attachmentMimeType: document?.mimetype ?? null,
             documentBase64,
             occurredAt: new Date(Number(message.messageTimestamp ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+            ...classifyMessageEvent(Boolean(message.key.fromMe), source),
         });
+    }
+
+    private rememberMessage(account: ManagedAccount, message: WAMessage): void {
+        if (!message.key.id) return;
+        account.messageStore.set(messageStoreKey(message.key), message);
+        while (account.messageStore.size > workerConfig.messageStoreLimit) {
+            const oldest = account.messageStore.keys().next().value;
+            if (typeof oldest !== "string") break;
+            account.messageStore.delete(oldest);
+        }
     }
 
     private requireConnectedSocket(accountId: string): WASocket {

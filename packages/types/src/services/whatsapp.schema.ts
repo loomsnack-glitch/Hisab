@@ -165,7 +165,7 @@ export const WhatsAppWorkerOutboundJobSchema = z.object({
     leaseOwner: z.string().trim().min(1).max(255),
 });
 
-export const WhatsAppWorkerInboundMessageSchema = z.object({
+const WhatsAppWorkerMessageFields = {
     providerMessageId: z.string().trim().min(1).max(255),
     externalChatId: z.string().trim().min(1).max(255),
     contactPhoneNumber: phoneSchema,
@@ -177,14 +177,28 @@ export const WhatsAppWorkerInboundMessageSchema = z.object({
     attachmentMimeType: z.string().trim().min(1).max(255).nullable(),
     documentBase64: z.string().max(14_000_000).nullable(),
     occurredAt: dtoDateSchema,
-}).superRefine((value, context) => {
+};
+
+const validateWorkerMessageContent = (value: {
+    messageType: "text" | "document";
+    body: string | null;
+    documentBase64: string | null;
+}, context: z.RefinementCtx): void => {
     if (value.messageType === "text" && !value.body?.trim()) {
         context.addIssue({ code: "custom", path: ["body"], message: "Text message body is required" });
     }
     if (value.messageType === "document" && !value.documentBase64) {
         context.addIssue({ code: "custom", path: ["documentBase64"], message: "Document content is required" });
     }
-});
+};
+
+export const WhatsAppWorkerInboundMessageSchema = z.object(WhatsAppWorkerMessageFields).superRefine(validateWorkerMessageContent);
+
+export const WhatsAppWorkerMessageEventSchema = z.object({
+    ...WhatsAppWorkerMessageFields,
+    direction: WhatsAppConversationMessageDirectionSchema,
+    source: z.enum(["realtime", "history"]),
+}).superRefine(validateWorkerMessageContent);
 
 export const WhatsAppConversationListResponseSchema = z.object({
     accountStatus: WhatsAppAccountStatusSchema,

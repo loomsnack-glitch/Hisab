@@ -467,6 +467,93 @@ Known validation boundary:
 Phase 7 code implementation and review are complete. Stop here pending the
 controlled real-account verification and approval for Phase 8.
 
+### Phase 7.1 — Direction-aware message synchronization and history catch-up
+
+Deliverables:
+
+- direction-aware worker event contract for customer inbound and linked-phone
+  outbound messages
+- processing for realtime `messages.upsert` and offline/history
+  `messaging-history.set` events
+- configurable full-history synchronization, enabled by default for recovery
+  and disabled explicitly only when an operator chooses a lighter sync
+- idempotent backend ingestion by provider message ID, with reconciliation for
+  an outbox result racing a provider event
+- bounded worker-to-API retry and a bounded Baileys `getMessage` lookup
+- source-aware unread behavior: realtime customer messages increment unread;
+  historical replay and outbound messages do not
+- focused contract and classification tests, production builds, and review
+
+Out of scope:
+
+- groups, broadcasts, newsletters, campaigns, reactions, presence, and read
+  synchronization for inbound history
+- replacing the encrypted auth state or adding a separate message database
+- production rollout, live account-scale measurement, or a ban-prevention claim
+
+Acceptance criteria:
+
+- a message sent from the linked phone appears once in the matching customer
+  conversation with `outbound` direction
+- a customer message appears once with `inbound` direction
+- reconnect/history replay fills missed 1:1 messages without duplicate rows
+- historical inbound messages do not inflate unread counts
+- transient internal API failures are retried with bounded backoff
+- worker, backend, shared-types checks and the full repository suite pass
+- real-device verification remains an explicit operator gate after local checks
+
+Research note: [WhatsApp message synchronization and history research](../research/2026-08-12-whatsapp-message-sync-and-history.md).
+
+Phase 7.1 plan review: PASS on 2026-08-12.
+
+Phase 7.1 implementation review: PASS on 2026-08-12.
+
+Implementation decisions:
+
+- Baileys `fromMe` events are normalized as outbound messages, while customer
+  events remain inbound. `messages.upsert` notify events are realtime and
+  append/history events plus `messaging-history.set` are history source events.
+- Full history sync is controlled by `WHATSAPP_SYNC_FULL_HISTORY` and defaults
+  to enabled for recovery. Operators can disable it for a deliberately lighter
+  deployment, but that also disables automatic missed-history catch-up.
+- Provider IDs remain unique per WhatsApp account. A narrow timestamp/content
+  reconciliation path attaches an outbound provider event to a queued outbox
+  message when the provider event arrives before the outbox result callback.
+- Event delivery is serialized per account and retries transient API/network
+  failures four times with bounded backoff. A bounded in-memory `getMessage`
+  cache supports provider retry/decryption lookups without logging message
+  contents; encrypted auth state and database conversation rows remain the
+  durable boundaries.
+- Realtime inbound events increment unread counts. History replay and outbound
+  events update the conversation timeline without creating unread work.
+
+Standards/spec review result:
+
+- Standards: PASS. The diff uses existing Hono/Zod/repository/service seams,
+  keeps provider details inside the worker, validates the new contract, avoids
+  sensitive logging, and passes whitespace/build/type checks.
+- Spec: PASS for the Phase 7.1 boundary. The implementation covers phone
+  outbound sync, customer inbound sync, history replay, idempotency, retries,
+  and source-aware unread behavior. Groups, campaigns, rollout, and real-device
+  evidence remain explicitly out of scope.
+
+Focused validation:
+
+- WhatsApp schema and event-classification tests — passed, 12 tests, 30
+  expectations across 6 files.
+- Worker typecheck and Node-targeted production bundle — passed, 5.58 MB
+  bundled output.
+- Backend production bundle — passed.
+- Full repository suite — passed, 250 tests, 899 expectations across 34 files.
+- `git diff --check` — passed.
+
+Known validation boundary:
+
+- A real linked account must still be tested by the operator: send from the
+  phone, receive from the customer, restart the worker, and confirm history
+  replay/deduplication in the conversation UI. No production database,
+  MinIO, or multi-account load claim is made by this local phase.
+
 ### Phase 8 — Rollout and production release
 
 Deliverables:

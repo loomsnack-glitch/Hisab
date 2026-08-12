@@ -23,6 +23,7 @@ import {
     WhatsAppWorkerMessageStatusSchema,
     WhatsAppWorkerOutboundJobSchema,
     WhatsAppWorkerInboundMessageSchema,
+    WhatsAppWorkerMessageEventSchema,
     WhatsAppConversationListResponseSchema,
     WhatsAppConversationMessagesResponseSchema,
     WhatsAppAttachmentResponseSchema,
@@ -71,6 +72,7 @@ export type WhatsAppWorkerInvoiceResultJSON = z.infer<typeof WhatsAppWorkerInvoi
 export type WhatsAppWorkerMessageStatusJSON = z.infer<typeof WhatsAppWorkerMessageStatusSchema>;
 export type WhatsAppWorkerOutboundJobDTO = z.infer<typeof WhatsAppWorkerOutboundJobSchema>;
 export type WhatsAppWorkerInboundMessageJSON = z.infer<typeof WhatsAppWorkerInboundMessageSchema>;
+export type WhatsAppWorkerMessageEventJSON = z.infer<typeof WhatsAppWorkerMessageEventSchema>;
 export type WhatsAppConversationListResponse = z.infer<typeof WhatsAppConversationListResponseSchema>;
 export type WhatsAppConversationMessagesResponse = z.infer<typeof WhatsAppConversationMessagesResponseSchema>;
 export type WhatsAppAttachmentResponse = z.infer<typeof WhatsAppAttachmentResponseSchema>;

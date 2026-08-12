@@ -16,8 +16,8 @@ export class WorkerMetrics {
     private claims = 0;
     private dispatchSuccesses = 0;
     private dispatchFailures = 0;
-    private inboundMessages = 0;
-    private inboundFailures = 0;
+    private messageEvents = 0;
+    private messageEventFailures = 0;
     private activeDispatches = 0;
     private maxActiveDispatches = 0;
     private lastDispatchAt: number | null = null;
@@ -45,12 +45,12 @@ export class WorkerMetrics {
         this.finishDispatch();
     }
 
-    public recordInboundMessage(stored: boolean): void {
-        if (stored) this.inboundMessages += 1;
+    public recordMessageEvent(stored: boolean): void {
+        if (stored) this.messageEvents += 1;
     }
 
-    public recordInboundFailure(): void {
-        this.inboundFailures += 1;
+    public recordMessageEventFailure(): void {
+        this.messageEventFailures += 1;
     }
 
     public recordOperationsRefresh(metrics: OperationsMetrics): void {
@@ -73,8 +73,8 @@ export class WorkerMetrics {
             claims: this.claims,
             dispatchSuccesses: this.dispatchSuccesses,
             dispatchFailures: this.dispatchFailures,
-            inboundMessages: this.inboundMessages,
-            inboundFailures: this.inboundFailures,
+            messageEvents: this.messageEvents,
+            messageEventFailures: this.messageEventFailures,
             activeDispatches: this.activeDispatches,
             maxActiveDispatches: this.maxActiveDispatches,
             lastDispatchAt: this.lastDispatchAt ? new Date(this.lastDispatchAt).toISOString() : null,
@@ -108,10 +108,10 @@ export class WorkerMetrics {
             `whatsapp_worker_dispatch_successes_total{${labels}} ${snapshot.dispatchSuccesses}`,
             "# TYPE whatsapp_worker_dispatch_failures_total counter",
             `whatsapp_worker_dispatch_failures_total{${labels}} ${snapshot.dispatchFailures}`,
-            "# TYPE whatsapp_worker_inbound_messages_total counter",
-            `whatsapp_worker_inbound_messages_total{${labels}} ${snapshot.inboundMessages}`,
-            "# TYPE whatsapp_worker_inbound_failures_total counter",
-            `whatsapp_worker_inbound_failures_total{${labels}} ${snapshot.inboundFailures}`,
+            "# TYPE whatsapp_worker_message_events_total counter",
+            `whatsapp_worker_message_events_total{${labels}} ${snapshot.messageEvents}`,
+            "# TYPE whatsapp_worker_message_event_failures_total counter",
+            `whatsapp_worker_message_event_failures_total{${labels}} ${snapshot.messageEventFailures}`,
             "# TYPE whatsapp_worker_operations_refresh_failures_total counter",
             `whatsapp_worker_operations_refresh_failures_total{${labels}} ${snapshot.operationsRefreshFailures}`,
         ];
