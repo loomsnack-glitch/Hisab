@@ -153,6 +153,7 @@ describe("WhatsApp schemas", () => {
         }).success).toBe(true);
 
         expect(WhatsAppConversationListResponseSchema.safeParse({
+            accountId: "00000000-0000-4000-8000-000000000001",
             accountStatus: "connected",
             conversations: [],
         }).success).toBe(true);

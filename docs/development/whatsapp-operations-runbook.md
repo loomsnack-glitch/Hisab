@@ -19,6 +19,8 @@ WHATSAPP_WORKER_PARTITION_COUNT=2
 WHATSAPP_WORKER_PARTITION_INDEX=0
 WHATSAPP_WORKER_DISPATCH_CONCURRENCY=2
 WHATSAPP_MAX_PENDING_OUTBOX_PER_ACCOUNT=1000
+WHATSAPP_MINIMUM_SEND_INTERVAL_MS=750
+WHATSAPP_MAX_MEDIA_BYTES=10485760
 ```
 
 The API applies the partition to account reconciliation and outbox claims.
@@ -32,7 +34,8 @@ cannot concurrently send the same account's queued work.
 - `GET /health/ready` confirms the worker process is ready to receive work.
 - `GET /metrics` requires the worker bearer token and returns Prometheus text.
 - The API's authenticated internal operations metrics include pending,
-  processing, retryable, dead-letter, oldest queued age, and account counts.
+  processing, retryable, dead-letter, oldest queued age, provider-event
+  retry/dead-letter counts, and account counts.
 
 Recommended alert rules for the deployment's metrics system:
 
@@ -52,13 +55,20 @@ The worker also filters known libsignal session-dump messages because the
 dependency can write those directly to `console.*`, bypassing the Baileys
 logger. Do not disable that filter or add raw provider logging.
 
-## Manual chat synchronization
+## Chat synchronization
 
-Use the `Sync chats` button in the WhatsApp inbox when messages are missing.
-The worker safely reconnects the existing session and requests history during
-the new socket startup. This does not log out the account, delete encrypted
-auth state, or require QR relinking. Allow a few seconds for history events to
-be received and stored; duplicate provider events are ignored.
+Realtime customer messages and receipts are processed continuously by the
+connected socket. The inbox does not expose a manual Sync button. The internal
+account sync endpoint remains an operator recovery tool and performs one
+bounded history page per request; repeat it deliberately when backfilling is
+needed. It does not log out the account, delete encrypted auth state, or
+require QR relinking.
+
+Provider message events are first recorded in the durable
+`whatsapp_provider_events` inbox. The API replays pending and retryable events
+periodically, deduplicated by account and provider message ID. Inspect the
+event status and `last_error` in PostgreSQL before investigating a dead-letter
+event; never replay a message by manually calling WhatsApp send operations.
 
 ## Restart and queued-work recovery
 
@@ -70,6 +80,7 @@ be received and stored; duplicate provider events are ignored.
    count and connected accounts reconnect.
 6. Confirm pending/retryable outbox rows are claimed after lease expiry and
    inspect dead-letter counts before replaying any messages.
+7. Confirm pending/retryable provider events are replayed by the API process.
 
 The API outbox is durable. A worker restart does not delete queued rows. An
 expired processing lease is returned to retryable work by the next claim.

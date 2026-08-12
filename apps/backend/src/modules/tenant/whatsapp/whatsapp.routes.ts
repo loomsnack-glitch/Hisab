@@ -306,6 +306,18 @@ whatsappInternalRoutes.get("/operations/metrics", async c => {
     }
 });
 
+whatsappInternalRoutes.get("/accounts/:accountId/history-anchors", async c => {
+    try {
+        const accountId = c.req.param("accountId");
+        if (!uuidSchema.safeParse(accountId).success) {
+            return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
+        }
+        return c.json({ anchors: await service.getHistoryAnchorsForWorker(accountId) });
+    } catch {
+        return c.json({ status: "error", message: "WhatsApp history anchors failed" }, 500);
+    }
+});
+
 whatsappInternalRoutes.post("/outbox/:outboxId/result", async c => {
     try {
         const outboxId = c.req.param("outboxId");

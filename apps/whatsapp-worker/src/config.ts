@@ -37,6 +37,7 @@ export const workerConfig = {
     partitionCount: integer("WHATSAPP_WORKER_PARTITION_COUNT", 1, 1),
     partitionIndex: integer("WHATSAPP_WORKER_PARTITION_INDEX", 0, 0),
     dispatchConcurrency: integer("WHATSAPP_WORKER_DISPATCH_CONCURRENCY", 2, 1),
+    minimumSendIntervalMs: integer("WHATSAPP_MINIMUM_SEND_INTERVAL_MS", 750, 0),
     reconnectBaseDelayMs: 2_000,
     reconnectMaxDelayMs: 60_000,
     qrTtlMs: 120_000,
@@ -46,6 +47,7 @@ export const workerConfig = {
     operationsRefreshIntervalMs: integer("WHATSAPP_WORKER_OPERATIONS_REFRESH_MS", 15_000, 1_000),
     syncFullHistory: boolean("WHATSAPP_SYNC_FULL_HISTORY", true),
     messageStoreLimit: integer("WHATSAPP_MESSAGE_STORE_LIMIT", 2_000, 100),
+    maxMediaBytes: integer("WHATSAPP_MAX_MEDIA_BYTES", 10 * 1024 * 1024, 1_024),
 };
 
 if (!Number.isInteger(workerConfig.port) || workerConfig.port < 1 || workerConfig.port > 65_535) {

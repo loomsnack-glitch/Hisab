@@ -12,6 +12,7 @@ import {
     type WhatsAppSendConversationTextJSON,
     type WhatsAppWorkerInboundMessageJSON,
     type WhatsAppWorkerMessageEventJSON,
+    WhatsAppWorkerMessageEventSchema,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as storage from "@/services/storage";
@@ -67,6 +68,7 @@ const conversationResponse = (
 
 const listForScope = async (scope: Scope): Promise<ServiceResponse<WhatsAppConversationListResponse>> => success(
     {
+        accountId: scope.account.id,
         accountStatus: scope.account.status,
         conversations: await repository.getConversations(scope.organizationId, scope.storeId, scope.account.id),
     },
@@ -240,7 +242,7 @@ export const getAttachmentForDevice = async (
     return success({ url: await storage.generateSignedUrlBeta(bucket, attachment.key, SIGNED_URL_SECONDS, attachment.fileName) }, "Attachment URL created");
 };
 
-export const ingestMessageEvent = async (
+const processMessageEvent = async (
     accountId: string,
     data: WhatsAppWorkerMessageEventJSON,
 ): Promise<{ stored: boolean }> => {
@@ -289,6 +291,40 @@ export const ingestMessageEvent = async (
             try { await storage.deleteObject(bucket, attachmentStorageKey); } catch { /* preserve ingest failure */ }
         }
         throw error;
+    }
+};
+
+export const ingestMessageEvent = async (
+    accountId: string,
+    data: WhatsAppWorkerMessageEventJSON,
+): Promise<{ stored: boolean }> => {
+    const claim = await repository.claimProviderEvent(accountId, data.providerMessageId, data);
+    if (claim.completed || !claim.claimed) return { stored: false };
+
+    try {
+        const result = await processMessageEvent(accountId, data);
+        await repository.completeProviderEvent(claim.claimed.id);
+        return result;
+    } catch (error) {
+        await repository.failProviderEvent(claim.claimed.id, error instanceof Error ? error.message : "WhatsApp provider event failed");
+        throw error;
+    }
+};
+
+export const replayPendingMessageEvents = async (): Promise<void> => {
+    const events = await repository.claimPendingProviderEvents();
+    for (const event of events) {
+        const parsed = WhatsAppWorkerMessageEventSchema.safeParse(event.payload);
+        if (!parsed.success) {
+            await repository.failProviderEvent(event.id, "Stored WhatsApp provider event payload is invalid");
+            continue;
+        }
+        try {
+            await processMessageEvent(event.accountId, parsed.data);
+            await repository.completeProviderEvent(event.id);
+        } catch (error) {
+            await repository.failProviderEvent(event.id, error instanceof Error ? error.message : "WhatsApp provider event replay failed");
+        }
     }
 };
 

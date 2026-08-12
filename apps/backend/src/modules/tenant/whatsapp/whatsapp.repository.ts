@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
     CustomerDTO,
     WhatsAppConversationDTO,
@@ -6,6 +7,7 @@ import type {
     WhatsAppAccountStatus,
     WhatsAppWorkerAccountDTO,
     WhatsAppWorkerStatusUpdateJSON,
+    WhatsAppWorkerMessageEventJSON,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
@@ -117,6 +119,20 @@ export type WorkerPartition = {
     index: number;
 };
 
+export type WhatsAppHistoryAnchor = {
+    externalChatId: string;
+    providerMessageId: string;
+    fromMe: boolean;
+    messageTimestamp: number;
+};
+
+export type ProviderEventClaim = {
+    id: string;
+    accountId: string;
+    providerEventId: string;
+    payload: WhatsAppWorkerMessageEventJSON;
+};
+
 export type WhatsAppOperationsMetrics = {
     pendingCount: number;
     processingCount: number;
@@ -125,6 +141,11 @@ export type WhatsAppOperationsMetrics = {
     oldestPendingAgeSeconds: number;
     connectedAccountCount: number;
     accountCount: number;
+    providerEventPendingCount: number;
+    providerEventProcessingCount: number;
+    providerEventRetryableCount: number;
+    providerEventDeadLetterCount: number;
+    oldestProviderEventAgeSeconds: number;
 };
 
 export class WhatsAppOutboxLimitError extends Error {
@@ -967,6 +988,160 @@ export const getAccountsForWorkerPartition = async (partition: WorkerPartition):
     return rows.map(mapWorkerAccount);
 };
 
+export const getHistoryAnchorsForWorker = async (accountId: string): Promise<WhatsAppHistoryAnchor[]> => {
+    const rows = await pg`
+        SELECT DISTINCT ON (m.conversation_id)
+            c.external_chat_id,
+            m.provider_message_id,
+            m.direction,
+            FLOOR(EXTRACT(EPOCH FROM m.created_at))::bigint AS message_timestamp
+        FROM whatsapp_messages m
+        INNER JOIN whatsapp_conversations c ON c.id = m.conversation_id
+        WHERE m.whatsapp_account_id = ${accountId}
+          AND m.provider_message_id IS NOT NULL
+        ORDER BY m.conversation_id, m.created_at ASC, m.id ASC
+    `;
+    return rows.map((row: Record<string, unknown>) => ({
+        externalChatId: String(row.external_chat_id),
+        providerMessageId: String(row.provider_message_id),
+        fromMe: row.direction === "outbound",
+        messageTimestamp: Number(row.message_timestamp),
+    }));
+};
+
+export const claimProviderEvent = async (
+    accountId: string,
+    providerEventId: string,
+    payload?: WhatsAppWorkerMessageEventJSON,
+): Promise<{ claimed: ProviderEventClaim | null; completed: boolean }> => {
+    const leaseOwner = "provider-events-" + randomUUID();
+    const inserted = payload
+        ? await pg`
+            INSERT INTO whatsapp_provider_events (
+                whatsapp_account_id,
+                provider_event_id,
+                payload,
+                status,
+                attempt_count,
+                lease_owner,
+                lease_expires_at
+            )
+            VALUES (
+                ${accountId},
+                ${providerEventId},
+                ${JSON.stringify(payload)}::jsonb,
+                'processing',
+                1,
+                ${leaseOwner},
+                NOW() + INTERVAL '60 seconds'
+            )
+            ON CONFLICT (whatsapp_account_id, provider_event_id) DO NOTHING
+            RETURNING id, whatsapp_account_id, provider_event_id, payload
+        `
+        : [];
+    const insertedRow = inserted[0] as Record<string, unknown> | undefined;
+    if (insertedRow) {
+        return {
+            claimed: {
+                id: String(insertedRow.id),
+                accountId: String(insertedRow.whatsapp_account_id),
+                providerEventId: String(insertedRow.provider_event_id),
+                payload: insertedRow.payload as WhatsAppWorkerMessageEventJSON,
+            },
+            completed: false,
+        };
+    }
+
+    const [claimedRow] = await pg`
+        UPDATE whatsapp_provider_events
+        SET status = 'processing',
+            attempt_count = attempt_count + 1,
+            lease_owner = ${leaseOwner},
+            lease_expires_at = NOW() + INTERVAL '60 seconds',
+            updated_at = NOW()
+        WHERE whatsapp_account_id = ${accountId}
+          AND provider_event_id = ${providerEventId}
+          AND status IN ('pending', 'retryable')
+          AND next_attempt_at <= NOW()
+        RETURNING id, whatsapp_account_id, provider_event_id, payload
+    `;
+    if (claimedRow) {
+        return {
+            claimed: {
+                id: String(claimedRow.id),
+                accountId: String(claimedRow.whatsapp_account_id),
+                providerEventId: String(claimedRow.provider_event_id),
+                payload: claimedRow.payload as WhatsAppWorkerMessageEventJSON,
+            },
+            completed: false,
+        };
+    }
+
+    const [existing] = await pg`
+        SELECT status
+        FROM whatsapp_provider_events
+        WHERE whatsapp_account_id = ${accountId}
+          AND provider_event_id = ${providerEventId}
+    `;
+    return { claimed: null, completed: existing?.status === "completed" };
+};
+
+export const completeProviderEvent = async (eventId: string): Promise<void> => {
+    await pg`
+        UPDATE whatsapp_provider_events
+        SET status = 'completed',
+            payload = '{}'::jsonb,
+            lease_owner = NULL,
+            lease_expires_at = NULL,
+            last_error = NULL,
+            updated_at = NOW()
+        WHERE id = ${eventId}
+    `;
+};
+
+export const failProviderEvent = async (eventId: string, errorMessage: string, maxAttempts = 8): Promise<void> => {
+    await pg`
+        UPDATE whatsapp_provider_events
+        SET status = CASE WHEN attempt_count >= ${maxAttempts} THEN 'dead_letter'::whatsapp_provider_event_status_enum ELSE 'retryable'::whatsapp_provider_event_status_enum END,
+            next_attempt_at = NOW() + make_interval(secs => LEAST(300, GREATEST(1, POWER(2, attempt_count)::integer))),
+            lease_owner = NULL,
+            lease_expires_at = NULL,
+            last_error = LEFT(${errorMessage}, 1_000),
+            updated_at = NOW()
+        WHERE id = ${eventId}
+    `;
+};
+
+export const claimPendingProviderEvents = async (limit = 50): Promise<ProviderEventClaim[]> => {
+    const leaseOwner = "provider-replay-" + randomUUID();
+    const rows = await pg`
+        WITH candidates AS (
+            SELECT id
+            FROM whatsapp_provider_events
+            WHERE (status IN ('pending', 'retryable') AND next_attempt_at <= NOW())
+               OR (status = 'processing' AND lease_expires_at < NOW())
+            ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT ${limit}
+        )
+        UPDATE whatsapp_provider_events event
+        SET status = 'processing',
+            attempt_count = event.attempt_count + 1,
+            lease_owner = ${leaseOwner},
+            lease_expires_at = NOW() + INTERVAL '60 seconds',
+            updated_at = NOW()
+        FROM candidates
+        WHERE event.id = candidates.id
+        RETURNING event.id, event.whatsapp_account_id, event.provider_event_id, event.payload
+    `;
+    return rows.map((row: Record<string, unknown>) => ({
+        id: String(row.id),
+        accountId: String(row.whatsapp_account_id),
+        providerEventId: String(row.provider_event_id),
+        payload: row.payload as WhatsAppWorkerMessageEventJSON,
+    }));
+};
+
 export const getOperationsMetrics = async (): Promise<WhatsAppOperationsMetrics> => {
     const [row] = await pg`
         SELECT
@@ -976,7 +1151,17 @@ export const getOperationsMetrics = async (): Promise<WhatsAppOperationsMetrics>
             COUNT(*) FILTER (WHERE status = 'dead_letter') AS dead_letter_count,
             COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(created_at) FILTER (WHERE status IN ('pending', 'retryable')))), 0) AS oldest_pending_age_seconds,
             (SELECT COUNT(*) FROM whatsapp_accounts WHERE status = 'connected') AS connected_account_count,
-            (SELECT COUNT(*) FROM whatsapp_accounts) AS account_count
+            (SELECT COUNT(*) FROM whatsapp_accounts) AS account_count,
+            (SELECT COUNT(*) FROM whatsapp_provider_events WHERE status = 'pending') AS provider_event_pending_count,
+            (SELECT COUNT(*) FROM whatsapp_provider_events WHERE status = 'processing') AS provider_event_processing_count,
+            (SELECT COUNT(*) FROM whatsapp_provider_events WHERE status = 'retryable') AS provider_event_retryable_count,
+            (SELECT COUNT(*) FROM whatsapp_provider_events WHERE status = 'dead_letter') AS provider_event_dead_letter_count,
+            COALESCE(
+                EXTRACT(EPOCH FROM (
+                    NOW() - MIN(created_at) FILTER (WHERE status IN ('pending', 'retryable'))
+                )),
+                0
+            ) AS oldest_provider_event_age_seconds
         FROM whatsapp_outbox
     `;
     return {
@@ -987,6 +1172,11 @@ export const getOperationsMetrics = async (): Promise<WhatsAppOperationsMetrics>
         oldestPendingAgeSeconds: Number(row?.oldest_pending_age_seconds ?? 0),
         connectedAccountCount: Number(row?.connected_account_count ?? 0),
         accountCount: Number(row?.account_count ?? 0),
+        providerEventPendingCount: Number(row?.provider_event_pending_count ?? 0),
+        providerEventProcessingCount: Number(row?.provider_event_processing_count ?? 0),
+        providerEventRetryableCount: Number(row?.provider_event_retryable_count ?? 0),
+        providerEventDeadLetterCount: Number(row?.provider_event_dead_letter_count ?? 0),
+        oldestProviderEventAgeSeconds: Number(row?.oldest_provider_event_age_seconds ?? 0),
     };
 };
 

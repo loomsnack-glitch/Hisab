@@ -1,4 +1,6 @@
 type AccountStatus = "pending_qr" | "connecting" | "connected" | "disconnected" | "failed" | "revoked";
+type MessageEventSource = "realtime" | "history";
+type MessageReceiptStatus = "delivered" | "read";
 
 export type OperationsMetrics = {
     pendingCount: number;
@@ -8,6 +10,11 @@ export type OperationsMetrics = {
     oldestPendingAgeSeconds: number;
     connectedAccountCount: number;
     accountCount: number;
+    providerEventPendingCount: number;
+    providerEventProcessingCount: number;
+    providerEventRetryableCount: number;
+    providerEventDeadLetterCount: number;
+    oldestProviderEventAgeSeconds: number;
 };
 
 export class WorkerMetrics {
@@ -17,7 +24,11 @@ export class WorkerMetrics {
     private dispatchSuccesses = 0;
     private dispatchFailures = 0;
     private messageEvents = 0;
+    private realtimeMessageEvents = 0;
+    private historyMessageEvents = 0;
     private messageEventFailures = 0;
+    private messageStatusUpdates = 0;
+    private readReceiptUpdates = 0;
     private activeDispatches = 0;
     private maxActiveDispatches = 0;
     private lastDispatchAt: number | null = null;
@@ -45,12 +56,21 @@ export class WorkerMetrics {
         this.finishDispatch();
     }
 
-    public recordMessageEvent(stored: boolean): void {
-        if (stored) this.messageEvents += 1;
+    public recordMessageEvent(stored: boolean, source?: MessageEventSource): void {
+        if (!stored) return;
+        this.messageEvents += 1;
+        if (source === "realtime") this.realtimeMessageEvents += 1;
+        if (source === "history") this.historyMessageEvents += 1;
     }
 
     public recordMessageEventFailure(): void {
         this.messageEventFailures += 1;
+    }
+
+    public recordMessageStatus(status: MessageReceiptStatus, persisted: boolean): void {
+        if (!persisted) return;
+        this.messageStatusUpdates += 1;
+        if (status === "read") this.readReceiptUpdates += 1;
     }
 
     public recordOperationsRefresh(metrics: OperationsMetrics): void {
@@ -74,7 +94,11 @@ export class WorkerMetrics {
             dispatchSuccesses: this.dispatchSuccesses,
             dispatchFailures: this.dispatchFailures,
             messageEvents: this.messageEvents,
+            realtimeMessageEvents: this.realtimeMessageEvents,
+            historyMessageEvents: this.historyMessageEvents,
             messageEventFailures: this.messageEventFailures,
+            messageStatusUpdates: this.messageStatusUpdates,
+            readReceiptUpdates: this.readReceiptUpdates,
             activeDispatches: this.activeDispatches,
             maxActiveDispatches: this.maxActiveDispatches,
             lastDispatchAt: this.lastDispatchAt ? new Date(this.lastDispatchAt).toISOString() : null,
@@ -110,8 +134,16 @@ export class WorkerMetrics {
             `whatsapp_worker_dispatch_failures_total{${labels}} ${snapshot.dispatchFailures}`,
             "# TYPE whatsapp_worker_message_events_total counter",
             `whatsapp_worker_message_events_total{${labels}} ${snapshot.messageEvents}`,
+            "# TYPE whatsapp_worker_realtime_message_events_total counter",
+            `whatsapp_worker_realtime_message_events_total{${labels}} ${snapshot.realtimeMessageEvents}`,
+            "# TYPE whatsapp_worker_history_message_events_total counter",
+            `whatsapp_worker_history_message_events_total{${labels}} ${snapshot.historyMessageEvents}`,
             "# TYPE whatsapp_worker_message_event_failures_total counter",
             `whatsapp_worker_message_event_failures_total{${labels}} ${snapshot.messageEventFailures}`,
+            "# TYPE whatsapp_worker_message_status_updates_total counter",
+            `whatsapp_worker_message_status_updates_total{${labels}} ${snapshot.messageStatusUpdates}`,
+            "# TYPE whatsapp_worker_read_receipts_total counter",
+            `whatsapp_worker_read_receipts_total{${labels}} ${snapshot.readReceiptUpdates}`,
             "# TYPE whatsapp_worker_operations_refresh_failures_total counter",
             `whatsapp_worker_operations_refresh_failures_total{${labels}} ${snapshot.operationsRefreshFailures}`,
         ];
@@ -131,6 +163,16 @@ export class WorkerMetrics {
                 `whatsapp_api_connected_accounts{${labels}} ${snapshot.operations.connectedAccountCount}`,
                 "# TYPE whatsapp_api_accounts gauge",
                 `whatsapp_api_accounts{${labels}} ${snapshot.operations.accountCount}`,
+                "# TYPE whatsapp_provider_events_pending gauge",
+                `whatsapp_provider_events_pending{${labels}} ${snapshot.operations.providerEventPendingCount}`,
+                "# TYPE whatsapp_provider_events_processing gauge",
+                `whatsapp_provider_events_processing{${labels}} ${snapshot.operations.providerEventProcessingCount}`,
+                "# TYPE whatsapp_provider_events_retryable gauge",
+                `whatsapp_provider_events_retryable{${labels}} ${snapshot.operations.providerEventRetryableCount}`,
+                "# TYPE whatsapp_provider_events_dead_letter gauge",
+                `whatsapp_provider_events_dead_letter{${labels}} ${snapshot.operations.providerEventDeadLetterCount}`,
+                "# TYPE whatsapp_provider_events_oldest_pending_age_seconds gauge",
+                `whatsapp_provider_events_oldest_pending_age_seconds{${labels}} ${snapshot.operations.oldestProviderEventAgeSeconds}`,
             );
         }
         return lines.join("\n") + "\n";

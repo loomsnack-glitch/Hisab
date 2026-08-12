@@ -8,7 +8,9 @@ describe("worker metrics", () => {
         metrics.setAccountStatus("account-2", "failed");
         metrics.recordClaim();
         metrics.recordDispatchSuccess();
-        metrics.recordMessageEvent(true);
+        metrics.recordMessageEvent(true, "realtime");
+        metrics.recordMessageEvent(true, "history");
+        metrics.recordMessageStatus("read", true);
         metrics.recordMessageEventFailure();
         metrics.recordOperationsRefresh({
             pendingCount: 3,
@@ -18,6 +20,11 @@ describe("worker metrics", () => {
             oldestPendingAgeSeconds: 42,
             connectedAccountCount: 1,
             accountCount: 2,
+            providerEventPendingCount: 4,
+            providerEventProcessingCount: 1,
+            providerEventRetryableCount: 2,
+            providerEventDeadLetterCount: 1,
+            oldestProviderEventAgeSeconds: 21,
         });
 
         const snapshot = metrics.snapshot("worker-1", 2, 0);
@@ -25,12 +32,17 @@ describe("worker metrics", () => {
         expect(snapshot.connectedAccountCount).toBe(1);
         expect(snapshot.activeDispatches).toBe(0);
         expect(snapshot.dispatchSuccesses).toBe(1);
-        expect(snapshot.messageEvents).toBe(1);
+        expect(snapshot.messageEvents).toBe(2);
+        expect(snapshot.realtimeMessageEvents).toBe(1);
+        expect(snapshot.historyMessageEvents).toBe(1);
         expect(snapshot.messageEventFailures).toBe(1);
+        expect(snapshot.messageStatusUpdates).toBe(1);
+        expect(snapshot.readReceiptUpdates).toBe(1);
         expect(snapshot.operations?.oldestPendingAgeSeconds).toBe(42);
 
         const prometheus = metrics.prometheus("worker-1", 2, 0);
         expect(prometheus).toContain("whatsapp_outbox_oldest_pending_age_seconds");
+        expect(prometheus).toContain("whatsapp_provider_events_dead_letter");
         expect(prometheus).not.toContain("account-1");
     });
 });

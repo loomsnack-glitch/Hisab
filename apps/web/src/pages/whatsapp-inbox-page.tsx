@@ -13,8 +13,6 @@ import {
     getWhatsAppAttachment,
     getWhatsAppConversation,
     getWhatsAppConversations,
-    syncPosWhatsAppAccount,
-    syncWhatsAppAccount,
     sendPosWhatsAppConversationText,
     sendWhatsAppConversationText,
 } from "@repo/services";
@@ -80,23 +78,6 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
     const accountStatus = conversationsQuery.data?.status === "success"
         ? conversationsQuery.data.data?.accountStatus
         : null;
-
-    const syncMutation = useMutation({
-        mutationFn: () => props.mode === "admin"
-            ? syncWhatsAppAccount(organizationId, storeId)
-            : syncPosWhatsAppAccount(),
-        onSuccess: response => {
-            const message = responseMessage(response);
-            if (message) {
-                toast.error(message);
-                return;
-            }
-            toast.success("Chat synchronization started. New messages may take a few seconds to appear.");
-            void queryClient.invalidateQueries({ queryKey: conversationsKey });
-            if (selectedConversationId) void queryClient.invalidateQueries({ queryKey: conversationKey });
-        },
-    });
-
     useEffect(() => {
         if (!selectedConversationId && conversations[0]) {
             setSelectedConversationId(conversations[0].id);
@@ -201,14 +182,6 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
                     <p className="mt-1 text-sm text-muted-foreground">Direct customer chats for this Store.</p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        disabled={syncMutation.isPending || accountStatus !== "connected"}
-                        onClick={() => syncMutation.mutate()}
-                    >
-                        {syncMutation.isPending ? <Spinner className="size-4" /> : <RefreshCw className="size-4" />}
-                        Sync chats
-                    </Button>
                     {props.mode === "admin" ? (
                         <Button variant="outline" render={<Link to={`/organizations/${organizationId}/stores/${storeId}/whatsapp`} />}>
                             <ArrowLeft className="size-4" />
@@ -233,9 +206,9 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
                 </div>
             ) : null}
 
-            <Card className="min-h-[min(70vh,720px)] overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardContent className="grid min-h-[min(70vh,720px)] grid-cols-1 p-0 md:grid-cols-[minmax(220px,30%)_1fr]">
-                    <aside className="border-b border-border/60 md:border-r md:border-b-0">
+            <Card className="h-[min(78vh,760px)] min-h-[520px] overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardContent className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(170px,34%)_minmax(0,1fr)] p-0 md:grid-cols-[minmax(220px,30%)_1fr] md:grid-rows-1">
+                    <aside className="flex min-h-0 flex-col border-b border-border/60 md:border-r md:border-b-0">
                         <div className="border-b border-border/60 px-4 py-3">
                             <div className="flex items-center justify-between gap-3">
                                 <p className="font-semibold">Inbox</p>
@@ -247,7 +220,7 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
                         ) : conversations.length === 0 ? (
                             <div className="p-6 text-sm text-muted-foreground">No WhatsApp conversations yet.</div>
                         ) : (
-                            <div className="max-h-[min(65vh,650px)] overflow-y-auto">
+                            <div className="min-h-0 flex-1 overflow-y-auto">
                                 {conversations.map((conversation) => (
                                     <button
                                         key={conversation.id}
@@ -267,7 +240,7 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
                         )}
                     </aside>
 
-                    <section className="flex min-h-[min(65vh,650px)] min-w-0 flex-col">
+                    <section className="flex min-h-0 min-w-0 flex-col">
                         {!selectedConversation ? (
                             <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
                                 Select a conversation to view messages.
@@ -311,7 +284,7 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
                                     </div>
                                 ) : null}
 
-                                <div className="flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4">
+                                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4">
                                     {conversationQuery.isPending ? (
                                         <div className="flex h-full items-center justify-center"><Spinner className="size-5 text-primary" /></div>
                                     ) : conversationQuery.data?.status === "error" ? (

@@ -201,6 +201,7 @@ export const WhatsAppWorkerMessageEventSchema = z.object({
 }).superRefine(validateWorkerMessageContent);
 
 export const WhatsAppConversationListResponseSchema = z.object({
+    accountId: z.uuid("Invalid WhatsApp account id"),
     accountStatus: WhatsAppAccountStatusSchema,
     conversations: z.array(WhatsAppConversationDTOSchema),
 });

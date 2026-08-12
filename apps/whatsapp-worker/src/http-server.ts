@@ -116,12 +116,16 @@ export const createHttpServer = (manager: BaileysAccountManager, metrics: Worker
             }
 
             if (method === "POST" && path.endsWith("/sync")) {
-                json(response, 200, await manager.syncAccount(accountId));
+                logger.info("Manual WhatsApp chat sync request received", { accountId });
+                const result = await manager.syncAccount(accountId);
+                logger.info("Manual WhatsApp chat sync socket restart requested", { accountId, status: result.status });
+                json(response, 200, result);
                 return;
             }
 
             json(response, 404, { status: "error", message: "Not found" });
         } catch {
+            logger.warn("WhatsApp worker request failed", { method: request.method ?? "GET", path: new URL(request.url ?? "/", "http://localhost").pathname });
             json(response, 500, { status: "error", message: "Worker request failed" });
         }
     });

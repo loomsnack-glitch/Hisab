@@ -1,6 +1,7 @@
 import { workerConfig } from "./config.js";
 import {
     claimNextInvoice,
+    getHistoryAnchors,
     getOperationsMetrics,
     listAccounts,
     reportMessageEvent,
@@ -11,6 +12,7 @@ import {
 import { startHttpServer } from "./http-server.js";
 import { logger } from "./logger.js";
 import { WorkerMetrics } from "./metrics.js";
+import { PerAccountSerialQueue } from "./operations/per-account-serial-queue.js";
 import { BaileysAccountManager } from "./provider/baileys-account-manager.js";
 import { installBaileysConsoleFilter } from "./provider/baileys-console-filter.js";
 
@@ -24,15 +26,22 @@ const reportStatusWithMetrics = async (snapshot: Parameters<typeof reportStatus>
 const reportMessageEventWithMetrics = async (...args: Parameters<typeof reportMessageEvent>): Promise<void> => {
     try {
         const result = await reportMessageEvent(...args);
-        metrics.recordMessageEvent(result.stored);
+        metrics.recordMessageEvent(result.stored, args[1].source);
     } catch (error) {
         metrics.recordMessageEventFailure();
         throw error;
     }
 };
 
-const manager = new BaileysAccountManager(reportStatusWithMetrics, reportMessageStatus, reportMessageEventWithMetrics);
+const reportMessageStatusWithMetrics = async (...args: Parameters<typeof reportMessageStatus>): Promise<boolean> => {
+    const persisted = await reportMessageStatus(...args);
+    metrics.recordMessageStatus(args[2], persisted);
+    return persisted;
+};
+
+const manager = new BaileysAccountManager(reportStatusWithMetrics, reportMessageStatusWithMetrics, reportMessageEventWithMetrics, getHistoryAnchors);
 const server = startHttpServer(manager, metrics);
+const outboundQueue = new PerAccountSerialQueue({ minimumIntervalMs: workerConfig.minimumSendIntervalMs });
 
 const wait = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -60,10 +69,10 @@ const dispatchInvoices = async (slot: number): Promise<void> => {
 
             metrics.recordClaim();
             try {
-                const providerMessageId = job.messageType === "text"
-                    ? await manager.sendText(job.accountId, job.phoneNumber, job.body ?? "")
+                const providerMessageId = await outboundQueue.run(job.accountId, async () => job.messageType === "text"
+                    ? manager.sendText(job.accountId, job.phoneNumber, job.body ?? "")
                     : job.documentBase64 && job.attachmentFileName && job.attachmentMimeType
-                      ? await manager.sendDocument(
+                      ? manager.sendDocument(
                             job.accountId,
                             job.phoneNumber,
                             Buffer.from(job.documentBase64, "base64"),
@@ -71,7 +80,7 @@ const dispatchInvoices = async (slot: number): Promise<void> => {
                             job.attachmentMimeType,
                             job.caption ?? undefined,
                         )
-                      : (() => { throw new Error("Outbound document payload is incomplete"); })();
+                      : (() => { throw new Error("Outbound document payload is incomplete"); })());
                 await reportInvoiceResult(job.outboxId, {
                     leaseOwner: job.leaseOwner,
                     providerMessageId,

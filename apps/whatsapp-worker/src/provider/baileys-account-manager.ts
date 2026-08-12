@@ -2,7 +2,6 @@ import {
     DisconnectReason,
     makeWASocket,
     Browsers,
-    WAMessageStatus,
     normalizeMessageContent,
     downloadMediaMessage,
     type WASocket,
@@ -18,6 +17,7 @@ import { workerConfig } from "../config.js";
 import { logger } from "../logger.js";
 import { resolveBaileysVersion } from "./baileys-version.js";
 import { classifyMessageEvent, type MessageEventSource } from "./message-event.js";
+import { normalizeMessageStatus } from "./message-status.js";
 
 export type WorkerAccountStatus =
     | "pending_qr"
@@ -41,8 +41,19 @@ export type AccountStatusSnapshot = {
 
 type StatusReporter = (snapshot: AccountStatusSnapshot) => Promise<void>;
 export type MessageStatus = "delivered" | "read";
-type MessageStatusReporter = (accountId: string, providerMessageId: string, status: MessageStatus) => Promise<void>;
+type MessageStatusReporter = (accountId: string, providerMessageId: string, status: MessageStatus) => Promise<boolean>;
 type MessageEventReporter = (accountId: string, message: WhatsAppWorkerMessageEventJSON) => Promise<void>;
+type HistoryAnchor = {
+    externalChatId: string;
+    providerMessageId: string;
+    fromMe: boolean;
+    messageTimestamp: number;
+};
+type HistoryAnchorProvider = (accountId: string) => Promise<HistoryAnchor[]>;
+type HistoryCursor = {
+    key: WAMessageKey;
+    messageTimestamp: number;
+};
 
 type ManagedAccount = {
     input: AccountConnectionInput;
@@ -54,7 +65,11 @@ type ManagedAccount = {
     reconnectTimer: NodeJS.Timeout | null;
     intentionalDisconnect: boolean;
     messageStore: Map<string, WAMessage>;
-    messageEventTail: Promise<void>;
+    realtimeMessageEventTail: Promise<void>;
+    historyMessageEventTail: Promise<void>;
+    syncInProgress: boolean;
+    historySyncRequested: boolean;
+    historyPageWaiter: ((messages: WAMessage[]) => void) | null;
 };
 
 const silentLogger = {
@@ -70,6 +85,14 @@ const silentLogger = {
 const accountDirectory = (accountId: string) => join(workerConfig.authStateDirectory, accountId);
 const phoneToJid = (phoneNumber: string) => phoneNumber.replace(/^\+/, "") + "@s.whatsapp.net";
 const messageStoreKey = (key: WAMessageKey): string => `${key.remoteJid ?? ""}:${key.id ?? ""}:${key.fromMe ? "me" : "them"}`;
+const phoneJidPattern = /^(\d{8,15})(?::\d+)?@(s\.whatsapp\.net|c\.us)$/;
+const jidType = (jid: string | null | undefined): string => jid?.split("@")[1] ?? "missing";
+const historyPageSize = 50;
+// Keep one explicit backfill page per user action; live events must stay responsive.
+const maxHistoryPagesPerChat = 1;
+const historyPageTimeoutMs = 15_000;
+// Baileys' proto enum currently assigns ON_DEMAND history sync the value 6.
+const onDemandHistorySyncType = 6;
 
 const disconnectCode = (error: unknown): number | null => {
     const output = (error as { output?: { statusCode?: unknown } } | null)?.output;
@@ -84,6 +107,7 @@ export class BaileysAccountManager {
         private readonly reportStatus: StatusReporter,
         private readonly reportMessageStatus?: MessageStatusReporter,
         private readonly reportMessageEvent?: MessageEventReporter,
+        private readonly getHistoryAnchors?: HistoryAnchorProvider,
     ) {}
 
     private getBaileysVersion(): Promise<WAVersion> {
@@ -123,7 +147,11 @@ export class BaileysAccountManager {
             reconnectTimer: null,
             intentionalDisconnect: false,
             messageStore: new Map(),
-            messageEventTail: Promise.resolve(),
+            realtimeMessageEventTail: Promise.resolve(),
+            historyMessageEventTail: Promise.resolve(),
+            syncInProgress: false,
+            historySyncRequested: false,
+            historyPageWaiter: null,
         };
         account.input = input;
         account.intentionalDisconnect = false;
@@ -151,34 +179,68 @@ export class BaileysAccountManager {
             printQRInTerminal: false,
             getMessage: async key => account.messageStore.get(messageStoreKey(key))?.message ?? undefined,
         });
+        logger.info("Baileys socket created", {
+            accountId: account.input.accountId,
+            syncFullHistory: workerConfig.syncFullHistory,
+        });
         account.socket = socket;
         socket.ev.on("creds.update", saveCreds);
         socket.ev.on("messages.upsert", event => {
+            logger.info("WhatsApp message upsert received", {
+                accountId: account.input.accountId,
+                messageCount: event.messages.length,
+                source: event.type === "notify" ? "realtime" : "history",
+            });
             for (const message of event.messages) {
                 this.enqueueMessageEvent(account, message, event.type === "notify" ? "realtime" : "history");
             }
         });
         socket.ev.on("messaging-history.set", event => {
+            logger.info("WhatsApp messaging history received", {
+                accountId: account.input.accountId,
+                messageCount: event.messages.length,
+                syncType: String(event.syncType ?? "unknown"),
+                isLatest: Boolean(event.isLatest),
+            });
             for (const message of event.messages) {
                 this.enqueueMessageEvent(account, message, "history");
+            }
+            const waiter = account.historyPageWaiter;
+            if (event.syncType === onDemandHistorySyncType && waiter) {
+                account.historyPageWaiter = null;
+                waiter(event.messages);
             }
         });
         socket.ev.on("messages.update", updates => {
             for (const update of updates) {
                 const providerMessageId = update.key.id;
-                if (!providerMessageId || !update.key.fromMe || !this.reportMessageStatus) continue;
                 const status = update.update.status;
-                const mappedStatus = status === WAMessageStatus.READ || status === WAMessageStatus.PLAYED
-                    ? "read"
-                    : status === WAMessageStatus.DELIVERY_ACK
-                      ? "delivered"
-                      : null;
-                if (!mappedStatus) continue;
-                void this.reportMessageStatus(account.input.accountId, providerMessageId, mappedStatus).catch(() => {
-                    logger.warn("Unable to report WhatsApp message status", {
-                        accountId: account.input.accountId,
-                    });
+                logger.info("WhatsApp message status update received", {
+                    accountId: account.input.accountId,
+                    providerMessageId: providerMessageId ? providerMessageId.slice(0, 12) : "missing",
+                    fromMe: Boolean(update.key.fromMe),
+                    status: status == null ? "missing" : String(status),
                 });
+                if (!providerMessageId || !update.key.fromMe || !this.reportMessageStatus) continue;
+                const mappedStatus = normalizeMessageStatus(status);
+                if (!mappedStatus) continue;
+                void this.reportMessageStatus(account.input.accountId, providerMessageId, mappedStatus)
+                    .then(accepted => {
+                        if (!accepted) {
+                            logger.warn("WhatsApp message status was not persisted after retries", {
+                                accountId: account.input.accountId,
+                                providerMessageId: providerMessageId.slice(0, 12),
+                                status: mappedStatus,
+                            });
+                        }
+                    })
+                    .catch(() => {
+                        logger.warn("Unable to report WhatsApp message status", {
+                            accountId: account.input.accountId,
+                            providerMessageId: providerMessageId.slice(0, 12),
+                            status: mappedStatus,
+                        });
+                    });
             }
         });
         socket.ev.on("connection.update", update => {
@@ -221,10 +283,21 @@ export class BaileysAccountManager {
 
     public async syncAccount(accountId: string): Promise<AccountStatusSnapshot> {
         const account = this.accounts.get(accountId);
+        if (account?.syncInProgress) {
+            logger.warn("Manual WhatsApp chat sync ignored because one is already running", { accountId });
+            return this.snapshot(account);
+        }
         if (!account?.socket || account.status !== "connected") {
+            logger.warn("Manual WhatsApp chat sync rejected because account is not connected", {
+                accountId,
+                status: account?.status ?? "unknown",
+            });
             throw new Error("WhatsApp account is not connected");
         }
 
+        logger.info("Manual WhatsApp chat sync starting", { accountId });
+        account.syncInProgress = true;
+        account.historySyncRequested = true;
         const previousSocket = account.socket;
         account.socket = null;
         account.status = "disconnected";
@@ -232,8 +305,9 @@ export class BaileysAccountManager {
         await this.report(account);
         try {
             previousSocket.end(new Error("Manual WhatsApp history sync requested"));
+            logger.info("Previous WhatsApp socket closed for manual sync", { accountId });
         } catch {
-            // The new socket below is the recovery path.
+            logger.warn("Previous WhatsApp socket close returned an error during manual sync", { accountId });
         }
 
         return this.connect(account.input);
@@ -287,29 +361,77 @@ export class BaileysAccountManager {
 
     private enqueueMessageEvent(account: ManagedAccount, message: WAMessage, source: MessageEventSource): void {
         this.rememberMessage(account, message);
-        account.messageEventTail = account.messageEventTail
+        const eventTail = source === "realtime" ? "realtimeMessageEventTail" : "historyMessageEventTail";
+        account[eventTail] = account[eventTail]
             .then(() => this.handleMessageEvent(account, message, source))
             .catch(() => {
-                logger.warn("Unable to process WhatsApp message event", { accountId: account.input.accountId });
+                logger.warn("Unable to process WhatsApp message event", {
+                    accountId: account.input.accountId,
+                    source,
+                });
             });
     }
 
     private async handleMessageEvent(account: ManagedAccount, message: WAMessage, source: MessageEventSource): Promise<void> {
-        if (!this.reportMessageEvent || !message.key.id) return;
-        const externalChatId = message.key.remoteJid ?? "";
-        if (!externalChatId.endsWith("@s.whatsapp.net")) return;
-        const phoneDigits = externalChatId.slice(0, -"@s.whatsapp.net".length).split(":")[0];
-        if (!/^\d{8,15}$/.test(phoneDigits)) return;
+        if (!this.reportMessageEvent || !message.key.id) {
+            logger.warn("WhatsApp message event skipped because it has no reporter or provider id", {
+                accountId: account.input.accountId,
+                source,
+            });
+            return;
+        }
+        const resolution = await this.resolvePhoneChatId(account, message);
+        if (!resolution.phoneJid) {
+            logger.info("WhatsApp message event skipped because chat is not an individual chat", {
+                accountId: account.input.accountId,
+                source,
+                remoteJidType: resolution.remoteJidType,
+                remoteJidAltType: resolution.remoteJidAltType,
+                resolution: resolution.resolution,
+            });
+            return;
+        }
+        const externalChatId = resolution.phoneJid;
+        const phoneDigits = phoneJidPattern.exec(externalChatId)?.[1] ?? "";
         const content = normalizeMessageContent(message.message);
-        if (!content) return;
+        if (!content) {
+            logger.info("WhatsApp message event skipped because message content is unsupported", {
+                accountId: account.input.accountId,
+                source,
+            });
+            return;
+        }
 
         const body = content.conversation ?? content.extendedTextMessage?.text ?? null;
         const document = content.documentMessage;
-        if (!body && !document) return;
+        if (!body && !document) {
+            logger.info("WhatsApp message event skipped because it is not text or document content", {
+                accountId: account.input.accountId,
+                source,
+            });
+            return;
+        }
 
         let documentBase64: string | null = null;
         if (document) {
+            const declaredSize = Number(document.fileLength ?? 0);
+            if (declaredSize > workerConfig.maxMediaBytes) {
+                logger.warn("WhatsApp media skipped because it exceeds the worker limit", {
+                    accountId: account.input.accountId,
+                    declaredSize,
+                    maxMediaBytes: workerConfig.maxMediaBytes,
+                });
+                return;
+            }
             const buffer = await downloadMediaMessage(message, "buffer", {});
+            if (buffer.byteLength > workerConfig.maxMediaBytes) {
+                logger.warn("WhatsApp media skipped because it exceeds the worker limit", {
+                    accountId: account.input.accountId,
+                    actualSize: buffer.byteLength,
+                    maxMediaBytes: workerConfig.maxMediaBytes,
+                });
+                return;
+            }
             documentBase64 = buffer.toString("base64");
         }
 
@@ -327,6 +449,12 @@ export class BaileysAccountManager {
             occurredAt: new Date(Number(message.messageTimestamp ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
             ...classifyMessageEvent(Boolean(message.key.fromMe), source),
         });
+        logger.info("WhatsApp message event reported to Ganatri", {
+            accountId: account.input.accountId,
+            direction: message.key.fromMe ? "outbound" : "inbound",
+            messageType: document ? "document" : "text",
+            source,
+        });
     }
 
     private rememberMessage(account: ManagedAccount, message: WAMessage): void {
@@ -337,6 +465,173 @@ export class BaileysAccountManager {
             if (typeof oldest !== "string") break;
             account.messageStore.delete(oldest);
         }
+    }
+
+    private async resolvePhoneChatId(account: ManagedAccount, message: WAMessage): Promise<{
+        phoneJid: string | null;
+        remoteJidType: string;
+        remoteJidAltType: string;
+        resolution: "phone_jid" | "alternate_phone_jid" | "lid_mapping" | "unresolved";
+    }> {
+        const remoteJid = message.key.remoteJid;
+        const remoteJidAlt = message.key.remoteJidAlt;
+        const candidates = [message.key.remoteJidAlt, message.key.remoteJid];
+        for (const [index, candidate] of candidates.entries()) {
+            const match = candidate ? phoneJidPattern.exec(candidate) : null;
+            if (match) {
+                return {
+                    phoneJid: `${match[1]}@s.whatsapp.net`,
+                    remoteJidType: jidType(remoteJid),
+                    remoteJidAltType: jidType(remoteJidAlt),
+                    resolution: index === 0 ? "alternate_phone_jid" : "phone_jid",
+                };
+            }
+        }
+
+        if (!remoteJid?.endsWith("@lid")) {
+            return {
+                phoneJid: null,
+                remoteJidType: jidType(remoteJid),
+                remoteJidAltType: jidType(remoteJidAlt),
+                resolution: "unresolved",
+            };
+        }
+        const phoneJid = await account.socket?.signalRepository.lidMapping.getPNForLID(remoteJid);
+        const match = phoneJid ? phoneJidPattern.exec(phoneJid) : null;
+        return {
+            phoneJid: match ? `${match[1]}@s.whatsapp.net` : null,
+            remoteJidType: jidType(remoteJid),
+            remoteJidAltType: jidType(remoteJidAlt),
+            resolution: match ? "lid_mapping" : "unresolved",
+        };
+    }
+
+    private async requestKnownChatHistory(account: ManagedAccount, socket: WASocket): Promise<void> {
+        const oldestByChat = new Map<string, HistoryCursor>();
+        let persistedAnchorCount = 0;
+        const rememberAnchor = (externalChatId: string, cursor: HistoryCursor): void => {
+            const match = phoneJidPattern.exec(externalChatId);
+            if (!match) return;
+            const phoneJid = `${match[1]}@s.whatsapp.net`;
+            const existing = oldestByChat.get(phoneJid);
+            if (!existing || cursor.messageTimestamp < existing.messageTimestamp) {
+                oldestByChat.set(phoneJid, cursor);
+            }
+        };
+
+        if (this.getHistoryAnchors) {
+            try {
+                const persistedAnchors = await this.getHistoryAnchors(account.input.accountId);
+                persistedAnchorCount = persistedAnchors.length;
+                for (const anchor of persistedAnchors) {
+                    const lidJid = await account.socket?.signalRepository.lidMapping.getLIDForPN(anchor.externalChatId);
+                    rememberAnchor(anchor.externalChatId, {
+                        key: {
+                            remoteJid: lidJid ?? anchor.externalChatId,
+                            remoteJidAlt: lidJid ? anchor.externalChatId : undefined,
+                            id: anchor.providerMessageId,
+                            fromMe: anchor.fromMe,
+                        },
+                        messageTimestamp: anchor.messageTimestamp,
+                    });
+                }
+            } catch {
+                logger.warn("Unable to load persisted WhatsApp history anchors", {
+                    accountId: account.input.accountId,
+                });
+            }
+        }
+
+        for (const message of account.messageStore.values()) {
+            if (message.messageTimestamp == null) continue;
+
+            const resolution = await this.resolvePhoneChatId(account, message);
+            if (!resolution.phoneJid) continue;
+            rememberAnchor(resolution.phoneJid, {
+                key: message.key,
+                messageTimestamp: Number(message.messageTimestamp),
+            });
+        }
+
+        logger.info("Requesting WhatsApp history for known individual chats", {
+            accountId: account.input.accountId,
+            chatCount: oldestByChat.size,
+            messageCount: account.messageStore.size,
+            persistedAnchorCount,
+        });
+
+        for (const [phoneJid, initialCursor] of oldestByChat) {
+            let cursor = initialCursor;
+            for (let page = 1; page <= maxHistoryPagesPerChat; page += 1) {
+                const historyPage = this.waitForHistoryPage(account);
+                try {
+                    await socket.fetchMessageHistory(historyPageSize, cursor.key, cursor.messageTimestamp);
+                    logger.info("WhatsApp chat history request sent", {
+                        accountId: account.input.accountId,
+                        chat: phoneJid.replace(/\d/g, "#"),
+                        count: historyPageSize,
+                        page,
+                    });
+                } catch {
+                    this.cancelHistoryPageWaiter(account);
+                    logger.warn("WhatsApp chat history request failed", {
+                        accountId: account.input.accountId,
+                        chat: phoneJid.replace(/\d/g, "#"),
+                        page,
+                    });
+                    break;
+                }
+
+                const returnedMessages = await historyPage;
+                const matchingMessages: WAMessage[] = [];
+                for (const message of returnedMessages) {
+                    if (message.messageTimestamp == null) continue;
+                    const resolution = await this.resolvePhoneChatId(account, message);
+                    if (resolution.phoneJid === phoneJid) matchingMessages.push(message);
+                }
+                const nextCursor = matchingMessages.reduce<HistoryCursor | null>((oldest, message) => {
+                    const candidate = {
+                        key: message.key,
+                        messageTimestamp: Number(message.messageTimestamp),
+                    } satisfies HistoryCursor;
+                    return !oldest || candidate.messageTimestamp < oldest.messageTimestamp ? candidate : oldest;
+                }, null);
+
+                logger.info("WhatsApp chat history page received", {
+                    accountId: account.input.accountId,
+                    chat: phoneJid.replace(/\d/g, "#"),
+                    page,
+                    messageCount: matchingMessages.length,
+                });
+
+                if (!nextCursor || nextCursor.messageTimestamp > cursor.messageTimestamp || nextCursor.key.id === cursor.key.id) {
+                    break;
+                }
+                cursor = nextCursor;
+            }
+        }
+    }
+
+    private waitForHistoryPage(account: ManagedAccount): Promise<WAMessage[]> {
+        return new Promise(resolve => {
+            const timeout = setTimeout(() => {
+                if (account.historyPageWaiter !== resolvePage) return;
+                account.historyPageWaiter = null;
+                logger.warn("Timed out waiting for WhatsApp chat history page", {
+                    accountId: account.input.accountId,
+                });
+                resolve([]);
+            }, historyPageTimeoutMs);
+            const resolvePage = (messages: WAMessage[]) => {
+                clearTimeout(timeout);
+                resolve(messages);
+            };
+            account.historyPageWaiter = resolvePage;
+        });
+    }
+
+    private cancelHistoryPageWaiter(account: ManagedAccount): void {
+        account.historyPageWaiter = null;
     }
 
     private requireConnectedSocket(accountId: string): WASocket {
@@ -385,11 +680,27 @@ export class BaileysAccountManager {
         }
 
         if (update.connection === "open") {
+            const shouldFetchHistory = account.historySyncRequested;
+            account.historySyncRequested = false;
+            if (!shouldFetchHistory) {
+                account.syncInProgress = false;
+            }
             account.status = "connected";
             account.qrImageDataUrl = null;
             account.lastErrorCode = null;
             account.reconnectAttempt = 0;
             await this.report(account);
+            if (shouldFetchHistory) {
+                void this.requestKnownChatHistory(account, socket)
+                    .catch(() => {
+                        logger.warn("Unable to request WhatsApp history for known chats", {
+                            accountId: account.input.accountId,
+                        });
+                    })
+                    .finally(() => {
+                        account.syncInProgress = false;
+                    });
+            }
             return;
         }
 
@@ -404,6 +715,7 @@ export class BaileysAccountManager {
         });
         account.socket = null;
         if (account.intentionalDisconnect) {
+            account.syncInProgress = false;
             account.status = "disconnected";
             account.qrImageDataUrl = null;
             await this.report(account);
@@ -411,6 +723,7 @@ export class BaileysAccountManager {
         }
 
         if (code === DisconnectReason.loggedOut || code === DisconnectReason.badSession) {
+            account.syncInProgress = false;
             account.status = "revoked";
             account.lastErrorCode = code === DisconnectReason.loggedOut ? "logged_out" : "bad_session";
             account.qrImageDataUrl = null;
@@ -420,6 +733,7 @@ export class BaileysAccountManager {
         }
 
         account.status = "failed";
+        account.syncInProgress = false;
         account.lastErrorCode = code ? "connection_" + code : "connection_closed";
         account.qrImageDataUrl = null;
         await this.report(account);

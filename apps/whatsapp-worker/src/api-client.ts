@@ -15,6 +15,13 @@ type BootstrapAccount = {
     status: WorkerAccountStatus;
 };
 
+export type WhatsAppHistoryAnchor = {
+    externalChatId: string;
+    providerMessageId: string;
+    fromMe: boolean;
+    messageTimestamp: number;
+};
+
 const request = async (path: string, init: RequestInit = {}, timeoutMs = 10_000): Promise<Response> => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -82,6 +89,22 @@ export const getOperationsMetrics = async (): Promise<OperationsMetrics> => {
     return data.metrics;
 };
 
+export const getHistoryAnchors = async (accountId: string): Promise<WhatsAppHistoryAnchor[]> => {
+    const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/history-anchors");
+    await assertOk(response);
+    const data = await response.json() as { anchors?: unknown };
+    if (!Array.isArray(data.anchors)) return [];
+    return data.anchors.filter((anchor): anchor is WhatsAppHistoryAnchor => {
+        if (!anchor || typeof anchor !== "object") return false;
+        const candidate = anchor as Partial<WhatsAppHistoryAnchor>;
+        return typeof candidate.externalChatId === "string"
+            && typeof candidate.providerMessageId === "string"
+            && typeof candidate.fromMe === "boolean"
+            && typeof candidate.messageTimestamp === "number"
+            && Number.isFinite(candidate.messageTimestamp);
+    });
+};
+
 export const reportInvoiceResult = async (
     outboxId: string,
     result: WhatsAppWorkerInvoiceResultJSON,
@@ -97,17 +120,18 @@ export const reportMessageStatus = async (
     accountId: string,
     providerMessageId: string,
     status: "delivered" | "read",
-): Promise<void> => {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+): Promise<boolean> => {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
         const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/messages/status", {
             method: "POST",
             body: JSON.stringify({ providerMessageId, status }),
         });
         await assertOk(response);
         const data = await response.json() as { status?: string };
-        if (data.status !== "ignored") return;
+        if (data.status !== "ignored") return true;
         await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
     }
+    return false;
 };
 
 export const reportMessageEvent = async (
