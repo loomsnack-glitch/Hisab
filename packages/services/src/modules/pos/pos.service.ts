@@ -331,6 +331,15 @@ export const getPosWhatsAppConversations = async (): Promise<ServiceResponse<Wha
   }
 };
 
+export const syncPosWhatsAppAccount = async (): Promise<ServiceResponse<unknown>> => {
+  try {
+    const response = await api.post("/pos/whatsapp/sync");
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
 export const getPosWhatsAppConversation = async (
   conversationId: string,
 ): Promise<ServiceResponse<WhatsAppConversationMessagesResponse | null>> => {

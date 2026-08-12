@@ -217,6 +217,18 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/account/disconnect", 
     }
 });
 
+userRouter.post("/:organizationId/stores/:storeId/whatsapp/account/sync", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await service.syncAccount(c.get("authUser").id, organizationId, storeId));
+    } catch {
+        return unexpectedError(c);
+    }
+});
+
 userRouter.post(
     "/:organizationId/stores/:storeId/whatsapp/invoice",
     validateSchema("json", WhatsAppSendInvoiceSchema),

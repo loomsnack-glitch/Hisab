@@ -313,6 +313,14 @@ router.get("/whatsapp/conversations", async (c) => {
   }
 });
 
+router.post("/whatsapp/sync", async (c) => {
+  try {
+    return handleServiceResponse(c, await whatsappService.syncAccountForDevice(c.get("authDevice")));
+  } catch (error) {
+    return handleError(FILE_NAME, "syncAccountForDevice", c, error);
+  }
+});
+
 router.get("/whatsapp/conversations/:conversationId", async (c) => {
   try {
     const conversationId = c.req.param("conversationId");

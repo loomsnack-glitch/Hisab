@@ -13,6 +13,8 @@ import {
     getWhatsAppAttachment,
     getWhatsAppConversation,
     getWhatsAppConversations,
+    syncPosWhatsAppAccount,
+    syncWhatsAppAccount,
     sendPosWhatsAppConversationText,
     sendWhatsAppConversationText,
 } from "@repo/services";
@@ -78,6 +80,22 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
     const accountStatus = conversationsQuery.data?.status === "success"
         ? conversationsQuery.data.data?.accountStatus
         : null;
+
+    const syncMutation = useMutation({
+        mutationFn: () => props.mode === "admin"
+            ? syncWhatsAppAccount(organizationId, storeId)
+            : syncPosWhatsAppAccount(),
+        onSuccess: response => {
+            const message = responseMessage(response);
+            if (message) {
+                toast.error(message);
+                return;
+            }
+            toast.success("Chat synchronization started. New messages may take a few seconds to appear.");
+            void queryClient.invalidateQueries({ queryKey: conversationsKey });
+            if (selectedConversationId) void queryClient.invalidateQueries({ queryKey: conversationKey });
+        },
+    });
 
     useEffect(() => {
         if (!selectedConversationId && conversations[0]) {
@@ -182,12 +200,22 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">Direct customer chats for this Store.</p>
                 </div>
-                {props.mode === "admin" ? (
-                    <Button variant="outline" render={<Link to={`/organizations/${organizationId}/stores/${storeId}/whatsapp`} />}>
-                        <ArrowLeft className="size-4" />
-                        Account settings
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        disabled={syncMutation.isPending || accountStatus !== "connected"}
+                        onClick={() => syncMutation.mutate()}
+                    >
+                        {syncMutation.isPending ? <Spinner className="size-4" /> : <RefreshCw className="size-4" />}
+                        Sync chats
                     </Button>
-                ) : null}
+                    {props.mode === "admin" ? (
+                        <Button variant="outline" render={<Link to={`/organizations/${organizationId}/stores/${storeId}/whatsapp`} />}>
+                            <ArrowLeft className="size-4" />
+                            Account settings
+                        </Button>
+                    ) : null}
+                </div>
             </div>
 
             {conversationsQuery.data?.status === "error" ? (

@@ -219,6 +219,26 @@ export class BaileysAccountManager {
         return this.snapshot(account);
     }
 
+    public async syncAccount(accountId: string): Promise<AccountStatusSnapshot> {
+        const account = this.accounts.get(accountId);
+        if (!account?.socket || account.status !== "connected") {
+            throw new Error("WhatsApp account is not connected");
+        }
+
+        const previousSocket = account.socket;
+        account.socket = null;
+        account.status = "disconnected";
+        account.qrImageDataUrl = null;
+        await this.report(account);
+        try {
+            previousSocket.end(new Error("Manual WhatsApp history sync requested"));
+        } catch {
+            // The new socket below is the recovery path.
+        }
+
+        return this.connect(account.input);
+    }
+
     public async shutdown(): Promise<void> {
         const accounts = [...this.accounts.values()];
         for (const account of accounts) {

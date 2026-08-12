@@ -5,6 +5,7 @@ import {
     type WhatsAppAccountStatusResponseDTO,
     type WhatsAppCreateAccountJSON,
     type WhatsAppWorkerStatusUpdateJSON,
+    type DeviceSessionDTO,
 } from "@repo/types";
 import { redis } from "@/config/redis";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
@@ -199,6 +200,36 @@ export const disconnectAccount = async (
     } catch {
         return workerUnavailable(account);
     }
+};
+
+const syncAccountForScope = async (account: WhatsAppAccountDTO): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO>> => {
+    try {
+        const snapshot = await workerClient.syncAccount(account.id);
+        const response = await saveWorkerSnapshot(snapshot);
+        return response
+            ? { status: "success", message: "WhatsApp chat synchronization started", data: response, code: STATUS_CODES.SUCCESS }
+            : workerUnavailable(account);
+    } catch {
+        return workerUnavailable(account);
+    }
+};
+
+export const syncAccount = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    return syncAccountForScope(scope.account);
+};
+
+export const syncAccountForDevice = async (
+    session: DeviceSessionDTO,
+): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const account = await repository.getAccount(session.organization.id, session.store.id);
+    if (!account) return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
+    return syncAccountForScope(account);
 };
 
 export const getWorkerAccounts = async (partition?: repository.WorkerPartition) =>

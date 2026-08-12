@@ -52,6 +52,14 @@ The worker also filters known libsignal session-dump messages because the
 dependency can write those directly to `console.*`, bypassing the Baileys
 logger. Do not disable that filter or add raw provider logging.
 
+## Manual chat synchronization
+
+Use the `Sync chats` button in the WhatsApp inbox when messages are missing.
+The worker safely reconnects the existing session and requests history during
+the new socket startup. This does not log out the account, delete encrypted
+auth state, or require QR relinking. Allow a few seconds for history events to
+be received and stored; duplicate provider events are ignored.
+
 ## Restart and queued-work recovery
 
 1. Stop the worker with `SIGTERM` and allow the configured shutdown timeout.

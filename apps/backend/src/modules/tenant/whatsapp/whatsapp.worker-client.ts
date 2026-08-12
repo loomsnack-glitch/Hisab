@@ -46,5 +46,10 @@ export const disconnectAccount = async (accountId: string): Promise<WorkerAccoun
         method: "POST",
     }));
 
+export const syncAccount = async (accountId: string): Promise<WorkerAccountStatus> =>
+    parseResponse(await request("/v1/accounts/" + encodeURIComponent(accountId) + "/sync", {
+        method: "POST",
+    }));
+
 export const getAccountStatus = async (accountId: string): Promise<WorkerAccountStatus> =>
     parseResponse(await request("/v1/accounts/" + encodeURIComponent(accountId) + "/status"));

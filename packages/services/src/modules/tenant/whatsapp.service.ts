@@ -60,6 +60,15 @@ export const disconnectWhatsAppAccount = async (organizationId: string, storeId:
     }
 };
 
+export const syncWhatsAppAccount = async (organizationId: string, storeId: string): Promise<WhatsAppResponse> => {
+    try {
+        const response = await api.post(accountPath(organizationId, storeId) + "/sync");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 const invoicePath = (organizationId: string, storeId: string, saleId: string) =>
     "/organizations/" + organizationId + "/stores/" + storeId + "/whatsapp/invoice/" + saleId;
 

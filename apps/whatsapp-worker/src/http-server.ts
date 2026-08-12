@@ -41,7 +41,7 @@ const readJson = async (request: IncomingMessage): Promise<Record<string, unknow
 };
 
 const accountIdFromPath = (path: string): string | null => {
-    const match = path.match(/^\/v1\/accounts\/([0-9a-f-]{36})(?:\/(connect|disconnect|status))?$/i);
+    const match = path.match(/^\/v1\/accounts\/([0-9a-f-]{36})(?:\/(connect|disconnect|status|sync))?$/i);
     return match?.[1] ?? null;
 };
 
@@ -112,6 +112,11 @@ export const createHttpServer = (manager: BaileysAccountManager, metrics: Worker
 
             if (method === "POST" && path.endsWith("/disconnect")) {
                 json(response, 200, await manager.disconnect(accountId));
+                return;
+            }
+
+            if (method === "POST" && path.endsWith("/sync")) {
+                json(response, 200, await manager.syncAccount(accountId));
                 return;
             }
 
