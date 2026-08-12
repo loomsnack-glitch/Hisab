@@ -12,6 +12,9 @@ import { startHttpServer } from "./http-server.js";
 import { logger } from "./logger.js";
 import { WorkerMetrics } from "./metrics.js";
 import { BaileysAccountManager } from "./provider/baileys-account-manager.js";
+import { installBaileysConsoleFilter } from "./provider/baileys-console-filter.js";
+
+installBaileysConsoleFilter();
 
 const metrics = new WorkerMetrics();
 const reportStatusWithMetrics = async (snapshot: Parameters<typeof reportStatus>[0]): Promise<void> => {

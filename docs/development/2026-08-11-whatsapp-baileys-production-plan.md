@@ -322,7 +322,7 @@ Phase 6 review boundary:
   and metrics, a bounded dry-run harness, and backup/session-loss recovery
   documentation.
 - Exclude live load testing, production backup execution, deployment changes,
-  pilot rollout, and the release/rollback gate reserved for Phase 7.
+  pilot rollout, and the release/rollback gate reserved for Phase 8.
 
 Phase 6 implementation review: PASS on 2026-08-12.
 
@@ -354,7 +354,7 @@ Standards/spec review result:
   the review smell baseline after extracting duplicated account mapping.
 - Spec: PASS for the Phase 6 implementation boundary. Live worker-pool
   routing, real Baileys resource usage, database execution, and backup/restore
-  evidence remain deployment decisions or Phase 7 evidence rather than being
+  evidence remain deployment decisions or Phase 8 evidence rather than being
   claimed as locally verified.
 
 Focused validation:
@@ -378,10 +378,96 @@ Known validation boundary:
   Phase 6 file appears in that error set.
 
 Phase 6 implementation and review are complete. Stop here pending approval for
-Phase 7; deployment, pilot rollout, and production release work have not
+Phase 7; the latest Baileys migration and deployment/rollout work have not
 started.
 
-### Phase 7 — Rollout and production release
+### Phase 7 — Latest Baileys API and v7 migration
+
+Deliverables:
+
+- dependency decision and lockfile update to the latest official Baileys v7
+  release candidate (`7.0.0-rc14` at plan time)
+- provider-adapter migration from the current v6 import/type surface to the
+  v7 ESM API surface described by the official API reference
+- preservation and compatibility verification of the encrypted custom auth
+  state for existing linked Store accounts
+- secure provider logging that prevents libsignal/session internals from
+  reaching stdout or structured logs
+- focused regression coverage for connection lifecycle, QR/pairing state,
+  text sends, document sends, inbound events, acknowledgements, reconnects,
+  and disconnect classification
+- one-account real-device verification report before rollout work begins
+
+Acceptance criteria:
+
+- `apps/whatsapp-worker` builds and typechecks against exactly one Baileys v7
+  package identity/version; no mixed v6/v7 dependency graph remains
+- the existing encrypted auth state is preserved and a linked account can
+  reconnect after worker restart without silently deleting credentials
+- one controlled account can connect, receive/send a text message, send a
+  document, report acknowledgement status, and recover from a transient close
+- no logs contain QR values, auth state, private keys, ratchet/session objects,
+  message bodies, or full customer phone numbers
+- account restriction state, if exposed by the v7 API, is treated as an
+  operator signal only; it must not be used to claim ban prevention
+- all focused tests, worker typecheck, production build, and the real-device
+  verification report pass before Phase 8 rollout work starts
+
+Out of scope:
+
+- automatic deletion or regeneration of existing auth state
+- changing the Store/account domain model or outbox contract
+- broadcasts, campaigns, groups, bulk sends, or account-restriction bypasses
+- production rollout, 50-account load selection, or a claim that Baileys is
+  equivalent to the official WhatsApp Business API
+
+Research note: [Baileys latest API and v7 migration research](../research/2026-08-12-baileys-latest-api-and-v7-migration.md).
+
+Phase 7 plan review: PASS on 2026-08-12.
+
+Phase 7 implementation review: PASS on 2026-08-12.
+
+Implementation decisions:
+
+- The worker now uses the official `baileys@7.0.0-rc14` package identity and
+  removes the old `@whiskeysockets/baileys@6.7.18` dependency. The lockfile
+  contains one Baileys package identity only.
+- The custom encrypted auth-state boundary remains unchanged. The local
+  `apps/whatsapp-worker/data/` path is ignored by Git, and the implementation
+  does not delete or regenerate existing account state.
+- The v7 `DEFAULT_CONNECTION_CONFIG.version` is used as the bundled fallback;
+  remote version resolution is bounded and falls back without logging the
+  underlying error contents.
+- The worker installs a narrow libsignal console filter because the dependency
+  can bypass the configured Baileys logger and print session objects directly.
+  Normal worker logs continue to pass through, while session keys, ratchets,
+  and related provider internals are suppressed.
+- The worker declares Node 20+ as its runtime requirement and the operations
+  runbook records the same deployment constraint.
+
+Focused validation:
+
+- `bun run --cwd apps/whatsapp-worker typecheck` — passed.
+- Worker tests — 5 passed, 14 expectations.
+- Node-targeted worker production bundle — passed, 5.44 MB bundled output.
+- Backend and services production bundles — passed.
+- Web TypeScript check — passed.
+- Full repository suite — 248 passed, 896 expectations across 33 files.
+- `git diff --check` — passed.
+
+Known validation boundary:
+
+- A real one-account link, reconnect, text send, document send, and provider
+  acknowledgement still require the operator to run the worker under Node 20+
+  against the linked account. They were not executed automatically here because
+  another worker may already own the account session.
+- Phase 8 rollout, live resource measurement, and production release remain
+  blocked until that controlled one-account verification is recorded.
+
+Phase 7 code implementation and review are complete. Stop here pending the
+controlled real-account verification and approval for Phase 8.
+
+### Phase 8 — Rollout and production release
 
 Deliverables:
 

@@ -28,6 +28,9 @@ build
 dist
 apps/web/public/version.json
 
+# WhatsApp worker local encrypted auth state
+apps/whatsapp-worker/data/
+
 
 # Debug
 npm-debug.log*

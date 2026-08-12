@@ -1,8 +1,12 @@
 # WhatsApp operations runbook
 
-This runbook covers the Phase 6 worker and outbox safety boundary. It is a
+This runbook covers the Phase 6/7 worker and outbox safety boundary. It is a
 recovery procedure, not evidence that production backups or a live pilot have
 been executed.
+
+The worker is a Node 20+ ESM service. Use the same Node major version for
+development, builds, and deployment; the Baileys v7 package requires Node 20
+or newer.
 
 ## Worker partitioning
 
@@ -43,6 +47,10 @@ the worker id and partition labels in the alert context.
 
 Do not add message bodies, full phone numbers, QR values, auth keys, tokens, or
 document contents to logs or metrics.
+
+The worker also filters known libsignal session-dump messages because the
+dependency can write those directly to `console.*`, bypassing the Baileys
+logger. Do not disable that filter or add raw provider logging.
 
 ## Restart and queued-work recovery
 

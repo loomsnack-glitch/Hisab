@@ -8,7 +8,7 @@ import {
     type WASocket,
     type WAMessage,
     type WAVersion,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import type { WhatsAppWorkerInboundMessageJSON } from "@repo/types";
 import { toDataURL } from "qrcode";
 import { join } from "node:path";

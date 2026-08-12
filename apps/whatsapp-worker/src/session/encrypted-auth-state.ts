@@ -7,7 +7,7 @@ import {
     proto,
     type AuthenticationState,
     type SignalDataTypeMap,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 
 const FILE_LOCKS = new Map<string, Promise<void>>();
 const ALGORITHM = "aes-256-gcm";
