@@ -18,6 +18,7 @@ const sale = {
   discountTotal: 10,
   grandTotal: 90,
   notes: null,
+  paymentMethods: "cash",
   items: [
     {
       productNameSnapshot: "Snapshot product",

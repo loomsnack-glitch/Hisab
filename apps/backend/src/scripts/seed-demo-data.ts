@@ -29,7 +29,7 @@ const DEMO_USER = {
   salutation: "mr." as const,
   firstName: "Demo",
   lastName: "Admin",
-  phone: "9000000001",
+  phone: "+919000000001",
   email: "demo@example.com",
 };
 

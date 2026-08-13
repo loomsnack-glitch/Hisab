@@ -77,6 +77,8 @@ export const WhatsAppCreateAccountSchema = z.object({
     phoneNumber: phoneSchema,
 });
 
+export const WhatsAppChangeAccountNumberSchema = WhatsAppCreateAccountSchema;
+
 export const WhatsAppAccountStatusResponseSchema = z.object({
     account: WhatsAppAccountDTOSchema,
     qrImageDataUrl: z.string().startsWith("data:image/png;base64,").max(200_000).nullable(),

@@ -14,9 +14,12 @@ import * as billingRepository from "@/modules/tenant/billing/billing.repository"
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as repository from "./whatsapp.repository";
 import { formatInvoiceText } from "./invoice-text";
+import { renderSalePdf } from "./invoice-pdf";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
+const invoiceObjectKey = (organizationId: string, storeId: string, accountId: string, saleId: string) =>
+  `whatsapp-invoices/${organizationId}/${storeId}/${accountId}/${saleId}.pdf`;
 
 const loadSaleDetail = async (
   organizationId: string,
@@ -138,7 +141,45 @@ export const queueInvoiceForStore = async (
     };
   }
 
+  const organization = await organizationRepository.getOrganizationById(organizationId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const bucket = privateBucket();
+  if (!bucket) {
+    return {
+      status: "error",
+      message: "Private media storage is not configured for WhatsApp invoices",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  const attachmentStorageKey = invoiceObjectKey(organizationId, storeId, account.id, sale.id);
+
   try {
+    const pdf = await renderSalePdf(sale, {
+      organizationName: organization.name,
+      organizationTagline: organization.tagline,
+      storeName: store.name,
+      storeAddress: store.address,
+    });
+    if (pdf.byteLength > MAX_INVOICE_BYTES) {
+      return {
+        status: "error",
+        message: "Generated invoice PDF is too large to send",
+        data: null,
+        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+      };
+    }
+    await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
+
     const request = await repository.createInvoiceOutbox({
       organizationId,
       storeId,
@@ -148,7 +189,10 @@ export const queueInvoiceForStore = async (
       customerPhone: parsedPhone.data,
       customerName:
         sale.customerNameSnapshot ?? sale.customer?.name ?? "Customer",
-      body: formatInvoiceText(sale),
+      caption: formatInvoiceText(sale, { organizationName: organization.name }),
+      attachmentStorageKey,
+      attachmentFileName: `Sale_${sale.saleNumber ?? sale.id}.pdf`,
+      attachmentMimeType: "application/pdf",
       messageId: crypto.randomUUID(),
       idempotencyKey: `invoice:${saleId}`,
     });
@@ -167,6 +211,11 @@ export const queueInvoiceForStore = async (
       // Preserve the original preparation failure when the race check cannot run.
     }
 
+    try {
+      await storage.deleteObject(bucket, attachmentStorageKey);
+    } catch {
+      // Preserve the queue error; the deterministic key can be cleaned up later.
+    }
     if (error instanceof repository.WhatsAppOutboxLimitError) {
       return {
         status: "error",
@@ -181,7 +230,7 @@ export const queueInvoiceForStore = async (
     );
     return {
       status: "error",
-      message: "Invoice text could not be queued. The Sale remains completed.",
+      message: "Invoice PDF could not be queued. The Sale remains completed.",
       data: null,
       code: STATUS_CODES.INTERNAL_SERVER_ERROR,
     };

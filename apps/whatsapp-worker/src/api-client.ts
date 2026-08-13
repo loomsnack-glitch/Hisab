@@ -42,9 +42,18 @@ const request = async (path: string, init: RequestInit = {}, timeoutMs = 10_000)
 };
 
 const assertOk = async (response: Response): Promise<void> => {
-    if (!response.ok) {
-        throw new Error("Ganatri API rejected the WhatsApp worker request");
+    if (response.ok) return;
+
+    let detail = "";
+    try {
+        const payload = await response.clone().json() as { message?: unknown };
+        if (typeof payload.message === "string") detail = payload.message;
+    } catch {
+        // Keep the status as the useful diagnostic when the response is not JSON.
     }
+
+    const suffix = detail ? `: ${detail.slice(0, 240)}` : "";
+    throw new Error(`Ganatri API request failed (${response.status} ${response.statusText})${suffix}`);
 };
 
 const partitionQuery = () => new URLSearchParams({

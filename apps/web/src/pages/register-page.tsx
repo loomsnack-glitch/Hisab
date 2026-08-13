@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, type SubmitHandler } from "react-hook-form";
+import { useForm, useWatch, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
 import { ChevronLeft, MonitorSmartphone } from "lucide-react";
 import { register as registerUser } from "@repo/services";
-import { RegisterFormSchema, SALUTATION_OPTIONS, formatIndianPhoneDisplay, type RegisterFormJSON } from "@repo/types";
+import { RegisterFormSchema, SALUTATION_OPTIONS, formatPhoneDisplay, type RegisterFormJSON } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
@@ -44,6 +44,7 @@ const RegisterPage = () => {
         resolver: zodResolver(RegisterFormSchema),
         defaultValues,
     });
+    const otp = useWatch({ control: form.control, name: "otp" });
 
     const registerMutation = useMutation({
         mutationFn: registerUser,
@@ -80,7 +81,7 @@ const RegisterPage = () => {
         if (step === "user-info") {
             form.setFocus("firstName");
         }
-    }, [step, form.setFocus]);
+    }, [form, step]);
 
     const onSubmit: SubmitHandler<RegisterFormJSON> = (values) => {
         registerMutation.mutate(values);
@@ -133,7 +134,7 @@ const RegisterPage = () => {
                                                 <ChevronLeft className="size-4" />
                                             </Button>
                                             <div>
-                                                <p className="text-xs font-semibold text-foreground">{formatIndianPhoneDisplay(form.getValues("phone"))}</p>
+                                                <p className="text-xs font-semibold text-foreground">{formatPhoneDisplay(form.getValues("phone"))}</p>
                                                 <p className="text-[10px] text-muted-foreground">Verification in progress</p>
                                             </div>
                                         </div>
@@ -152,7 +153,7 @@ const RegisterPage = () => {
                                     <Button
                                         type="submit"
                                         className="h-10 w-full rounded-xl transition-all duration-200 text-sm font-semibold"
-                                        disabled={registerMutation.isPending || form.watch("otp")?.length !== 6}
+                                        disabled={registerMutation.isPending || otp?.length !== 6}
                                     >
                                         {registerMutation.isPending ? "Verifying..." : "Verify and continue"}
                                     </Button>

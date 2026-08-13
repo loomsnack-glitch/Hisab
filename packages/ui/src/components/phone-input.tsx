@@ -2,7 +2,7 @@ import * as React from "react";
 import { CheckIcon, ChevronsUpDown } from "lucide-react";
 import * as RPNInput from "react-phone-number-input";
 import flags from "react-phone-number-input/flags";
-import type { Country } from "react-phone-number-input";
+import type { Country, FlagProps } from "react-phone-number-input";
 
 import { Button } from "@repo/ui/components/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, } from "@repo/ui/components/command";
@@ -35,11 +35,6 @@ interface CountrySelectOptionProps {
     onChange: (country: Country) => void;
 }
 
-interface FlagComponentProps {
-    country: Country | undefined;
-    countryName: string | undefined;
-}
-
 const PhoneInput = React.forwardRef<
     React.ElementRef<typeof RPNInput.default>,
     PhoneInputProps
@@ -47,11 +42,15 @@ const PhoneInput = React.forwardRef<
     return (
         <RPNInput.default
             ref={ref}
-            className={cn("flex", className)}
+            className={cn(
+                "flex h-full min-h-0 items-stretch [&>button]:!h-full [&>button]:min-h-0 [&>input]:!h-full [&>input]:min-h-0",
+                className,
+            )}
             flagComponent={FlagComponent}
             countrySelectComponent={CountrySelect}
             inputComponent={InputComponent}
             smartCaret={false}
+            defaultCountry="IN"
             /**
              * Handles the onChange event.
              *
@@ -73,7 +72,7 @@ const InputComponent = React.forwardRef<
     InputComponentProps
 >(({ className, ...props }, ref) => (
     <Input
-        className={cn("rounded-e-md rounded-s-none h-full", className)}
+        className={cn("rounded-e-md rounded-s-none !h-full min-h-0", className)}
         {...props}
         ref={ref}
     />
@@ -92,13 +91,17 @@ const CountrySelect: React.FC<CountrySelectProps> = ({
                 <Button
                     type="button"
                     variant="outline"
-                    className="flex gap-1 rounded-e-none rounded-s-md border-r-0 px-3 h-9 focus:z-10"
+                    className="!flex !h-full min-h-0 min-w-[5.5rem] gap-1 rounded-e-none rounded-s-md border-r-0 px-3 py-0 focus:z-10"
                     disabled={disabled}
                 >
-                    <FlagComponent
-                        country={selectedCountry}
-                        countryName={selectedCountry}
-                    />
+                    {selectedCountry ? (
+                        <FlagComponent country={selectedCountry} countryName={selectedCountry} />
+                    ) : (
+                        <span className="flex h-4 w-6 overflow-hidden rounded-sm bg-foreground/20" />
+                    )}
+                    <span className="text-xs font-medium">
+                        {selectedCountry ? "+" + RPNInput.getCountryCallingCode(selectedCountry) : "+"}
+                    </span>
                     <ChevronsUpDown
                         className={cn(
                             "-mr-2 size-4 opacity-50",
@@ -108,7 +111,12 @@ const CountrySelect: React.FC<CountrySelectProps> = ({
                 </Button>
             } />
 
-            <PopoverContent className="w-[300px] p-0" align="start" >
+            <PopoverContent
+                className="w-75 p-0"
+                align="start"
+                collisionBoundary="viewport"
+                positionMethod="fixed"
+            >
                 <Command>
                     <CommandInput placeholder="Search country..." />
                     <CommandList>
@@ -153,12 +161,12 @@ const CountrySelectOption: React.FC<CountrySelectOptionProps> = ({
     );
 };
 
-const FlagComponent: React.FC<FlagComponentProps> = ({ country, countryName }) => {
+const FlagComponent = ({ country, countryName }: FlagProps): React.JSX.Element => {
     const Flag = country ? flags[country] : null;
 
     return (
-        <span className="flex h-4 w-6 overflow-hidden rounded-sm bg-foreground/20 [&_svg]:!size-full">
-            {Flag && <Flag title={countryName || ''} />}
+        <span className="flex h-4 w-6 overflow-hidden rounded-sm bg-foreground/20 [&_svg]:size-full!">
+            {Flag ? <Flag title={countryName} /> : null}
         </span>
     );
 };

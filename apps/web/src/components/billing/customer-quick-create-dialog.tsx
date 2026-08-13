@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm, type SubmitHandler } from "react-hook-form";
+import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import { createCustomer, createPosCustomer } from "@repo/services";
-import { CreateCustomerSchema, type CreateCustomerJSON, type CustomerDTO } from "@repo/types";
+import { CreateCustomerSchema, normalizePhoneNumber, type CreateCustomerJSON, type CustomerDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
@@ -16,6 +16,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { PhoneInput } from "@repo/ui/components/phone-input";
 import { toast } from "sonner";
 
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
@@ -45,7 +46,7 @@ const CustomerQuickCreateDialog = ({
         resolver: zodResolver(CreateCustomerSchema),
         defaultValues: {
             name: suggestedName?.trim() || "",
-            phone: suggestedPhone?.trim() || "",
+            phone: normalizePhoneNumber(suggestedPhone) ?? "",
             isActive: true,
         },
     });
@@ -54,7 +55,7 @@ const CustomerQuickCreateDialog = ({
         if (!open) {
             form.reset({
                 name: suggestedName?.trim() || "",
-                phone: suggestedPhone?.trim() || "",
+                phone: normalizePhoneNumber(suggestedPhone) ?? "",
                 isActive: true,
             });
         }
@@ -110,10 +111,18 @@ const CustomerQuickCreateDialog = ({
                     <Field data-invalid={!!form.formState.errors.phone}>
                         <FieldLabel>Phone</FieldLabel>
                         <FieldContent>
-                            <Input
-                                className="h-11 rounded-2xl"
-                                placeholder="Optional phone number"
-                                {...form.register("phone")}
+                            <Controller
+                                control={form.control}
+                                name="phone"
+                                render={({ field }) => (
+                                    <PhoneInput
+                                        className="h-11 rounded-2xl border"
+                                        value={field.value || undefined}
+                                        onChange={(value) => field.onChange(value ?? "")}
+                                        onBlur={field.onBlur}
+                                        placeholder="Optional phone number"
+                                    />
+                                )}
                             />
                             <FieldError errors={[form.formState.errors.phone]} />
                         </FieldContent>

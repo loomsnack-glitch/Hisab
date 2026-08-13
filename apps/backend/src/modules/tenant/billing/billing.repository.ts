@@ -1,6 +1,7 @@
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
 import { camelToSnakeSql } from "@/utils/case-sql";
+import { normalizePhoneNumber } from "@repo/types";
 import type {
     AddOnScopedSalesRollupDTO,
     BundleCommercialSalesRollupDTO,
@@ -160,6 +161,8 @@ export const getCustomersByOrganizationId = async (
 ): Promise<CustomerDTO[]> => {
     const search = query.search?.trim() ?? "";
     const searchPattern = search ? `%${search}%` : "";
+    const normalizedPhoneSearch = normalizePhoneNumber(search);
+    const normalizedPhonePattern = normalizedPhoneSearch ? `%${normalizedPhoneSearch}%` : "";
     const limit = query.limit ?? 50;
 
     const results = await pg`
@@ -170,6 +173,7 @@ export const getCustomersByOrganizationId = async (
               ${search} = ''
               OR name ILIKE ${searchPattern}
               OR COALESCE(phone, '') ILIKE ${searchPattern}
+              OR COALESCE(phone, '') ILIKE ${normalizedPhonePattern}
           )
         ORDER BY created_at DESC
         LIMIT ${limit}

@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { register as registerUser, setAuthToken } from "@repo/services";
-import { RegisterFormSchema, SALUTATION_OPTIONS, formatIndianPhoneDisplay, type RegisterFormJSON } from "@repo/types";
+import { RegisterFormSchema, SALUTATION_OPTIONS, formatPhoneDisplay, type RegisterFormJSON } from "@repo/types";
 
 import AuthShell from "../components/auth-shell";
 import OtpField from "../components/otp-field";
@@ -104,7 +104,7 @@ const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
                         </Pressable>
                         <View className="items-end">
                             <Text className="text-sm font-medium text-secondary-foreground">
-                                {formatIndianPhoneDisplay(form.getValues("phone"))}
+                                {formatPhoneDisplay(form.getValues("phone"))}
                             </Text>
                             <Text className="text-xs text-secondary-foreground/60">Verification in progress</Text>
                         </View>

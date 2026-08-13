@@ -45,7 +45,7 @@ export const workerConfig = {
     dispatchErrorDelayMs: 5_000,
     shutdownTimeoutMs: integer("WHATSAPP_WORKER_SHUTDOWN_TIMEOUT_MS", 30_000, 1_000),
     operationsRefreshIntervalMs: integer("WHATSAPP_WORKER_OPERATIONS_REFRESH_MS", 15_000, 1_000),
-    syncFullHistory: boolean("WHATSAPP_SYNC_FULL_HISTORY", true),
+    syncFullHistory: boolean("WHATSAPP_SYNC_FULL_HISTORY", false),
     messageStoreLimit: integer("WHATSAPP_MESSAGE_STORE_LIMIT", 2_000, 100),
     maxMediaBytes: integer("WHATSAPP_MAX_MEDIA_BYTES", 10 * 1024 * 1024, 1_024),
 };

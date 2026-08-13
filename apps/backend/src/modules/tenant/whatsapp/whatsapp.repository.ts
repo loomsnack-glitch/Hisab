@@ -29,7 +29,10 @@ type InvoiceOutboxParams = {
     customerId: string;
     customerPhone: string;
     customerName: string;
-    body: string;
+    caption: string;
+    attachmentStorageKey: string;
+    attachmentFileName: string;
+    attachmentMimeType: string;
     messageId: string;
     idempotencyKey: string;
 };
@@ -198,6 +201,17 @@ export const getAccountById = async (accountId: string): Promise<WhatsAppAccount
     return row ? mapAccount(row) : null;
 };
 
+export const getAccountByPhoneNumber = async (phoneNumber: string): Promise<WhatsAppAccountDTO | null> => {
+    const [row] = await pg`
+        SELECT *
+        FROM whatsapp_accounts
+        WHERE provider = 'baileys'
+          AND phone_number_normalized = ${phoneNumber}
+        LIMIT 1
+    `;
+    return row ? mapAccount(row) : null;
+};
+
 export const getInvoiceOutbox = async (
     organizationId: string,
     storeId: string,
@@ -310,12 +324,12 @@ export const createInvoiceOutbox = async (params: InvoiceOutboxParams): Promise<
                 ${params.whatsappAccountId},
                 ${conversation.id},
                 'outbound',
-                'text',
-                ${params.body},
+                'document',
                 NULL,
-                NULL,
-                NULL,
-                NULL,
+                ${params.caption},
+                ${params.attachmentStorageKey},
+                ${params.attachmentFileName},
+                ${params.attachmentMimeType},
                 'queued',
                 ${params.idempotencyKey}
             )
@@ -1234,4 +1248,50 @@ export const updateAccountStatus = async (
         RETURNING *
     `;
     return row ? mapAccount(row) : null;
+};
+
+export const updateAccountPhoneNumber = async (
+    accountId: string,
+    phoneNumber: string,
+    userId: string,
+): Promise<WhatsAppAccountDTO | null> => {
+    const [row] = await pg`
+        UPDATE whatsapp_accounts
+        SET phone_number = ${phoneNumber},
+            phone_number_normalized = ${phoneNumber},
+            updated_by = ${userId},
+            updated_at = NOW()
+        WHERE id = ${accountId}
+        RETURNING *
+    `;
+    return row ? mapAccount(row) : null;
+};
+
+export type WhatsAppAccountUsage = {
+    conversations: number;
+    messages: number;
+    outbox: number;
+};
+
+export const getAccountUsage = async (accountId: string): Promise<WhatsAppAccountUsage> => {
+    const [row] = await pg`
+        SELECT
+            (SELECT COUNT(*) FROM whatsapp_conversations WHERE whatsapp_account_id = ${accountId}) AS conversations,
+            (SELECT COUNT(*) FROM whatsapp_messages WHERE whatsapp_account_id = ${accountId}) AS messages,
+            (SELECT COUNT(*) FROM whatsapp_outbox WHERE whatsapp_account_id = ${accountId}) AS outbox
+    `;
+    return {
+        conversations: Number(row?.conversations ?? 0),
+        messages: Number(row?.messages ?? 0),
+        outbox: Number(row?.outbox ?? 0),
+    };
+};
+
+export const deleteAccount = async (accountId: string): Promise<boolean> => {
+    const [row] = await pg`
+        DELETE FROM whatsapp_accounts
+        WHERE id = ${accountId}
+        RETURNING id
+    `;
+    return Boolean(row);
 };

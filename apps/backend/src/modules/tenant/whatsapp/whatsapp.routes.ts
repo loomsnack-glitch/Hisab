@@ -5,6 +5,7 @@ import {
     STATUS_CODES,
     WhatsAppAttachConversationCustomerSchema,
     WhatsAppCreateAccountSchema,
+    WhatsAppChangeAccountNumberSchema,
     WhatsAppSendConversationTextSchema,
     WhatsAppSendInvoiceSchema,
     WhatsAppWorkerInboundMessageSchema,
@@ -28,12 +29,20 @@ const invalidUuid = (value: string, message: string) => {
     return { status: "error" as const, message, code: STATUS_CODES.BAD_REQUEST };
 };
 
-const unexpectedError = (c: Context) => {
-    console.error("[whatsapp] unexpected route error");
+const unexpectedError = (c: Context, error?: unknown) => {
+    console.error(
+        "[whatsapp] unexpected route error",
+        error instanceof Error ? error.message : error ? String(error) : "unknown error",
+    );
     return c.json(
         { status: "error", message: "WhatsApp operation failed", code: STATUS_CODES.INTERNAL_SERVER_ERROR },
         STATUS_CODES.INTERNAL_SERVER_ERROR,
     );
+};
+
+const unexpectedInternalError = (c: Context, operation: string, error: unknown, message: string) => {
+    console.error(`[whatsapp] ${operation}`, error instanceof Error ? error.message : String(error));
+    return c.json({ status: "error", message }, 500);
 };
 
 const workerPartitionFromQuery = (c: Context): { count: number; index: number } | null => {
@@ -217,6 +226,42 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/account/disconnect", 
     }
 });
 
+userRouter.post(
+    "/:organizationId/stores/:storeId/whatsapp/account/change-number",
+    validateSchema("json", WhatsAppChangeAccountNumberSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(
+                c,
+                await service.changeAccountNumber(
+                    c.get("authUser").id,
+                    organizationId,
+                    storeId,
+                    c.req.valid("json"),
+                ),
+            );
+        } catch {
+            return unexpectedError(c);
+        }
+    },
+);
+
+userRouter.post("/:organizationId/stores/:storeId/whatsapp/account/remove", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await service.removeAccount(c.get("authUser").id, organizationId, storeId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
 userRouter.post("/:organizationId/stores/:storeId/whatsapp/account/sync", async c => {
     try {
         const organizationId = c.req.param("organizationId");
@@ -259,8 +304,8 @@ whatsappInternalRoutes.get("/accounts", async c => {
         const partition = workerPartitionFromQuery(c);
         if (!partition) return c.json({ status: "error", message: "Invalid worker partition" }, STATUS_CODES.BAD_REQUEST);
         return c.json({ accounts: await service.getWorkerAccounts(partition) });
-    } catch {
-        return c.json({ status: "error", message: "Worker reconciliation failed" }, 500);
+    } catch (error) {
+        return unexpectedInternalError(c, "worker reconciliation failed", error, "Worker reconciliation failed");
     }
 });
 
@@ -278,8 +323,8 @@ whatsappInternalRoutes.post(
                 return c.json({ status: "error", message: "WhatsApp account not found" }, STATUS_CODES.NOT_FOUND);
             }
             return c.json({ status: "success" });
-        } catch {
-            return c.json({ status: "error", message: "Worker status update failed" }, 500);
+        } catch (error) {
+            return unexpectedInternalError(c, "worker status update failed", error, "Worker status update failed");
         }
     },
 );
@@ -293,16 +338,16 @@ whatsappInternalRoutes.get("/outbox/next", async c => {
             return c.json({ status: "error", message: "Invalid worker id" }, STATUS_CODES.BAD_REQUEST);
         }
         return c.json(await service.claimInvoiceForWorker(workerId, partition));
-    } catch {
-        return c.json({ status: "error", message: "WhatsApp outbox claim failed" }, 500);
+    } catch (error) {
+        return unexpectedInternalError(c, "WhatsApp outbox claim failed", error, "WhatsApp outbox claim failed");
     }
 });
 
 whatsappInternalRoutes.get("/operations/metrics", async c => {
     try {
         return c.json({ metrics: await service.getOperationsMetrics() });
-    } catch {
-        return c.json({ status: "error", message: "WhatsApp operations metrics failed" }, 500);
+    } catch (error) {
+        return unexpectedInternalError(c, "WhatsApp operations metrics failed", error, "WhatsApp operations metrics failed");
     }
 });
 
@@ -313,8 +358,8 @@ whatsappInternalRoutes.get("/accounts/:accountId/history-anchors", async c => {
             return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
         }
         return c.json({ anchors: await service.getHistoryAnchorsForWorker(accountId) });
-    } catch {
-        return c.json({ status: "error", message: "WhatsApp history anchors failed" }, 500);
+    } catch (error) {
+        return unexpectedInternalError(c, "WhatsApp history anchors failed", error, "WhatsApp history anchors failed");
     }
 });
 
@@ -329,8 +374,8 @@ whatsappInternalRoutes.post("/outbox/:outboxId/result", async c => {
         if (!parsed.success) return c.json({ status: "error", message: "Invalid invoice result" }, STATUS_CODES.BAD_REQUEST);
         const accepted = await service.receiveInvoiceResult(outboxId, parsed.data);
         return c.json({ status: accepted ? "success" : "ignored" });
-    } catch {
-        return c.json({ status: "error", message: "WhatsApp outbox result failed" }, 500);
+    } catch (error) {
+        return unexpectedInternalError(c, "WhatsApp outbox result failed", error, "WhatsApp outbox result failed");
     }
 });
 
@@ -344,8 +389,8 @@ whatsappInternalRoutes.post("/accounts/:accountId/messages/status", async c => {
         if (!parsed.success) return c.json({ status: "error", message: "Invalid message status" }, STATUS_CODES.BAD_REQUEST);
         const accepted = await service.receiveInvoiceMessageStatus(accountId, parsed.data);
         return c.json({ status: accepted ? "success" : "ignored" });
-    } catch {
-        return c.json({ status: "error", message: "WhatsApp message status failed" }, 500);
+    } catch (error) {
+        return unexpectedInternalError(c, "WhatsApp message status failed", error, "WhatsApp message status failed");
     }
 });
 
@@ -359,8 +404,8 @@ whatsappInternalRoutes.post("/accounts/:accountId/messages/inbound", async c => 
         if (!parsed.success) return c.json({ status: "error", message: "Invalid inbound message" }, STATUS_CODES.BAD_REQUEST);
         const result = await service.ingestInboundMessage(accountId, parsed.data);
         return c.json({ status: "success", ...result });
-    } catch {
-        return c.json({ status: "error", message: "Inbound WhatsApp message failed" }, 500);
+    } catch (error) {
+        return unexpectedInternalError(c, "Inbound WhatsApp message failed", error, "Inbound WhatsApp message failed");
     }
 });
 
@@ -374,8 +419,8 @@ whatsappInternalRoutes.post("/accounts/:accountId/messages/events", async c => {
         if (!parsed.success) return c.json({ status: "error", message: "Invalid WhatsApp message event" }, STATUS_CODES.BAD_REQUEST);
         const result = await service.ingestMessageEvent(accountId, parsed.data);
         return c.json({ status: "success", ...result });
-    } catch {
-        return c.json({ status: "error", message: "WhatsApp message event failed" }, 500);
+    } catch (error) {
+        return unexpectedInternalError(c, "WhatsApp message event failed", error, "WhatsApp message event failed");
     }
 });
 

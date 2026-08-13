@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm, useWatch, type SubmitHandler } from "react-hook-form";
+import { Controller, useForm, useWatch, type SubmitHandler } from "react-hook-form";
 import {
     getCustomerLedger,
     getCustomers,
@@ -13,6 +13,7 @@ import {
     UpdateCustomerSchema,
     type CustomerDTO,
     type UpdateCustomerJSON,
+    normalizePhoneNumber,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -25,6 +26,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { PhoneInput } from "@repo/ui/components/phone-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
 import { CheckCircle2, Eye, Pencil, Plus, Search, User, XCircle } from "lucide-react";
@@ -77,7 +79,7 @@ const CustomerEditDialog = ({
         if (!customer) return;
         form.reset({
             name: customer.name,
-            phone: customer.phone ?? "",
+            phone: normalizePhoneNumber(customer.phone) ?? "",
             isActive: customer.isActive,
         });
     }, [customer, form]);
@@ -125,7 +127,19 @@ const CustomerEditDialog = ({
                     <Field data-invalid={!!form.formState.errors.phone}>
                         <FieldLabel>Phone</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="Optional phone number" {...form.register("phone")} />
+                            <Controller
+                                control={form.control}
+                                name="phone"
+                                render={({ field }) => (
+                                    <PhoneInput
+                                        className="h-11 rounded-xl border"
+                                        value={field.value || undefined}
+                                        onChange={(value) => field.onChange(value ?? "")}
+                                        onBlur={field.onBlur}
+                                        placeholder="Optional phone number"
+                                    />
+                                )}
+                            />
                             <FieldError errors={[form.formState.errors.phone]} />
                         </FieldContent>
                     </Field>

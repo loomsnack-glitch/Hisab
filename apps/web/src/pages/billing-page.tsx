@@ -50,6 +50,7 @@ import type {
     SaleSummaryDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
+import { normalizePhoneNumber } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
     AlertDialog,
@@ -71,6 +72,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Calendar as DateCalendar } from "@repo/ui/components/calendar";
 import { Input } from "@repo/ui/components/input";
+import { PhoneInput } from "@repo/ui/components/phone-input";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
@@ -734,12 +736,21 @@ const BillingPage = ({
             storeAddress: store?.address,
         };
     }, [isDeviceMode, organization, selectedStoreId, session]);
-    const categories = categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : [];
-    const products = productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : [];
-    const inactiveProductCodes =
-        productsQuery.data?.status === "success"
-            ? ((productsQuery.data.data?.inactiveProductCodes ?? []) as InactiveProductCode[])
-            : [];
+    const categories = useMemo(
+        () => (categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : []),
+        [categoriesQuery.data],
+    );
+    const products = useMemo(
+        () => (productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : []),
+        [productsQuery.data],
+    );
+    const inactiveProductCodes = useMemo(
+        () =>
+            productsQuery.data?.status === "success"
+                ? ((productsQuery.data.data?.inactiveProductCodes ?? []) as InactiveProductCode[])
+                : [],
+        [productsQuery.data],
+    );
     const barcodeScanningEnabled =
         posSettingsQuery.data?.status === "success" &&
         posSettingsQuery.data.data?.organizationCatalogSettings.barcodeScanningEnabled === true;
@@ -812,6 +823,9 @@ const BillingPage = ({
         enabled: Boolean(organizationId),
         staleTime: 5 * 60 * 1000,
     });
+    const comboProductsData = comboProductsQuery.data;
+    const comboProductsIsError = comboProductsQuery.isError;
+    const refetchComboProducts = comboProductsQuery.refetch;
     const preloadedCombos = useMemo(
         () => (comboProductsQuery.data?.status === "success" ? (comboProductsQuery.data.data?.combos ?? []) : []),
         [comboProductsQuery.data],
@@ -861,7 +875,7 @@ const BillingPage = ({
         [adminAttachmentQueries, isDeviceMode, selectableAttachmentsQuery.data],
     );
     const customers = customersQuery.data?.status === "success" ? (customersQuery.data.data?.customers ?? []) : [];
-    const salesPages = salesQuery.data?.pages ?? [];
+    const salesPages = useMemo(() => salesQuery.data?.pages ?? [], [salesQuery.data]);
     const sales = useMemo(
         () =>
             salesPages.flatMap((page) =>
@@ -1040,7 +1054,7 @@ const BillingPage = ({
         observer.observe(target);
 
         return () => observer.disconnect();
-    }, [salesQuery.fetchNextPage, salesQuery.hasNextPage, salesQuery.isFetchingNextPage]);
+    }, [salesQuery]);
 
     const salesLoadMoreFooter = salesQuery.isFetchNextPageError ? (
         <div className="flex justify-center py-4">
@@ -1161,7 +1175,7 @@ const BillingPage = ({
     const openCustomerCreate = () => {
         setCustomerCreateOpen(true);
         if (customerSearchLooksLikePhone) {
-            setNewCustomerPhone(customerSearch.trim());
+            setNewCustomerPhone(normalizePhoneNumber(customerSearch.trim()) ?? "");
             setNewCustomerName("");
         } else {
             setNewCustomerName(customerSearch.trim());
@@ -1209,14 +1223,6 @@ const BillingPage = ({
     };
 
     useEffect(() => {
-        if (isDeviceMode && posPrinter?.connected) {
-            setInvoiceActions((current) =>
-                current.includes("print") ? current : [...current, "print"],
-            );
-        }
-    }, [isDeviceMode, posPrinter?.connected]);
-
-    useEffect(() => {
         if (!receiptToPrint) {
             return;
         }
@@ -1234,7 +1240,7 @@ const BillingPage = ({
         };
     }, [receiptContext, receiptToPrint]);
 
-    const addPlainProductToBill = (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
+    const addPlainProductToBill = useCallback((product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
         setItems((current) => {
             const existingPlainItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
@@ -1265,49 +1271,62 @@ const BillingPage = ({
                 },
             ];
         });
-    };
+    }, []);
 
-    const addProductToBill = (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
-        if (product.productType !== "combo") {
+    const addProductToBill = useCallback(
+        (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
+            if (product.productType !== "combo") {
+                addPlainProductToBill(product, onAdded);
+                return;
+            }
+
+            const combo = preloadedCombos.find((item) => item.product.id === product.id);
+            if (comboProductsIsError || comboProductsData?.status === "error") {
+                toast.error("Unable to load Combo options. Retrying now.");
+                void refetchComboProducts();
+                return;
+            }
+
+            if (!combo) {
+                toast.error("This Combo is no longer available");
+                return;
+            }
+
+            if (combo.choiceGroups.length) {
+                setConfigureComboProductId(product.id);
+                return;
+            }
+
             addPlainProductToBill(product, onAdded);
-            return;
-        }
+        },
+        [
+            addPlainProductToBill,
+            comboProductsData?.status,
+            comboProductsIsError,
+            preloadedCombos,
+            refetchComboProducts,
+            setConfigureComboProductId,
+        ],
+    );
 
-        const combo = preloadedCombos.find((item) => item.product.id === product.id);
-        if (comboProductsQuery.isError || comboProductsQuery.data?.status === "error") {
-            toast.error("Unable to load Combo options. Retrying now.");
-            void comboProductsQuery.refetch();
-            return;
-        }
+    const handleProductCardClick = useCallback(
+        (product: ProductResponseDTO, action: ProductCardAction) => {
+            if (action === "customize") {
+                setCustomizeProductId(product.id);
+                return;
+            }
 
-        if (!combo) {
-            toast.error("This Combo is no longer available");
-            return;
-        }
+            if (action === "configure") {
+                setConfigureComboProductId(product.id);
+                return;
+            }
 
-        if (combo?.choiceGroups.length) {
-            setConfigureComboProductId(product.id);
-            return;
-        }
-
-        addPlainProductToBill(product, onAdded);
-    };
-
-    const handleProductCardClick = (product: ProductResponseDTO, action: ProductCardAction) => {
-        if (action === "customize") {
-            setCustomizeProductId(product.id);
-            return;
-        }
-
-        if (action === "configure") {
-            setConfigureComboProductId(product.id);
-            return;
-        }
-
-        if (action === "add") {
-            addProductToBill(product);
-        }
-    };
+            if (action === "add") {
+                addProductToBill(product);
+            }
+        },
+        [addProductToBill, setConfigureComboProductId, setCustomizeProductId],
+    );
 
     const focusScanField = useCallback(() => {
         window.setTimeout(() => scanInputRef.current?.focus(), 0);
@@ -3674,7 +3693,12 @@ const BillingPage = ({
                     }
                 }}
             >
-                <DialogContent className="grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-2xl border-border/70 bg-background/95 p-2 shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:p-3">
+                <DialogContent
+                    className={cn(
+                        "grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] rounded-2xl border-border/70 bg-background/95 p-2 shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:p-3",
+                        customerPickerOpen && customerCreateOpen ? "overflow-visible" : "overflow-hidden",
+                    )}
+                >
                     <DialogHeader className="space-y-1 border-b border-border/50 pb-2">
                         <div className="flex items-start gap-2 pr-6">
                             {customerPickerOpen ? (
@@ -3723,15 +3747,14 @@ const BillingPage = ({
                                             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                                                 Phone
                                             </label>
-                                            <Input
+                                            <PhoneInput
                                                 autoFocus
-                                                type="tel"
                                                 inputMode="tel"
                                                 autoComplete="tel"
                                                 className="h-12 rounded-xl bg-muted/40 text-base"
                                                 placeholder="Phone number"
-                                                value={newCustomerPhone}
-                                                onChange={(event) => setNewCustomerPhone(event.target.value)}
+                                                value={newCustomerPhone || undefined}
+                                                onChange={(value) => setNewCustomerPhone(value ?? "")}
                                                 aria-label="Customer phone"
                                             />
                                         </div>

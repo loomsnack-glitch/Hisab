@@ -31,6 +31,8 @@ export {
   queuePosWhatsAppInvoice,
   retryPosWhatsAppInvoice,
   getPosWhatsAppConversations,
+  getPosWhatsAppAccount,
+  connectPosWhatsAppAccount,
   getPosWhatsAppConversation,
   sendPosWhatsAppConversationText,
   attachPosWhatsAppConversationCustomer,

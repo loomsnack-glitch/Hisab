@@ -145,6 +145,7 @@
     "packages/types": {
       "name": "@repo/types",
       "dependencies": {
+        "libphonenumber-js": "^1.12.24",
         "zod": "^4.1.12",
       },
       "devDependencies": {

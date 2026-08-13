@@ -1,6 +1,7 @@
 import type {
     ServiceResponse,
     WhatsAppAccountStatusResponseDTO,
+    WhatsAppChangeAccountNumberJSON,
     WhatsAppCreateAccountJSON,
     WhatsAppInvoiceQueueResponseDTO,
     WhatsAppConversationListResponse,
@@ -54,6 +55,28 @@ export const connectWhatsAppAccount = async (organizationId: string, storeId: st
 export const disconnectWhatsAppAccount = async (organizationId: string, storeId: string): Promise<WhatsAppResponse> => {
     try {
         const response = await api.post(accountPath(organizationId, storeId) + "/disconnect");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const changeWhatsAppAccountNumber = async (
+    organizationId: string,
+    storeId: string,
+    data: WhatsAppChangeAccountNumberJSON,
+): Promise<WhatsAppResponse> => {
+    try {
+        const response = await api.post(accountPath(organizationId, storeId) + "/change-number", data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const removeWhatsAppAccount = async (organizationId: string, storeId: string): Promise<WhatsAppResponse> => {
+    try {
+        const response = await api.post(accountPath(organizationId, storeId) + "/remove");
         return response.data;
     } catch (error) {
         return handleApiError(error);

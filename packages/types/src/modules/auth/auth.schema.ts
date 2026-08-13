@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { indianMobileNumberSchema, optionalFormEmailSchema, phoneSchema } from "../../common";
+import { optionalFormEmailSchema, phoneSchema } from "../../common";
 import { UserDTOSchema } from "../user";
 
 const passwordSchema = z
@@ -108,7 +108,7 @@ const RegisterBaseSchema = z.object({
 });
 
 const RegisterFormBaseSchema = RegisterBaseSchema.extend({
-    phone: indianMobileNumberSchema,
+    phone: phoneSchema,
 });
 
 export const RegisterUserSchema = RegisterBaseSchema.extend({
@@ -151,7 +151,7 @@ export const LoginSchema = z
 export const LoginFormSchema = z
     .object({
         requestType: z.enum(["user-info", "otp-info", "otp-verification"]),
-        phone: indianMobileNumberSchema,
+        phone: phoneSchema,
         password: z.string().optional(),
         otp: z.string().optional(),
     })

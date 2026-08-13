@@ -313,6 +313,22 @@ router.get("/whatsapp/conversations", async (c) => {
   }
 });
 
+router.get("/whatsapp/account", async (c) => {
+  try {
+    return handleServiceResponse(c, await whatsappService.getAccountForDevice(c.get("authDevice")));
+  } catch (error) {
+    return handleError(FILE_NAME, "getAccountForDevice", c, error);
+  }
+});
+
+router.post("/whatsapp/account/connect", async (c) => {
+  try {
+    return handleServiceResponse(c, await whatsappService.connectAccountForDevice(c.get("authDevice")));
+  } catch (error) {
+    return handleError(FILE_NAME, "connectAccountForDevice", c, error);
+  }
+});
+
 router.post("/whatsapp/sync", async (c) => {
   try {
     return handleServiceResponse(c, await whatsappService.syncAccountForDevice(c.get("authDevice")));

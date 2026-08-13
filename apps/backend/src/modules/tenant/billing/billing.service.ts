@@ -3,6 +3,7 @@ import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository"
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import {
     STATUS_CODES,
+    normalizePhoneNumber,
     type AddOnSalesRollupsListResponse,
     type BundleSalesRollupsListResponse,
     type CommitSaleSVC,
@@ -1405,7 +1406,16 @@ const createCustomerInOrganization = async (
     createdBy: string,
     customerData: CreateCustomerSVC,
 ): Promise<ServiceResponse<CustomerResponse | null>> => {
-    const phone = normalizeOptionalText(customerData.phone);
+    const rawPhone = normalizeOptionalText(customerData.phone);
+    const phone = rawPhone ? normalizePhoneNumber(rawPhone) : null;
+    if (rawPhone && !phone) {
+        return {
+            status: "error",
+            message: "Enter a valid phone number with country code",
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+        };
+    }
     if (phone) {
         const alreadyExists = await billingRepository.customerPhoneExistsInOrganization(organizationId, phone);
         if (alreadyExists) {
@@ -2880,8 +2890,16 @@ export const updateCustomer = async (
         };
     }
 
-    const phone =
-        customerData.phone === undefined ? (existingCustomer.phone ?? null) : normalizeOptionalText(customerData.phone);
+    const rawPhone = customerData.phone === undefined ? (existingCustomer.phone ?? null) : normalizeOptionalText(customerData.phone);
+    const phone = rawPhone ? normalizePhoneNumber(rawPhone) : null;
+    if (rawPhone && !phone) {
+        return {
+            status: "error",
+            message: "Enter a valid phone number with country code",
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+        };
+    }
 
     if (phone) {
         const alreadyExists = await billingRepository.customerPhoneExistsInOrganization(

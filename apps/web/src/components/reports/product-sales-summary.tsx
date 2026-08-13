@@ -67,6 +67,7 @@ type ProductSalesSummaryProps =
     }
   | {
       mode: "pos";
+      storeName: string;
     };
 
 const startOfLocalDay = (date: Date) =>
@@ -496,7 +497,7 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
         ? "All stores"
         : props.stores.find((store) => store.id === selectedStoreId)?.name ??
           "Choose store"
-      : null;
+      : props.storeName;
 
   return (
     <div className="min-w-0 space-y-5">
@@ -514,6 +515,11 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
           <p className="mt-1 text-sm text-muted-foreground">
             See how many units of each product were sold for the selected date.
           </p>
+          {props.mode === "pos" ? (
+            <p className="mt-1 text-xs font-medium text-muted-foreground">
+              Store: {selectedStoreName}
+            </p>
+          ) : null}
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:shrink-0">
           <ReportDateFilter value={dateSelection} onChange={setDateSelection} />

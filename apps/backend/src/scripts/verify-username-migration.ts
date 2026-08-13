@@ -51,7 +51,7 @@ async function setup() {
     // Create test user first (required for foreign key constraints)
     await pg`
         INSERT INTO users (id, salutation, first_name, last_name, phone)
-        VALUES (${TEST_USER_ID}, 'mr.', 'Test', 'User', '0000000000')
+        VALUES (${TEST_USER_ID}, 'mr.', 'Test', 'User', '+919000000000')
         ON CONFLICT (id) DO NOTHING
     `;
     log("Test user created.");

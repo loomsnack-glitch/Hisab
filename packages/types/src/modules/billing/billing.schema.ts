@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dtoDateSchema } from "../../common";
+import { dtoDateSchema, phoneSchema } from "../../common";
 
 export const SaleNumberResetPeriodSchema = z.enum([
     "never",
@@ -34,7 +34,7 @@ export const UpdateSaleNumberSettingsSchema = z.object({
 const nameSchema = z.string().trim().min(1, "Name is required").max(255, "Name must be at most 255 characters");
 
 const optionalPhoneSchema = z
-    .union([z.literal(""), z.string().trim().max(20, "Phone must be at most 20 characters")])
+    .union([z.literal(""), phoneSchema])
     .nullable()
     .optional();
 
@@ -72,7 +72,7 @@ export const CustomerDTOSchema = z.object({
     id: z.uuid("Invalid customer id"),
     organizationId: z.uuid("Invalid organization id"),
     name: nameSchema,
-    phone: z.string().nullable().optional(),
+    phone: phoneSchema.nullable().optional(),
     balance: moneySchema,
     isActive: z.boolean(),
     createdBy: z.uuid("Invalid creator id"),

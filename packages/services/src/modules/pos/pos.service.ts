@@ -30,6 +30,7 @@ import type {
   UpdatePurchaseJSON,
   VoidPurchaseJSON,
   WhatsAppInvoiceQueueResponseDTO,
+  WhatsAppAccountStatusResponseDTO,
   WhatsAppConversationListResponse,
   WhatsAppConversationMessagesResponse,
   WhatsAppConversationDTO,
@@ -325,6 +326,24 @@ export const retryPosWhatsAppInvoice = async (
 export const getPosWhatsAppConversations = async (): Promise<ServiceResponse<WhatsAppConversationListResponse | null>> => {
   try {
     const response = await api.get("/pos/whatsapp/conversations");
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosWhatsAppAccount = async (): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+  try {
+    const response = await api.get("/pos/whatsapp/account");
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const connectPosWhatsAppAccount = async (): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+  try {
+    const response = await api.post("/pos/whatsapp/account/connect");
     return response.data;
   } catch (error) {
     return handleApiError(error);

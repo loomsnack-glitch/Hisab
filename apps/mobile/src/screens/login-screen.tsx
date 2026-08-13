@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { setAuthToken, userLogin } from "@repo/services";
-import { LoginFormSchema, formatIndianPhoneDisplay, type LoginFormJSON } from "@repo/types";
+import { LoginFormSchema, formatPhoneDisplay, type LoginFormJSON } from "@repo/types";
 
 import AuthShell from "../components/auth-shell";
 import OtpField from "../components/otp-field";
@@ -174,7 +174,7 @@ const LoginScreen = ({ navigation }: LoginScreenProps) => {
                         </Pressable>
                         <View className="items-end">
                             <Text className="text-sm font-medium text-secondary-foreground">
-                                {formatIndianPhoneDisplay(form.getValues("phone"))}
+                                {formatPhoneDisplay(form.getValues("phone"))}
                             </Text>
                             <Text className="text-xs text-secondary-foreground/60">OTP verification</Text>
                         </View>

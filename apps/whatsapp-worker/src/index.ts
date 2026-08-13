@@ -45,6 +45,8 @@ const outboundQueue = new PerAccountSerialQueue({ minimumIntervalMs: workerConfi
 
 const wait = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
 
+const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
 const classifySendFailure = (error: unknown): { code: string; message: string; retryable: boolean } => {
     const message = error instanceof Error ? error.message : "WhatsApp message send failed";
     const normalized = message.toLowerCase();
@@ -72,7 +74,7 @@ const dispatchInvoices = async (slot: number): Promise<void> => {
                 const providerMessageId = await outboundQueue.run(job.accountId, async () => job.messageType === "text"
                     ? manager.sendText(job.accountId, job.phoneNumber, job.body ?? "")
                     : job.documentBase64 && job.attachmentFileName && job.attachmentMimeType
-                      ? manager.sendDocument(
+                      ? manager.sendMedia(
                             job.accountId,
                             job.phoneNumber,
                             Buffer.from(job.documentBase64, "base64"),
@@ -92,6 +94,13 @@ const dispatchInvoices = async (slot: number): Promise<void> => {
             } catch (error) {
                 metrics.recordDispatchFailure();
                 const failure = classifySendFailure(error);
+                logger.warn("WhatsApp invoice dispatch failed", {
+                    accountId: job.accountId,
+                    outboxId: job.outboxId,
+                    error: errorMessage(error),
+                    failureCode: failure.code,
+                    retryable: failure.retryable,
+                });
                 await reportInvoiceResult(job.outboxId, {
                     leaseOwner: job.leaseOwner,
                     providerMessageId: null,
@@ -100,8 +109,8 @@ const dispatchInvoices = async (slot: number): Promise<void> => {
                     retryable: failure.retryable,
                 });
             }
-        } catch {
-            logger.warn("WhatsApp dispatch cycle failed", { slot });
+        } catch (error) {
+            logger.warn("WhatsApp dispatch cycle failed", { slot, error: errorMessage(error) });
             await wait(workerConfig.dispatchErrorDelayMs);
         }
     }
@@ -110,9 +119,9 @@ const dispatchInvoices = async (slot: number): Promise<void> => {
 const refreshOperationsMetrics = async (): Promise<void> => {
     try {
         metrics.recordOperationsRefresh(await getOperationsMetrics());
-    } catch {
+    } catch (error) {
         metrics.recordOperationsRefreshFailure();
-        logger.warn("Unable to refresh WhatsApp operations metrics");
+        logger.warn("Unable to refresh WhatsApp operations metrics", { error: errorMessage(error) });
     }
 };
 

@@ -18,6 +18,7 @@ import { logger } from "../logger.js";
 import { resolveBaileysVersion } from "./baileys-version.js";
 import { classifyMessageEvent, type MessageEventSource } from "./message-event.js";
 import { normalizeMessageStatus } from "./message-status.js";
+import { createOutboundMediaMessage } from "./media-message.js";
 
 export type WorkerAccountStatus =
     | "pending_qr"
@@ -191,6 +192,13 @@ export class BaileysAccountManager {
                 messageCount: event.messages.length,
                 source: event.type === "notify" ? "realtime" : "history",
             });
+            if (event.type !== "notify" && !workerConfig.syncFullHistory) {
+                logger.info("WhatsApp history message upsert ignored because history sync is disabled", {
+                    accountId: account.input.accountId,
+                    messageCount: event.messages.length,
+                });
+                return;
+            }
             for (const message of event.messages) {
                 this.enqueueMessageEvent(account, message, event.type === "notify" ? "realtime" : "history");
             }
@@ -202,6 +210,13 @@ export class BaileysAccountManager {
                 syncType: String(event.syncType ?? "unknown"),
                 isLatest: Boolean(event.isLatest),
             });
+            if (!workerConfig.syncFullHistory) {
+                logger.info("WhatsApp messaging history ignored because history sync is disabled", {
+                    accountId: account.input.accountId,
+                    messageCount: event.messages.length,
+                });
+                return;
+            }
             for (const message of event.messages) {
                 this.enqueueMessageEvent(account, message, "history");
             }
@@ -282,6 +297,10 @@ export class BaileysAccountManager {
     }
 
     public async syncAccount(accountId: string): Promise<AccountStatusSnapshot> {
+        if (!workerConfig.syncFullHistory) {
+            logger.info("Manual WhatsApp chat sync ignored because history sync is disabled", { accountId });
+            return this.getStatus(accountId);
+        }
         const account = this.accounts.get(accountId);
         if (account?.syncInProgress) {
             logger.warn("Manual WhatsApp chat sync ignored because one is already running", { accountId });
@@ -338,21 +357,19 @@ export class BaileysAccountManager {
         return result.key.id;
     }
 
-    public async sendDocument(
+    public async sendMedia(
         accountId: string,
         phoneNumber: string,
-        document: Buffer,
+        media: Buffer,
         fileName: string,
         mimeType: string,
         caption?: string,
     ): Promise<string> {
         const socket = this.requireConnectedSocket(accountId);
-        const result = await socket.sendMessage(phoneToJid(phoneNumber), {
-            document,
-            fileName,
-            mimetype: mimeType,
-            caption,
-        });
+        const result = await socket.sendMessage(
+            phoneToJid(phoneNumber),
+            createOutboundMediaMessage(media, fileName, mimeType, caption),
+        );
         if (!result?.key?.id) {
             throw new Error("WhatsApp provider did not return a message id");
         }

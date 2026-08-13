@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Controller, type SubmitHandler } from "react-hook-form";
+import { useForm, useWatch, Controller, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
 import { ChevronLeft, KeyRound, MessageSquareText, MonitorSmartphone } from "lucide-react";
 import whatsAppIcon from "@repo/assets/services/whatsapp.webp";
 import { userLogin } from "@repo/services";
-import { LoginFormSchema, formatIndianPhoneDisplay, type LoginFormJSON } from "@repo/types";
+import { LoginFormSchema, formatPhoneDisplay, type LoginFormJSON } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
@@ -36,6 +36,8 @@ const LoginPage = () => {
         resolver: zodResolver(LoginFormSchema),
         defaultValues,
     });
+    const requestType = useWatch({ control: form.control, name: "requestType" });
+    const otp = useWatch({ control: form.control, name: "otp" });
 
     const loginMutation = useMutation({
         mutationFn: userLogin,
@@ -74,7 +76,7 @@ const LoginPage = () => {
 
     useEffect(() => {
         form.setFocus("phone");
-    }, [form.setFocus]);
+    }, [form]);
 
     const submitForm: SubmitHandler<LoginFormJSON> = (values) => {
         loginMutation.mutate(values);
@@ -154,7 +156,7 @@ const LoginPage = () => {
                         </div>
 
                         <form className="space-y-3.5" onSubmit={form.handleSubmit(submitForm)}>
-                            {form.watch("requestType") !== "otp-verification" && (
+                            {requestType !== "otp-verification" && (
                                 <Controller
                                     control={form.control}
                                     name="phone"
@@ -193,7 +195,7 @@ const LoginPage = () => {
                                         {loginMutation.isPending ? "Logging in..." : "Login"}
                                     </Button>
                                 </>
-                            ) : form.watch("requestType") === "otp-verification" ? (
+                            ) : requestType === "otp-verification" ? (
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between border-b border-dashed border-border/60 pb-3">
                                         <div className="flex items-center gap-2">
@@ -201,7 +203,7 @@ const LoginPage = () => {
                                                 <ChevronLeft className="size-4" />
                                             </Button>
                                             <div>
-                                                <p className="text-xs font-semibold text-foreground">{formatIndianPhoneDisplay(form.getValues("phone"))}</p>
+                                                <p className="text-xs font-semibold text-foreground">{formatPhoneDisplay(form.getValues("phone"))}</p>
                                                 <p className="text-[10px] text-muted-foreground">OTP verification</p>
                                             </div>
                                         </div>
@@ -220,7 +222,7 @@ const LoginPage = () => {
                                     <Button
                                         type="submit"
                                         className="h-10 w-full rounded-xl transition-all duration-200 text-sm font-semibold"
-                                        disabled={loginMutation.isPending || form.watch("otp")?.length !== 6}
+                                        disabled={loginMutation.isPending || otp?.length !== 6}
                                     >
                                         {loginMutation.isPending ? "Verifying..." : "Verify and login"}
                                     </Button>

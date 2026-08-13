@@ -36,25 +36,19 @@ const sale = {
 } as unknown as SaleDetailDTO;
 
 describe("invoice text", () => {
-    it("uses sale snapshots and includes the complete bill summary", () => {
-        const text = formatInvoiceText(sale);
+    it("creates a professional invoice caption from sale snapshots", () => {
+        const text = formatInvoiceText(sale, { organizationName: "Dev VadaPav" });
 
-        expect(text).toContain("Bill: INV-42");
-        expect(text).toContain("Customer: Original customer");
-        expect(text).toContain("Phone: +919876543210");
-        expect(text).toContain(
-            "A very long product name that must wrap without losing any",
-        );
-        expect(text).toContain("content x 2: ₹90.00");
-        expect(text).toContain("Gift wrap x 2: ₹4.00");
-        expect(text).toContain("Total: ₹90.00");
+        expect(text).toContain("Hello Original customer,");
+        expect(text).toContain("Thank you for shopping with Dev VadaPav.");
+        expect(text).toContain("Bill number: INV-42");
+        expect(text).toContain("Total amount: ₹90.00");
         expect(text).toContain("Paid: ₹50.00");
-        expect(text).toContain("Due: ₹40.00");
-        expect(text).toContain("Payment: Partial");
+        expect(text).toContain("Balance due: ₹40.00");
+        expect(text).toContain("Regards,\nDev VadaPav");
     });
 
-    it("wraps long lines without truncating them", () => {
-        const text = formatInvoiceText(sale);
-        expect(text.split("\n").every((line) => line.length <= 60)).toBe(true);
+    it("falls back to the product name when no organization name is provided", () => {
+        expect(formatInvoiceText(sale)).toContain("Thank you for shopping with Ganatri.");
     });
 });

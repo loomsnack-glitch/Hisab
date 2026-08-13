@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { deviceLogout } from "@repo/services";
-import type { DeviceSessionDTO } from "@repo/types";
+import { Link, useNavigate } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { connectPosWhatsAppAccount, deviceLogout, getPosWhatsAppAccount } from "@repo/services";
+import type { DeviceSessionDTO, WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import {
@@ -15,7 +15,14 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@repo/ui/components/alert-dialog";
-import { BarChart3, Expand, LoaderCircle, LogOut, MessageCircle, Minimize, Printer, Search, X } from "lucide-react";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@repo/ui/components/dialog";
+import { Expand, LoaderCircle, LogOut, Minimize, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ThemeToggle from "@/components/dashboard/theme-toggle";
@@ -24,7 +31,9 @@ import { formatLongDate } from "@/lib/format";
 import { deviceAuthKeys } from "@/lib/query-keys";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
+import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
+import { whatsappKeys } from "@/lib/query-keys";
 
 type PrinterButtonVisualState =
     | "connected"
@@ -33,6 +42,41 @@ type PrinterButtonVisualState =
     | "printing"
     | "error"
     | "unsupported";
+
+type WhatsAppButtonVisualState = "connected" | "connecting" | "pending_qr" | "failed" | "disconnected" | "unavailable";
+
+type WhatsAppAccountQueryError = {
+    message?: string;
+    data?: WhatsAppAccountStatusResponseDTO | null;
+};
+
+const getWhatsAppButtonClassName = (state: WhatsAppButtonVisualState) => {
+    switch (state) {
+        case "connected":
+            return "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400";
+        case "connecting":
+        case "pending_qr":
+            return "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400";
+        case "failed":
+            return "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20";
+        default:
+            return "border-border bg-muted/30 text-muted-foreground hover:bg-muted";
+    }
+};
+
+const getWhatsAppDotClassName = (state: WhatsAppButtonVisualState) => {
+    switch (state) {
+        case "connected":
+            return "bg-emerald-500";
+        case "connecting":
+        case "pending_qr":
+            return "bg-sky-500";
+        case "failed":
+            return "bg-destructive";
+        default:
+            return "bg-muted-foreground/60";
+    }
+};
 
 const getPrinterButtonClassName = (state: PrinterButtonVisualState) => {
     switch (state) {
@@ -84,11 +128,41 @@ const PosLayout = ({
   showSearch = true,
 }: PosLayoutProps) => {
     const navigate = useNavigate();
-    const location = useLocation();
     const queryClient = useQueryClient();
     const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
     const posPrinter = useOptionalPosPrinter();
     const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false);
+    const [whatsappQrOpen, setWhatsappQrOpen] = useState(false);
+    const whatsappAccountQuery = useQuery({
+        queryKey: whatsappKeys.posAccount(),
+        queryFn: getPosWhatsAppAccount,
+        refetchInterval: query => {
+            const error = query.state.error as WhatsAppAccountQueryError | null;
+            const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
+            if (whatsappQrOpen && status !== "connected") {
+                return 2_000;
+            }
+            return status === "pending_qr" || status === "connecting" ? 2_000 : false;
+        },
+    });
+    const whatsappConnectMutation = useMutation({
+        mutationFn: connectPosWhatsAppAccount,
+        onSuccess: response => {
+            if (response.status === "success" && response.data) {
+                queryClient.setQueryData(whatsappKeys.posAccount(), response);
+            }
+            void queryClient.invalidateQueries({ queryKey: whatsappKeys.posAccount() });
+            if (response.status === "success") {
+                const status = response.data?.account.status;
+                if (!response.data || status === "connecting" || status === "pending_qr" || response.data.qrImageDataUrl) {
+                    setWhatsappQrOpen(true);
+                }
+            } else {
+                toast.error(response.message || "WhatsApp could not be connected");
+            }
+        },
+        onError: error => toast.error((error as { message?: string })?.message || "WhatsApp could not be connected"),
+    });
     const printerButtonState: PrinterButtonVisualState | null = posPrinter
         ? !posPrinter.supported
             ? "unsupported"
@@ -103,6 +177,24 @@ const PosLayout = ({
             : "disconnected"
         : null;
     const printerIsBusy = printerButtonState === "connecting" || printerButtonState === "printing";
+    const whatsappQueryError = whatsappAccountQuery.error as WhatsAppAccountQueryError | null;
+    const whatsappAccountData = whatsappAccountQuery.data?.data ?? whatsappQueryError?.data ?? null;
+    const whatsappAccount = whatsappAccountData?.account ?? null;
+    const whatsappStatus = whatsappAccount?.status ?? "disconnected";
+    const whatsappIsInitialLoading = whatsappAccountQuery.isPending && !whatsappAccountData;
+    const whatsappButtonState: WhatsAppButtonVisualState = whatsappAccountQuery.isError
+        ? "unavailable"
+        : whatsappConnectMutation.isPending || whatsappIsInitialLoading || whatsappStatus === "connecting"
+          ? "connecting"
+          : whatsappStatus;
+    // Do not keep showing a loader over stale `connecting` data when the latest
+    // status request failed. The unavailable state has its own visual indicator
+    // and the query continues retrying while the worker recovers.
+    const whatsappIsBusy = whatsappConnectMutation.isPending
+        || whatsappIsInitialLoading
+        || (whatsappStatus === "connecting" && !whatsappAccountQuery.isError);
+    const whatsappButtonDisabled = whatsappConnectMutation.isPending || whatsappIsInitialLoading;
+    const whatsappQrVisible = whatsappQrOpen && whatsappStatus !== "connected";
 
     const handleFullscreenToggle = async () => {
         try {
@@ -198,30 +290,45 @@ const PosLayout = ({
                         </p>
                     </div>
 
+                    <div className="flex shrink-0 items-center gap-2">
                     <Button
+                        type="button"
                         variant="outline"
-                        className={`h-9 shrink-0 rounded-full px-3 ${location.pathname === "/pos/reports" ? "border-primary/50 bg-primary/10 text-primary" : ""}`}
-                        aria-label="Product sales reports"
-                        title="Product sales reports"
-                        render={<Link to="/pos/reports" />}
+                        size="icon"
+                        className={`relative size-9 rounded-full transition-colors ${getWhatsAppButtonClassName(whatsappButtonState)}`}
+                        aria-label={whatsappStatus === "connected" ? "WhatsApp connected" : "Connect WhatsApp"}
+                        aria-busy={whatsappIsBusy || whatsappStatus === "connecting"}
+                        title={
+                            whatsappAccountQuery.isError
+                                ? "WhatsApp status unavailable"
+                                : whatsappStatus === "failed"
+                                  ? `WhatsApp connection failed${whatsappAccount?.lastErrorCode ? `: ${whatsappAccount.lastErrorCode}` : ""}`
+                                  : whatsappStatus === "pending_qr"
+                                    ? "Scan the WhatsApp QR code"
+                                    : whatsappStatus === "connecting" || whatsappIsBusy
+                                      ? "Connecting WhatsApp"
+                                      : whatsappStatus === "connected"
+                                        ? "WhatsApp connected"
+                                        : "Connect WhatsApp"
+                        }
+                        disabled={whatsappButtonDisabled}
+                        onClick={() => {
+                            if (whatsappStatus === "connected") {
+                                return;
+                            }
+                            if (whatsappStatus === "connecting" || whatsappStatus === "pending_qr") {
+                                setWhatsappQrOpen(true);
+                            } else {
+                                whatsappConnectMutation.mutate();
+                            }
+                        }}
                     >
-                        <BarChart3 className="size-4" />
-                        <span className="hidden text-xs font-semibold sm:inline">Reports</span>
+                        {whatsappIsBusy ? <LoaderCircle className="size-4 animate-spin" /> : <WhatsAppIcon className="size-4" />}
+                        <span
+                            aria-hidden="true"
+                            className={`absolute top-0 right-0 size-2.5 rounded-full border-2 border-background ${getWhatsAppDotClassName(whatsappButtonState)}`}
+                        />
                     </Button>
-
-                    <Button
-                        variant="outline"
-                        className={`h-9 shrink-0 rounded-full px-3 ${location.pathname === "/pos/whatsapp" ? "border-primary/50 bg-primary/10 text-primary" : ""}`}
-                        aria-label="WhatsApp conversations"
-                        title="WhatsApp conversations"
-                        render={<Link to="/pos/whatsapp" />}
-                    >
-                        <MessageCircle className="size-4" />
-                        <span className="hidden text-xs font-semibold sm:inline">WhatsApp</span>
-                    </Button>
-
-                    <DisplayScaleControl />
-                    <ThemeToggle />
 
                     {posPrinter ? (
                         <Button
@@ -254,6 +361,10 @@ const PosLayout = ({
                             />
                         </Button>
                     ) : null}
+                    </div>
+
+                    <DisplayScaleControl />
+                    <ThemeToggle />
 
                     {isSupported ? (
                         <Button
@@ -283,6 +394,31 @@ const PosLayout = ({
                     </Button>
                 </div>
             </header>
+
+            <Dialog open={whatsappQrVisible} onOpenChange={setWhatsappQrOpen}>
+                <DialogContent className="max-w-sm rounded-2xl p-5">
+                    <DialogHeader>
+                        <DialogTitle>Connect WhatsApp</DialogTitle>
+                        <DialogDescription>
+                            Open WhatsApp on the linked phone, choose Linked devices, and scan this QR code.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {whatsappAccountData?.qrImageDataUrl ? (
+                        <div className="flex flex-col items-center gap-3 rounded-xl bg-white p-4">
+                            <img
+                                src={whatsappAccountData.qrImageDataUrl}
+                                alt="WhatsApp connection QR code"
+                                className="size-64"
+                            />
+                            <p className="text-center text-xs text-slate-600">The code refreshes automatically while WhatsApp is connecting.</p>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center py-8">
+                            <LoaderCircle className="size-6 animate-spin text-primary" />
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
 
             <AlertDialog open={logoutConfirmationOpen} onOpenChange={setLogoutConfirmationOpen}>
                 <AlertDialogContent>
