@@ -1,6 +1,7 @@
 import {
   A4_SHEET_LABEL_TEMPLATE,
   THERMAL_ROLL_LABEL_TEMPLATE,
+  millimetreBoxesIntersect,
 } from "@repo/types";
 import type { LabelTemplateDocument } from "@repo/types";
 
@@ -132,6 +133,7 @@ export type InternalLabelPreview = {
   textBelowBarcode: string | null;
   sellingPriceWarning: string | null;
   svg: string;
+  printSvg: string;
 };
 
 export type InternalLabelDocument = {
@@ -215,9 +217,50 @@ const formatSellingPrice = (
   return `₹${numericSellingPrice.toFixed(2)}`;
 };
 
+const assertKeepOutsDoNotIntersectElements = (template: LabelTemplate) => {
+  for (const keepOut of template.keepOuts) {
+    for (const element of template.elements) {
+      if (millimetreBoxesIntersect(element, keepOut)) {
+        throw new Error("Label Element intersects a Keep-Out");
+      }
+    }
+  }
+};
+
+const renderKeepOutRects = (
+  template: LabelTemplate,
+  mode: "preview" | "print",
+) =>
+  template.keepOuts
+    .map((keepOut) =>
+      mode === "preview"
+        ? `<rect x="${keepOut.xMm}" y="${keepOut.yMm}" width="${keepOut.widthMm}" height="${keepOut.heightMm}" fill="#94a3b8" fill-opacity="0.35"/>`
+        : `<rect x="${keepOut.xMm}" y="${keepOut.yMm}" width="${keepOut.widthMm}" height="${keepOut.heightMm}" fill="#fff"/>`,
+    )
+    .join("");
+
+const wrapLabelFaceSvg = (
+  barcodeSvg: string,
+  template: LabelTemplate,
+  mode: "preview" | "print",
+) => {
+  if (template.keepOuts.length === 0) {
+    return barcodeSvg;
+  }
+
+  const { widthMm, heightMm } = template.stock;
+  const nestedBarcodeSvg = barcodeSvg.replace(
+    "<svg ",
+    `<svg x="0" y="0" width="${widthMm}" height="${heightMm}" `,
+  );
+
+  return `<svg class="internal-product-label-face" viewBox="0 0 ${widthMm} ${heightMm}" width="${widthMm}mm" height="${heightMm}mm" xmlns="http://www.w3.org/2000/svg">${nestedBarcodeSvg}${renderKeepOutRects(template, mode)}</svg>`;
+};
+
 export const buildInternalLabelPreview = (
   input: LabelPreviewInput,
 ): InternalLabelPreview => {
+  assertKeepOutsDoNotIntersectElements(input.template);
   const label = labelInputFromTemplate(input);
   const modulePattern = encodeEan13(label.productCode);
   const textAboveBarcode = label.includeProductName ? label.productName : null;
@@ -225,7 +268,7 @@ export const buildInternalLabelPreview = (
     ? formatSellingPrice(label.sellingPrice)
     : null;
   const viewBoxHeight = textBelowBarcode ? 94 : 84;
-  const svg = `<svg class="internal-product-label-barcode" role="img" aria-label="EAN-13 barcode ${label.productCode}" viewBox="0 0 ${EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2} ${viewBoxHeight}" preserveAspectRatio="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="${EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2}" height="${viewBoxHeight}" fill="#fff"/>${textAboveBarcode ? `<text class="product-name" font-size="7" font-family="Arial, sans-serif" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="11" text-anchor="middle">${escapeHtml(textAboveBarcode)}</text>` : ""}${renderBars(modulePattern)}<text class="human-readable-digits" font-size="6" font-family="monospace" letter-spacing="0.5" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="78" text-anchor="middle">${label.productCode}</text>${textBelowBarcode ? `<text class="selling-price" font-size="7" font-family="Arial, sans-serif" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="90" text-anchor="middle">${textBelowBarcode}</text>` : ""}</svg>`;
+  const barcodeSvg = `<svg class="internal-product-label-barcode" role="img" aria-label="EAN-13 barcode ${label.productCode}" viewBox="0 0 ${EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2} ${viewBoxHeight}" preserveAspectRatio="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="${EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2}" height="${viewBoxHeight}" fill="#fff"/>${textAboveBarcode ? `<text class="product-name" font-size="7" font-family="Arial, sans-serif" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="11" text-anchor="middle">${escapeHtml(textAboveBarcode)}</text>` : ""}${renderBars(modulePattern)}<text class="human-readable-digits" font-size="6" font-family="monospace" letter-spacing="0.5" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="78" text-anchor="middle">${label.productCode}</text>${textBelowBarcode ? `<text class="selling-price" font-size="7" font-family="Arial, sans-serif" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="90" text-anchor="middle">${textBelowBarcode}</text>` : ""}</svg>`;
 
   return {
     encodedCode: label.productCode,
@@ -240,12 +283,13 @@ export const buildInternalLabelPreview = (
     sellingPriceWarning: textBelowBarcode
       ? "Selling price is printed on this label. Reprint labels after any price change."
       : null,
-    svg,
+    svg: wrapLabelFaceSvg(barcodeSvg, input.template, "preview"),
+    printSvg: wrapLabelFaceSvg(barcodeSvg, input.template, "print"),
   };
 };
 
 const renderLabelCopy = (preview: InternalLabelPreview, copyNumber: number) =>
-  `<article class="internal-product-label" data-label-copy="${copyNumber}">${preview.svg}</article>`;
+  `<article class="internal-product-label" data-label-copy="${copyNumber}">${preview.printSvg}</article>`;
 
 export const sheetLabelCapacity = (template: LabelTemplate) => {
   if (template.stock.media === "sheet" && template.stock.sheet) {
@@ -273,18 +317,26 @@ const sheetPagePaddingMm = (template: LabelTemplate) => {
   };
 };
 
+const rollRowWidthMm = (template: LabelTemplate) => {
+  const { widthMm, labelsPerRow, horizontalGapMm } = template.stock;
+  return labelsPerRow * widthMm + Math.max(0, labelsPerRow - 1) * horizontalGapMm;
+};
+
 const documentStyles = (template: LabelTemplate) => {
   const { widthMm, heightMm, horizontalGapMm, verticalGapMm, media, sheet } =
     template.stock;
+  const rollRowWidth = rollRowWidthMm(template);
   const pageSize =
     media === "sheet" && sheet
       ? `${sheet.pageWidthMm}mm ${sheet.pageHeightMm}mm`
-      : `${widthMm}mm ${heightMm}mm`;
+      : `${rollRowWidth}mm ${heightMm}mm`;
   const padding = sheetPagePaddingMm(template);
   const layoutStyles =
     media === "sheet" && sheet
       ? `.internal-label-page { width: ${sheet.pageWidthMm}mm; min-height: ${sheet.pageHeightMm}mm; padding: ${padding.vertical}mm ${padding.horizontal}mm; display: grid; grid-template-columns: repeat(${sheet.columns}, ${widthMm}mm); grid-template-rows: repeat(${sheet.rows}, ${heightMm}mm); column-gap: ${horizontalGapMm}mm; row-gap: ${verticalGapMm}mm; page-break-after: always; } .internal-product-label { width: ${widthMm}mm; height: ${heightMm}mm; } .internal-label-empty { width: ${widthMm}mm; height: ${heightMm}mm; }`
-      : `.internal-label-page { width: ${widthMm}mm; height: ${heightMm}mm; page-break-after: always; } .internal-product-label { width: ${widthMm}mm; height: ${heightMm}mm; }`;
+      : template.stock.labelsPerRow > 1
+        ? `.internal-label-page { width: ${rollRowWidth}mm; height: ${heightMm}mm; display: grid; grid-template-columns: repeat(${template.stock.labelsPerRow}, ${widthMm}mm); column-gap: ${horizontalGapMm}mm; page-break-after: always; } .internal-product-label { width: ${widthMm}mm; height: ${heightMm}mm; } .internal-label-empty { width: ${widthMm}mm; height: ${heightMm}mm; }`
+        : `.internal-label-page { width: ${widthMm}mm; height: ${heightMm}mm; page-break-after: always; } .internal-product-label { width: ${widthMm}mm; height: ${heightMm}mm; }`;
 
   return `
   @page { size: ${pageSize}; margin: 0; }
@@ -319,7 +371,7 @@ const buildSheetPages = (
     startingPosition > capacity
   ) {
     throw new Error(
-      `A4 starting position must be between 1 and ${capacity}`,
+      `Sheet starting position must be between 1 and ${capacity}`,
     );
   }
 
@@ -349,11 +401,41 @@ const buildSheetPages = (
   return pages;
 };
 
-const buildRollPages = (preview: InternalLabelPreview, copyCount: number) =>
-  Array.from({ length: copyCount }, (_, index) => ({
-    occupiedPositions: [1],
-    html: `<section class="internal-label-page">${renderLabelCopy(preview, index + 1)}</section>`,
-  }));
+const buildRollPages = (
+  preview: InternalLabelPreview,
+  template: LabelTemplate,
+  copyCount: number,
+) => {
+  const capacity = template.stock.labelsPerRow;
+  if (capacity <= 1) {
+    return Array.from({ length: copyCount }, (_, index) => ({
+      occupiedPositions: [1],
+      html: `<section class="internal-label-page">${renderLabelCopy(preview, index + 1)}</section>`,
+    }));
+  }
+
+  const pages: Array<{ occupiedPositions: number[]; html: string }> = [];
+  let copyNumber = 1;
+
+  while (copyNumber <= copyCount) {
+    const occupiedPositions: number[] = [];
+    const slots = Array.from({ length: capacity }, (_, index) => {
+      if (copyNumber > copyCount) {
+        return '<div class="internal-label-empty" aria-hidden="true"></div>';
+      }
+
+      occupiedPositions.push(index + 1);
+      return renderLabelCopy(preview, copyNumber++);
+    }).join("");
+
+    pages.push({
+      occupiedPositions,
+      html: `<section class="internal-label-page">${slots}</section>`,
+    });
+  }
+
+  return pages;
+};
 
 export const buildInternalLabelDocument = (
   input: LabelDocumentInput,
@@ -366,7 +448,7 @@ export const buildInternalLabelDocument = (
   const pages =
     input.template.stock.media === "sheet"
       ? buildSheetPages(preview, input.template, input.job)
-      : buildRollPages(preview, input.job.copyCount);
+      : buildRollPages(preview, input.template, input.job.copyCount);
 
   return {
     pages: pages.map(({ occupiedPositions }) => ({ occupiedPositions })),

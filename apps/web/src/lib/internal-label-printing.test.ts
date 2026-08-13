@@ -198,6 +198,32 @@ describe("Internal Product Code label printing", () => {
     expect(document.html.match(/data-label-copy=/g)).toHaveLength(2);
   });
 
+  test("sizes a 1-across roll print page to the saved Label Stock millimetres", () => {
+    const document = buildInternalLabelDocument({
+      template: {
+        ...THERMAL_ROLL_LABEL_TEMPLATE,
+        stock: {
+          ...THERMAL_ROLL_LABEL_TEMPLATE.stock,
+          widthMm: 50,
+          heightMm: 40,
+        },
+      },
+      product: {
+        productCode: internalCode,
+        name: null,
+        price: null,
+      },
+      job: {
+        copyCount: 1,
+      },
+    });
+
+    expect(document.html).toContain("@page { size: 50mm 40mm;");
+    expect(document.html).toContain(
+      ".internal-product-label { width: 50mm; height: 40mm; }",
+    );
+  });
+
   test("requires a test print and an operator-confirmed production-like scan before labels can print", () => {
     expect(
       canPrintInternalLabels({ testPrinted: false, testScanConfirmed: false }),
@@ -229,5 +255,123 @@ describe("Internal Product Code label printing", () => {
         testScanConfirmed: true,
       }),
     ).toBe(true);
+  });
+
+  test("places 2-across roll labels using Label Stock millimetres and the horizontal gap", () => {
+    const document = buildInternalLabelDocument({
+      template: {
+        ...THERMAL_ROLL_LABEL_TEMPLATE,
+        name: "Two-across roll",
+        stock: {
+          widthMm: 40,
+          heightMm: 30,
+          labelsPerRow: 2,
+          horizontalGapMm: 2,
+          verticalGapMm: 3,
+          media: "roll",
+        },
+        elements: [],
+      },
+      product: {
+        productCode: internalCode,
+        name: null,
+        price: null,
+      },
+      job: {
+        copyCount: 3,
+      },
+    });
+
+    expect(document.html).toContain("@page { size: 82mm 30mm;");
+    expect(document.html).toContain(
+      "grid-template-columns: repeat(2, 40mm)",
+    );
+    expect(document.html).toContain("column-gap: 2mm");
+    expect(document.html).toContain(".internal-product-label { width: 40mm; height: 30mm; }");
+    expect(document.pages).toHaveLength(2);
+    expect(document.html.match(/data-label-copy=/g)).toHaveLength(3);
+  });
+
+  test("sizes a sheet print page from Label Stock millimetres and places labels with both gaps", () => {
+    const document = buildInternalLabelDocument({
+      template: {
+        ...A4_SHEET_LABEL_TEMPLATE,
+        name: "Custom sheet",
+        stock: {
+          widthMm: 60,
+          heightMm: 40,
+          labelsPerRow: 2,
+          horizontalGapMm: 4,
+          verticalGapMm: 3,
+          media: "sheet",
+          sheet: {
+            pageWidthMm: 210,
+            pageHeightMm: 297,
+            columns: 2,
+            rows: 6,
+          },
+        },
+      },
+      product: {
+        productCode: internalCode,
+        name: null,
+        price: null,
+      },
+      job: {
+        copyCount: 1,
+        startingPosition: 2,
+      },
+    });
+
+    expect(document.html).toContain("@page { size: 210mm 297mm;");
+    expect(document.html).toContain(
+      "grid-template-columns: repeat(2, 60mm)",
+    );
+    expect(document.html).toContain("grid-template-rows: repeat(6, 40mm)");
+    expect(document.html).toContain("column-gap: 4mm");
+    expect(document.html).toContain("row-gap: 3mm");
+    expect(document.pages[0]?.occupiedPositions).toEqual([2]);
+  });
+
+  test("shades Keep-Outs on the preview and leaves them undrawn in the print document", () => {
+    const template = {
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      keepOuts: [{ xMm: 0, yMm: 0, widthMm: 2, heightMm: 40 }],
+    };
+    const product = {
+      productCode: internalCode,
+      name: null,
+      price: null,
+    };
+    const preview = buildInternalLabelPreview({ template, product });
+    const document = buildInternalLabelDocument({
+      template,
+      product,
+      job: { copyCount: 1 },
+    });
+
+    expect(preview.svg).toContain('width="2" height="40"');
+    expect(preview.svg).toMatch(/fill-opacity="0\.\d+"/);
+    expect(document.html).toContain('width="2" height="40"');
+    expect(document.html).not.toMatch(/fill-opacity="0\.\d+"/);
+    expect(document.html).toContain('fill="#fff"');
+  });
+
+  test("rejects print when a Label Element intersects a Keep-Out", () => {
+    const template = {
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      keepOuts: [{ xMm: 0, yMm: 0, widthMm: 58, heightMm: 12 }],
+    };
+
+    expect(() =>
+      buildInternalLabelPreview({
+        template,
+        product: {
+          productCode: internalCode,
+          name: null,
+          price: null,
+        },
+      }),
+    ).toThrow("Label Element intersects a Keep-Out");
   });
 });

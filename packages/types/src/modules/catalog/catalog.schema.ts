@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
+import {
+  keepOutFitsStock,
+  millimetreBoxesIntersect,
+} from "./label-template-geometry";
 
 const nameSchema = z
   .string()
@@ -613,13 +617,35 @@ export const LabelElementSchema = z.discriminatedUnion("type", [
   LabelBoxElementSchema,
 ]);
 
-export const LabelTemplateDocumentSchema = z.object({
-  name: nameSchema,
-  status: LabelTemplateStatusSchema,
-  stock: LabelStockSchema,
-  keepOuts: z.array(LabelKeepOutSchema),
-  elements: z.array(LabelElementSchema),
-});
+export const LabelTemplateDocumentSchema = z
+  .object({
+    name: nameSchema,
+    status: LabelTemplateStatusSchema,
+    stock: LabelStockSchema,
+    keepOuts: z.array(LabelKeepOutSchema),
+    elements: z.array(LabelElementSchema),
+  })
+  .superRefine((value, ctx) => {
+    value.keepOuts.forEach((keepOut, keepOutIndex) => {
+      if (!keepOutFitsStock(keepOut, value.stock)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Keep-Out must fit on the Label Stock",
+          path: ["keepOuts", keepOutIndex],
+        });
+      }
+
+      value.elements.forEach((element, elementIndex) => {
+        if (millimetreBoxesIntersect(element, keepOut)) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Label Element intersects a Keep-Out",
+            path: ["elements", elementIndex],
+          });
+        }
+      });
+    });
+  });
 
 export const LabelTemplateDTOSchema = LabelTemplateDocumentSchema.extend({
   id: z.uuid("Invalid label template id"),
@@ -630,7 +656,7 @@ export const LabelTemplateDTOSchema = LabelTemplateDocumentSchema.extend({
   updatedAt: dtoDateSchema,
 });
 
-export const CreateLabelTemplateSchema = LabelTemplateDocumentSchema.extend({
+export const CreateLabelTemplateSchema = LabelTemplateDocumentSchema.safeExtend({
   status: LabelTemplateStatusSchema.optional(),
 });
 

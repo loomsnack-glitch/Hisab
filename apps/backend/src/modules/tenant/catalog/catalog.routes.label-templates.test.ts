@@ -59,4 +59,21 @@ describe("Label Template catalog routes", () => {
         const body = await response.json();
         expect(body.data.labelTemplates).toHaveLength(2);
     });
+
+    test("rejects a Label Template whose Label Elements intersect a Keep-Out", async () => {
+        const response = await catalogRoutes.request(
+            `http://localhost/${harness.organizationId}/label-templates`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ...A4_SHEET_LABEL_TEMPLATE,
+                    keepOuts: [{ xMm: 0, yMm: 0, widthMm: 70, heightMm: 12 }],
+                }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.createLabelTemplateRepo).not.toHaveBeenCalled();
+    });
 });

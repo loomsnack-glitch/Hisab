@@ -14,6 +14,7 @@ import {
   UpdateProductAddOnAttachmentSchema,
   UpdateProductSchema,
 } from "./catalog.schema";
+import { keepOutsFromContentInset } from "./label-template-geometry";
 import {
   A4_SHEET_LABEL_TEMPLATE,
   THERMAL_ROLL_LABEL_TEMPLATE,
@@ -471,5 +472,116 @@ describe("Label Template catalog contracts", () => {
     const result = UpdateLabelTemplateSchema.safeParse({ status: "inactive" });
 
     expect(result.success).toBe(true);
+  });
+
+  test("content-inset helper creates Keep-Out rectangles for a branded header", () => {
+    expect(
+      keepOutsFromContentInset(
+        { widthMm: 50, heightMm: 40 },
+        { topMm: 12, rightMm: 0, bottomMm: 0, leftMm: 0 },
+      ),
+    ).toEqual([{ xMm: 0, yMm: 0, widthMm: 50, heightMm: 12 }]);
+  });
+
+  test("content-inset helper creates Keep-Outs on each reserved side", () => {
+    expect(
+      keepOutsFromContentInset(
+        { widthMm: 50, heightMm: 40 },
+        { topMm: 12, rightMm: 5, bottomMm: 3, leftMm: 4 },
+      ),
+    ).toEqual([
+      { xMm: 0, yMm: 0, widthMm: 50, heightMm: 12 },
+      { xMm: 45, yMm: 0, widthMm: 5, heightMm: 40 },
+      { xMm: 0, yMm: 37, widthMm: 50, heightMm: 3 },
+      { xMm: 0, yMm: 0, widthMm: 4, heightMm: 40 },
+    ]);
+  });
+
+  test("create Label Template accepts 2-across roll Label Stock with millimetre gaps", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      name: "Two-across roll",
+      stock: {
+        widthMm: 40,
+        heightMm: 30,
+        labelsPerRow: 2,
+        horizontalGapMm: 2,
+        verticalGapMm: 3,
+        media: "roll",
+      },
+      elements: [],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.stock.labelsPerRow).toBe(2);
+      expect(result.data.stock.horizontalGapMm).toBe(2);
+      expect(result.data.stock.verticalGapMm).toBe(3);
+      expect(result.data.stock.media).toBe("roll");
+    }
+  });
+
+  test("create Label Template accepts sheet Label Stock with a page grid and gaps", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...A4_SHEET_LABEL_TEMPLATE,
+      name: "Custom sheet",
+      stock: {
+        widthMm: 60,
+        heightMm: 40,
+        labelsPerRow: 2,
+        horizontalGapMm: 4,
+        verticalGapMm: 3,
+        media: "sheet",
+        sheet: {
+          pageWidthMm: 210,
+          pageHeightMm: 297,
+          columns: 2,
+          rows: 6,
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.stock.sheet).toEqual({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        columns: 2,
+        rows: 6,
+      });
+      expect(result.data.stock.horizontalGapMm).toBe(4);
+    }
+  });
+
+  test("rejects a Label Element that intersects a Keep-Out", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      keepOuts: keepOutsFromContentInset(THERMAL_ROLL_LABEL_TEMPLATE.stock, {
+        topMm: 12,
+        rightMm: 0,
+        bottomMm: 0,
+        leftMm: 0,
+      }),
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts a Keep-Out that touches but does not overlap a Label Element", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      keepOuts: [{ xMm: 0, yMm: 0, widthMm: 2, heightMm: 40 }],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects a Keep-Out that does not fit on the Label Stock", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      keepOuts: [{ xMm: 50, yMm: 0, widthMm: 20, heightMm: 10 }],
+    });
+
+    expect(result.success).toBe(false);
   });
 });

@@ -28,11 +28,11 @@ import { catalogKeys } from "@/lib/query-keys";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
 const stockSummary = (template: LabelTemplateDTO) => {
-    const { widthMm, heightMm, media } = template.stock;
+    const { widthMm, heightMm, labelsPerRow, media } = template.stock;
     if (media === "sheet" && template.stock.sheet) {
-        return `${widthMm} × ${heightMm} mm · A4 ${template.stock.sheet.columns} × ${template.stock.sheet.rows}`;
+        return `${widthMm} × ${heightMm} mm · ${labelsPerRow}-across · sheet ${template.stock.sheet.columns} × ${template.stock.sheet.rows}`;
     }
-    return `${widthMm} × ${heightMm} mm · roll`;
+    return `${widthMm} × ${heightMm} mm · ${labelsPerRow}-across · roll`;
 };
 
 const DeleteLabelTemplateButton = ({
@@ -224,7 +224,7 @@ const LabelTemplatesPage = () => {
                                 </EmptyMedia>
                                 <EmptyTitle>No Label Templates yet</EmptyTitle>
                                 <EmptyDescription>
-                                    Create an A4 sheet or 58×40 mm thermal Label Template for this Organization.
+                                    Create a Label Template with millimetre Label Stock and Keep-Outs for this Organization.
                                 </EmptyDescription>
                             </EmptyHeader>
                             <EmptyContent>

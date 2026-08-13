@@ -187,4 +187,20 @@ describe("Label Template catalog service", () => {
     expect("deleteLabelTemplateForDevice" in catalogService).toBe(false);
     expect("getLabelTemplatesForDevice" in catalogService).toBe(false);
   });
+
+  test("rejects updating Keep-Outs that intersect existing Label Elements", async () => {
+    const response = await catalogService.updateLabelTemplate(
+      userId,
+      organizationId,
+      labelTemplateId,
+      {
+        keepOuts: [{ xMm: 0, yMm: 0, widthMm: 70, heightMm: 12 }],
+      },
+    );
+
+    expect(response.status).toBe("error");
+    expect(response.code).toBe(400);
+    expect(response.message).toBe("Label Element intersects a Keep-Out");
+    expect(updateLabelTemplateRepo).not.toHaveBeenCalled();
+  });
 });

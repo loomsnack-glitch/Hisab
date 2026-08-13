@@ -134,7 +134,7 @@ const InternalProductLabelDialog = ({
   const handleTestPrint = () => {
     if (!validStartingPosition) {
       toast.error(
-        `Choose an A4 starting position from 1 to ${sheetCapacity}`,
+        `Choose a sheet starting position from 1 to ${sheetCapacity}`,
       );
       return;
     }
@@ -239,7 +239,7 @@ const InternalProductLabelDialog = ({
               </label>
               {isSheet ? (
                 <label className="block space-y-1.5 text-sm font-medium">
-                  A4 starting position
+                  Sheet starting position
                   <Input
                     type="number"
                     min={1}

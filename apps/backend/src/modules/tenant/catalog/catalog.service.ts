@@ -1,5 +1,6 @@
 import {
   STATUS_CODES,
+  LabelTemplateDocumentSchema,
   type AddOnResponse,
   type AddOnsListResponse,
   type BundleProductResponse,
@@ -3435,6 +3436,26 @@ const getLabelTemplateForOrganization = async (
   return catalogRepository.getLabelTemplateById(organizationId, labelTemplateId);
 };
 
+const rejectInvalidLabelTemplateDocument = (document: {
+  name: string;
+  status: "active" | "inactive";
+  stock: CreateLabelTemplateSVC["stock"];
+  keepOuts: CreateLabelTemplateSVC["keepOuts"];
+  elements: CreateLabelTemplateSVC["elements"];
+}): ServiceResponse<null> | null => {
+  const parsed = LabelTemplateDocumentSchema.safeParse(document);
+  if (parsed.success) {
+    return null;
+  }
+
+  return {
+    status: "error",
+    message: parsed.error.issues[0]?.message ?? "Invalid Label Template",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+  };
+};
+
 export const getLabelTemplates = async (
   userId: string,
   organizationId: string,
@@ -3487,6 +3508,18 @@ export const createLabelTemplate = async (
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
+  }
+
+  const document = {
+    name: labelTemplateData.name,
+    status: labelTemplateData.status ?? "active",
+    stock: labelTemplateData.stock,
+    keepOuts: labelTemplateData.keepOuts,
+    elements: labelTemplateData.elements,
+  };
+  const invalidDocument = rejectInvalidLabelTemplateDocument(document);
+  if (invalidDocument) {
+    return invalidDocument;
   }
 
   const labelTemplate = await catalogRepository.createLabelTemplate({
@@ -3599,6 +3632,18 @@ export const updateLabelTemplate = async (
         code: STATUS_CODES.CONFLICT,
       };
     }
+  }
+
+  const document = {
+    name: nextName,
+    status: labelTemplateData.status ?? existing.status,
+    stock: labelTemplateData.stock ?? existing.stock,
+    keepOuts: labelTemplateData.keepOuts ?? existing.keepOuts,
+    elements: labelTemplateData.elements ?? existing.elements,
+  };
+  const invalidDocument = rejectInvalidLabelTemplateDocument(document);
+  if (invalidDocument) {
+    return invalidDocument;
   }
 
   const labelTemplate = await catalogRepository.updateLabelTemplate({
