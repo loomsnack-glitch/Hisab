@@ -27,6 +27,7 @@ import {
   decryptDeviceSecret,
   encryptDeviceSecret,
 } from "@/helpers/deviceSecret.helper";
+import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository";
 import * as organizationRepository from "./organization.repository";
 
 const normalizeOptionalText = (value?: string) => {
@@ -142,6 +143,15 @@ export const createOrganization = async (
       );
     if (!settings)
       throw new Error("Failed to create organization catalog settings");
+
+    const labelTemplates = await catalogRepository.seedDefaultLabelTemplates(
+      organization.id,
+      userId,
+      tx,
+    );
+    if (labelTemplates.length === 0) {
+      throw new Error("Failed to seed Label Templates");
+    }
   });
 
   if (!organization) {

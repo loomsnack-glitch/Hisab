@@ -5,7 +5,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Button } from "@repo/ui/components/button";
 import { cn } from "@repo/ui/lib/utils";
-import { Layers3, Package2, Puzzle } from "lucide-react";
+import { Layers3, Package2, Puzzle, Sticker } from "lucide-react";
 
 import { organizationKeys } from "@/lib/query-keys";
 
@@ -13,6 +13,7 @@ const tabs = [
     { label: "Products", path: "list", icon: Package2 },
     { label: "Categories", path: "categories", icon: Layers3 },
     { label: "Add-Ons", path: "add-ons", icon: Puzzle },
+    { label: "Labels", path: "label-templates", icon: Sticker },
 ] as const;
 
 const ProductsPage = () => {
@@ -64,7 +65,7 @@ const ProductsPage = () => {
         <div className="space-y-6">
             {/* Tab Navigation */}
             <div className="border-b border-border/60">
-                <nav className="grid grid-cols-3 w-full sm:flex sm:w-auto sm:justify-start gap-1" aria-label="Product navigation tabs">
+                <nav className="grid grid-cols-2 w-full sm:flex sm:w-auto sm:justify-start gap-1" aria-label="Product navigation tabs">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.path;

@@ -1,5 +1,7 @@
-import { useState } from "react";
-import type { ProductResponseDTO } from "@repo/types";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getLabelTemplates } from "@repo/services";
+import type { LabelTemplateDTO, ProductResponseDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -9,34 +11,32 @@ import {
   DialogTrigger,
 } from "@repo/ui/components/dialog";
 import { Input } from "@repo/ui/components/input";
+import { Spinner } from "@repo/ui/components/spinner";
 import { Barcode, Printer, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  A4_SHEET_LABEL_TEMPLATE,
-  THERMAL_ROLL_LABEL_TEMPLATE,
   buildInternalLabelPreview,
   canPrintInternalLabels,
+  labelPrintConfirmationKey,
   printInternalLabelDocument,
   sheetLabelCapacity,
 } from "@/lib/internal-label-printing";
+import { catalogKeys } from "@/lib/query-keys";
 
 type InternalProductLabelDialogProps = {
+  organizationId: string;
   product: ProductResponseDTO;
   trigger?: React.ReactElement;
 };
 
-const IN_CODE_LABEL_TEMPLATES = [
-  A4_SHEET_LABEL_TEMPLATE,
-  THERMAL_ROLL_LABEL_TEMPLATE,
-] as const;
-
 const InternalProductLabelDialog = ({
+  organizationId,
   product,
   trigger,
 }: InternalProductLabelDialogProps) => {
   const [open, setOpen] = useState(false);
-  const [templateName, setTemplateName] = useState(A4_SHEET_LABEL_TEMPLATE.name);
+  const [templateId, setTemplateId] = useState("");
   const [copyCount, setCopyCount] = useState("1");
   const [startingPosition, setStartingPosition] = useState("1");
   const [includeProductName, setIncludeProductName] = useState(true);
@@ -44,18 +44,48 @@ const InternalProductLabelDialog = ({
   const [testPrintedFor, setTestPrintedFor] = useState<string | null>(null);
   const [testScanConfirmed, setTestScanConfirmed] = useState(false);
 
+  const templatesQuery = useQuery({
+    queryKey: catalogKeys.labelTemplates(organizationId),
+    queryFn: () => getLabelTemplates(organizationId),
+    enabled: Boolean(organizationId) && open,
+  });
+
+  const activeTemplates = useMemo(() => {
+    const templates =
+      templatesQuery.data?.status === "success"
+        ? templatesQuery.data.data?.labelTemplates ?? []
+        : [];
+    return templates.filter((template) => template.status === "active");
+  }, [templatesQuery.data]);
+
+  useEffect(() => {
+    if (activeTemplates.length === 0) {
+      setTemplateId("");
+      return;
+    }
+
+    if (!activeTemplates.some((entry) => entry.id === templateId)) {
+      setTemplateId(activeTemplates[0]?.id ?? "");
+      setTestScanConfirmed(false);
+    }
+  }, [activeTemplates, templateId]);
+
   const productCode = product.productCode;
-  const template =
-    IN_CODE_LABEL_TEMPLATES.find((entry) => entry.name === templateName) ??
-    A4_SHEET_LABEL_TEMPLATE;
-  const sheetCapacity = sheetLabelCapacity(template);
-  const isSheet = template.stock.media === "sheet";
+  const template = activeTemplates.find((entry) => entry.id === templateId) ?? null;
+  const sheetCapacity = template ? sheetLabelCapacity(template) : 0;
+  const isSheet = template?.stock.media === "sheet";
   const labelProduct = {
     productCode: productCode ?? "",
     name: includeProductName ? product.name : null,
     price: includeSellingPrice ? product.price : null,
   };
-  const layoutSignature = `${template.name}:${includeProductName}:${includeSellingPrice}`;
+  const layoutSignature = template
+    ? labelPrintConfirmationKey({
+        templateId: template.id,
+        includeProductName,
+        includeSellingPrice,
+      })
+    : "";
   const testPrintedForCurrentLayout = testPrintedFor === layoutSignature;
   const parsedCopyCount = Number(copyCount);
   const parsedStartingPosition = Number(startingPosition);
@@ -68,11 +98,14 @@ const InternalProductLabelDialog = ({
     (Number.isInteger(parsedStartingPosition) &&
       parsedStartingPosition >= 1 &&
       parsedStartingPosition <= sheetCapacity);
-  const preview = buildInternalLabelPreview({
-    template,
-    product: labelProduct,
-  });
+  const preview = template
+    ? buildInternalLabelPreview({
+        template,
+        product: labelProduct,
+      })
+    : null;
   const printAllowed =
+    Boolean(template) &&
     validCopyCount &&
     validStartingPosition &&
     canPrintInternalLabels({
@@ -84,14 +117,19 @@ const InternalProductLabelDialog = ({
     return null;
   }
 
-  const printInput = (nextCopyCount: number) => ({
-    template,
-    product: labelProduct,
-    job: {
-      copyCount: nextCopyCount,
-      ...(isSheet ? { startingPosition: parsedStartingPosition } : {}),
-    },
-  });
+  const printInput = (nextCopyCount: number) => {
+    if (!template) {
+      return null;
+    }
+    return {
+      template,
+      product: labelProduct,
+      job: {
+        copyCount: nextCopyCount,
+        ...(isSheet ? { startingPosition: parsedStartingPosition } : {}),
+      },
+    };
+  };
 
   const handleTestPrint = () => {
     if (!validStartingPosition) {
@@ -101,8 +139,8 @@ const InternalProductLabelDialog = ({
       return;
     }
 
-    const printed = printInternalLabelDocument(printInput(1));
-    if (!printed) {
+    const input = printInput(1);
+    if (!input || !printInternalLabelDocument(input)) {
       toast.error("Unable to open the browser print dialog");
       return;
     }
@@ -119,7 +157,8 @@ const InternalProductLabelDialog = ({
       return;
     }
 
-    if (!printInternalLabelDocument(printInput(parsedCopyCount))) {
+    const input = printInput(parsedCopyCount);
+    if (!input || !printInternalLabelDocument(input)) {
       toast.error("Unable to open the browser print dialog");
       return;
     }
@@ -159,23 +198,33 @@ const InternalProductLabelDialog = ({
               </p>
             </div>
 
-            <label className="block space-y-1.5 text-sm font-medium">
-              Label layout
-              <select
-                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                value={template.name}
-                onChange={(event) => {
-                  setTemplateName(event.target.value);
-                  setTestScanConfirmed(false);
-                }}
-              >
-                {IN_CODE_LABEL_TEMPLATES.map((entry) => (
-                  <option key={entry.name} value={entry.name}>
-                    {entry.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {templatesQuery.isPending ? (
+              <div className="flex min-h-24 items-center justify-center">
+                <Spinner className="size-5 text-primary" />
+              </div>
+            ) : activeTemplates.length === 0 ? (
+              <p className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                No active Label Templates are available. Add or reactivate one in Label Templates.
+              </p>
+            ) : (
+              <label className="block space-y-1.5 text-sm font-medium">
+                Label Template
+                <select
+                  className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                  value={template?.id ?? ""}
+                  onChange={(event) => {
+                    setTemplateId(event.target.value);
+                    setTestScanConfirmed(false);
+                  }}
+                >
+                  {activeTemplates.map((entry: LabelTemplateDTO) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-1.5 text-sm font-medium">
@@ -228,9 +277,9 @@ const InternalProductLabelDialog = ({
                     setTestScanConfirmed(false);
                   }}
                 />
-                Show selling price ({preview.textBelowBarcode ?? "optional"})
+                Show selling price ({preview?.textBelowBarcode ?? "optional"})
               </label>
-              {preview.sellingPriceWarning ? (
+              {preview?.sellingPriceWarning ? (
                 <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
                   {preview.sellingPriceWarning}
                 </p>
@@ -256,6 +305,7 @@ const InternalProductLabelDialog = ({
                 variant="outline"
                 size="sm"
                 onClick={handleTestPrint}
+                disabled={!template}
               >
                 <Printer className="size-4" />
                 Test print one label
@@ -276,7 +326,7 @@ const InternalProductLabelDialog = ({
               </label>
               {!testPrintedForCurrentLayout ? (
                 <p className="text-xs text-muted-foreground">
-                  Test print this layout after changing layout or printed text.
+                  Test print this Label Template after changing template or printed text.
                 </p>
               ) : null}
             </div>
@@ -284,10 +334,16 @@ const InternalProductLabelDialog = ({
 
           <div className="space-y-2">
             <p className="text-sm font-medium">Preview</p>
-            <div
-              className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"
-              dangerouslySetInnerHTML={{ __html: preview.svg }}
-            />
+            {preview ? (
+              <div
+                className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"
+                dangerouslySetInnerHTML={{ __html: preview.svg }}
+              />
+            ) : (
+              <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-10 text-center text-xs text-muted-foreground">
+                Choose a Label Template to preview this Product.
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
               Black bars on white with the required EAN-13 quiet zones.
             </p>

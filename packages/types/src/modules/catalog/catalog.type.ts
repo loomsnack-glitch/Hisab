@@ -15,8 +15,11 @@ import type {
     CreateBundleProductSchema,
     CreateComboProductSchema,
     CreateCategorySchema,
+    CreateLabelTemplateSchema,
     CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
+    LabelTemplateDTOSchema,
+    LabelTemplateDocumentSchema,
     ProductAddOnAttachmentDTOSchema,
     ProductAddOnAttachmentResponseDTOSchema,
     ProductDTOSchema,
@@ -26,6 +29,7 @@ import type {
     UpdateBundleProductSchema,
     UpdateComboProductSchema,
     UpdateCategorySchema,
+    UpdateLabelTemplateSchema,
     UpdateProductAddOnAttachmentSchema,
     UpdateProductSchema,
 } from "./catalog.schema";
@@ -43,6 +47,8 @@ export type ComboChoiceOptionInput = z.infer<typeof ComboChoiceOptionInputSchema
 export type ComboChoiceGroupResponseDTO = z.infer<typeof ComboChoiceGroupResponseDTOSchema>;
 export type ComboChoiceOptionResponseDTO = z.infer<typeof ComboChoiceOptionResponseDTOSchema>;
 export type AddOnDTO = z.infer<typeof AddOnDTOSchema>;
+export type LabelTemplateDocument = z.infer<typeof LabelTemplateDocumentSchema>;
+export type LabelTemplateDTO = z.infer<typeof LabelTemplateDTOSchema>;
 export type ProductAddOnAttachmentDTO = z.infer<typeof ProductAddOnAttachmentDTOSchema>;
 export type ProductAddOnAttachmentResponseDTO = z.infer<typeof ProductAddOnAttachmentResponseDTOSchema>;
 export type CategoryStatus = CategoryDTO["status"];
@@ -50,6 +56,7 @@ export type ProductStatus = ProductDTO["status"];
 export type ProductType = ProductDTO["productType"];
 export type ProductCodeKind = NonNullable<ProductDTO["productCodeKind"]>;
 export type AddOnStatus = AddOnDTO["status"];
+export type LabelTemplateStatus = LabelTemplateDTO["status"];
 export type ProductAddOnAttachmentStatus = ProductAddOnAttachmentDTO["status"];
 
 export type CreateCategoryJSON = z.infer<typeof CreateCategorySchema>;
@@ -143,6 +150,36 @@ export type CreateComboChoiceOptionREPO = Pick<
     | "createdBy"
 >;
 
+export type CreateLabelTemplateJSON = z.infer<typeof CreateLabelTemplateSchema>;
+export type CreateLabelTemplateSVC = CreateLabelTemplateJSON;
+export type CreateLabelTemplateREPO = Pick<
+    LabelTemplateDTO,
+    | "id"
+    | "organizationId"
+    | "name"
+    | "status"
+    | "stock"
+    | "keepOuts"
+    | "elements"
+    | "createdBy"
+> & {
+    updatedBy?: string | null;
+};
+
+export type UpdateLabelTemplateJSON = z.infer<typeof UpdateLabelTemplateSchema>;
+export type UpdateLabelTemplateSVC = UpdateLabelTemplateJSON;
+export type UpdateLabelTemplateREPO = Pick<
+    LabelTemplateDTO,
+    | "id"
+    | "organizationId"
+    | "name"
+    | "status"
+    | "stock"
+    | "keepOuts"
+    | "elements"
+    | "updatedBy"
+>;
+
 export type CreateAddOnJSON = z.infer<typeof CreateAddOnSchema>;
 export type CreateAddOnSVC = CreateAddOnJSON;
 export type CreateAddOnREPO = Pick<
@@ -217,6 +254,14 @@ export type AddOnsListResponse = {
 
 export type AddOnResponse = {
     addOn: AddOnDTO;
+};
+
+export type LabelTemplatesListResponse = {
+    labelTemplates: LabelTemplateDTO[];
+};
+
+export type LabelTemplateResponse = {
+    labelTemplate: LabelTemplateDTO;
 };
 
 export type ProductAddOnAttachmentsListResponse = {

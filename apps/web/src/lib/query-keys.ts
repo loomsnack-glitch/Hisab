@@ -40,6 +40,8 @@ export const catalogKeys = {
       "selectable-product-attachments",
       organizationId,
     ] as const,
+  labelTemplates: (organizationId: string) =>
+    [...catalogKeys.all, "label-templates", organizationId] as const,
 };
 
 export const billingKeys = {

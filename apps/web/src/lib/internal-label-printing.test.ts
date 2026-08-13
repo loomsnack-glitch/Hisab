@@ -9,6 +9,7 @@ import {
   buildInternalLabelDocument,
   buildInternalLabelPreview,
   canPrintInternalLabels,
+  labelPrintConfirmationKey,
 } from "./internal-label-printing";
 
 const internalCode = "0400000000008";
@@ -206,6 +207,27 @@ describe("Internal Product Code label printing", () => {
     ).toBe(false);
     expect(
       canPrintInternalLabels({ testPrinted: true, testScanConfirmed: true }),
+    ).toBe(true);
+  });
+
+  test("changing the chosen Label Template produces a different test-scan confirmation key", () => {
+    const a4Key = labelPrintConfirmationKey({
+      templateId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      includeProductName: true,
+      includeSellingPrice: false,
+    });
+    const thermalKey = labelPrintConfirmationKey({
+      templateId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      includeProductName: true,
+      includeSellingPrice: false,
+    });
+
+    expect(a4Key).not.toBe(thermalKey);
+    expect(
+      canPrintInternalLabels({
+        testPrinted: true,
+        testScanConfirmed: true,
+      }),
     ).toBe(true);
   });
 });

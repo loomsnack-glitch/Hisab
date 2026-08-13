@@ -463,6 +463,197 @@ export const UpdateAddOnSchema = z
     },
   );
 
+export const LabelTemplateStatusSchema = z.enum(["active", "inactive"]);
+export const LabelStockMediaSchema = z.enum(["sheet", "roll"]);
+export const LabelRotationDegSchema = z.union([
+  z.literal(0),
+  z.literal(90),
+  z.literal(180),
+  z.literal(270),
+]);
+export const LabelTextBindingSchema = z.enum([
+  "product.name",
+  "product.productCode",
+  "product.price",
+  "productLabel.mrp",
+  "productLabel.ingredients",
+  "productLabel.netWeight",
+  "productLabel.unitSellingPriceText",
+  "job.packedDate",
+  "job.expiryDate",
+  "job.batchNumber",
+]);
+export const LabelBarcodeSymbologySchema = z.enum(["ean13", "code128"]);
+
+const millimetreSizeSchema = z
+  .number({ error: "Size in millimetres is required" })
+  .finite("Size in millimetres must be a valid number")
+  .positive("Size in millimetres must be greater than 0");
+const millimetreGapSchema = z
+  .number({ error: "Gap in millimetres is required" })
+  .finite("Gap in millimetres must be a valid number")
+  .min(0, "Gap in millimetres must be 0 or more");
+const millimetrePositionSchema = z
+  .number({ error: "Position in millimetres is required" })
+  .finite("Position in millimetres must be a valid number");
+const labelsPerRowSchema = z
+  .number({ error: "Labels per row is required" })
+  .int("Labels per row must be a whole number")
+  .min(1, "Labels per row must be at least 1");
+const sheetCountSchema = z
+  .number({ error: "Sheet count is required" })
+  .int("Sheet count must be a whole number")
+  .min(1, "Sheet count must be at least 1");
+
+export const LabelStockSheetSchema = z.object({
+  pageWidthMm: millimetreSizeSchema,
+  pageHeightMm: millimetreSizeSchema,
+  columns: sheetCountSchema,
+  rows: sheetCountSchema,
+});
+
+export const LabelStockSchema = z
+  .object({
+    widthMm: millimetreSizeSchema,
+    heightMm: millimetreSizeSchema,
+    labelsPerRow: labelsPerRowSchema,
+    horizontalGapMm: millimetreGapSchema,
+    verticalGapMm: millimetreGapSchema,
+    media: LabelStockMediaSchema,
+    sheet: LabelStockSheetSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.media === "sheet" && value.sheet === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Sheet Label Stock must define page size and row/column counts",
+        path: ["sheet"],
+      });
+    }
+    if (value.media === "roll" && value.sheet !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Roll Label Stock cannot define a sheet grid",
+        path: ["sheet"],
+      });
+    }
+  });
+
+export const LabelKeepOutSchema = z.object({
+  xMm: millimetrePositionSchema,
+  yMm: millimetrePositionSchema,
+  widthMm: millimetreSizeSchema,
+  heightMm: millimetreSizeSchema,
+});
+
+const labelElementBoxSchema = z.object({
+  id: z.string().trim().min(1, "Label Element id is required"),
+  xMm: millimetrePositionSchema,
+  yMm: millimetrePositionSchema,
+  widthMm: millimetreSizeSchema,
+  heightMm: millimetreSizeSchema,
+  rotationDeg: LabelRotationDegSchema,
+});
+
+export const LabelTextElementSchema = labelElementBoxSchema.extend({
+  type: z.literal("text"),
+  text: z
+    .object({
+      source: z.enum(["static", "binding"]),
+      staticValue: z.string().optional(),
+      binding: LabelTextBindingSchema.optional(),
+      fontSizeMm: millimetreSizeSchema,
+      fontWeight: z.enum(["normal", "bold"]),
+      align: z.enum(["left", "center", "right"]),
+    })
+    .superRefine((value, ctx) => {
+      if (value.source === "binding" && value.binding === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Bound text must include a binding",
+          path: ["binding"],
+        });
+      }
+      if (value.source === "static" && (value.staticValue ?? "").length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Static text must include a value",
+          path: ["staticValue"],
+        });
+      }
+    }),
+});
+
+export const LabelBarcodeElementSchema = labelElementBoxSchema.extend({
+  type: z.literal("barcode"),
+  barcode: z.object({
+    symbology: LabelBarcodeSymbologySchema,
+    showHumanDigits: z.boolean(),
+  }),
+});
+
+export const LabelTableElementSchema = labelElementBoxSchema.extend({
+  type: z.literal("table"),
+  table: z.object({
+    binding: z.literal("productLabel.nutrition"),
+  }),
+});
+
+export const LabelBoxElementSchema = labelElementBoxSchema.extend({
+  type: z.literal("box"),
+  box: z.object({
+    strokeWidthMm: millimetreSizeSchema,
+  }),
+});
+
+export const LabelElementSchema = z.discriminatedUnion("type", [
+  LabelTextElementSchema,
+  LabelBarcodeElementSchema,
+  LabelTableElementSchema,
+  LabelBoxElementSchema,
+]);
+
+export const LabelTemplateDocumentSchema = z.object({
+  name: nameSchema,
+  status: LabelTemplateStatusSchema,
+  stock: LabelStockSchema,
+  keepOuts: z.array(LabelKeepOutSchema),
+  elements: z.array(LabelElementSchema),
+});
+
+export const LabelTemplateDTOSchema = LabelTemplateDocumentSchema.extend({
+  id: z.uuid("Invalid label template id"),
+  organizationId: z.uuid("Invalid organization id"),
+  createdBy: z.uuid("Invalid creator id"),
+  updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+});
+
+export const CreateLabelTemplateSchema = LabelTemplateDocumentSchema.extend({
+  status: LabelTemplateStatusSchema.optional(),
+});
+
+export const UpdateLabelTemplateSchema = z
+  .object({
+    name: nameSchema.optional(),
+    status: LabelTemplateStatusSchema.optional(),
+    stock: LabelStockSchema.optional(),
+    keepOuts: z.array(LabelKeepOutSchema).optional(),
+    elements: z.array(LabelElementSchema).optional(),
+  })
+  .refine(
+    (value) =>
+      value.name !== undefined ||
+      value.status !== undefined ||
+      value.stock !== undefined ||
+      value.keepOuts !== undefined ||
+      value.elements !== undefined,
+    {
+      message: "At least one field is required",
+    },
+  );
+
 export const CreateProductAddOnAttachmentSchema = z.object({
   addOnId: z.uuid("Invalid add-on id"),
   selectionCap: selectionCapSchema.optional(),

@@ -349,6 +349,7 @@ const ProductsListPage = () => {
                                                 ) : null}
                                                 {barcodeScanningEnabled && product.productCodeKind === "internal_rcn" ? (
                                                     <InternalProductLabelDialog
+                                                        organizationId={organizationId}
                                                         product={product}
                                                         trigger={
                                                             <Button

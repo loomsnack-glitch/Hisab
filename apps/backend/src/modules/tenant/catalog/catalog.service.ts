@@ -11,9 +11,12 @@ import {
   type CreateBundleProductSVC,
   type CreateComboProductSVC,
   type CreateCategorySVC,
+  type CreateLabelTemplateSVC,
   type CreateProductAddOnAttachmentSVC,
   type CreateProductSVC,
   type DeviceSessionDTO,
+  type LabelTemplateResponse,
+  type LabelTemplatesListResponse,
   type ProductAddOnAttachmentResponse,
   type ProductAddOnAttachmentResponseDTO,
   type ProductAddOnAttachmentsListResponse,
@@ -28,6 +31,7 @@ import {
   type UpdateBundleProductSVC,
   type UpdateCategorySVC,
   type UpdateComboProductSVC,
+  type UpdateLabelTemplateSVC,
   type UpdateProductAddOnAttachmentSVC,
   type UpdateProductSVC,
   normalizeProductCodeInput,
@@ -3420,6 +3424,283 @@ export const deleteProductAddOnAttachment = async (
     status: "success",
     data: { attachment: existingAttachment },
     message: "Product add-on attachment deleted successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+const getLabelTemplateForOrganization = async (
+  organizationId: string,
+  labelTemplateId: string,
+) => {
+  return catalogRepository.getLabelTemplateById(organizationId, labelTemplateId);
+};
+
+export const getLabelTemplates = async (
+  userId: string,
+  organizationId: string,
+): Promise<ServiceResponse<LabelTemplatesListResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const labelTemplates =
+    await catalogRepository.getLabelTemplatesByOrganizationId(organizationId);
+  return {
+    status: "success",
+    data: { labelTemplates },
+    message: "Label Templates fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const createLabelTemplate = async (
+  userId: string,
+  organizationId: string,
+  labelTemplateData: CreateLabelTemplateSVC,
+): Promise<ServiceResponse<LabelTemplateResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const alreadyExists =
+    await catalogRepository.labelTemplateNameExistsInOrganization(
+      organizationId,
+      labelTemplateData.name,
+    );
+  if (alreadyExists) {
+    return {
+      status: "error",
+      message:
+        "Label Template with the same name already exists in this organization",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  const labelTemplate = await catalogRepository.createLabelTemplate({
+    id: crypto.randomUUID(),
+    organizationId,
+    name: labelTemplateData.name,
+    status: labelTemplateData.status ?? "active",
+    stock: labelTemplateData.stock,
+    keepOuts: labelTemplateData.keepOuts,
+    elements: labelTemplateData.elements,
+    createdBy: userId,
+  });
+
+  if (!labelTemplate) {
+    return {
+      status: "error",
+      message: "Failed to create Label Template",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { labelTemplate },
+    message: "Label Template created successfully",
+    code: STATUS_CODES.CREATED,
+  };
+};
+
+export const getLabelTemplateDetails = async (
+  userId: string,
+  organizationId: string,
+  labelTemplateId: string,
+): Promise<ServiceResponse<LabelTemplateResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const labelTemplate = await getLabelTemplateForOrganization(
+    organizationId,
+    labelTemplateId,
+  );
+  if (!labelTemplate) {
+    return {
+      status: "error",
+      message: "Label Template not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { labelTemplate },
+    message: "Label Template fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const updateLabelTemplate = async (
+  userId: string,
+  organizationId: string,
+  labelTemplateId: string,
+  labelTemplateData: UpdateLabelTemplateSVC,
+): Promise<ServiceResponse<LabelTemplateResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const existing = await getLabelTemplateForOrganization(
+    organizationId,
+    labelTemplateId,
+  );
+  if (!existing) {
+    return {
+      status: "error",
+      message: "Label Template not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const nextName = labelTemplateData.name ?? existing.name;
+  if (nextName.toLowerCase() !== existing.name.toLowerCase()) {
+    const alreadyExists =
+      await catalogRepository.labelTemplateNameExistsInOrganization(
+        organizationId,
+        nextName,
+        labelTemplateId,
+      );
+    if (alreadyExists) {
+      return {
+        status: "error",
+        message:
+          "Label Template with the same name already exists in this organization",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+  }
+
+  const labelTemplate = await catalogRepository.updateLabelTemplate({
+    id: labelTemplateId,
+    organizationId,
+    name: nextName,
+    status: labelTemplateData.status ?? existing.status,
+    stock: labelTemplateData.stock ?? existing.stock,
+    keepOuts: labelTemplateData.keepOuts ?? existing.keepOuts,
+    elements: labelTemplateData.elements ?? existing.elements,
+    updatedBy: userId,
+  });
+
+  if (!labelTemplate) {
+    return {
+      status: "error",
+      message: "Failed to update Label Template",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { labelTemplate },
+    message: "Label Template updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const deleteLabelTemplate = async (
+  userId: string,
+  organizationId: string,
+  labelTemplateId: string,
+): Promise<ServiceResponse<LabelTemplateResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const existing = await getLabelTemplateForOrganization(
+    organizationId,
+    labelTemplateId,
+  );
+  if (!existing) {
+    return {
+      status: "error",
+      message: "Label Template not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const deleted = await catalogRepository.deleteLabelTemplate(
+    organizationId,
+    labelTemplateId,
+  );
+  if (!deleted) {
+    return {
+      status: "error",
+      message: "Failed to delete Label Template",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { labelTemplate: deleted },
+    message: "Label Template deleted successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const seedDefaultLabelTemplates = async (
+  userId: string,
+  organizationId: string,
+): Promise<ServiceResponse<LabelTemplatesListResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const labelTemplates = await catalogRepository.seedDefaultLabelTemplates(
+    organizationId,
+    userId,
+  );
+
+  return {
+    status: "success",
+    data: { labelTemplates },
+    message: "Label Templates seeded successfully",
     code: STATUS_CODES.SUCCESS,
   };
 };

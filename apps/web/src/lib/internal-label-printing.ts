@@ -1,92 +1,17 @@
+import {
+  A4_SHEET_LABEL_TEMPLATE,
+  THERMAL_ROLL_LABEL_TEMPLATE,
+} from "@repo/types";
+import type { LabelTemplateDocument } from "@repo/types";
+
 export const EAN13_MODULE_COUNT = 95;
 export const EAN13_QUIET_ZONE_MODULES = 11;
-export const A4_LABEL_COLUMNS = 3;
-export const A4_LABEL_ROWS = 8;
+export const A4_LABEL_COLUMNS = A4_SHEET_LABEL_TEMPLATE.stock.sheet?.columns ?? 3;
+export const A4_LABEL_ROWS = A4_SHEET_LABEL_TEMPLATE.stock.sheet?.rows ?? 8;
 export const A4_LABEL_CAPACITY = A4_LABEL_COLUMNS * A4_LABEL_ROWS;
 
-export type LabelRotationDeg = 0 | 90 | 180 | 270;
-
-export type LabelStock = {
-  widthMm: number;
-  heightMm: number;
-  labelsPerRow: number;
-  horizontalGapMm: number;
-  verticalGapMm: number;
-  media: "sheet" | "roll";
-  sheet?: {
-    pageWidthMm: number;
-    pageHeightMm: number;
-    columns: number;
-    rows: number;
-  };
-};
-
-export type LabelKeepOut = {
-  xMm: number;
-  yMm: number;
-  widthMm: number;
-  heightMm: number;
-};
-
-export type LabelElement =
-  | {
-      id: string;
-      type: "text";
-      xMm: number;
-      yMm: number;
-      widthMm: number;
-      heightMm: number;
-      rotationDeg: LabelRotationDeg;
-      text: {
-        source: "static" | "binding";
-        staticValue?: string;
-        binding?: string;
-        fontSizeMm: number;
-        fontWeight: "normal" | "bold";
-        align: "left" | "center" | "right";
-      };
-    }
-  | {
-      id: string;
-      type: "barcode";
-      xMm: number;
-      yMm: number;
-      widthMm: number;
-      heightMm: number;
-      rotationDeg: LabelRotationDeg;
-      barcode: {
-        symbology: "ean13" | "code128";
-        showHumanDigits: boolean;
-      };
-    }
-  | {
-      id: string;
-      type: "table";
-      xMm: number;
-      yMm: number;
-      widthMm: number;
-      heightMm: number;
-      rotationDeg: LabelRotationDeg;
-      table: { binding: "productLabel.nutrition" };
-    }
-  | {
-      id: string;
-      type: "box";
-      xMm: number;
-      yMm: number;
-      widthMm: number;
-      heightMm: number;
-      rotationDeg: LabelRotationDeg;
-      box: { strokeWidthMm: number };
-    };
-
-export type LabelTemplate = {
-  name: string;
-  status: "active" | "inactive";
-  stock: LabelStock;
-  keepOuts: LabelKeepOut[];
-  elements: LabelElement[];
-};
+export type LabelTemplate = LabelTemplateDocument;
+export { A4_SHEET_LABEL_TEMPLATE, THERMAL_ROLL_LABEL_TEMPLATE };
 
 export type LabelProductInput = {
   productCode: string;
@@ -97,134 +22,6 @@ export type LabelProductInput = {
 export type LabelJobInput = {
   copyCount: number;
   startingPosition?: number;
-};
-
-export const A4_SHEET_LABEL_TEMPLATE: LabelTemplate = {
-  name: "A4 sheet (3 × 8 labels)",
-  status: "active",
-  stock: {
-    widthMm: 70,
-    heightMm: 35,
-    labelsPerRow: A4_LABEL_COLUMNS,
-    horizontalGapMm: 0,
-    verticalGapMm: 0,
-    media: "sheet",
-    sheet: {
-      pageWidthMm: 210,
-      pageHeightMm: 297,
-      columns: A4_LABEL_COLUMNS,
-      rows: A4_LABEL_ROWS,
-    },
-  },
-  keepOuts: [],
-  elements: [
-    {
-      id: "product-name",
-      type: "text",
-      xMm: 2,
-      yMm: 1,
-      widthMm: 66,
-      heightMm: 5,
-      rotationDeg: 0,
-      text: {
-        source: "binding",
-        binding: "product.name",
-        fontSizeMm: 2.5,
-        fontWeight: "bold",
-        align: "center",
-      },
-    },
-    {
-      id: "product-code-barcode",
-      type: "barcode",
-      xMm: 3,
-      yMm: 6.5,
-      widthMm: 64,
-      heightMm: 22,
-      rotationDeg: 0,
-      barcode: {
-        symbology: "ean13",
-        showHumanDigits: true,
-      },
-    },
-    {
-      id: "selling-price",
-      type: "text",
-      xMm: 2,
-      yMm: 29,
-      widthMm: 66,
-      heightMm: 5,
-      rotationDeg: 0,
-      text: {
-        source: "binding",
-        binding: "product.price",
-        fontSizeMm: 2.5,
-        fontWeight: "bold",
-        align: "center",
-      },
-    },
-  ],
-};
-
-export const THERMAL_ROLL_LABEL_TEMPLATE: LabelTemplate = {
-  name: "Thermal label (58 × 40 mm)",
-  status: "active",
-  stock: {
-    widthMm: 58,
-    heightMm: 40,
-    labelsPerRow: 1,
-    horizontalGapMm: 0,
-    verticalGapMm: 0,
-    media: "roll",
-  },
-  keepOuts: [],
-  elements: [
-    {
-      id: "product-name",
-      type: "text",
-      xMm: 2,
-      yMm: 1.5,
-      widthMm: 54,
-      heightMm: 5.5,
-      rotationDeg: 0,
-      text: {
-        source: "binding",
-        binding: "product.name",
-        fontSizeMm: 2.5,
-        fontWeight: "bold",
-        align: "center",
-      },
-    },
-    {
-      id: "product-code-barcode",
-      type: "barcode",
-      xMm: 2.5,
-      yMm: 7.5,
-      widthMm: 53,
-      heightMm: 25,
-      rotationDeg: 0,
-      barcode: {
-        symbology: "ean13",
-        showHumanDigits: true,
-      },
-    },
-    {
-      id: "selling-price",
-      type: "text",
-      xMm: 2,
-      yMm: 33.5,
-      widthMm: 54,
-      heightMm: 5.5,
-      rotationDeg: 0,
-      text: {
-        source: "binding",
-        binding: "product.price",
-        fontSizeMm: 2.5,
-        fontWeight: "bold",
-        align: "center",
-      },
-    },
-  ],
 };
 
 type Ean13Parity = "L" | "G";
@@ -581,6 +378,13 @@ export const canPrintInternalLabels = (input: {
   testPrinted: boolean;
   testScanConfirmed: boolean;
 }) => input.testPrinted && input.testScanConfirmed;
+
+export const labelPrintConfirmationKey = (input: {
+  templateId: string;
+  includeProductName: boolean;
+  includeSellingPrice: boolean;
+}) =>
+  `${input.templateId}:${input.includeProductName}:${input.includeSellingPrice}`;
 
 /** Opens an isolated browser print document; receipt printing has no dependency on this path. */
 export const printInternalLabelDocument = (

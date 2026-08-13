@@ -3,15 +3,21 @@ import {
   CreateAddOnSchema,
   CreateBundleProductSchema,
   CreateComboProductSchema,
+  CreateLabelTemplateSchema,
   CreateProductAddOnAttachmentSchema,
   CreateProductSchema,
   ProductDTOSchema,
   ProductResponseDTOSchema,
   UpdateAddOnSchema,
   UpdateBundleProductSchema,
+  UpdateLabelTemplateSchema,
   UpdateProductAddOnAttachmentSchema,
   UpdateProductSchema,
 } from "./catalog.schema";
+import {
+  A4_SHEET_LABEL_TEMPLATE,
+  THERMAL_ROLL_LABEL_TEMPLATE,
+} from "./seeded-label-templates";
 
 describe("Add-On catalog contracts", () => {
   test("create add-on accepts name, price, discount, and status", () => {
@@ -389,5 +395,81 @@ describe("Product Code catalog contracts", () => {
         productCodeKind: null,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("Label Template catalog contracts", () => {
+  test("create Label Template accepts the seeded A4 sheet design", () => {
+    const result = CreateLabelTemplateSchema.safeParse(A4_SHEET_LABEL_TEMPLATE);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe("A4 sheet (3 × 8 labels)");
+      expect(result.data.stock.media).toBe("sheet");
+      expect(result.data.stock.sheet?.columns).toBe(3);
+      expect(result.data.stock.sheet?.rows).toBe(8);
+      expect(result.data.stock.widthMm).toBe(70);
+      expect(result.data.stock.heightMm).toBe(35);
+    }
+  });
+
+  test("create Label Template accepts the seeded 58×40 mm thermal design", () => {
+    const result = CreateLabelTemplateSchema.safeParse(
+      THERMAL_ROLL_LABEL_TEMPLATE,
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe("Thermal label (58 × 40 mm)");
+      expect(result.data.stock.media).toBe("roll");
+      expect(result.data.stock.widthMm).toBe(58);
+      expect(result.data.stock.heightMm).toBe(40);
+      expect(result.data.stock.labelsPerRow).toBe(1);
+      expect(result.data.stock.sheet).toBeUndefined();
+    }
+  });
+
+  test("rejects an empty Label Template name", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...A4_SHEET_LABEL_TEMPLATE,
+      name: "   ",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects unknown Label Element bindings", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...A4_SHEET_LABEL_TEMPLATE,
+      elements: [
+        {
+          ...A4_SHEET_LABEL_TEMPLATE.elements[0],
+          text: {
+            ...A4_SHEET_LABEL_TEMPLATE.elements[0]?.text,
+            binding: "product.unknownField",
+          },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects invalid millimetre Label Stock", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      stock: {
+        ...THERMAL_ROLL_LABEL_TEMPLATE.stock,
+        widthMm: 0,
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("update Label Template accepts deactivation", () => {
+    const result = UpdateLabelTemplateSchema.safeParse({ status: "inactive" });
+
+    expect(result.success).toBe(true);
   });
 });
