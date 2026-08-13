@@ -13,11 +13,12 @@ import { Barcode, Printer, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  A4_LABEL_CAPACITY,
+  A4_SHEET_LABEL_TEMPLATE,
+  THERMAL_ROLL_LABEL_TEMPLATE,
   buildInternalLabelPreview,
   canPrintInternalLabels,
   printInternalLabelDocument,
-  type InternalLabelLayout,
+  sheetLabelCapacity,
 } from "@/lib/internal-label-printing";
 
 type InternalProductLabelDialogProps = {
@@ -25,12 +26,17 @@ type InternalProductLabelDialogProps = {
   trigger?: React.ReactElement;
 };
 
+const IN_CODE_LABEL_TEMPLATES = [
+  A4_SHEET_LABEL_TEMPLATE,
+  THERMAL_ROLL_LABEL_TEMPLATE,
+] as const;
+
 const InternalProductLabelDialog = ({
   product,
   trigger,
 }: InternalProductLabelDialogProps) => {
   const [open, setOpen] = useState(false);
-  const [layout, setLayout] = useState<InternalLabelLayout>("a4");
+  const [templateName, setTemplateName] = useState(A4_SHEET_LABEL_TEMPLATE.name);
   const [copyCount, setCopyCount] = useState("1");
   const [startingPosition, setStartingPosition] = useState("1");
   const [includeProductName, setIncludeProductName] = useState(true);
@@ -39,14 +45,17 @@ const InternalProductLabelDialog = ({
   const [testScanConfirmed, setTestScanConfirmed] = useState(false);
 
   const productCode = product.productCode;
-  const labelInput = {
+  const template =
+    IN_CODE_LABEL_TEMPLATES.find((entry) => entry.name === templateName) ??
+    A4_SHEET_LABEL_TEMPLATE;
+  const sheetCapacity = sheetLabelCapacity(template);
+  const isSheet = template.stock.media === "sheet";
+  const labelProduct = {
     productCode: productCode ?? "",
-    productName: product.name,
-    sellingPrice: product.price,
-    includeProductName,
-    includeSellingPrice,
+    name: includeProductName ? product.name : null,
+    price: includeSellingPrice ? product.price : null,
   };
-  const layoutSignature = `${layout}:${includeProductName}:${includeSellingPrice}`;
+  const layoutSignature = `${template.name}:${includeProductName}:${includeSellingPrice}`;
   const testPrintedForCurrentLayout = testPrintedFor === layoutSignature;
   const parsedCopyCount = Number(copyCount);
   const parsedStartingPosition = Number(startingPosition);
@@ -55,11 +64,14 @@ const InternalProductLabelDialog = ({
     parsedCopyCount >= 1 &&
     parsedCopyCount <= 1_000;
   const validStartingPosition =
-    layout !== "a4" ||
+    !isSheet ||
     (Number.isInteger(parsedStartingPosition) &&
       parsedStartingPosition >= 1 &&
-      parsedStartingPosition <= A4_LABEL_CAPACITY);
-  const preview = buildInternalLabelPreview(labelInput);
+      parsedStartingPosition <= sheetCapacity);
+  const preview = buildInternalLabelPreview({
+    template,
+    product: labelProduct,
+  });
   const printAllowed =
     validCopyCount &&
     validStartingPosition &&
@@ -73,16 +85,18 @@ const InternalProductLabelDialog = ({
   }
 
   const printInput = (nextCopyCount: number) => ({
-    layout,
-    copyCount: nextCopyCount,
-    ...(layout === "a4" ? { startingPosition: parsedStartingPosition } : {}),
-    label: labelInput,
+    template,
+    product: labelProduct,
+    job: {
+      copyCount: nextCopyCount,
+      ...(isSheet ? { startingPosition: parsedStartingPosition } : {}),
+    },
   });
 
   const handleTestPrint = () => {
     if (!validStartingPosition) {
       toast.error(
-        `Choose an A4 starting position from 1 to ${A4_LABEL_CAPACITY}`,
+        `Choose an A4 starting position from 1 to ${sheetCapacity}`,
       );
       return;
     }
@@ -149,14 +163,17 @@ const InternalProductLabelDialog = ({
               Label layout
               <select
                 className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                value={layout}
+                value={template.name}
                 onChange={(event) => {
-                  setLayout(event.target.value as InternalLabelLayout);
+                  setTemplateName(event.target.value);
                   setTestScanConfirmed(false);
                 }}
               >
-                <option value="a4">A4 sheet (3 × 8 labels)</option>
-                <option value="thermal">Thermal label (58 × 40 mm)</option>
+                {IN_CODE_LABEL_TEMPLATES.map((entry) => (
+                  <option key={entry.name} value={entry.name}>
+                    {entry.name}
+                  </option>
+                ))}
               </select>
             </label>
 
@@ -171,20 +188,20 @@ const InternalProductLabelDialog = ({
                   onChange={(event) => setCopyCount(event.target.value)}
                 />
               </label>
-              {layout === "a4" ? (
+              {isSheet ? (
                 <label className="block space-y-1.5 text-sm font-medium">
                   A4 starting position
                   <Input
                     type="number"
                     min={1}
-                    max={A4_LABEL_CAPACITY}
+                    max={sheetCapacity}
                     value={startingPosition}
                     onChange={(event) =>
                       setStartingPosition(event.target.value)
                     }
                   />
                   <span className="block text-xs font-normal text-muted-foreground">
-                    1–{A4_LABEL_CAPACITY}; use this for partially used sheets.
+                    1–{sheetCapacity}; use this for partially used sheets.
                   </span>
                 </label>
               ) : null}

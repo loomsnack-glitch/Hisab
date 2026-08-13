@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 
 import {
   A4_LABEL_CAPACITY,
+  A4_SHEET_LABEL_TEMPLATE,
   EAN13_MODULE_COUNT,
   EAN13_QUIET_ZONE_MODULES,
+  THERMAL_ROLL_LABEL_TEMPLATE,
   buildInternalLabelDocument,
   buildInternalLabelPreview,
   canPrintInternalLabels,
@@ -14,11 +16,12 @@ const internalCode = "0400000000008";
 describe("Internal Product Code label printing", () => {
   test("renders the exact 13-digit Internal Product Code as a black EAN-13 barcode with quiet zones and readable digits", () => {
     const preview = buildInternalLabelPreview({
-      productCode: internalCode,
-      productName: "House Blend Tea",
-      sellingPrice: 125,
-      includeProductName: false,
-      includeSellingPrice: false,
+      template: A4_SHEET_LABEL_TEMPLATE,
+      product: {
+        productCode: internalCode,
+        name: null,
+        price: null,
+      },
     });
 
     expect(preview.encodedCode).toBe(internalCode);
@@ -48,15 +51,19 @@ describe("Internal Product Code label printing", () => {
     expect(preview.svg).toContain('fill="#fff"');
     expect(preview.svg).toContain('fill="#000"');
     expect(preview.svg).toContain(`>${internalCode}</text>`);
+    expect(preview.textAboveBarcode).toBeNull();
+    expect(preview.textBelowBarcode).toBeNull();
+    expect(preview.sellingPriceWarning).toBeNull();
   });
 
   test("keeps optional Product text outside the barcode quiet zones and warns when selling price is printed", () => {
     const preview = buildInternalLabelPreview({
-      productCode: internalCode,
-      productName: "House Blend Tea",
-      sellingPrice: 125,
-      includeProductName: true,
-      includeSellingPrice: true,
+      template: A4_SHEET_LABEL_TEMPLATE,
+      product: {
+        productCode: internalCode,
+        name: "House Blend Tea",
+        price: 125,
+      },
     });
 
     expect(preview.textAboveBarcode).toBe("House Blend Tea");
@@ -74,25 +81,52 @@ describe("Internal Product Code label printing", () => {
     );
   });
 
+  test("never puts Product text into the encoded barcode payload", () => {
+    const named = buildInternalLabelPreview({
+      template: A4_SHEET_LABEL_TEMPLATE,
+      product: {
+        productCode: internalCode,
+        name: "House Blend Tea",
+        price: 125,
+      },
+    });
+    const renamed = buildInternalLabelPreview({
+      template: A4_SHEET_LABEL_TEMPLATE,
+      product: {
+        productCode: internalCode,
+        name: "Different Product Name",
+        price: 999,
+      },
+    });
+
+    expect(named.encodedCode).toBe(internalCode);
+    expect(renamed.encodedCode).toBe(internalCode);
+    expect(named.modulePattern).toBe(renamed.modulePattern);
+    expect(named.encodedCode).not.toContain("House Blend Tea");
+    expect(named.humanReadableDigits).toBe(internalCode);
+  });
+
   test("accepts a numeric catalog price string without crashing the preview", () => {
     expect(() =>
       buildInternalLabelPreview({
-        productCode: internalCode,
-        productName: "House Blend Tea",
-        sellingPrice: "125" as unknown as number,
-        includeProductName: false,
-        includeSellingPrice: true,
+        template: A4_SHEET_LABEL_TEMPLATE,
+        product: {
+          productCode: internalCode,
+          name: "House Blend Tea",
+          price: "125",
+        },
       }),
     ).not.toThrow();
   });
 
   test("carries legible text sizing into the browser preview instead of relying on print-only CSS", () => {
     const preview = buildInternalLabelPreview({
-      productCode: internalCode,
-      productName: "House Blend Tea",
-      sellingPrice: 125,
-      includeProductName: true,
-      includeSellingPrice: true,
+      template: A4_SHEET_LABEL_TEMPLATE,
+      product: {
+        productCode: internalCode,
+        name: "House Blend Tea",
+        price: 125,
+      },
     });
 
     expect(preview.svg).toContain('class="product-name" font-size="7"');
@@ -104,15 +138,15 @@ describe("Internal Product Code label printing", () => {
 
   test("places A4 copies after the selected starting position and continues onto a new sheet", () => {
     const document = buildInternalLabelDocument({
-      layout: "a4",
-      startingPosition: A4_LABEL_CAPACITY - 1,
-      copyCount: 3,
-      label: {
+      template: A4_SHEET_LABEL_TEMPLATE,
+      product: {
         productCode: internalCode,
-        productName: "House Blend Tea",
-        sellingPrice: 125,
-        includeProductName: true,
-        includeSellingPrice: false,
+        name: "House Blend Tea",
+        price: null,
+      },
+      job: {
+        copyCount: 3,
+        startingPosition: A4_LABEL_CAPACITY - 1,
       },
     });
 
@@ -127,14 +161,14 @@ describe("Internal Product Code label printing", () => {
 
   test("scales the barcode drawing to fill its physical A4 label cell instead of letterboxing it like the preview", () => {
     const document = buildInternalLabelDocument({
-      layout: "a4",
-      copyCount: 1,
-      label: {
+      template: A4_SHEET_LABEL_TEMPLATE,
+      product: {
         productCode: internalCode,
-        productName: "House Blend Tea",
-        sellingPrice: 125,
-        includeProductName: true,
-        includeSellingPrice: false,
+        name: "House Blend Tea",
+        price: null,
+      },
+      job: {
+        copyCount: 1,
       },
     });
 
@@ -142,18 +176,19 @@ describe("Internal Product Code label printing", () => {
     expect(document.html).toContain(
       ".internal-product-label { width: 70mm; height: 35mm; }",
     );
+    expect(document.html).toContain("@page { size: 210mm 297mm;");
   });
 
-  test("uses a dedicated thermal layout for every requested copy", () => {
+  test("uses the in-code thermal Label Template for every requested copy", () => {
     const document = buildInternalLabelDocument({
-      layout: "thermal",
-      copyCount: 2,
-      label: {
+      template: THERMAL_ROLL_LABEL_TEMPLATE,
+      product: {
         productCode: internalCode,
-        productName: "House Blend Tea",
-        sellingPrice: 125,
-        includeProductName: false,
-        includeSellingPrice: false,
+        name: null,
+        price: null,
+      },
+      job: {
+        copyCount: 2,
       },
     });
 
