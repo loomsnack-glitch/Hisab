@@ -1,8 +1,24 @@
 # WhatsApp Worker Production Hardening Plan
 
-Status: Implemented through deterministic local verification; controlled WhatsApp staging verification remains.
+Status: Implemented through deterministic local verification; controlled WhatsApp
+staging verification, migration execution, and production rollout remain.
 Date: 2026-08-13
 Scope: `apps/whatsapp-worker`, its authenticated backend adapter, shared WhatsApp contracts, and worker-facing tests.
+
+Update — 2026-08-14
+
+The current implementation also includes the Admin/POS account-linking status
+flow, QR polling and recovery states, country-aware phone normalization, sale
+invoice text/PDF delivery, and native worker media sends. The worker's checked-in
+development configuration keeps `WHATSAPP_SYNC_FULL_HISTORY=false`; realtime
+events remain enabled, while history replay is an explicit operator choice.
+
+The phone-normalization migration is committed at
+`apps/backend/db/migrations/20260813110000_normalize_phone_numbers.sql` but has
+not been executed against the target database. The latest focused verification
+passed 19 WhatsApp/backend/worker tests, the workspace production build, the
+web TypeScript check, and `git diff --check`. These checks do not replace a
+controlled real-device QR, reconnect, send, and delivery test.
 
 ## Objective
 

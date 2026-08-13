@@ -1,8 +1,43 @@
 # Ganatri WhatsApp + Baileys Production Plan
 
-Status: Proposed execution plan; implementation proceeds one phase at a time.
+Status: Living implementation plan; Phases 0-7.1 are implemented locally, while
+controlled real-device verification and Phase 8 rollout remain pending.
 Date: 2026-08-11
 Scope: POS Web first; API and domain model reusable by mobile later.
+
+Current implementation snapshot: 2026-08-14
+
+The implementation currently includes the following completed local scope:
+
+- Admin account linking with country-aware phone input, India as the default
+  country, QR/status polling, reconnect, disconnect, change-number, and safe
+  remove-number handling. Existing WhatsApp history is preserved; removal is
+  refused when saved WhatsApp records depend on the account.
+- POS header WhatsApp status control beside the receipt-printer control. It
+  shows disconnected, connecting, pending-QR, connected, failed, and
+  unavailable states, opens QR linking in place, polls through temporary worker
+  errors, and closes the QR dialog when the worker reports connected. The POS
+  WhatsApp route remains available.
+- Committed-sale invoice text and PDF generation using sale/customer snapshots,
+  private document delivery through the durable outbox, and worker support for
+  native PDF and image messages. Invoice sending does not roll back a Sale.
+- Baileys v7 worker hardening: encrypted auth state, reconnect handling,
+  per-account dispatch controls, provider-event durability, bounded media,
+  status/receipt handling, structured operational metrics, and Node 20 runtime
+  requirements.
+- Phone normalization and shared country-aware phone fields across the relevant
+  web/mobile forms. Migration `20260813110000_normalize_phone_numbers.sql` is
+  committed but still requires execution against the target database.
+- Full WhatsApp history synchronization is disabled in the checked-in worker
+  environment by default (`WHATSAPP_SYNC_FULL_HISTORY=false`). Realtime message
+  handling remains enabled; operators can explicitly enable bounded history
+  recovery when required.
+
+Local verification through this snapshot: web TypeScript, workspace production
+build, focused backend/worker WhatsApp tests (19 passing tests), and
+`git diff --check` passed. A real linked account, provider-side delivery,
+database migration execution, and deployment rollout are not claimed as
+verified here.
 
 ## Objective
 
@@ -513,9 +548,10 @@ Implementation decisions:
 - Baileys `fromMe` events are normalized as outbound messages, while customer
   events remain inbound. `messages.upsert` notify events are realtime and
   append/history events plus `messaging-history.set` are history source events.
-- Full history sync is controlled by `WHATSAPP_SYNC_FULL_HISTORY` and defaults
-  to enabled for recovery. Operators can disable it for a deliberately lighter
-  deployment, but that also disables automatic missed-history catch-up.
+- Full history sync is controlled by `WHATSAPP_SYNC_FULL_HISTORY`. The checked-in
+  development environment defaults to `false` so a new link does not import
+  history; operators can explicitly enable it for bounded recovery, which also
+  enables automatic missed-history catch-up.
 - Provider IDs remain unique per WhatsApp account. A narrow timestamp/content
   reconciliation path attaches an outbound provider event to a queued outbox
   message when the provider event arrives before the outbox result callback.
@@ -888,3 +924,13 @@ Known validation boundary:
 Phase 5 implementation and review are complete. Stop here pending approval for
 Phase 6; multi-account scaling, realtime delivery, load testing, and rollout
 operations have not started.
+
+Current status update — 2026-08-14
+
+The historical phase notes above record the review gates when each phase was
+implemented. The current checkout has progressed through the local portions of
+Phases 6, 7, and 7.1, and also contains the invoice-delivery, media-message,
+phone-normalization, and Admin/POS account-linking refinements described in the
+implementation snapshot at the top of this document. The next release gate is
+controlled staging with one real account, followed by migration verification
+and the Phase 8 rollout review.

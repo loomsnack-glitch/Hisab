@@ -1,12 +1,59 @@
 # WhatsApp operations runbook
 
-This runbook covers the Phase 6/7 worker and outbox safety boundary. It is a
-recovery procedure, not evidence that production backups or a live pilot have
-been executed.
+This runbook covers the worker, account-linking, invoice-delivery, and outbox
+safety boundary. It is a recovery procedure, not evidence that production
+backups or a live pilot have been executed.
 
 The worker is a Node 20+ ESM service. Use the same Node major version for
 development, builds, and deployment; the Baileys v7 package requires Node 20
 or newer.
+
+## Current local development flow
+
+Run the API, web app, and worker together with the repository's development
+orchestrator. The worker process itself must run under Node, not Bun, because
+it is the Node-targeted Baileys service and owns the WebSocket connection.
+
+```bash
+bun run dev
+```
+
+The repository's worker development script uses Bun only to rebuild the
+Node-targeted bundle; it starts the actual worker with Node. To run an already
+built worker directly with Node:
+
+```bash
+cd apps/whatsapp-worker
+node --env-file=.env --watch dist/index.js
+```
+
+Build the worker bundle when source changes with the existing repository build
+task, then keep the runtime command above as Node:
+
+```bash
+bun run --cwd apps/whatsapp-worker build
+```
+
+For staging and production, run `node --env-file=.env dist/index.js` under PM2;
+do not run `bun dist/index.js`.
+
+For a store, open the Admin WhatsApp account screen to create or reconnect the
+store account and scan the QR code. In POS, use the WhatsApp icon beside the
+printer icon; the control opens the QR dialog in place and changes to green when
+the worker reports `connected`. The POS WhatsApp route remains available for
+later conversation work.
+
+Before testing country-aware phone storage, apply pending backend migrations
+from `apps/backend`:
+
+```bash
+bunx dbmate -d db/migrations up
+```
+
+The current phone migration is
+`20260813110000_normalize_phone_numbers.sql`. Confirm its version appears in
+the database's `schema_migrations` table before treating phone normalization as
+database-verified.
 
 ## Worker partitioning
 
@@ -63,6 +110,11 @@ account sync endpoint remains an operator recovery tool and performs one
 bounded history page per request; repeat it deliberately when backfilling is
 needed. It does not log out the account, delete encrypted auth state, or
 require QR relinking.
+
+`WHATSAPP_SYNC_FULL_HISTORY=false` is the checked-in development default. With
+that value, full history events are intentionally ignored while realtime events
+continue to work. Set it to `true` only for an explicit history-recovery test or
+deployment, then restart the Node worker.
 
 Provider message events are first recorded in the durable
 `whatsapp_provider_events` inbox. The API replays pending and retryable events
