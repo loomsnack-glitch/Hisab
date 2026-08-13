@@ -12,7 +12,10 @@ export const A4_LABEL_ROWS = A4_SHEET_LABEL_TEMPLATE.stock.sheet?.rows ?? 8;
 export const A4_LABEL_CAPACITY = A4_LABEL_COLUMNS * A4_LABEL_ROWS;
 
 export type LabelTemplate = LabelTemplateDocument;
+export type LabelElement = LabelTemplate["elements"][number];
 export { A4_SHEET_LABEL_TEMPLATE, THERMAL_ROLL_LABEL_TEMPLATE };
+
+const LABEL_TEXT_FONT = "'Noto Sans Gujarati', 'Noto Sans', Arial, sans-serif";
 
 export type LabelProductInput = {
   productCode: string;
@@ -159,22 +162,23 @@ const calculateEan13CheckDigit = (codeWithoutCheckDigit: string) => {
   return String((10 - (sum % 10)) % 10);
 };
 
-const assertInternalProductCode = (productCode: string) => {
-  if (!/^04\d{11}$/.test(productCode)) {
-    throw new Error(
-      "Internal Product Code labels require an exact 13-digit code beginning with 04",
-    );
+const templateBarcodeElement = (template: LabelTemplate) =>
+  template.elements.find((element) => element.type === "barcode");
+
+const assertEan13ProductCode = (productCode: string) => {
+  if (!/^\d{13}$/.test(productCode)) {
+    throw new Error("Product Code is not a valid EAN-13 value");
   }
 
   if (
     calculateEan13CheckDigit(productCode.slice(0, -1)) !== productCode.at(-1)
   ) {
-    throw new Error("Internal Product Code has an invalid EAN-13 check digit");
+    throw new Error("Product Code is not a valid EAN-13 value");
   }
 };
 
 const encodeEan13 = (productCode: string) => {
-  assertInternalProductCode(productCode);
+  assertEan13ProductCode(productCode);
 
   const parity = parityByLeadingDigit[productCode[0]];
   const left = Array.from(productCode.slice(1, 7))
@@ -188,27 +192,190 @@ const encodeEan13 = (productCode: string) => {
   const modules = `101${left}01010${right}101`;
 
   if (modules.length !== EAN13_MODULE_COUNT) {
-    throw new Error("Failed to encode the Internal Product Code as EAN-13");
+    throw new Error("Failed to encode the Product Code as EAN-13");
   }
 
   return modules;
 };
 
-const renderBars = (modulePattern: string) =>
+// Code 128 patterns from ISO/IEC 15417. Index is the code-set value; 103–106 are
+// Start A, Start B, Start C, and Stop. Stop includes the 2-module termination bar.
+const CODE128_PATTERNS = [
+  "11011001100",
+  "11001101100",
+  "11001100110",
+  "10010011000",
+  "10010001100",
+  "10001001100",
+  "10011001000",
+  "10011000100",
+  "10001100100",
+  "11001001000",
+  "11001000100",
+  "11000100100",
+  "10110011100",
+  "10011011100",
+  "10011001110",
+  "10111001100",
+  "10011101100",
+  "10011100110",
+  "11001110010",
+  "11001011100",
+  "11001001110",
+  "11011100100",
+  "11001110100",
+  "11101101110",
+  "11101001100",
+  "11100101100",
+  "11100100110",
+  "11101100100",
+  "11100110100",
+  "11100110010",
+  "11011011000",
+  "11011000110",
+  "11000110110",
+  "10100011000",
+  "10001011000",
+  "10001000110",
+  "10110001000",
+  "10001101000",
+  "10001100010",
+  "11010001000",
+  "11000101000",
+  "11000100010",
+  "10110111000",
+  "10110001110",
+  "10001101110",
+  "10111011000",
+  "10111000110",
+  "10001110110",
+  "11101110110",
+  "11010001110",
+  "11000101110",
+  "11011101000",
+  "11011100010",
+  "11011101110",
+  "11101011000",
+  "11101000110",
+  "11100010110",
+  "11101101000",
+  "11101100010",
+  "11100011010",
+  "11101111010",
+  "11001000010",
+  "11110001000",
+  "10100110000",
+  "10100001100",
+  "10010110000",
+  "10010000110",
+  "10000101100",
+  "10000100110",
+  "10110010000",
+  "10110000100",
+  "10011010000",
+  "10011000010",
+  "10000110100",
+  "10000110010",
+  "11000010010",
+  "11001010000",
+  "11110111010",
+  "11000010100",
+  "10001111010",
+  "10100111100",
+  "10010111100",
+  "10010011110",
+  "10111100100",
+  "10011110100",
+  "10011110010",
+  "11110100100",
+  "11110010100",
+  "11110010010",
+  "11011011110",
+  "11011110110",
+  "11110110110",
+  "10101111000",
+  "10100011110",
+  "10001011110",
+  "10111101000",
+  "10111100010",
+  "11110101000",
+  "11110100010",
+  "10111011110",
+  "10111101110",
+  "11101011110",
+  "11110101110",
+  "11010000100",
+  "11010010000",
+  "11010011100",
+  "1100011101011",
+];
+
+const CODE128_START_B = 104;
+const CODE128_STOP = 106;
+
+const encodeCode128 = (productCode: string) => {
+  if (productCode.length === 0) {
+    throw new Error("Code 128 requires a Product Code");
+  }
+
+  const values = Array.from(productCode, (character) => {
+    const codeValue = character.charCodeAt(0) - 32;
+    if (codeValue < 0 || codeValue > 94) {
+      throw new Error("Code 128 cannot encode this Product Code");
+    }
+    return codeValue;
+  });
+
+  const checksum =
+    (CODE128_START_B +
+      values.reduce((total, value, index) => total + value * (index + 1), 0)) %
+    103;
+  const symbols = [CODE128_START_B, ...values, checksum, CODE128_STOP];
+  return symbols
+    .map((symbol) => {
+      const pattern = CODE128_PATTERNS[symbol];
+      if (!pattern) {
+        throw new Error("Failed to encode the Product Code as Code 128");
+      }
+      return pattern;
+    })
+    .join("");
+};
+
+const encodeProductCode = (
+  productCode: string,
+  symbology: "ean13" | "code128",
+) => {
+  if (symbology === "code128") {
+    return encodeCode128(productCode);
+  }
+
+  return encodeEan13(productCode);
+};
+
+const renderBars = (
+  modulePattern: string,
+  options: { quietZoneModules: number; useEan13Guards: boolean },
+) =>
   Array.from(modulePattern)
     .flatMap((module, index) => {
       if (module !== "1") {
         return [];
       }
 
-      const height = guardModuleIndexes.has(index) ? 51 : 46;
-      return `<rect x="${EAN13_QUIET_ZONE_MODULES + index}" y="18" width="1" height="${height}" fill="#000"/>`;
+      const height =
+        options.useEan13Guards && guardModuleIndexes.has(index) ? 51 : 46;
+      return `<rect x="${options.quietZoneModules + index}" y="2" width="1" height="${height}" fill="#000"/>`;
     })
     .join("");
 
 const formatSellingPrice = (
   sellingPrice: LabelFaceInput["sellingPrice"],
 ) => {
+  if (sellingPrice == null || sellingPrice === "") {
+    return null;
+  }
+
   const numericSellingPrice = Number(sellingPrice);
   if (!Number.isFinite(numericSellingPrice) || numericSellingPrice < 0) {
     return null;
@@ -216,6 +383,154 @@ const formatSellingPrice = (
 
   return `₹${numericSellingPrice.toFixed(2)}`;
 };
+
+const resolveBoundText = (
+  binding: string,
+  product: LabelProductInput,
+): string | null => {
+  if (binding === "product.name") {
+    const name = product.name?.trim() ?? "";
+    return name.length > 0 ? name : null;
+  }
+  if (binding === "product.productCode") {
+    return product.productCode.length > 0 ? product.productCode : null;
+  }
+  if (binding === "product.price") {
+    return formatSellingPrice(product.price);
+  }
+  return null;
+};
+
+const resolveTextElementValue = (
+  element: Extract<LabelElement, { type: "text" }>,
+  product: LabelProductInput,
+): string | null => {
+  if (element.text.source === "static") {
+    const value = element.text.staticValue?.trim() ?? "";
+    return value.length > 0 ? value : null;
+  }
+  if (!element.text.binding) {
+    return null;
+  }
+  return resolveBoundText(element.text.binding, product);
+};
+
+const textAnchor = (align: "left" | "center" | "right") => {
+  if (align === "center") {
+    return "middle";
+  }
+  return align === "right" ? "end" : "start";
+};
+
+const textX = (
+  element: Extract<LabelElement, { type: "text" }>,
+  widthMm: number,
+) => {
+  if (element.text.align === "center") {
+    return widthMm / 2;
+  }
+  return element.text.align === "right" ? widthMm : 0;
+};
+
+const textClassName = (
+  element: Extract<LabelElement, { type: "text" }>,
+) => {
+  if (element.text.binding === "product.name") {
+    return "product-name";
+  }
+  if (element.text.binding === "product.price") {
+    return "selling-price";
+  }
+  return "label-text";
+};
+
+const rotatedDrawSize = (element: LabelElement) => {
+  const swapped = element.rotationDeg === 90 || element.rotationDeg === 270;
+  return {
+    widthMm: swapped ? element.heightMm : element.widthMm,
+    heightMm: swapped ? element.widthMm : element.heightMm,
+  };
+};
+
+const wrapRotatedElement = (element: LabelElement, inner: string) => {
+  if (element.rotationDeg === 0) {
+    return inner;
+  }
+
+  const { widthMm, heightMm } = rotatedDrawSize(element);
+  const cx = element.xMm + element.widthMm / 2;
+  const cy = element.yMm + element.heightMm / 2;
+  return `<g transform="translate(${cx} ${cy}) rotate(${element.rotationDeg}) translate(${-widthMm / 2} ${-heightMm / 2})">${inner}</g>`;
+};
+
+const placedBox = (element: LabelElement) => {
+  if (element.rotationDeg === 0) {
+    return {
+      x: element.xMm,
+      y: element.yMm,
+      width: element.widthMm,
+      height: element.heightMm,
+    };
+  }
+  const size = rotatedDrawSize(element);
+  return { x: 0, y: 0, width: size.widthMm, height: size.heightMm };
+};
+
+const renderTextElement = (
+  element: Extract<LabelElement, { type: "text" }>,
+  value: string,
+) => {
+  const box = placedBox(element);
+  const svg = `<svg class="${textClassName(element)}-box" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" viewBox="0 0 ${box.width} ${box.height}" overflow="hidden" xmlns="http://www.w3.org/2000/svg"><text class="${textClassName(element)}" font-size="${element.text.fontSizeMm}" font-family="${LABEL_TEXT_FONT}" font-weight="${element.text.fontWeight === "bold" ? "700" : "400"}" x="${textX(element, box.width)}" y="${element.text.fontSizeMm}" text-anchor="${textAnchor(element.text.align)}">${escapeHtml(value)}</text></svg>`;
+  return wrapRotatedElement(element, svg);
+};
+
+const renderBarcodeElement = (
+  element: Extract<LabelElement, { type: "barcode" }>,
+  productCode: string,
+  modulePattern: string,
+) => {
+  const box = placedBox(element);
+  const quietZoneModules =
+    element.barcode.symbology === "ean13" ? EAN13_QUIET_ZONE_MODULES : 10;
+  const viewBoxWidth = modulePattern.length + quietZoneModules * 2;
+  const viewBoxHeight = element.barcode.showHumanDigits ? 70 : 54;
+  const digits = element.barcode.showHumanDigits
+    ? `<text class="human-readable-digits" font-size="8" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" letter-spacing="0.5" x="${viewBoxWidth / 2}" y="66" text-anchor="middle">${escapeHtml(productCode)}</text>`
+    : "";
+  const svg = `<svg class="internal-product-label-barcode" role="img" aria-label="${element.barcode.symbology === "ean13" ? "EAN-13" : "Code 128"} barcode ${escapeHtml(productCode)}" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}" preserveAspectRatio="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="${viewBoxWidth}" height="${viewBoxHeight}" fill="#fff"/>${renderBars(modulePattern, { quietZoneModules, useEan13Guards: element.barcode.symbology === "ean13" })}${digits}</svg>`;
+  return wrapRotatedElement(element, svg);
+};
+
+const renderBoxElement = (element: Extract<LabelElement, { type: "box" }>) => {
+  const box = placedBox(element);
+  const svg = `<svg class="label-box" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" viewBox="0 0 ${box.width} ${box.height}" overflow="visible" xmlns="http://www.w3.org/2000/svg"><rect x="${element.box.strokeWidthMm / 2}" y="${element.box.strokeWidthMm / 2}" width="${Math.max(0, box.width - element.box.strokeWidthMm)}" height="${Math.max(0, box.height - element.box.strokeWidthMm)}" fill="none" stroke="#000" stroke-width="${element.box.strokeWidthMm}"/></svg>`;
+  return wrapRotatedElement(element, svg);
+};
+
+const renderTemplateElements = (
+  template: LabelTemplate,
+  product: LabelProductInput,
+) =>
+  template.elements
+    .map((element) => {
+      if (element.type === "text") {
+        const value = resolveTextElementValue(element, product);
+        return value ? renderTextElement(element, value) : "";
+      }
+      if (element.type === "barcode") {
+        const modulePattern = encodeProductCode(
+          product.productCode,
+          element.barcode.symbology,
+        );
+        return renderBarcodeElement(element, product.productCode, modulePattern);
+      }
+      if (element.type === "box") {
+        return renderBoxElement(element);
+      }
+      return "";
+    })
+    .join("");
 
 const assertKeepOutsDoNotIntersectElements = (template: LabelTemplate) => {
   for (const keepOut of template.keepOuts) {
@@ -240,51 +555,53 @@ const renderKeepOutRects = (
     .join("");
 
 const wrapLabelFaceSvg = (
-  barcodeSvg: string,
+  content: string,
   template: LabelTemplate,
   mode: "preview" | "print",
 ) => {
-  if (template.keepOuts.length === 0) {
-    return barcodeSvg;
-  }
-
   const { widthMm, heightMm } = template.stock;
-  const nestedBarcodeSvg = barcodeSvg.replace(
-    "<svg ",
-    `<svg x="0" y="0" width="${widthMm}" height="${heightMm}" `,
-  );
-
-  return `<svg class="internal-product-label-face" viewBox="0 0 ${widthMm} ${heightMm}" width="${widthMm}mm" height="${heightMm}mm" xmlns="http://www.w3.org/2000/svg">${nestedBarcodeSvg}${renderKeepOutRects(template, mode)}</svg>`;
+  return `<svg class="internal-product-label-face" viewBox="0 0 ${widthMm} ${heightMm}" width="${widthMm}mm" height="${heightMm}mm" xmlns="http://www.w3.org/2000/svg">${content}${renderKeepOutRects(template, mode)}</svg>`;
 };
 
 export const buildInternalLabelPreview = (
   input: LabelPreviewInput,
 ): InternalLabelPreview => {
-  assertKeepOutsDoNotIntersectElements(input.template);
   const label = labelInputFromTemplate(input);
-  const modulePattern = encodeEan13(label.productCode);
+  const barcodeElement = templateBarcodeElement(input.template);
+  const symbology = barcodeElement?.barcode.symbology ?? "ean13";
+  const modulePattern = barcodeElement
+    ? encodeProductCode(label.productCode, symbology)
+    : "";
+  const quietZoneModules = barcodeElement
+    ? symbology === "ean13"
+      ? EAN13_QUIET_ZONE_MODULES
+      : 10
+    : 0;
   const textAboveBarcode = label.includeProductName ? label.productName : null;
   const textBelowBarcode = label.includeSellingPrice
     ? formatSellingPrice(label.sellingPrice)
     : null;
-  const viewBoxHeight = textBelowBarcode ? 94 : 84;
-  const barcodeSvg = `<svg class="internal-product-label-barcode" role="img" aria-label="EAN-13 barcode ${label.productCode}" viewBox="0 0 ${EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2} ${viewBoxHeight}" preserveAspectRatio="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="${EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2}" height="${viewBoxHeight}" fill="#fff"/>${textAboveBarcode ? `<text class="product-name" font-size="7" font-family="Arial, sans-serif" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="11" text-anchor="middle">${escapeHtml(textAboveBarcode)}</text>` : ""}${renderBars(modulePattern)}<text class="human-readable-digits" font-size="6" font-family="monospace" letter-spacing="0.5" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="78" text-anchor="middle">${label.productCode}</text>${textBelowBarcode ? `<text class="selling-price" font-size="7" font-family="Arial, sans-serif" x="${(EAN13_MODULE_COUNT + EAN13_QUIET_ZONE_MODULES * 2) / 2}" y="90" text-anchor="middle">${textBelowBarcode}</text>` : ""}</svg>`;
+  const content = renderTemplateElements(input.template, input.product);
 
   return {
     encodedCode: label.productCode,
-    humanReadableDigits: label.productCode,
+    humanReadableDigits: barcodeElement?.barcode.showHumanDigits
+      ? label.productCode
+      : barcodeElement
+        ? ""
+        : label.productCode,
     modulePattern,
     quietZoneModules: {
-      left: EAN13_QUIET_ZONE_MODULES,
-      right: EAN13_QUIET_ZONE_MODULES,
+      left: quietZoneModules,
+      right: quietZoneModules,
     },
     textAboveBarcode,
     textBelowBarcode,
     sellingPriceWarning: textBelowBarcode
       ? "Selling price is printed on this label. Reprint labels after any price change."
       : null,
-    svg: wrapLabelFaceSvg(barcodeSvg, input.template, "preview"),
-    printSvg: wrapLabelFaceSvg(barcodeSvg, input.template, "print"),
+    svg: wrapLabelFaceSvg(content, input.template, "preview"),
+    printSvg: wrapLabelFaceSvg(content, input.template, "print"),
   };
 };
 
@@ -341,13 +658,12 @@ const documentStyles = (template: LabelTemplate) => {
   return `
   @page { size: ${pageSize}; margin: 0; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: ${LABEL_TEXT_FONT}; }
   .internal-product-label { background: #fff; color: #000; overflow: hidden; }
-  .internal-product-label-barcode { display: block; width: 100%; height: 100%; background: #fff; }
-  .internal-product-label-barcode text { fill: #000; font-family: Arial, sans-serif; }
-  .internal-product-label-barcode .product-name { font-size: 7px; font-weight: 700; }
-  .internal-product-label-barcode .human-readable-digits { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 8px; letter-spacing: 1px; }
-  .internal-product-label-barcode .selling-price { font-size: 8px; font-weight: 700; }
+  .internal-product-label-face { display: block; width: 100%; height: 100%; }
+  .internal-product-label-barcode { background: #fff; }
+  .internal-product-label-face text { fill: #000; font-family: ${LABEL_TEXT_FONT}; }
+  .internal-product-label-barcode .human-readable-digits { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: 1px; }
   ${layoutStyles}
 `;
 };
@@ -441,6 +757,7 @@ export const buildInternalLabelDocument = (
   input: LabelDocumentInput,
 ): InternalLabelDocument => {
   validateCopyCount(input.job.copyCount);
+  assertKeepOutsDoNotIntersectElements(input.template);
   const preview = buildInternalLabelPreview({
     template: input.template,
     product: input.product,
@@ -452,7 +769,7 @@ export const buildInternalLabelDocument = (
 
   return {
     pages: pages.map(({ occupiedPositions }) => ({ occupiedPositions })),
-    html: `<!doctype html><html><head><meta charset="utf-8"><title>Internal Product Labels</title><style>${documentStyles(input.template)}</style></head><body>${pages.map((page) => page.html).join("")}</body></html>`,
+    html: `<!doctype html><html><head><meta charset="utf-8"><title>Product Labels</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Gujarati:wght@400;700&display=swap" rel="stylesheet"><style>${documentStyles(input.template)}</style></head><body>${pages.map((page) => page.html).join("")}</body></html>`,
   };
 };
 
@@ -461,12 +778,30 @@ export const canPrintInternalLabels = (input: {
   testScanConfirmed: boolean;
 }) => input.testPrinted && input.testScanConfirmed;
 
+export const canOfferProductLabelPrint = (input: {
+  barcodeScanningEnabled: boolean;
+  productCode: string | null | undefined;
+}) => Boolean(input.barcodeScanningEnabled && input.productCode?.trim());
+
+const elementConfirmationSignature = (element: LabelElement) => {
+  const box = `${element.xMm}:${element.yMm}:${element.widthMm}:${element.heightMm}:${element.rotationDeg}`;
+  if (element.type === "barcode") {
+    return `barcode:${element.barcode.symbology}:${element.barcode.showHumanDigits}:${box}`;
+  }
+  if (element.type === "text") {
+    return `text:${element.text.source}:${element.text.binding ?? ""}:${element.text.staticValue ?? ""}:${box}`;
+  }
+  if (element.type === "box") {
+    return `box:${element.box.strokeWidthMm}:${box}`;
+  }
+  return `table:${box}`;
+};
+
 export const labelPrintConfirmationKey = (input: {
   templateId: string;
-  includeProductName: boolean;
-  includeSellingPrice: boolean;
+  elements: LabelElement[];
 }) =>
-  `${input.templateId}:${input.includeProductName}:${input.includeSellingPrice}`;
+  `${input.templateId}:${input.elements.map(elementConfirmationSignature).join("|")}`;
 
 /** Opens an isolated browser print document; receipt printing has no dependency on this path. */
 export const printInternalLabelDocument = (

@@ -14,7 +14,11 @@ import {
   UpdateProductAddOnAttachmentSchema,
   UpdateProductSchema,
 } from "./catalog.schema";
-import { keepOutsFromContentInset } from "./label-template-geometry";
+import {
+  keepOutsFromContentInset,
+  leftoverPrintableBox,
+  mapLabelElementsIntoBox,
+} from "./label-template-geometry";
 import {
   A4_SHEET_LABEL_TEMPLATE,
   THERMAL_ROLL_LABEL_TEMPLATE,
@@ -583,5 +587,148 @@ describe("Label Template catalog contracts", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  test("content inset leftover is the printable area below a branded header", () => {
+    const stock = { widthMm: 38, heightMm: 50 };
+    const keepOuts = keepOutsFromContentInset(stock, {
+      topMm: 20,
+      rightMm: 0,
+      bottomMm: 0,
+      leftMm: 0,
+    });
+
+    expect(leftoverPrintableBox(stock, keepOuts)).toEqual({
+      xMm: 0,
+      yMm: 20,
+      widthMm: 38,
+      heightMm: 30,
+    });
+  });
+
+  test("mapped Label Elements sit in leftover space and do not intersect a header Keep-Out", () => {
+    const stock = { widthMm: 38, heightMm: 50 };
+    const keepOuts = keepOutsFromContentInset(stock, {
+      topMm: 20,
+      rightMm: 0,
+      bottomMm: 0,
+      leftMm: 0,
+    });
+    const leftover = leftoverPrintableBox(stock, keepOuts);
+    const elements = mapLabelElementsIntoBox(
+      THERMAL_ROLL_LABEL_TEMPLATE.elements,
+      THERMAL_ROLL_LABEL_TEMPLATE.stock,
+      leftover,
+    );
+    const result = CreateLabelTemplateSchema.safeParse({
+      name: "Branded roll",
+      status: "active",
+      stock: {
+        ...stock,
+        labelsPerRow: 2,
+        horizontalGapMm: 2,
+        verticalGapMm: 2,
+        media: "roll",
+      },
+      keepOuts,
+      elements,
+    });
+
+    expect(leftover).toEqual({ xMm: 0, yMm: 20, widthMm: 38, heightMm: 30 });
+    expect(result.success).toBe(true);
+    expect(elements[0]?.yMm).toBeGreaterThanOrEqual(20);
+  });
+
+  test("create Label Template accepts composed catalog bindings with no mandatory Element", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      name: "Packaging leftover",
+      keepOuts: [{ xMm: 0, yMm: 0, widthMm: 58, heightMm: 12 }],
+      elements: [
+        {
+          id: "product-name",
+          type: "text",
+          xMm: 2,
+          yMm: 14,
+          widthMm: 54,
+          heightMm: 6,
+          rotationDeg: 0,
+          text: {
+            source: "binding",
+            binding: "product.name",
+            fontSizeMm: 2.5,
+            fontWeight: "bold",
+            align: "left",
+          },
+        },
+        {
+          id: "static-taxes",
+          type: "text",
+          xMm: 2,
+          yMm: 21,
+          widthMm: 20,
+          heightMm: 4,
+          rotationDeg: 90,
+          text: {
+            source: "static",
+            staticValue: "Inc. of all Taxes",
+            fontSizeMm: 2,
+            fontWeight: "normal",
+            align: "left",
+          },
+        },
+        {
+          id: "product-code-barcode",
+          type: "barcode",
+          xMm: 24,
+          yMm: 14,
+          widthMm: 10,
+          heightMm: 24,
+          rotationDeg: 90,
+          barcode: {
+            symbology: "code128",
+            showHumanDigits: true,
+          },
+        },
+        {
+          id: "price-frame",
+          type: "box",
+          xMm: 36,
+          yMm: 14,
+          widthMm: 20,
+          heightMm: 10,
+          rotationDeg: 0,
+          box: { strokeWidthMm: 0.4 },
+        },
+        {
+          id: "selling-price",
+          type: "text",
+          xMm: 38,
+          yMm: 16,
+          widthMm: 16,
+          heightMm: 6,
+          rotationDeg: 0,
+          text: {
+            source: "binding",
+            binding: "product.price",
+            fontSizeMm: 2.5,
+            fontWeight: "bold",
+            align: "center",
+          },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("create Label Template accepts a design with no Label Elements", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      name: "Blank leftover",
+      elements: [],
+    });
+
+    expect(result.success).toBe(true);
   });
 });

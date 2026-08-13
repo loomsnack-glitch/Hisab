@@ -39,8 +39,6 @@ const InternalProductLabelDialog = ({
   const [templateId, setTemplateId] = useState("");
   const [copyCount, setCopyCount] = useState("1");
   const [startingPosition, setStartingPosition] = useState("1");
-  const [includeProductName, setIncludeProductName] = useState(true);
-  const [includeSellingPrice, setIncludeSellingPrice] = useState(false);
   const [testPrintedFor, setTestPrintedFor] = useState<string | null>(null);
   const [testScanConfirmed, setTestScanConfirmed] = useState(false);
 
@@ -76,14 +74,13 @@ const InternalProductLabelDialog = ({
   const isSheet = template?.stock.media === "sheet";
   const labelProduct = {
     productCode: productCode ?? "",
-    name: includeProductName ? product.name : null,
-    price: includeSellingPrice ? product.price : null,
+    name: product.name,
+    price: product.price,
   };
   const layoutSignature = template
     ? labelPrintConfirmationKey({
         templateId: template.id,
-        includeProductName,
-        includeSellingPrice,
+        elements: template.elements,
       })
     : "";
   const testPrintedForCurrentLayout = testPrintedFor === layoutSignature;
@@ -98,14 +95,33 @@ const InternalProductLabelDialog = ({
     (Number.isInteger(parsedStartingPosition) &&
       parsedStartingPosition >= 1 &&
       parsedStartingPosition <= sheetCapacity);
-  const preview = template
-    ? buildInternalLabelPreview({
-        template,
-        product: labelProduct,
-      })
-    : null;
+  const previewResult = useMemo(() => {
+    if (!template) {
+      return { preview: null, error: null };
+    }
+    try {
+      return {
+        preview: buildInternalLabelPreview({
+          template,
+          product: labelProduct,
+        }),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        preview: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "This Product cannot be printed on the chosen Label Template.",
+      };
+    }
+  }, [labelProduct, template]);
+  const preview = previewResult.preview;
+  const previewError = previewResult.error;
   const printAllowed =
     Boolean(template) &&
+    !previewError &&
     validCopyCount &&
     validStartingPosition &&
     canPrintInternalLabels({
@@ -113,7 +129,7 @@ const InternalProductLabelDialog = ({
       testScanConfirmed,
     });
 
-  if (product.productCodeKind !== "internal_rcn" || !productCode) {
+  if (!productCode) {
     return null;
   }
 
@@ -140,8 +156,17 @@ const InternalProductLabelDialog = ({
     }
 
     const input = printInput(1);
-    if (!input || !printInternalLabelDocument(input)) {
-      toast.error("Unable to open the browser print dialog");
+    try {
+      if (!input || !printInternalLabelDocument(input)) {
+        toast.error("Unable to open the browser print dialog");
+        return;
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to open the browser print dialog",
+      );
       return;
     }
 
@@ -158,13 +183,22 @@ const InternalProductLabelDialog = ({
     }
 
     const input = printInput(parsedCopyCount);
-    if (!input || !printInternalLabelDocument(input)) {
-      toast.error("Unable to open the browser print dialog");
+    try {
+      if (!input || !printInternalLabelDocument(input)) {
+        toast.error("Unable to open the browser print dialog");
+        return;
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to open the browser print dialog",
+      );
       return;
     }
 
     toast.success(
-      `${parsedCopyCount} internal label${parsedCopyCount === 1 ? "" : "s"} opened for printing.`,
+              `${parsedCopyCount} label${parsedCopyCount === 1 ? "" : "s"} opened for printing.`,
     );
   };
 
@@ -183,15 +217,15 @@ const InternalProductLabelDialog = ({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader
           icon={<Barcode className="size-5" />}
-          title="Print store-only labels"
-          subtitle="The barcode always encodes only this exact Internal Product Code. Product text never changes scan identity."
+          title="Print labels"
+          subtitle="The barcode encodes only this Product Code. Product text never changes scan identity."
         />
 
         <div className="grid gap-5 pt-2 md:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="space-y-4">
             <div className="rounded-xl border border-border/60 bg-muted/25 p-3">
               <p className="text-xs text-muted-foreground">
-                Internal Product Code
+                Product Code
               </p>
               <p className="mt-1 font-mono text-lg font-semibold tracking-wider text-foreground">
                 {productCode}
@@ -256,35 +290,16 @@ const InternalProductLabelDialog = ({
               ) : null}
             </div>
 
-            <div className="space-y-2 rounded-xl border border-border/60 p-3">
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={includeProductName}
-                  onChange={(event) => {
-                    setIncludeProductName(event.target.checked);
-                    setTestScanConfirmed(false);
-                  }}
-                />
-                Show Product name
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={includeSellingPrice}
-                  onChange={(event) => {
-                    setIncludeSellingPrice(event.target.checked);
-                    setTestScanConfirmed(false);
-                  }}
-                />
-                Show selling price ({preview?.textBelowBarcode ?? "optional"})
-              </label>
-              {preview?.sellingPriceWarning ? (
-                <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
-                  {preview.sellingPriceWarning}
-                </p>
-              ) : null}
-            </div>
+            {preview?.sellingPriceWarning ? (
+              <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
+                {preview.sellingPriceWarning}
+              </p>
+            ) : null}
+            {previewError ? (
+              <p className="rounded-lg bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+                {previewError}
+              </p>
+            ) : null}
 
             <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3">
               <div className="flex items-start gap-2">
@@ -305,7 +320,7 @@ const InternalProductLabelDialog = ({
                 variant="outline"
                 size="sm"
                 onClick={handleTestPrint}
-                disabled={!template}
+                disabled={!template || Boolean(previewError)}
               >
                 <Printer className="size-4" />
                 Test print one label
@@ -326,7 +341,7 @@ const InternalProductLabelDialog = ({
               </label>
               {!testPrintedForCurrentLayout ? (
                 <p className="text-xs text-muted-foreground">
-                  Test print this Label Template after changing template or printed text.
+                  Test print this Label Template after changing template, Label Elements, or barcode geometry.
                 </p>
               ) : null}
             </div>
@@ -341,11 +356,11 @@ const InternalProductLabelDialog = ({
               />
             ) : (
               <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-10 text-center text-xs text-muted-foreground">
-                Choose a Label Template to preview this Product.
+                {previewError ?? "Choose a Label Template to preview this Product."}
               </div>
             )}
             <p className="text-xs text-muted-foreground">
-              Black bars on white with the required EAN-13 quiet zones.
+              EAN-13 keeps quiet zones on a white patch. Code 128 encodes the Product Code as stored.
             </p>
           </div>
         </div>
