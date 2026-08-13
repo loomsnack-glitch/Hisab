@@ -38,11 +38,11 @@ export default defineConfig(({ mode }) => {
                 "react-select",
                 "@emotion/react",
                 "hoist-non-react-statics",
-                "@repo/types",
             ],
             exclude: [
                 "@repo/assets",
                 "@repo/services",
+                "@repo/types",
                 "@repo/ui",
             ],
         },
