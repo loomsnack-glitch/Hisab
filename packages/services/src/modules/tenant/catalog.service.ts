@@ -17,6 +17,8 @@ import type {
     ProductAddOnAttachmentsListResponse,
     ProductResponse,
     ProductsListResponse,
+    ReorderCategoriesJSON,
+    ReorderProductsJSON,
     LabelTemplateResponse,
     LabelTemplatesListResponse,
     ServiceResponse,
@@ -47,6 +49,18 @@ export const createCategory = async (
 ): Promise<ServiceResponse<CategoryResponse | null>> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/categories`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const reorderCategories = async (
+    organizationId: string,
+    data: ReorderCategoriesJSON,
+): Promise<ServiceResponse<null>> => {
+    try {
+        const response = await api.put(`/organizations/${organizationId}/categories/order`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);
@@ -117,6 +131,18 @@ export const createProduct = async (
 ): Promise<ServiceResponse<ProductResponse | null>> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/products`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const reorderProducts = async (
+    organizationId: string,
+    data: ReorderProductsJSON,
+): Promise<ServiceResponse<null>> => {
+    try {
+        const response = await api.put(`/organizations/${organizationId}/products/order`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

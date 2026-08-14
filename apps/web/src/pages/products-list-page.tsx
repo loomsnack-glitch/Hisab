@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
-import { getCategories, getOrganizationCatalogSettings, getProducts } from "@repo/services";
+import { getCategories, getOrganizationCatalogSettings, getProducts, reorderProducts } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
-import { Barcode, Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
+import { Barcode, Boxes, Layers3, Link2, ListOrdered, Package2, Pencil, PlusCircle, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 import DeleteProductButton from "@/components/catalog/delete-product-button";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
@@ -19,12 +20,14 @@ import InternalProductLabelDialog from "@/components/catalog/internal-product-la
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
+import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
 
 const EMPTY_CATALOG_ITEMS: never[] = [];
 
 const ProductsListPage = () => {
     const { organizationId = "" } = useParams();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
 
@@ -84,6 +87,43 @@ const ProductsListPage = () => {
             return true;
         });
     }, [products, selectedCategoryFilter, searchQuery, categoryMap]);
+
+    const selectedCategoryProducts = useMemo(
+        () => selectedCategoryFilter === "all"
+            ? []
+            : products.filter((product) => product.categoryId === selectedCategoryFilter),
+        [products, selectedCategoryFilter],
+    );
+
+    const productOrderItems = useMemo(
+        () => selectedCategoryProducts.map((product) => ({
+            id: product.id,
+            name: product.name,
+            description: categoryMap.get(product.categoryId)?.name,
+            leading: <Package2 className="size-4 shrink-0 text-primary" />,
+        })),
+        [categoryMap, selectedCategoryProducts],
+    );
+
+    const saveProductOrder = async (productIds: string[]) => {
+        if (selectedCategoryFilter === "all") {
+            return { status: "error" as const, message: "Select a category before reordering products" };
+        }
+        const response = await reorderProducts(organizationId, {
+            categoryId: selectedCategoryFilter,
+            productIds,
+        });
+        if (response.status === "success") {
+            await queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
+        }
+        return response;
+    };
+
+    const productReorderDisabledReason = selectedCategoryFilter === "all"
+        ? "Select a category to reorder its products."
+        : selectedCategoryProducts.length < 2
+            ? "This category needs at least two products to reorder."
+            : null;
 
     if (categoriesQuery.isPending || productsQuery.isPending) {
         return (
@@ -191,6 +231,47 @@ const ProductsListPage = () => {
                             </Button>
                         }
                     />
+
+                    {productReorderDisabledReason ? (
+                        <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex" />}>
+                                <ReorderListDialog
+                                    title="Reorder products"
+                                    description="Choose the order products appear inside the selected category."
+                                    items={productOrderItems}
+                                    onSave={saveProductOrder}
+                                    trigger={
+                                        <Button
+                                            variant="outline"
+                                            className="rounded-full h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
+                                            disabled
+                                        >
+                                            <ListOrdered className="size-3.5 sm:size-4" />
+                                            Reorder
+                                        </Button>
+                                    }
+                                />
+                            </TooltipTrigger>
+                            <TooltipContent>{productReorderDisabledReason}</TooltipContent>
+                        </Tooltip>
+                    ) : (
+                        <ReorderListDialog
+                        title="Reorder products"
+                        description="Choose the order products appear inside the selected category."
+                        items={productOrderItems}
+                        onSave={saveProductOrder}
+                        trigger={
+                            <Button
+                                variant="outline"
+                                className="rounded-full h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
+                                disabled={selectedCategoryFilter === "all" || selectedCategoryProducts.length < 2}
+                            >
+                                <ListOrdered className="size-3.5 sm:size-4" />
+                                Reorder
+                            </Button>
+                        }
+                        />
+                    )}
                 </div>
             </div>
 

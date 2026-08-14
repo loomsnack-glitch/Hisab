@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import { getCategories, getProducts } from "@repo/services";
+import { getCategories, getProducts, reorderCategories } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
@@ -9,7 +9,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
-import { LayoutGrid, Pencil, PlusCircle, RefreshCw, Search, Table as TableIcon, Tags, X } from "lucide-react";
+import { LayoutGrid, ListOrdered, Pencil, PlusCircle, RefreshCw, Search, Table as TableIcon, Tags, X } from "lucide-react";
 
 import DeleteCategoryButton from "@/components/catalog/delete-category-button";
 import CategoryStatusBadge from "@/components/catalog/category-status-badge";
@@ -17,9 +17,11 @@ import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
 import { formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
+import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
 
 const CategoriesPage = () => {
     const { organizationId = "" } = useParams();
+    const queryClient = useQueryClient();
     const [mobileViewMode, setMobileViewMode] = useState<"card" | "table">("card");
     const [mobileSearchQuery, setMobileSearchQuery] = useState("");
 
@@ -47,6 +49,25 @@ const CategoriesPage = () => {
         }
         return grouped;
     }, [products]);
+
+    const categoryOrderItems = useMemo(
+        () => categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            description: `${productsByCategoryId.get(category.id)?.length ?? 0} product${(productsByCategoryId.get(category.id)?.length ?? 0) === 1 ? "" : "s"}`,
+            leading: <Tags className="size-4 shrink-0 text-primary" />,
+        })),
+        [categories, productsByCategoryId],
+    );
+
+    const saveCategoryOrder = async (categoryIds: string[]) => {
+        const response = await reorderCategories(organizationId, { categoryIds });
+        if (response.status === "success") {
+            await queryClient.invalidateQueries({ queryKey: catalogKeys.categories(organizationId) });
+            await queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
+        }
+        return response;
+    };
 
     const filteredCategories = useMemo(() => {
         if (!mobileSearchQuery.trim()) return categories;
@@ -206,15 +227,29 @@ const CategoriesPage = () => {
                             ]}
                             infoText={`${categories.length} categor${categories.length === 1 ? "y" : "ies"}`}
                             toolbarActions={
-                                <UpsertCategoryDialog
-                                    organizationId={organizationId}
-                                    trigger={
-                                        <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-4">
-                                            <PlusCircle className="size-3.5" />
-                                            Add category
-                                        </Button>
-                                    }
-                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <ReorderListDialog
+                                        title="Reorder categories"
+                                        description="Choose the order categories appear in the catalog and POS."
+                                        items={categoryOrderItems}
+                                        onSave={saveCategoryOrder}
+                                        trigger={
+                                            <Button variant="outline" className="rounded-full h-9 text-xs px-4">
+                                                <ListOrdered className="size-3.5" />
+                                                Reorder
+                                            </Button>
+                                        }
+                                    />
+                                    <UpsertCategoryDialog
+                                        organizationId={organizationId}
+                                        trigger={
+                                            <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-4">
+                                                <PlusCircle className="size-3.5" />
+                                                Add category
+                                            </Button>
+                                        }
+                                    />
+                                </div>
                             }
                         />
                     </div>
@@ -279,6 +314,18 @@ const CategoriesPage = () => {
                                         <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-3 shrink-0">
                                             <PlusCircle className="size-3.5" />
                                             Add
+                                        </Button>
+                                    }
+                                />
+                                <ReorderListDialog
+                                    title="Reorder categories"
+                                    description="Choose the order categories appear in the catalog and POS."
+                                    items={categoryOrderItems}
+                                    onSave={saveCategoryOrder}
+                                    trigger={
+                                        <Button variant="outline" className="rounded-full h-9 text-xs px-3 shrink-0">
+                                            <ListOrdered className="size-3.5" />
+                                            Reorder
                                         </Button>
                                     }
                                 />

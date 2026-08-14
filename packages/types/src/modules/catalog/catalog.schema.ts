@@ -101,6 +101,7 @@ export const CategoryDTOSchema = z.object({
   id: z.uuid("Invalid category id"),
   organizationId: z.uuid("Invalid organization id"),
   name: nameSchema,
+  sortOrder: z.number().int().nonnegative(),
   status: CategoryStatusSchema,
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
@@ -113,6 +114,7 @@ const ProductDTOObjectSchema = z.object({
   organizationId: z.uuid("Invalid organization id"),
   categoryId: z.uuid("Invalid category id"),
   name: nameSchema,
+  sortOrder: z.number().int().nonnegative(),
   price: priceSchema,
   discount: discountSchema,
   imagePath: z.string().nullable().optional(),
@@ -359,6 +361,22 @@ export const ReuseInternalProductCodeSchema = z.object({
       /^04\d{11}$/,
       "Internal Product Code must be a 13-digit code beginning with 04",
     ),
+});
+
+const orderedIdsSchema = z
+  .array(z.uuid("Invalid id"))
+  .min(1, "At least one item is required")
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "Items cannot be repeated",
+  });
+
+export const ReorderCategoriesSchema = z.object({
+  categoryIds: orderedIdsSchema,
+});
+
+export const ReorderProductsSchema = z.object({
+  categoryId: z.uuid("Invalid category id"),
+  productIds: orderedIdsSchema,
 });
 
 export const CreateBundleProductSchema = z.object({

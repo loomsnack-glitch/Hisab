@@ -25,6 +25,8 @@ import type {
     ProductDTOSchema,
     ProductResponseDTOSchema,
     ReuseInternalProductCodeSchema,
+    ReorderCategoriesSchema,
+    ReorderProductsSchema,
     UpdateAddOnSchema,
     UpdateBundleProductSchema,
     UpdateComboProductSchema,
@@ -61,7 +63,7 @@ export type ProductAddOnAttachmentStatus = ProductAddOnAttachmentDTO["status"];
 
 export type CreateCategoryJSON = z.infer<typeof CreateCategorySchema>;
 export type CreateCategorySVC = CreateCategoryJSON;
-export type CreateCategoryREPO = Pick<CategoryDTO, "id" | "organizationId" | "name" | "status" | "createdBy"> & {
+export type CreateCategoryREPO = Pick<CategoryDTO, "id" | "organizationId" | "name" | "status" | "sortOrder" | "createdBy"> & {
     updatedBy?: string | null;
 };
 
@@ -77,6 +79,7 @@ export type CreateProductREPO = Pick<
     | "organizationId"
     | "categoryId"
     | "name"
+    | "sortOrder"
     | "price"
     | "discount"
     | "productType"
@@ -106,7 +109,11 @@ export type UpdateProductREPO = Pick<
     | "updatedBy"
 > & {
     imagePath?: string | null;
+    sortOrder?: number;
 };
+
+export type ReorderCategoriesJSON = z.infer<typeof ReorderCategoriesSchema>;
+export type ReorderProductsJSON = z.infer<typeof ReorderProductsSchema>;
 
 export type CreateBundleProductJSON = z.infer<typeof CreateBundleProductSchema>;
 export type CreateBundleProductSVC = CreateBundleProductJSON;

@@ -26,6 +26,8 @@ import {
   type ProductResponse,
   type ProductResponseDTO,
   type ProductsListResponse,
+  type ReorderCategoriesJSON,
+  type ReorderProductsJSON,
   type ReuseInternalProductCodeJSON,
   type ServiceResponse,
   type UpdateAddOnSVC,
@@ -381,12 +383,17 @@ export const createCategory = async (
     };
   }
 
-  const category = await catalogRepository.createCategory({
-    id: crypto.randomUUID(),
-    organizationId,
-    name: categoryData.name,
-    status: categoryData.status ?? "active",
-    createdBy: userId,
+  let category: Awaited<ReturnType<typeof catalogRepository.createCategory>> = null;
+  await pg.begin(async (tx) => {
+    const sortOrder = await catalogRepository.getNextCategorySortOrder(organizationId, tx);
+    category = await catalogRepository.createCategory({
+      id: crypto.randomUUID(),
+      organizationId,
+      name: categoryData.name,
+      status: categoryData.status ?? "active",
+      sortOrder,
+      createdBy: userId,
+    }, tx);
   });
 
   if (!category) {
@@ -404,6 +411,48 @@ export const createCategory = async (
     message: "Category created successfully",
     code: STATUS_CODES.CREATED,
   };
+};
+
+export const reorderCategories = async (
+  userId: string,
+  organizationId: string,
+  orderData: ReorderCategoriesJSON,
+): Promise<ServiceResponse<null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
+
+  const categories = await catalogRepository.getCategoriesByOrganizationId(organizationId);
+  const requestedIds = new Set(orderData.categoryIds);
+  const categoryIds = new Set(categories.map((category) => category.id));
+  if (requestedIds.size !== categoryIds.size || orderData.categoryIds.some((id) => !categoryIds.has(id))) {
+    return { status: "error", message: "The category order must include every category exactly once", data: null, code: STATUS_CODES.BAD_REQUEST };
+  }
+
+  await pg.begin((tx) => catalogRepository.reorderCategories(organizationId, orderData.categoryIds, userId, tx));
+  return { status: "success", message: "Category order updated successfully", data: null, code: STATUS_CODES.SUCCESS };
+};
+
+export const reorderProducts = async (
+  userId: string,
+  organizationId: string,
+  orderData: ReorderProductsJSON,
+): Promise<ServiceResponse<null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
+
+  const products = await catalogRepository.getProductsByCategoryId(organizationId, orderData.categoryId);
+  const requestedIds = new Set(orderData.productIds);
+  const productIds = new Set(products.map((product) => product.id));
+  if (requestedIds.size !== productIds.size || orderData.productIds.some((id) => !productIds.has(id))) {
+    return { status: "error", message: "The product order must include every product in the category exactly once", data: null, code: STATUS_CODES.BAD_REQUEST };
+  }
+
+  await pg.begin((tx) => catalogRepository.reorderProducts(organizationId, orderData.categoryId, orderData.productIds, userId, tx));
+  return { status: "success", message: "Product order updated successfully", data: null, code: STATUS_CODES.SUCCESS };
 };
 
 export const getCategoryDetails = async (
@@ -759,6 +808,10 @@ export const createProduct = async (
 
   let product: ProductDTO | null = null;
   try {
+    const sortOrder = await catalogRepository.getNextProductSortOrder(
+      organizationId,
+      productData.categoryId,
+    );
     product = await catalogRepository.createProduct({
       id: crypto.randomUUID(),
       organizationId,
@@ -771,6 +824,7 @@ export const createProduct = async (
       productCode: codeAssignment.productCode,
       productCodeKind: codeAssignment.productCodeKind,
       status: productData.status ?? "active",
+      sortOrder,
       createdBy: userId,
     });
   } catch (error) {
@@ -929,6 +983,9 @@ export const updateProduct = async (
   }
 
   const categoryChanged = nextCategoryId !== existingProduct.categoryId;
+  const nextSortOrder = categoryChanged
+    ? await catalogRepository.getNextProductSortOrder(organizationId, nextCategoryId)
+    : existingProduct.sortOrder;
   const nameChanged =
     nextName.toLowerCase() !== existingProduct.name.toLowerCase();
   if (categoryChanged || nameChanged) {
@@ -1003,6 +1060,7 @@ export const updateProduct = async (
       productCode: nextProductCode,
       productCodeKind: nextProductCodeKind,
       status: nextStatus,
+      sortOrder: nextSortOrder,
       updatedBy: userId,
     };
     if (
@@ -1803,8 +1861,7 @@ const loadComboChoiceGroupsForProducts = async (
     groupsByComboProductId.set(group.comboProductId, comboGroups);
   }
 
-  return new Map(
-    await Promise.all(
+  const entries: Array<[string, ComboProductResponse["choiceGroups"]]> = await Promise.all(
       comboProducts.map(async (combo) => [
         combo.id,
         await Promise.all(
@@ -1821,9 +1878,9 @@ const loadComboChoiceGroupsForProducts = async (
               ),
           })),
         ),
-      ]),
-    ),
+      ] as [string, ComboProductResponse["choiceGroups"]]),
   );
+  return new Map(entries);
 };
 
 const validateComboChoiceGroups = async (
@@ -2038,6 +2095,7 @@ export const createComboProduct = async (
           productCode: null,
           productCodeKind: null,
           status: comboData.status ?? "active",
+          sortOrder: await catalogRepository.getNextProductSortOrder(organizationId, comboData.categoryId, tx),
           createdBy: userId,
         },
         tx,
@@ -2319,6 +2377,10 @@ export const updateComboProduct = async (
           productCode: existingProduct.productCode,
           productCodeKind: existingProduct.productCodeKind,
           status: comboData.status ?? existingProduct.status,
+          sortOrder:
+            nextCategoryId === existingProduct.categoryId
+              ? existingProduct.sortOrder
+              : await catalogRepository.getNextProductSortOrder(organizationId, nextCategoryId, tx),
           updatedBy: userId,
         },
         tx,
@@ -2441,6 +2503,7 @@ export const createBundleProduct = async (
           productCode: null,
           productCodeKind: null,
           status: bundleData.status ?? "active",
+          sortOrder: await catalogRepository.getNextProductSortOrder(organizationId, bundleData.categoryId, tx),
           createdBy: userId,
         },
         tx,
@@ -2649,6 +2712,10 @@ export const updateBundleProduct = async (
           productCode: existingProduct.productCode,
           productCodeKind: existingProduct.productCodeKind,
           status: nextStatus,
+          sortOrder:
+            nextCategoryId === existingProduct.categoryId
+              ? existingProduct.sortOrder
+              : await catalogRepository.getNextProductSortOrder(organizationId, nextCategoryId, tx),
           updatedBy: userId,
         },
         tx,

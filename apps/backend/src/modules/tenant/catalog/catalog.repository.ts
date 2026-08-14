@@ -118,12 +118,26 @@ export const createCategory = async (
     return result ? snakeToCamel(result) : null;
 };
 
+export const getNextCategorySortOrder = async (
+    organizationId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<number> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT COALESCE(MAX(sort_order) + 1, 0)::int AS next_sort_order
+        FROM categories
+        WHERE organization_id = ${organizationId}
+    `;
+
+    return Number(result?.next_sort_order ?? 0);
+};
+
 export const getCategoriesByOrganizationId = async (organizationId: string): Promise<CategoryDTO[]> => {
     const results = await pg`
         SELECT *
         FROM categories
         WHERE organization_id = ${organizationId}
-        ORDER BY created_at ASC
+        ORDER BY sort_order ASC, created_at ASC, id ASC
     `;
 
     return results.map((result: Record<string, unknown>) => mapRow<CategoryDTO>(result));
@@ -217,10 +231,13 @@ export const createProduct = async (
 
 export const getProductsByOrganizationId = async (organizationId: string): Promise<ProductDTO[]> => {
     const results = await pg`
-        SELECT *
-        FROM products
-        WHERE organization_id = ${organizationId}
-        ORDER BY created_at ASC
+        SELECT p.*
+        FROM products p
+        INNER JOIN categories c
+            ON c.id = p.category_id
+           AND c.organization_id = p.organization_id
+        WHERE p.organization_id = ${organizationId}
+        ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
     `;
 
     return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
@@ -265,11 +282,14 @@ export const getProductsByIds = async (organizationId: string, productIds: strin
 
 export const getActiveProductsByOrganizationId = async (organizationId: string): Promise<ProductDTO[]> => {
     const results = await pg`
-        SELECT *
-        FROM products
-        WHERE organization_id = ${organizationId}
-          AND status = 'active'
-        ORDER BY created_at ASC
+        SELECT p.*
+        FROM products p
+        INNER JOIN categories c
+            ON c.id = p.category_id
+           AND c.organization_id = p.organization_id
+        WHERE p.organization_id = ${organizationId}
+          AND p.status = 'active'
+        ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
     `;
 
     return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
@@ -281,7 +301,7 @@ export const getProductsByCategoryId = async (organizationId: string, categoryId
         FROM products
         WHERE organization_id = ${organizationId}
           AND category_id = ${categoryId}
-        ORDER BY created_at ASC
+        ORDER BY sort_order ASC, created_at ASC, id ASC
     `;
 
     return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
@@ -296,6 +316,60 @@ export const getProductById = async (organizationId: string, productId: string):
     `;
 
     return result ? snakeToCamel(result) : null;
+};
+
+export const getNextProductSortOrder = async (
+    organizationId: string,
+    categoryId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<number> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT COALESCE(MAX(sort_order) + 1, 0)::int AS next_sort_order
+        FROM products
+        WHERE organization_id = ${organizationId}
+          AND category_id = ${categoryId}
+    `;
+
+    return Number(result?.next_sort_order ?? 0);
+};
+
+export const reorderCategories = async (
+    organizationId: string,
+    categoryIds: string[],
+    updatedBy: string,
+    tx: Bun.TransactionSQL,
+): Promise<void> => {
+    for (const [sortOrder, categoryId] of categoryIds.entries()) {
+        await tx`
+            UPDATE categories
+            SET sort_order = ${sortOrder},
+                updated_by = ${updatedBy},
+                updated_at = NOW()
+            WHERE organization_id = ${organizationId}
+              AND id = ${categoryId}
+        `;
+    }
+};
+
+export const reorderProducts = async (
+    organizationId: string,
+    categoryId: string,
+    productIds: string[],
+    updatedBy: string,
+    tx: Bun.TransactionSQL,
+): Promise<void> => {
+    for (const [sortOrder, productId] of productIds.entries()) {
+        await tx`
+            UPDATE products
+            SET sort_order = ${sortOrder},
+                updated_by = ${updatedBy},
+                updated_at = NOW()
+            WHERE organization_id = ${organizationId}
+              AND category_id = ${categoryId}
+              AND id = ${productId}
+        `;
+    }
 };
 
 export const getProductByCode = async (
@@ -444,6 +518,7 @@ export const updateProduct = async (
     const [result] = await db`
         UPDATE products
         SET category_id = ${productData.categoryId},
+            sort_order = COALESCE(${productData.sortOrder ?? null}, sort_order),
             name = ${productData.name},
             price = ${productData.price},
             discount = ${productData.discount},

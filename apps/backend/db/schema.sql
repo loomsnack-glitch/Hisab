@@ -332,11 +332,13 @@ CREATE TABLE public.categories (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     organization_id uuid NOT NULL,
     name character varying(255) NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
     status public.category_status_enum DEFAULT 'active'::public.category_status_enum NOT NULL,
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT categories_sort_order_check CHECK ((sort_order >= 0))
 );
 
 
@@ -487,6 +489,7 @@ CREATE TABLE public.products (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     organization_id uuid NOT NULL,
     category_id uuid NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
     name character varying(255) NOT NULL,
     price numeric(10,2) NOT NULL,
     discount numeric(10,2) DEFAULT 0 NOT NULL,
@@ -497,6 +500,7 @@ CREATE TABLE public.products (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     product_type public.product_type_enum DEFAULT 'single'::public.product_type_enum NOT NULL,
+    CONSTRAINT products_sort_order_check CHECK ((sort_order >= 0)),
     CONSTRAINT products_discount_check CHECK ((discount >= (0)::numeric)),
     CONSTRAINT products_image_path_no_icons CHECK (((image_path IS NULL) OR ((image_path)::text !~~ 'icon:%'::text))),
     CONSTRAINT products_price_check CHECK ((price >= (0)::numeric))
@@ -1330,6 +1334,12 @@ CREATE INDEX idx_categories_organization_id ON public.categories USING btree (or
 CREATE INDEX idx_categories_organization_status ON public.categories USING btree (organization_id, status);
 
 
+-- Name: idx_categories_organization_sort_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_categories_organization_sort_order ON public.categories USING btree (organization_id, sort_order, id);
+
+
 --
 -- Name: idx_combo_choice_groups_organization_id; Type: INDEX; Schema: public; Owner: -
 --
@@ -1461,6 +1471,12 @@ CREATE INDEX idx_products_organization_product_type ON public.products USING btr
 --
 
 CREATE INDEX idx_products_organization_status ON public.products USING btree (organization_id, status);
+
+
+-- Name: idx_products_organization_category_sort_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_products_organization_category_sort_order ON public.products USING btree (organization_id, category_id, sort_order, id);
 
 
 --
