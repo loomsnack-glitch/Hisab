@@ -139,6 +139,20 @@ export type InternalLabelPreview = {
   printSvg: string;
 };
 
+export type LabelLayoutPreviewSlot = {
+  filled: boolean;
+};
+
+export type InternalLabelLayoutPreview = InternalLabelPreview & {
+  slots: LabelLayoutPreviewSlot[];
+  widthMm: number;
+  heightMm: number;
+  horizontalGapMm: number;
+  verticalGapMm: number;
+  columns: number;
+  rows: number;
+};
+
 export type InternalLabelDocument = {
   html: string;
   pages: Array<{ occupiedPositions: number[] }>;
@@ -751,6 +765,88 @@ const buildRollPages = (
   }
 
   return pages;
+};
+
+export const buildInternalLabelLayoutPreview = (
+  input: LabelDocumentInput,
+): InternalLabelLayoutPreview => {
+  validateCopyCount(input.job.copyCount);
+  const preview = buildInternalLabelPreview({
+    template: input.template,
+    product: input.product,
+  });
+  const {
+    widthMm,
+    heightMm,
+    horizontalGapMm,
+    verticalGapMm,
+    media,
+    labelsPerRow,
+    sheet,
+  } = input.template.stock;
+
+  if (media === "roll") {
+    const columns = Math.max(1, labelsPerRow);
+    if (columns <= 1) {
+      return {
+        ...preview,
+        slots: [{ filled: true }],
+        widthMm,
+        heightMm,
+        horizontalGapMm,
+        verticalGapMm,
+        columns: 1,
+        rows: 1,
+      };
+    }
+
+    return {
+      ...preview,
+      slots: Array.from({ length: columns }, (_, index) => ({
+        filled: index + 1 <= input.job.copyCount,
+      })),
+      widthMm,
+      heightMm,
+      horizontalGapMm,
+      verticalGapMm,
+      columns,
+      rows: 1,
+    };
+  }
+
+  const capacity = sheetLabelCapacity(input.template);
+  const startingPosition = input.job.startingPosition ?? 1;
+  if (
+    !Number.isInteger(startingPosition) ||
+    startingPosition < 1 ||
+    startingPosition > capacity
+  ) {
+    throw new Error(
+      `Sheet starting position must be between 1 and ${capacity}`,
+    );
+  }
+
+  let copyNumber = 1;
+  const slots = Array.from({ length: capacity }, (_, index) => {
+    const position = index + 1;
+    if (position < startingPosition || copyNumber > input.job.copyCount) {
+      return { filled: false };
+    }
+
+    copyNumber += 1;
+    return { filled: true };
+  });
+
+  return {
+    ...preview,
+    slots,
+    widthMm,
+    heightMm,
+    horizontalGapMm,
+    verticalGapMm,
+    columns: sheet?.columns ?? 1,
+    rows: sheet?.rows ?? 1,
+  };
 };
 
 export const buildInternalLabelDocument = (

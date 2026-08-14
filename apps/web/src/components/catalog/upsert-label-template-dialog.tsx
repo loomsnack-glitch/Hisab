@@ -458,7 +458,7 @@ const MillimetreInput = ({
 
 const SAMPLE_LABEL_PRODUCT = {
     productCode: "0400000000008",
-    name: "જીરા ભાખરી",
+    name: "Sample product name",
     price: 125,
 };
 
@@ -1285,7 +1285,7 @@ const UpsertLabelTemplateDialog = ({
                             {preview && "svg" in preview ? (
                                 <div className="overflow-x-auto rounded-xl border border-border/60 bg-muted/20 p-3">
                                     <div
-                                        className="flex items-start"
+                                        className="flex w-fit items-start"
                                         style={{
                                             gap: `${horizontalGapMm}mm`,
                                         }}

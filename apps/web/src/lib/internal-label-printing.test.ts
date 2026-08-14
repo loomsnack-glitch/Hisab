@@ -11,6 +11,7 @@ import {
   EAN13_QUIET_ZONE_MODULES,
   THERMAL_ROLL_LABEL_TEMPLATE,
   buildInternalLabelDocument,
+  buildInternalLabelLayoutPreview,
   buildInternalLabelPreview,
   canOfferProductLabelPrint,
   canPrintInternalLabels,
@@ -323,6 +324,61 @@ describe("Internal Product Code label printing", () => {
     expect(document.html).toContain(".internal-product-label { width: 40mm; height: 30mm; }");
     expect(document.pages).toHaveLength(2);
     expect(document.html.match(/data-label-copy=/g)).toHaveLength(3);
+  });
+
+  test("layout preview shows an empty second slot for one copy on a 2-across roll", () => {
+    const preview = buildInternalLabelLayoutPreview({
+      template: {
+        ...THERMAL_ROLL_LABEL_TEMPLATE,
+        stock: {
+          widthMm: 38,
+          heightMm: 50,
+          labelsPerRow: 2,
+          horizontalGapMm: 2,
+          verticalGapMm: 0,
+          media: "roll",
+        },
+      },
+      product: {
+        productCode: internalCode,
+        name: "Sample product name",
+        price: 80,
+      },
+      job: {
+        copyCount: 1,
+      },
+    });
+
+    expect(preview.columns).toBe(2);
+    expect(preview.rows).toBe(1);
+    expect(preview.slots).toEqual([{ filled: true }, { filled: false }]);
+    expect(preview.svg).toContain("Sample product name");
+  });
+
+  test("layout preview fills both slots for two copies on a 2-across roll", () => {
+    const preview = buildInternalLabelLayoutPreview({
+      template: {
+        ...THERMAL_ROLL_LABEL_TEMPLATE,
+        stock: {
+          widthMm: 38,
+          heightMm: 50,
+          labelsPerRow: 2,
+          horizontalGapMm: 2,
+          verticalGapMm: 0,
+          media: "roll",
+        },
+      },
+      product: {
+        productCode: internalCode,
+        name: "Sample product name",
+        price: 80,
+      },
+      job: {
+        copyCount: 2,
+      },
+    });
+
+    expect(preview.slots).toEqual([{ filled: true }, { filled: true }]);
   });
 
   test("sizes a sheet print page from Label Stock millimetres and places labels with both gaps", () => {

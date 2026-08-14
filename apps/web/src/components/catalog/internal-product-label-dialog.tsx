@@ -16,7 +16,7 @@ import { Barcode, Printer, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  buildInternalLabelPreview,
+  buildInternalLabelLayoutPreview,
   canPrintInternalLabels,
   labelPrintConfirmationKey,
   printInternalLabelDocument,
@@ -95,15 +95,31 @@ const InternalProductLabelDialog = ({
     (Number.isInteger(parsedStartingPosition) &&
       parsedStartingPosition >= 1 &&
       parsedStartingPosition <= sheetCapacity);
+  const previewCopyCount =
+    Number.isInteger(parsedCopyCount) &&
+    parsedCopyCount >= 1 &&
+    parsedCopyCount <= 1_000
+      ? parsedCopyCount
+      : 1;
+  const previewStartingPosition =
+    Number.isInteger(parsedStartingPosition) &&
+    parsedStartingPosition >= 1 &&
+    parsedStartingPosition <= sheetCapacity
+      ? parsedStartingPosition
+      : 1;
   const previewResult = useMemo(() => {
     if (!template) {
       return { preview: null, error: null };
     }
     try {
       return {
-        preview: buildInternalLabelPreview({
+        preview: buildInternalLabelLayoutPreview({
           template,
           product: labelProduct,
+          job: {
+            copyCount: previewCopyCount,
+            ...(isSheet ? { startingPosition: previewStartingPosition } : {}),
+          },
         }),
         error: null,
       };
@@ -116,7 +132,13 @@ const InternalProductLabelDialog = ({
             : "This Product cannot be printed on the chosen Label Template.",
       };
     }
-  }, [labelProduct, template]);
+  }, [
+    isSheet,
+    labelProduct,
+    previewCopyCount,
+    previewStartingPosition,
+    template,
+  ]);
   const preview = previewResult.preview;
   const previewError = previewResult.error;
   const printAllowed =
@@ -221,7 +243,7 @@ const InternalProductLabelDialog = ({
           subtitle="The barcode encodes only this Product Code. Product text never changes scan identity."
         />
 
-        <div className="grid gap-5 pt-2 md:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="grid gap-5 pt-2 md:grid-cols-[minmax(0,1fr)_minmax(12rem,20rem)]">
           <div className="space-y-4">
             <div className="rounded-xl border border-border/60 bg-muted/25 p-3">
               <p className="text-xs text-muted-foreground">
@@ -350,10 +372,39 @@ const InternalProductLabelDialog = ({
           <div className="space-y-2">
             <p className="text-sm font-medium">Preview</p>
             {preview ? (
-              <div
-                className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"
-                dangerouslySetInnerHTML={{ __html: preview.svg }}
-              />
+              <div className="overflow-x-auto rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div
+                  className="inline-grid w-fit"
+                  style={{
+                    gridTemplateColumns: `repeat(${preview.columns}, ${preview.widthMm}mm)`,
+                    gridTemplateRows: `repeat(${preview.rows}, ${preview.heightMm}mm)`,
+                    columnGap: `${preview.horizontalGapMm}mm`,
+                    rowGap: `${preview.verticalGapMm}mm`,
+                  }}
+                >
+                  {preview.slots.map((slot, index) => (
+                    <div
+                      key={index}
+                      className={
+                        slot.filled
+                          ? "overflow-hidden rounded-lg border border-border/40 bg-white shadow-sm"
+                          : "rounded-lg border border-dashed border-border/50 bg-muted/30"
+                      }
+                      style={{
+                        width: `${preview.widthMm}mm`,
+                        height: `${preview.heightMm}mm`,
+                      }}
+                    >
+                      {slot.filled ? (
+                        <div
+                          className="h-full w-full [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+                          dangerouslySetInnerHTML={{ __html: preview.svg }}
+                        />
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
               <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-10 text-center text-xs text-muted-foreground">
                 {previewError ?? "Choose a Label Template to preview this Product."}
