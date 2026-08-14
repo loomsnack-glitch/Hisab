@@ -3,7 +3,7 @@ import { redis } from "./config/redis";
 import { handleShutdown } from "./helpers/server.helper";
 import { replayPendingMessageEvents } from "./modules/tenant/whatsapp/whatsapp.service";
 
-const port = Number(process.env.PORT) || 8000;
+const port = Number(process.env.PORT) || 8001;
 const hostname = process.env.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0";
 
 Bun.serve({

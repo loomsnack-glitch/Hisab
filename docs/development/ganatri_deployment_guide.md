@@ -38,11 +38,23 @@ bun --version
 
 The backend continues to use its existing Bun/Hono runtime. The isolated
 WhatsApp worker must be started with Node 20 or newer; do not start it with Bun.
+PM2 uses `/usr/bin/node`, so that binary must be v20, not an older system Node
+or a newer Node that only exists under nvm.
 
 ```bash
 node --version
+/usr/bin/node --version
 npm --version
 pm2 --version
+```
+
+If `/usr/bin/node` is older than v20, install Node 20 LTS system-wide (Ubuntu):
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+node --version
+/usr/bin/node --version
 ```
 
 If Node or PM2 is missing, install the approved Node 20 LTS distribution for
@@ -83,15 +95,14 @@ nginx -t && systemctl reload nginx
 
 If `loomsnack.com` already has a wildcard cert for `*.loomsnack.com`, you can skip certbot and reuse that cert path (as in `boxmap.loomsnack.com`).
 
-### Backend `.env` on server (first time only)
+### Backend `.env`
 
-Create `/var/www/ganatri.loomsnack.com/backend/apps/backend/.env` (never commit this file):
+Keep production values in gitignored `apps/backend/.env` (`PORT=8001`, production
+database, MinIO, Redis, JWT, matching `WHATSAPP_WORKER_TOKEN`). Every deploy
+copies that file into `out/` and rsyncs it with the backend.
 
-```bash
-nano /var/www/ganatri.loomsnack.com/backend/apps/backend/.env
-```
-
-Use `apps/backend/.env.example` as a template. Production values:
+First time only, if the file is not on the server yet, rsync will create it.
+Do not commit `.env`.
 
 ```env
 BASE_PATH="/api"
@@ -126,18 +137,17 @@ WHATSAPP_API_URL=https://graph.facebook.com/v22.0/<phone_number_id>/messages
 WHATSAPP_API_TOKEN=your_whatsapp_api_token
 ```
 
-### WhatsApp worker `.env` on server (first time only)
+### WhatsApp worker `.env`
 
-Create `/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/.env` and
-never commit it:
+Keep the same production secrets in gitignored `apps/whatsapp-worker/.env`.
+`WHATSAPP_WORKER_TOKEN` must match the backend file. `WHATSAPP_API_URL` is
+`http://127.0.0.1:8001/api`. Every deploy rsyncs this file onto the server.
+
+Create the auth-state directory once:
 
 ```bash
 mkdir -p /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/data/whatsapp-auth
-nano /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/.env
 ```
-
-Use `apps/whatsapp-worker/.env.example` as the template. For this deployment,
-the internal API URL points to the Bun backend on port 8001:
 
 ```env
 WHATSAPP_WORKER_HOST=127.0.0.1
@@ -146,7 +156,7 @@ WHATSAPP_WORKER_ID=whatsapp-worker-0
 WHATSAPP_API_URL=http://127.0.0.1:8001/api
 WHATSAPP_WORKER_TOKEN=the-same-long-random-secret-used-by-the-backend
 WHATSAPP_AUTH_ENCRYPTION_KEY=at-least-32-random-bytes
-WHATSAPP_AUTH_STATE_DIRECTORY=/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/data/whatsapp-auth
+WHATSAPP_AUTH_STATE_DIRECTORY=./data/whatsapp-auth
 WHATSAPP_WORKER_PARTITION_COUNT=1
 WHATSAPP_WORKER_PARTITION_INDEX=0
 WHATSAPP_WORKER_DISPATCH_CONCURRENCY=2
@@ -158,16 +168,16 @@ WHATSAPP_WORKER_SHUTDOWN_TIMEOUT_MS=30000
 WHATSAPP_WORKER_OPERATIONS_REFRESH_MS=15000
 ```
 
-Generate secrets instead of using the placeholders:
+Generate secrets once and reuse them locally and in production:
 
 ```bash
 openssl rand -hex 32  # WHATSAPP_WORKER_TOKEN
 openssl rand -hex 32  # WHATSAPP_AUTH_ENCRYPTION_KEY
 ```
 
-Keep the encrypted auth-state directory persistent across deployments and
-worker restarts. Never use `rsync --delete` against its parent without excluding
-`data/` and `.env`.
+Never rsync `--delete` the worker `data/` directory. That encrypted auth state
+is not in git and is not in `out/`. Backend `out/` rsync must exclude
+`apps/whatsapp-worker` so `--delete` cannot wipe worker `data/` or `dist/`.
 
 ### PM2 (first time only)
 
@@ -188,8 +198,9 @@ pm2 save
 ```
 
 `pm2 list` must show both **`ganatri-backend`** and
-**`ganatri-whatsapp-worker`**. The worker entry uses:
-`node --env-file=.env dist/index.js`; it does not run under Bun.
+**`ganatri-whatsapp-worker`**. The worker entry runs `node dist/index.js` and
+loads `apps/whatsapp-worker/.env` through PM2. It does not run under Bun. Do
+not pass Node `--env-file`; older `/usr/bin/node` binaries reject that flag.
 
 ---
 
@@ -206,6 +217,7 @@ bun run build
 
 # Pruned backend bundle (smaller deploy, same pattern as TenderSense)
 bun turbo prune --scope=backend
+cp apps/backend/.env out/apps/backend/.env
 cd out
 bun install --ignore-scripts
 cd apps/backend
@@ -290,9 +302,15 @@ curl -fsSI https://ganatri.loomsnack.com/index.html | grep -i cache-control
 ```bash
 rsync -avz --delete --progress \
   --exclude=node_modules \
+  --exclude=apps/whatsapp-worker \
   /mnt/c/Users/smarty/Desktop/loomsnack/Hisab/out/ \
   root@216.158.228.89:/var/www/ganatri.loomsnack.com/backend/
 ```
+
+`turbo prune --scope=backend` does not include the WhatsApp worker. `--delete`
+without `--exclude=apps/whatsapp-worker` removes worker `dist/` and `data/`.
+`.env` is included: copy `apps/backend/.env` into `out/` after prune so the
+production file is in `out/apps/backend/.env` before this rsync.
 
 Also sync the PM2 ecosystem file (first deploy or when it changes):
 
@@ -303,18 +321,21 @@ scp /mnt/c/Users/smarty/Desktop/loomsnack/Hisab/docs/development/ecosystem.confi
 
 ## 3.1 Deploy WhatsApp worker
 
-The worker bundle is deployed separately from the pruned backend. Exclude the
-worker `.env` and encrypted auth state so a code deployment cannot overwrite
-secrets or log out the linked account:
+The worker bundle is deployed separately from the pruned backend. Rsync the
+worker `.env` with the same production token as the backend. Exclude only
+encrypted auth state so a code deploy cannot log out the linked account:
 
 ```bash
-ssh root@216.158.228.89 "mkdir -p /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/dist"
+ssh root@216.158.228.89 "mkdir -p /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/dist \
+  /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/data/whatsapp-auth"
 
 rsync -avz --delete \
-  --exclude=.env \
   --exclude=data/ \
   /mnt/c/Users/smarty/Desktop/loomsnack/Hisab/apps/whatsapp-worker/dist/ \
   root@216.158.228.89:/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/dist/
+
+scp /mnt/c/Users/smarty/Desktop/loomsnack/Hisab/apps/whatsapp-worker/.env \
+  root@216.158.228.89:/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/.env
 ```
 
 Copy the updated PM2 ecosystem file whenever its worker entry changes:
@@ -339,7 +360,7 @@ bunx dbmate -d db/migrations up
 
 cd /var/www/ganatri.loomsnack.com/backend
 cp ecosystem.config.ganatri.cjs ecosystem.config.cjs
-pm2 startOrRestart ecosystem.config.cjs
+pm2 restart ecosystem.config.cjs
 pm2 save
 
 pm2 logs ganatri-backend --lines 50
@@ -396,10 +417,10 @@ bun run add-initial-data
 
 | Task | Command |
 |------|---------|
-| Full local build | `bun i && bun run build && bun turbo prune --scope=backend && cd out && bun install --ignore-scripts && cd apps/backend && bun run build` |
+| Full local build | `bun i && bun run build && bun turbo prune --scope=backend && cp apps/backend/.env out/apps/backend/.env && cd out && bun install --ignore-scripts && cd apps/backend && bun run build` |
 | Sync frontend | rsync `--delete` `apps/web/dist/` → `.../frontend/` |
-| Sync backend | rsync `out/` → `.../backend/` (exclude `node_modules`) |
-| Sync worker | rsync `apps/whatsapp-worker/dist/` → `.../backend/apps/whatsapp-worker/dist/` (exclude `.env`, `data/`) |
+| Sync backend | rsync `out/` → `.../backend/` (exclude `node_modules`, `apps/whatsapp-worker`; include `.env`) |
+| Sync worker | rsync `apps/whatsapp-worker/dist/` → `.../dist/` (exclude `data/`); scp worker `.env` |
 | Install on server | `cd .../backend/apps/backend && bun install --ignore-scripts` |
 | Migrations | `bunx dbmate -d db/migrations up` |
 | Restart API | `pm2 restart ganatri-backend` |
@@ -437,6 +458,36 @@ cd apps/web && bun run build
 
 **Certbot fails** — confirm DNS A record and port 80 open before `certbot --nginx`.
 
+**PM2: `Missing env file: .../whatsapp-worker/.env`** — backend `out/` rsync
+deleted the worker directory, or the worker `.env` was not scp'd. Recreate
+`data/whatsapp-auth` if it is gone (the account must be linked again), then
+scp the local worker `.env` and restart:
+
+```bash
+ls -la /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker
+ls -la /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/data
+```
+
+**WhatsApp invoice toast: `Invoice PDF could not be queued`** — MinIO is usually fine.
+The backend bundle must not inline PDFKit font paths from the Windows build machine.
+`apps/backend` builds with `--external pdfkit` so production loads
+`node_modules/pdfkit` on the server. Rebuild and rsync `out/` after this change.
+Look in `pm2 logs ganatri-backend` for `[whatsapp] invoice preparation failed`.
+
+**WhatsApp worker: `bad option: --env-file=.env`** — the worker `.env` exists;
+`/usr/bin/node` is older than 20.6 and does not understand `--env-file`. Check
+`/usr/bin/node --version`, install Node 20 LTS system-wide, copy the updated
+`ecosystem.config.ganatri.js`, then:
+
+```bash
+cd /var/www/ganatri.loomsnack.com/backend
+cp ecosystem.config.ganatri.cjs ecosystem.config.cjs
+pm2 delete ganatri-whatsapp-worker
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 logs ganatri-whatsapp-worker --lines 50
+```
+
 ---
 
 ## Full copy-paste flow (repeat deploys)
@@ -448,10 +499,19 @@ cd /mnt/c/Users/smarty/Desktop/loomsnack/Hisab
 git pull
 bun i && bun run build
 bun turbo prune --scope=backend
+cp apps/backend/.env out/apps/backend/.env
 cd out && bun install --ignore-scripts && cd apps/backend && bun run build && cd ../../..
 
 rsync -avz --delete --progress apps/web/dist/ root@216.158.228.89:/var/www/ganatri.loomsnack.com/frontend/
-rsync -avz --delete --progress --exclude=node_modules out/ root@216.158.228.89:/var/www/ganatri.loomsnack.com/backend/
+rsync -avz --delete --progress \
+  --exclude=node_modules \
+  --exclude=apps/whatsapp-worker \
+  out/ root@216.158.228.89:/var/www/ganatri.loomsnack.com/backend/
+rsync -avz --delete --exclude=data/ \
+  apps/whatsapp-worker/dist/ \
+  root@216.158.228.89:/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/dist/
+scp apps/whatsapp-worker/.env \
+  root@216.158.228.89:/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/.env
 ```
 
 **Server:**

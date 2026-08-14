@@ -61,8 +61,8 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/account", async c => {
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.getAccount(c.get("authUser").id, organizationId, storeId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -84,8 +84,8 @@ userRouter.post(
                     c.req.valid("json"),
                 ),
             );
-        } catch {
-            return unexpectedError(c);
+        } catch (error) {
+            return unexpectedError(c, error);
         }
     },
 );
@@ -100,8 +100,8 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId", asyn
             ?? invalidUuid(saleId, "Invalid sale id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.getInvoiceStatus(c.get("authUser").id, organizationId, storeId, saleId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -115,8 +115,8 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId/retry
             ?? invalidUuid(saleId, "Invalid sale id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.retryInvoice(c.get("authUser").id, organizationId, storeId, saleId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -127,8 +127,8 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/conversations", async 
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.listConversations(c.get("authUser").id, organizationId, storeId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -142,8 +142,8 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/conversations/:convers
             ?? invalidUuid(conversationId, "Invalid conversation id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.getConversation(c.get("authUser").id, organizationId, storeId, conversationId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -160,8 +160,8 @@ userRouter.post(
                 ?? invalidUuid(conversationId, "Invalid conversation id");
             if (invalid) return c.json(invalid, invalid.code);
             return handleServiceResponse(c, await service.sendText(c.get("authUser").id, organizationId, storeId, conversationId, c.req.valid("json")));
-        } catch {
-            return unexpectedError(c);
+        } catch (error) {
+            return unexpectedError(c, error);
         }
     },
 );
@@ -179,8 +179,8 @@ userRouter.post(
                 ?? invalidUuid(conversationId, "Invalid conversation id");
             if (invalid) return c.json(invalid, invalid.code);
             return handleServiceResponse(c, await service.attachCustomer(c.get("authUser").id, organizationId, storeId, conversationId, c.req.valid("json")));
-        } catch {
-            return unexpectedError(c);
+        } catch (error) {
+            return unexpectedError(c, error);
         }
     },
 );
@@ -197,8 +197,8 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/conversations/:convers
             ?? invalidUuid(messageId, "Invalid message id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.getAttachment(c.get("authUser").id, organizationId, storeId, conversationId, messageId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -209,8 +209,8 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/account/connect", asy
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.connectAccount(c.get("authUser").id, organizationId, storeId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -221,8 +221,8 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/account/disconnect", 
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.disconnectAccount(c.get("authUser").id, organizationId, storeId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -244,8 +244,8 @@ userRouter.post(
                     c.req.valid("json"),
                 ),
             );
-        } catch {
-            return unexpectedError(c);
+        } catch (error) {
+            return unexpectedError(c, error);
         }
     },
 );
@@ -269,8 +269,8 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/account/sync", async 
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.syncAccount(c.get("authUser").id, organizationId, storeId));
-    } catch {
-        return unexpectedError(c);
+    } catch (error) {
+        return unexpectedError(c, error);
     }
 });
 
@@ -290,8 +290,8 @@ userRouter.post(
                 c,
                 await service.queueInvoice(c.get("authUser").id, organizationId, storeId, saleId),
             );
-        } catch {
-            return unexpectedError(c);
+        } catch (error) {
+            return unexpectedError(c, error);
         }
     },
 );

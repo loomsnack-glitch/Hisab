@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { getApiBaseUrl, setApiBaseUrl } from "@repo/services";
 
 const LOCALHOST_PATTERN = /localhost|127\.0\.0\.1/g;
-const API_PORT = "8000";
+const API_PORT = "8001";
 
 const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, "");
 
@@ -101,11 +101,11 @@ export const getMobileApiSetupHint = (): string | undefined => {
     const apiUrl = getConfiguredApiBaseUrl();
 
     if (apiUrl.includes("10.0.2.2") && Device.isDevice) {
-        return "This device cannot reach 10.0.2.2. Set EXPO_PUBLIC_BASE_API_URL to your PC LAN IP in apps/mobile/.env, or run: adb reverse tcp:8000 tcp:8000";
+        return "This device cannot reach 10.0.2.2. Set EXPO_PUBLIC_BASE_API_URL to your PC LAN IP in apps/mobile/.env, or run: adb reverse tcp:8001 tcp:8001";
     }
 
     if (LOCALHOST_PATTERN.test(apiUrl) && Device.isDevice) {
-        return "Set EXPO_PUBLIC_BASE_API_URL to your PC LAN IP in apps/mobile/.env (example: http://192.168.1.10:8000/api), or run: adb reverse tcp:8000 tcp:8000";
+        return "Set EXPO_PUBLIC_BASE_API_URL to your PC LAN IP in apps/mobile/.env (example: http://192.168.1.10:8001/api), or run: adb reverse tcp:8001 tcp:8001";
     }
 
     return undefined;

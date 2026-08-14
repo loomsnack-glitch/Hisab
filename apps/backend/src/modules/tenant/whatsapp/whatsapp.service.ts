@@ -59,12 +59,31 @@ const saveWorkerSnapshot = async (snapshot: workerClient.WorkerAccountStatus) =>
     return account ? accountResponse(account, snapshot.qrImageDataUrl) : null;
 };
 
+const postgresCode = (error: unknown): string | undefined => {
+    if (typeof error !== "object" || error === null) return undefined;
+    if ("code" in error && typeof error.code === "string") return error.code;
+    if ("cause" in error) return postgresCode(error.cause);
+    return undefined;
+};
+
 const workerUnavailable = (account: WhatsAppAccountDTO): ServiceResponse<WhatsAppAccountStatusResponseDTO> => ({
     status: "error",
     message: "WhatsApp worker is unavailable. The account was saved; retry linking when the worker is healthy.",
     data: accountResponse(account, null),
     code: 503,
 });
+
+const markAccountWorkerUnavailable = async (accountId: string) => {
+    try {
+        await saveWorkerStatus(accountId, {
+            status: "failed",
+            qrImageDataUrl: null,
+            lastErrorCode: "worker_unavailable",
+        });
+    } catch (error) {
+        console.error("[whatsapp] failed to persist worker_unavailable status", error instanceof Error ? error.message : error);
+    }
+};
 
 export const getAccount = async (
     userId: string,
@@ -130,7 +149,7 @@ export const createAccount = async (
     try {
         account = await repository.createAccount(organizationId, storeId, phoneNumber, userId);
     } catch (error) {
-        if ((error as { code?: string }).code === "23505") {
+        if (postgresCode(error) === "23505") {
             return {
                 status: "error",
                 message: "This store already has a WhatsApp account",
@@ -138,7 +157,13 @@ export const createAccount = async (
                 code: STATUS_CODES.CONFLICT,
             };
         }
-        throw error;
+        console.error("[whatsapp] createAccount insert failed", error instanceof Error ? error.message : error);
+        return {
+            status: "error",
+            message: "WhatsApp operation failed",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
     }
 
     try {
@@ -151,11 +176,7 @@ export const createAccount = async (
             code: STATUS_CODES.CREATED,
         };
     } catch {
-        await saveWorkerStatus(account.id, {
-            status: "failed",
-            qrImageDataUrl: null,
-            lastErrorCode: "worker_unavailable",
-        });
+        await markAccountWorkerUnavailable(account.id);
         return workerUnavailable(account);
     }
 };
@@ -274,7 +295,7 @@ export const changeAccountNumber = async (
         }
         updatedAccount = updated;
     } catch (error) {
-        if ((error as { code?: string }).code === "23505") {
+        if (postgresCode(error) === "23505") {
             return {
                 status: "error",
                 message: "This WhatsApp number is already linked to another account",
@@ -282,7 +303,13 @@ export const changeAccountNumber = async (
                 code: STATUS_CODES.CONFLICT,
             };
         }
-        throw error;
+        console.error("[whatsapp] updateAccountPhoneNumber failed", error instanceof Error ? error.message : error);
+        return {
+            status: "error",
+            message: "WhatsApp operation failed",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
     }
 
     try {
