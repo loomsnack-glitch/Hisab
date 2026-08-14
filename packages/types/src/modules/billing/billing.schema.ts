@@ -254,8 +254,14 @@ export const UpdateCustomerSchema = z
         message: "At least one field is required",
     });
 
+export const CustomerListStatusSchema = z.enum(["all", "active", "inactive", "due", "no_due"]);
+export const CustomerSortSchema = z.enum(["newest", "oldest", "name_asc", "name_desc", "highest_due", "lowest_due"]);
+
 export const CustomerListQuerySchema = z.object({
     search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    status: CustomerListStatusSchema.optional(),
+    sort: CustomerSortSchema.optional(),
+    cursor: z.string().trim().max(2048, "Cursor is too long").optional(),
     limit: positiveIntLimitSchema.optional(),
 });
 
@@ -390,6 +396,12 @@ export const ProductSalesSummaryResponseSchema = z.object({
 export const SalesListPageInfoSchema = z.object({
     hasMore: z.boolean(),
     nextCursor: z.string().nullable(),
+});
+
+export const CustomerListPageInfoSchema = z.object({
+    hasMore: z.boolean(),
+    nextCursor: z.string().nullable(),
+    totalCount: z.number().int().min(0),
 });
 
 export const ParentScopedAddOnSalesRollupDTOSchema = z.object({

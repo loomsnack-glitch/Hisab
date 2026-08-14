@@ -1380,6 +1380,13 @@ CREATE INDEX idx_customers_organization_active ON public.customers USING btree (
 
 
 --
+-- Name: idx_customers_organization_created_at_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customers_organization_created_at_id ON public.customers USING btree (organization_id, created_at DESC, id DESC);
+
+
+--
 -- Name: idx_customers_organization_phone; Type: INDEX; Schema: public; Owner: -
 --
 

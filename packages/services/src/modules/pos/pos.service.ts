@@ -10,6 +10,7 @@ import type {
   CreateDraftSaleJSON,
   CreatePaymentJSON,
   CustomerResponse,
+  CustomerListQuery,
   CustomersListResponse,
   PaymentResponse,
   ProductSalesSummaryListResponse,
@@ -129,10 +130,9 @@ export const getPosComboProducts = async (): Promise<
   }
 };
 
-export const getPosCustomers = async (params?: {
-  search?: string;
-  limit?: number;
-}): Promise<ServiceResponse<CustomersListResponse | null>> => {
+export const getPosCustomers = async (
+  params?: CustomerListQuery,
+): Promise<ServiceResponse<CustomersListResponse | null>> => {
   try {
     const response = await api.get("/pos/customers", { params });
     return response.data;

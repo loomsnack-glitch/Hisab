@@ -18,6 +18,7 @@ import {
     type CreateSaleItemREPO,
     type CustomerDTO,
     type CustomerLedgerResponse,
+    type CustomerListQuery,
     type CustomerResponse,
     type CustomersListResponse,
     type DeviceSessionDTO,
@@ -1390,12 +1391,12 @@ const appendCustomerLedgerEntry = async (
 
 const getCustomersInOrganization = async (
     organizationId: string,
-    query: { search?: string; limit?: number },
+    query: CustomerListQuery,
 ): Promise<ServiceResponse<CustomersListResponse | null>> => {
-    const customers = await billingRepository.getCustomersByOrganizationId(organizationId, query);
+    const result = await billingRepository.getCustomersByOrganizationId(organizationId, query);
     return {
         status: "success",
-        data: { customers },
+        data: result,
         message: "Customers fetched successfully",
         code: STATUS_CODES.SUCCESS,
     };
@@ -2818,7 +2819,7 @@ const voidSaleInStore = async (
 export const getCustomers = async (
     userId: string,
     organizationId: string,
-    query: { search?: string; limit?: number },
+    query: CustomerListQuery,
 ): Promise<ServiceResponse<CustomersListResponse | null>> => {
     const scopeError = await verifyOrganizationAndStore(userId, organizationId);
     if (scopeError) {
@@ -3156,7 +3157,7 @@ export const getBundleSalesRollups = async (
 
 export const getCustomersForDevice = async (
     session: DeviceSessionDTO,
-    query: { search?: string; limit?: number },
+    query: CustomerListQuery,
 ): Promise<ServiceResponse<CustomersListResponse | null>> => {
     return getCustomersInOrganization(session.organization.id, query);
 };

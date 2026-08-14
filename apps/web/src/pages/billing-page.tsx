@@ -696,8 +696,13 @@ const BillingPage = ({
     }, [deferredSalesSearch, paymentMethodFilter, salesDateBounds.from, salesDateBounds.to, salesPaymentStatusFilter, salesStatusFilter, sortBy]);
 
     const customersQuery = useQuery({
-        queryKey: billingKeys.customers(organizationId, { mode: "device" }),
-        queryFn: () => getPosCustomers({ limit: 100 }),
+        queryKey: billingKeys.customers(organizationId, { mode: "device", search: deferredCustomerSearch }),
+        queryFn: () =>
+            getPosCustomers({
+                search: deferredCustomerSearch || undefined,
+                status: "all",
+                limit: 40,
+            }),
         enabled: isDeviceMode && Boolean(organizationId),
     });
 
@@ -897,18 +902,7 @@ const BillingPage = ({
         categoryFilter !== "all" && !categories.some((category) => category.id === categoryFilter)
             ? "all"
             : categoryFilter;
-    const filteredCustomers = customers
-        .filter((customer) => {
-            if (!deferredCustomerSearch) {
-                return true;
-            }
-
-            return (
-                customer.name.toLowerCase().includes(deferredCustomerSearch) ||
-                (customer.phone ?? "").toLowerCase().includes(deferredCustomerSearch)
-            );
-        })
-        .slice(0, customerPickerOpen ? 40 : 8);
+    const filteredCustomers = customers.slice(0, customerPickerOpen ? 40 : 8);
 
     const selectAdjacentCategory = (direction: -1 | 1) => {
         const currentIndex = Math.max(
