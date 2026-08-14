@@ -1142,6 +1142,12 @@ const BillingPage = ({
         setDiscountEditorOpen(true);
     };
 
+    const removeOrderDiscount = () => {
+        setDiscountInput("");
+        setDiscountMode("percent");
+        setDiscountEditorOpen(false);
+    };
+
     const toggleInvoiceAction = (action: InvoiceAction) => {
         setInvoiceActions((current) =>
             current.includes(action) ? current.filter((item) => item !== action) : [...current, action],
@@ -3945,27 +3951,40 @@ const BillingPage = ({
                         </section>
 
                         <section className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
-                            <button
-                                type="button"
-                                className="flex w-full items-center justify-between text-left text-xs font-semibold text-foreground"
-                                onClick={() => setDiscountEditorOpen((open) => !open)}
-                                aria-expanded={discountEditorOpen}
-                            >
-                                <span>{orderDiscountAmount > 0 ? "Order discount" : "Add discount"}</span>
-                                <span
-                                    className={
-                                        orderDiscountAmount > 0
-                                            ? "text-emerald-600 dark:text-emerald-400"
-                                            : "text-muted-foreground"
-                                    }
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    className="flex min-w-0 flex-1 items-center justify-between text-left text-xs font-semibold text-foreground"
+                                    onClick={() => setDiscountEditorOpen((open) => !open)}
+                                    aria-expanded={discountEditorOpen}
                                 >
-                                    {orderDiscountAmount > 0
-                                        ? `-${formatCurrency(orderDiscountAmount)}${orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}`
-                                        : discountEditorOpen
-                                          ? "Hide"
-                                          : "Optional"}
-                                </span>
-                            </button>
+                                    <span>{orderDiscountAmount > 0 ? "Order discount" : "Add discount"}</span>
+                                    <span
+                                        className={
+                                            orderDiscountAmount > 0
+                                                ? "text-emerald-600 dark:text-emerald-400"
+                                                : "text-muted-foreground"
+                                        }
+                                    >
+                                        {orderDiscountAmount > 0
+                                            ? `-${formatCurrency(orderDiscountAmount)}${orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}`
+                                            : discountEditorOpen
+                                              ? "Hide"
+                                              : "Optional"}
+                                    </span>
+                                </button>
+                                {orderDiscountAmount > 0 || discountInput.trim() !== "" ? (
+                                    <button
+                                        type="button"
+                                        onClick={removeOrderDiscount}
+                                        className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-destructive transition-colors hover:bg-destructive/10"
+                                        aria-label="Remove discount"
+                                    >
+                                        <X className="size-3.5" />
+                                        <span className="hidden sm:inline">Remove</span>
+                                    </button>
+                                ) : null}
+                            </div>
                             {discountEditorOpen ? (
                                 <div className="mt-3 grid gap-2 border-t border-border/50 pt-3 sm:grid-cols-[1fr_auto]">
                                     <div className="flex h-10 shrink-0 items-center rounded-xl border border-border/60 bg-background/50 p-0.5 sm:order-2">
