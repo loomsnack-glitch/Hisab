@@ -3,15 +3,26 @@ import {
   CreateAddOnSchema,
   CreateBundleProductSchema,
   CreateComboProductSchema,
+  CreateLabelTemplateSchema,
   CreateProductAddOnAttachmentSchema,
   CreateProductSchema,
   ProductDTOSchema,
   ProductResponseDTOSchema,
   UpdateAddOnSchema,
   UpdateBundleProductSchema,
+  UpdateLabelTemplateSchema,
   UpdateProductAddOnAttachmentSchema,
   UpdateProductSchema,
 } from "./catalog.schema";
+import {
+  keepOutsFromContentInset,
+  leftoverPrintableBox,
+  mapLabelElementsIntoBox,
+} from "./label-template-geometry";
+import {
+  A4_SHEET_LABEL_TEMPLATE,
+  THERMAL_ROLL_LABEL_TEMPLATE,
+} from "./seeded-label-templates";
 
 describe("Add-On catalog contracts", () => {
   test("create add-on accepts name, price, discount, and status", () => {
@@ -389,5 +400,335 @@ describe("Product Code catalog contracts", () => {
         productCodeKind: null,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("Label Template catalog contracts", () => {
+  test("create Label Template accepts the seeded A4 sheet design", () => {
+    const result = CreateLabelTemplateSchema.safeParse(A4_SHEET_LABEL_TEMPLATE);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe("A4 sheet (3 × 8 labels)");
+      expect(result.data.stock.media).toBe("sheet");
+      expect(result.data.stock.sheet?.columns).toBe(3);
+      expect(result.data.stock.sheet?.rows).toBe(8);
+      expect(result.data.stock.widthMm).toBe(70);
+      expect(result.data.stock.heightMm).toBe(35);
+    }
+  });
+
+  test("create Label Template accepts the seeded 58×40 mm thermal design", () => {
+    const result = CreateLabelTemplateSchema.safeParse(
+      THERMAL_ROLL_LABEL_TEMPLATE,
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe("Thermal label (58 × 40 mm)");
+      expect(result.data.stock.media).toBe("roll");
+      expect(result.data.stock.widthMm).toBe(58);
+      expect(result.data.stock.heightMm).toBe(40);
+      expect(result.data.stock.labelsPerRow).toBe(1);
+      expect(result.data.stock.sheet).toBeUndefined();
+    }
+  });
+
+  test("rejects an empty Label Template name", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...A4_SHEET_LABEL_TEMPLATE,
+      name: "   ",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects unknown Label Element bindings", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...A4_SHEET_LABEL_TEMPLATE,
+      elements: [
+        {
+          ...A4_SHEET_LABEL_TEMPLATE.elements[0],
+          text: {
+            ...A4_SHEET_LABEL_TEMPLATE.elements[0]?.text,
+            binding: "product.unknownField",
+          },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects invalid millimetre Label Stock", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      stock: {
+        ...THERMAL_ROLL_LABEL_TEMPLATE.stock,
+        widthMm: 0,
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("update Label Template accepts deactivation", () => {
+    const result = UpdateLabelTemplateSchema.safeParse({ status: "inactive" });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("content-inset helper creates Keep-Out rectangles for a branded header", () => {
+    expect(
+      keepOutsFromContentInset(
+        { widthMm: 50, heightMm: 40 },
+        { topMm: 12, rightMm: 0, bottomMm: 0, leftMm: 0 },
+      ),
+    ).toEqual([{ xMm: 0, yMm: 0, widthMm: 50, heightMm: 12 }]);
+  });
+
+  test("content-inset helper creates Keep-Outs on each reserved side", () => {
+    expect(
+      keepOutsFromContentInset(
+        { widthMm: 50, heightMm: 40 },
+        { topMm: 12, rightMm: 5, bottomMm: 3, leftMm: 4 },
+      ),
+    ).toEqual([
+      { xMm: 0, yMm: 0, widthMm: 50, heightMm: 12 },
+      { xMm: 45, yMm: 0, widthMm: 5, heightMm: 40 },
+      { xMm: 0, yMm: 37, widthMm: 50, heightMm: 3 },
+      { xMm: 0, yMm: 0, widthMm: 4, heightMm: 40 },
+    ]);
+  });
+
+  test("create Label Template accepts 2-across roll Label Stock with millimetre gaps", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      name: "Two-across roll",
+      stock: {
+        widthMm: 40,
+        heightMm: 30,
+        labelsPerRow: 2,
+        horizontalGapMm: 2,
+        verticalGapMm: 3,
+        media: "roll",
+      },
+      elements: [],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.stock.labelsPerRow).toBe(2);
+      expect(result.data.stock.horizontalGapMm).toBe(2);
+      expect(result.data.stock.verticalGapMm).toBe(3);
+      expect(result.data.stock.media).toBe("roll");
+    }
+  });
+
+  test("create Label Template accepts sheet Label Stock with a page grid and gaps", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...A4_SHEET_LABEL_TEMPLATE,
+      name: "Custom sheet",
+      stock: {
+        widthMm: 60,
+        heightMm: 40,
+        labelsPerRow: 2,
+        horizontalGapMm: 4,
+        verticalGapMm: 3,
+        media: "sheet",
+        sheet: {
+          pageWidthMm: 210,
+          pageHeightMm: 297,
+          columns: 2,
+          rows: 6,
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.stock.sheet).toEqual({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        columns: 2,
+        rows: 6,
+      });
+      expect(result.data.stock.horizontalGapMm).toBe(4);
+    }
+  });
+
+  test("rejects a Label Element that intersects a Keep-Out", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      keepOuts: keepOutsFromContentInset(THERMAL_ROLL_LABEL_TEMPLATE.stock, {
+        topMm: 12,
+        rightMm: 0,
+        bottomMm: 0,
+        leftMm: 0,
+      }),
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts a Keep-Out that touches but does not overlap a Label Element", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      keepOuts: [{ xMm: 0, yMm: 0, widthMm: 2, heightMm: 40 }],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects a Keep-Out that does not fit on the Label Stock", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      keepOuts: [{ xMm: 50, yMm: 0, widthMm: 20, heightMm: 10 }],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("content inset leftover is the printable area below a branded header", () => {
+    const stock = { widthMm: 38, heightMm: 50 };
+    const keepOuts = keepOutsFromContentInset(stock, {
+      topMm: 20,
+      rightMm: 0,
+      bottomMm: 0,
+      leftMm: 0,
+    });
+
+    expect(leftoverPrintableBox(stock, keepOuts)).toEqual({
+      xMm: 0,
+      yMm: 20,
+      widthMm: 38,
+      heightMm: 30,
+    });
+  });
+
+  test("mapped Label Elements sit in leftover space and do not intersect a header Keep-Out", () => {
+    const stock = { widthMm: 38, heightMm: 50 };
+    const keepOuts = keepOutsFromContentInset(stock, {
+      topMm: 20,
+      rightMm: 0,
+      bottomMm: 0,
+      leftMm: 0,
+    });
+    const leftover = leftoverPrintableBox(stock, keepOuts);
+    const elements = mapLabelElementsIntoBox(
+      THERMAL_ROLL_LABEL_TEMPLATE.elements,
+      THERMAL_ROLL_LABEL_TEMPLATE.stock,
+      leftover,
+    );
+    const result = CreateLabelTemplateSchema.safeParse({
+      name: "Branded roll",
+      status: "active",
+      stock: {
+        ...stock,
+        labelsPerRow: 2,
+        horizontalGapMm: 2,
+        verticalGapMm: 2,
+        media: "roll",
+      },
+      keepOuts,
+      elements,
+    });
+
+    expect(leftover).toEqual({ xMm: 0, yMm: 20, widthMm: 38, heightMm: 30 });
+    expect(result.success).toBe(true);
+    expect(elements[0]?.yMm).toBeGreaterThanOrEqual(20);
+  });
+
+  test("create Label Template accepts composed catalog bindings with no mandatory Element", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      name: "Packaging leftover",
+      keepOuts: [{ xMm: 0, yMm: 0, widthMm: 58, heightMm: 12 }],
+      elements: [
+        {
+          id: "product-name",
+          type: "text",
+          xMm: 2,
+          yMm: 14,
+          widthMm: 54,
+          heightMm: 6,
+          rotationDeg: 0,
+          text: {
+            source: "binding",
+            binding: "product.name",
+            fontSizeMm: 2.5,
+            fontWeight: "bold",
+            align: "left",
+          },
+        },
+        {
+          id: "static-taxes",
+          type: "text",
+          xMm: 2,
+          yMm: 21,
+          widthMm: 20,
+          heightMm: 4,
+          rotationDeg: 90,
+          text: {
+            source: "static",
+            staticValue: "Inc. of all Taxes",
+            fontSizeMm: 2,
+            fontWeight: "normal",
+            align: "left",
+          },
+        },
+        {
+          id: "product-code-barcode",
+          type: "barcode",
+          xMm: 24,
+          yMm: 14,
+          widthMm: 10,
+          heightMm: 24,
+          rotationDeg: 90,
+          barcode: {
+            symbology: "code128",
+            showHumanDigits: true,
+          },
+        },
+        {
+          id: "price-frame",
+          type: "box",
+          xMm: 36,
+          yMm: 14,
+          widthMm: 20,
+          heightMm: 10,
+          rotationDeg: 0,
+          box: { strokeWidthMm: 0.4 },
+        },
+        {
+          id: "selling-price",
+          type: "text",
+          xMm: 38,
+          yMm: 16,
+          widthMm: 16,
+          heightMm: 6,
+          rotationDeg: 0,
+          text: {
+            source: "binding",
+            binding: "product.price",
+            fontSizeMm: 2.5,
+            fontWeight: "bold",
+            align: "center",
+          },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("create Label Template accepts a design with no Label Elements", () => {
+    const result = CreateLabelTemplateSchema.safeParse({
+      ...THERMAL_ROLL_LABEL_TEMPLATE,
+      name: "Blank leftover",
+      elements: [],
+    });
+
+    expect(result.success).toBe(true);
   });
 });

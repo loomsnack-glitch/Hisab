@@ -18,6 +18,7 @@ import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-o
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
 
 const EMPTY_CATALOG_ITEMS: never[] = [];
 
@@ -347,8 +348,12 @@ const ProductsListPage = () => {
                                                         }
                                                     />
                                                 ) : null}
-                                                {barcodeScanningEnabled && product.productCodeKind === "internal_rcn" ? (
+                                                {canOfferProductLabelPrint({
+                                                    barcodeScanningEnabled,
+                                                    productCode: product.productCode,
+                                                }) ? (
                                                     <InternalProductLabelDialog
+                                                        organizationId={organizationId}
                                                         product={product}
                                                         trigger={
                                                             <Button

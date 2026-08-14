@@ -10,17 +10,21 @@ import type {
     CreateBundleProductJSON,
     CreateComboProductJSON,
     CreateCategoryJSON,
+    CreateLabelTemplateJSON,
     CreateProductAddOnAttachmentJSON,
     CreateProductJSON,
     ProductAddOnAttachmentResponse,
     ProductAddOnAttachmentsListResponse,
     ProductResponse,
     ProductsListResponse,
+    LabelTemplateResponse,
+    LabelTemplatesListResponse,
     ServiceResponse,
     UpdateAddOnJSON,
     UpdateBundleProductJSON,
     UpdateComboProductJSON,
     UpdateCategoryJSON,
+    UpdateLabelTemplateJSON,
     UpdateProductAddOnAttachmentJSON,
     UpdateProductJSON,
 } from "@repo/types";
@@ -382,6 +386,73 @@ export const deleteProductAddOnAttachment = async (
     try {
         const response = await api.delete(
             `/organizations/${organizationId}/products/${productId}/add-on-attachments/${attachmentId}`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getLabelTemplates = async (
+    organizationId: string,
+): Promise<ServiceResponse<LabelTemplatesListResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/label-templates`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createLabelTemplate = async (
+    organizationId: string,
+    data: CreateLabelTemplateJSON,
+): Promise<ServiceResponse<LabelTemplateResponse | null>> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/label-templates`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getLabelTemplate = async (
+    organizationId: string,
+    labelTemplateId: string,
+): Promise<ServiceResponse<LabelTemplateResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/label-templates/${labelTemplateId}`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateLabelTemplate = async (
+    organizationId: string,
+    labelTemplateId: string,
+    data: UpdateLabelTemplateJSON,
+): Promise<ServiceResponse<LabelTemplateResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/label-templates/${labelTemplateId}`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const deleteLabelTemplate = async (
+    organizationId: string,
+    labelTemplateId: string,
+): Promise<ServiceResponse<LabelTemplateResponse | null>> => {
+    try {
+        const response = await api.delete(
+            `/organizations/${organizationId}/label-templates/${labelTemplateId}`,
         );
         return response.data;
     } catch (error) {

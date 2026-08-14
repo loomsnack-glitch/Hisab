@@ -314,6 +314,74 @@ export const getComboChoiceOptionsByGroupIds = mock(async () => []);
 export const deleteComboChoiceGroupsByProductId = mock(async () => undefined);
 export const deleteAddOnRepo = mock(async () => addOn);
 export const deleteProductAddOnAttachmentRepo = mock(async () => attachmentResponse);
+export const labelTemplateId = "88888888-8888-4888-8888-888888888888";
+export const thermalLabelTemplateId = "99999999-9999-4999-8999-999999999999";
+
+export const a4LabelTemplate = {
+    id: labelTemplateId,
+    organizationId,
+    name: "A4 sheet (3 × 8 labels)",
+    status: "active" as const,
+    stock: {
+        widthMm: 70,
+        heightMm: 35,
+        labelsPerRow: 3,
+        horizontalGapMm: 0,
+        verticalGapMm: 0,
+        media: "sheet" as const,
+        sheet: {
+            pageWidthMm: 210,
+            pageHeightMm: 297,
+            columns: 3,
+            rows: 8,
+        },
+    },
+    keepOuts: [] as Array<{ xMm: number; yMm: number; widthMm: number; heightMm: number }>,
+    elements: [
+        {
+            id: "product-name",
+            type: "text" as const,
+            xMm: 2,
+            yMm: 1,
+            widthMm: 66,
+            heightMm: 5,
+            rotationDeg: 0 as const,
+            text: {
+                source: "binding" as const,
+                binding: "product.name" as const,
+                fontSizeMm: 2.5,
+                fontWeight: "bold" as const,
+                align: "center" as const,
+            },
+        },
+    ],
+    createdBy: userId,
+    updatedBy: null as string | null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+export const thermalLabelTemplate = {
+    ...a4LabelTemplate,
+    id: thermalLabelTemplateId,
+    name: "Thermal label (58 × 40 mm)",
+    stock: {
+        widthMm: 58,
+        heightMm: 40,
+        labelsPerRow: 1,
+        horizontalGapMm: 0,
+        verticalGapMm: 0,
+        media: "roll" as const,
+    },
+};
+
+export const getLabelTemplatesByOrganizationId = mock(async () => [a4LabelTemplate, thermalLabelTemplate]);
+export const getLabelTemplateById = mock(async (): Promise<typeof a4LabelTemplate | null> => a4LabelTemplate);
+export const labelTemplateNameExistsInOrganization = mock(async () => false);
+export const createLabelTemplateRepo = mock(async (data: typeof a4LabelTemplate) => data);
+export const updateLabelTemplateRepo = mock(async (data: typeof a4LabelTemplate) => data);
+export const deleteLabelTemplateRepo = mock(async () => a4LabelTemplate);
+export const seedDefaultLabelTemplatesRepo = mock(async () => [a4LabelTemplate, thermalLabelTemplate]);
 export const begin = mock(async (callback: (tx: unknown) => Promise<void>) => callback({}));
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
@@ -385,6 +453,13 @@ mock.module("./catalog.repository", () => ({
     deleteComboChoiceGroupsByProductId,
     deleteAddOn: deleteAddOnRepo,
     deleteProductAddOnAttachment: deleteProductAddOnAttachmentRepo,
+    getLabelTemplatesByOrganizationId,
+    getLabelTemplateById,
+    labelTemplateNameExistsInOrganization,
+    createLabelTemplate: createLabelTemplateRepo,
+    updateLabelTemplate: updateLabelTemplateRepo,
+    deleteLabelTemplate: deleteLabelTemplateRepo,
+    seedDefaultLabelTemplates: seedDefaultLabelTemplatesRepo,
 }));
 
 export const catalogService = await import("./catalog.service");

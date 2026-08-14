@@ -22,6 +22,7 @@ import ProductsListPage from "@/pages/products-list-page";
 import CategoriesPage from "@/pages/categories-page";
 import CustomersPage from "@/pages/customers-page";
 import AddOnsPage from "@/pages/add-ons-page";
+import LabelTemplatesPage from "@/pages/label-templates-page";
 import LandingPage from "@/pages/landing-page";
 import ReportsPage from "@/pages/reports-page";
 import PosReportsPage from "@/pages/pos-reports-page";
@@ -126,6 +127,7 @@ const App = () => {
                                     <Route path="list" element={<ProductsListPage />} />
                                     <Route path="categories" element={<CategoriesPage />} />
                                     <Route path="add-ons" element={<AddOnsPage />} />
+                                    <Route path="label-templates" element={<LabelTemplatesPage />} />
                                 </Route>
                                 <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
                                 <Route path="/organizations/:organizationId/reports" element={<ReportsPage />} />

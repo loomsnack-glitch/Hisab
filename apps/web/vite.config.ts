@@ -41,11 +41,11 @@ export default defineConfig(({ mode }) => {
                 "classnames",
                 "@emotion/react",
                 "hoist-non-react-statics",
-                "@repo/types",
             ],
             exclude: [
                 "@repo/assets",
                 "@repo/services",
+                "@repo/types",
                 "@repo/ui",
             ],
         },

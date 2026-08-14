@@ -14,16 +14,20 @@ import type {
     CreateBundleProductComponentAddOnREPO,
     CreateBundleProductComponentREPO,
     CreateCategoryREPO,
+    CreateLabelTemplateREPO,
     CreateProductAddOnAttachmentREPO,
     CreateProductREPO,
+    LabelTemplateDTO,
     ProductAddOnAttachmentDTO,
     ProductAddOnAttachmentResponseDTO,
     ProductDTO,
     UpdateAddOnREPO,
     UpdateCategoryREPO,
+    UpdateLabelTemplateREPO,
     UpdateProductAddOnAttachmentREPO,
     UpdateProductREPO,
 } from "@repo/types";
+import { SEEDED_LABEL_TEMPLATES } from "@repo/types";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 
@@ -1158,4 +1162,171 @@ export const countActiveBundlesByProductAddOnPairAboveQuantity = async (
     `;
 
     return Number(result?.total ?? 0);
+};
+
+const parseJsonColumn = <T>(value: T | string): T =>
+    typeof value === "string" ? (JSON.parse(value) as T) : value;
+
+const mapLabelTemplate = (row: Record<string, unknown>): LabelTemplateDTO => {
+    const mapped = mapRow<LabelTemplateDTO>(row);
+    return {
+        ...mapped,
+        stock: parseJsonColumn(mapped.stock),
+        keepOuts: parseJsonColumn(mapped.keepOuts),
+        elements: parseJsonColumn(mapped.elements),
+    };
+};
+
+export const createLabelTemplate = async (
+    labelTemplateData: CreateLabelTemplateREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<LabelTemplateDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO label_templates (
+            id,
+            organization_id,
+            name,
+            status,
+            stock,
+            keep_outs,
+            elements,
+            created_by
+        )
+        VALUES (
+            ${labelTemplateData.id},
+            ${labelTemplateData.organizationId},
+            ${labelTemplateData.name},
+            ${labelTemplateData.status},
+            ${JSON.stringify(labelTemplateData.stock)}::jsonb,
+            ${JSON.stringify(labelTemplateData.keepOuts)}::jsonb,
+            ${JSON.stringify(labelTemplateData.elements)}::jsonb,
+            ${labelTemplateData.createdBy}
+        )
+        RETURNING *
+    `;
+
+    return result ? mapLabelTemplate(result) : null;
+};
+
+export const getLabelTemplatesByOrganizationId = async (
+    organizationId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<LabelTemplateDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM label_templates
+        WHERE organization_id = ${organizationId}
+        ORDER BY created_at ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapLabelTemplate(result));
+};
+
+export const getLabelTemplateById = async (
+    organizationId: string,
+    labelTemplateId: string,
+): Promise<LabelTemplateDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM label_templates
+        WHERE id = ${labelTemplateId}
+          AND organization_id = ${organizationId}
+    `;
+
+    return result ? mapLabelTemplate(result) : null;
+};
+
+export const labelTemplateNameExistsInOrganization = async (
+    organizationId: string,
+    name: string,
+    excludeId?: string,
+): Promise<boolean> => {
+    const results = excludeId
+        ? await pg`
+            SELECT 1
+            FROM label_templates
+            WHERE organization_id = ${organizationId}
+              AND LOWER(name) = LOWER(${name})
+              AND id <> ${excludeId}
+            LIMIT 1
+        `
+        : await pg`
+            SELECT 1
+            FROM label_templates
+            WHERE organization_id = ${organizationId}
+              AND LOWER(name) = LOWER(${name})
+            LIMIT 1
+        `;
+
+    return Boolean(results[0]);
+};
+
+export const updateLabelTemplate = async (
+    labelTemplateData: UpdateLabelTemplateREPO,
+): Promise<LabelTemplateDTO | null> => {
+    const [result] = await pg`
+        UPDATE label_templates
+        SET name = ${labelTemplateData.name},
+            status = ${labelTemplateData.status},
+            stock = ${JSON.stringify(labelTemplateData.stock)}::jsonb,
+            keep_outs = ${JSON.stringify(labelTemplateData.keepOuts)}::jsonb,
+            elements = ${JSON.stringify(labelTemplateData.elements)}::jsonb,
+            updated_by = ${labelTemplateData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${labelTemplateData.id}
+          AND organization_id = ${labelTemplateData.organizationId}
+        RETURNING *
+    `;
+
+    return result ? mapLabelTemplate(result) : null;
+};
+
+export const deleteLabelTemplate = async (
+    organizationId: string,
+    labelTemplateId: string,
+): Promise<LabelTemplateDTO | null> => {
+    const [result] = await pg`
+        DELETE FROM label_templates
+        WHERE id = ${labelTemplateId}
+          AND organization_id = ${organizationId}
+        RETURNING *
+    `;
+
+    return result ? mapLabelTemplate(result) : null;
+};
+
+export const seedDefaultLabelTemplates = async (
+    organizationId: string,
+    createdBy: string,
+    tx?: Bun.TransactionSQL,
+): Promise<LabelTemplateDTO[]> => {
+    const existing = await getLabelTemplatesByOrganizationId(organizationId, tx);
+    if (existing.length > 0) {
+        return existing;
+    }
+
+    const seeded: LabelTemplateDTO[] = [];
+    for (const template of SEEDED_LABEL_TEMPLATES) {
+        const created = await createLabelTemplate(
+            {
+                id: crypto.randomUUID(),
+                organizationId,
+                name: template.name,
+                status: template.status,
+                stock: template.stock,
+                keepOuts: template.keepOuts,
+                elements: template.elements,
+                createdBy,
+            },
+            tx,
+        );
+        if (!created) {
+            throw new Error("Failed to seed Label Templates");
+        }
+        seeded.push(created);
+    }
+
+    return seeded;
 };

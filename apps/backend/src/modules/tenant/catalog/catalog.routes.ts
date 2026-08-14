@@ -5,6 +5,7 @@ import {
     CreateBundleProductSchema,
     CreateComboProductSchema,
     CreateCategorySchema,
+    CreateLabelTemplateSchema,
     CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
     ReuseInternalProductCodeSchema,
@@ -13,6 +14,7 @@ import {
     UpdateBundleProductSchema,
     UpdateComboProductSchema,
     UpdateCategorySchema,
+    UpdateLabelTemplateSchema,
     UpdateProductAddOnAttachmentSchema,
     UpdateProductSchema,
 } from "@repo/types";
@@ -551,6 +553,124 @@ router.delete("/:organizationId/add-ons/:addOnId", async (c) => {
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "deleteAddOn", c, error);
+    }
+});
+
+router.get("/:organizationId/label-templates", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const serviceResponse = await catalogService.getLabelTemplates(c.get("authUser").id, organizationId);
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getLabelTemplates", c, error);
+    }
+});
+
+router.post(
+    "/:organizationId/label-templates",
+    validateSchema("json", CreateLabelTemplateSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const serviceResponse = await catalogService.createLabelTemplate(
+                c.get("authUser").id,
+                organizationId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "createLabelTemplate", c, error);
+        }
+    },
+);
+
+router.get("/:organizationId/label-templates/:labelTemplateId", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const labelTemplateId = c.req.param("labelTemplateId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidLabelTemplateId = validateUuidParam(labelTemplateId, "Invalid label template id");
+        if (invalidLabelTemplateId) {
+            return c.json(invalidLabelTemplateId, invalidLabelTemplateId.code);
+        }
+
+        const serviceResponse = await catalogService.getLabelTemplateDetails(
+            c.get("authUser").id,
+            organizationId,
+            labelTemplateId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getLabelTemplateDetails", c, error);
+    }
+});
+
+router.patch(
+    "/:organizationId/label-templates/:labelTemplateId",
+    validateSchema("json", UpdateLabelTemplateSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const labelTemplateId = c.req.param("labelTemplateId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const invalidLabelTemplateId = validateUuidParam(labelTemplateId, "Invalid label template id");
+            if (invalidLabelTemplateId) {
+                return c.json(invalidLabelTemplateId, invalidLabelTemplateId.code);
+            }
+
+            const serviceResponse = await catalogService.updateLabelTemplate(
+                c.get("authUser").id,
+                organizationId,
+                labelTemplateId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateLabelTemplate", c, error);
+        }
+    },
+);
+
+router.delete("/:organizationId/label-templates/:labelTemplateId", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const labelTemplateId = c.req.param("labelTemplateId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const invalidLabelTemplateId = validateUuidParam(labelTemplateId, "Invalid label template id");
+        if (invalidLabelTemplateId) {
+            return c.json(invalidLabelTemplateId, invalidLabelTemplateId.code);
+        }
+
+        const serviceResponse = await catalogService.deleteLabelTemplate(
+            c.get("authUser").id,
+            organizationId,
+            labelTemplateId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "deleteLabelTemplate", c, error);
     }
 });
 
