@@ -1,5 +1,7 @@
 import logo from "@repo/assets/logo.png";
 
+import AppVersionBadge from "@/components/app-version-badge";
+
 export type Workspace = "admin" | "pos";
 
 type WorkspaceBrandProps = {
@@ -27,9 +29,12 @@ const WorkspaceBrand = ({
       </div>
       {showLabel ? (
         <div className="min-w-0 flex flex-col justify-center">
-          <p className="truncate text-[9px] font-bold uppercase tracking-[0.25em] text-primary leading-tight">
-            Loomsnack
-          </p>
+          <div className="flex min-w-0 items-center gap-1">
+            <p className="truncate text-[9px] font-bold uppercase tracking-[0.25em] text-primary leading-tight">
+              Loomsnack
+            </p>
+            <AppVersionBadge className="shrink-0 border-0 bg-transparent p-0 text-[9px] uppercase tracking-[0.12em]" />
+          </div>
           <p className="truncate font-display text-[15px] font-semibold tracking-tight text-foreground leading-tight mt-0.5">
             {workspaceTitles[workspace]}
           </p>

@@ -23,7 +23,6 @@ import { cn } from "@repo/ui/lib/utils";
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
-import AppVersionBadge from "@/components/app-version-badge";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
@@ -296,15 +295,6 @@ const AppSidebar = ({
                         <div key={item.label}>{renderSecondaryItem(item)}</div>
                     ))}
                 </nav>
-
-                <div
-                    className={cn(
-                        "shrink-0 border-t border-border/50",
-                        isCollapsed && !isMobile ? "flex justify-center px-2 py-3" : "px-3 py-3",
-                    )}
-                >
-                    <AppVersionBadge />
-                </div>
 
             </div>
 
