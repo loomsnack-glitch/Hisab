@@ -278,7 +278,7 @@ describe("Add-On catalog service", () => {
 
     expect(response.status).toBe("success");
     expect(response.data?.products).toEqual([
-      { ...product, imageSignedUrl: null },
+      { ...product, imageSignedUrl: null, labelProfile: null },
     ]);
     expect(response.data?.inactiveProductCodes).toEqual([]);
     expect(getActiveProductsByOrganizationId).toHaveBeenCalledWith(
@@ -295,7 +295,7 @@ describe("Add-On catalog service", () => {
 
     expect(response.status).toBe("success");
     expect(response.data?.products).toEqual([
-      { ...product, imageSignedUrl: null, activeAddOnCount: 3 },
+      { ...product, imageSignedUrl: null, activeAddOnCount: 3, labelProfile: null },
     ]);
     expect(getActiveProductAddOnCountsByOrganizationId).toHaveBeenCalledWith(
       organizationId,
@@ -332,6 +332,7 @@ describe("Add-On catalog service", () => {
       {
         ...codedProduct,
         imageSignedUrl: null,
+        labelProfile: null,
       },
     ]);
     expect(response.data?.inactiveProductCodes).toEqual([]);
@@ -358,7 +359,9 @@ describe("Add-On catalog service", () => {
       device: { id: "device-1" },
     } as never);
 
-    expect(response.data?.products).toEqual([{ ...product, imageSignedUrl: null }]);
+    expect(response.data?.products).toEqual([
+      { ...product, imageSignedUrl: null, labelProfile: null },
+    ]);
     expect(response.data?.inactiveProductCodes).toEqual([
       { productCode: "retired-burger", productName: "Retired Burger" },
     ]);

@@ -313,7 +313,20 @@ const emptyInset = {
 };
 
 type LabelElement = LabelTemplateDocument["elements"][number];
-type ComposerKind = "product.name" | "product.price" | "barcode" | "static" | "box";
+type ComposerKind =
+    | "product.name"
+    | "product.price"
+    | "productLabel.mrp"
+    | "productLabel.ingredients"
+    | "productLabel.netWeight"
+    | "productLabel.unitSellingPriceText"
+    | "productLabel.nutrition"
+    | "job.packedDate"
+    | "job.expiryDate"
+    | "job.batchNumber"
+    | "barcode"
+    | "static"
+    | "box";
 type LabelRotation = 0 | 90 | 180 | 270;
 
 const rotationOptions = [
@@ -388,6 +401,21 @@ const createComposerElement = (
             stock,
         );
     }
+    if (kind === "productLabel.nutrition") {
+        return clampElementToStock(
+            {
+                id,
+                type: "table",
+                xMm,
+                yMm,
+                widthMm: Math.min(54, Math.max(20, stock.widthMm - 4)),
+                heightMm: 14,
+                rotationDeg: 0,
+                table: { binding: "productLabel.nutrition" },
+            },
+            stock,
+        );
+    }
     if (kind === "static") {
         return clampElementToStock(
             {
@@ -409,6 +437,21 @@ const createComposerElement = (
             stock,
         );
     }
+    const bindingMap: Record<string, string> = {
+        "product.name": "product.name",
+        "product.price": "product.price",
+        "productLabel.mrp": "productLabel.mrp",
+        "productLabel.ingredients": "productLabel.ingredients",
+        "productLabel.netWeight": "productLabel.netWeight",
+        "productLabel.unitSellingPriceText": "productLabel.unitSellingPriceText",
+        "job.packedDate": "job.packedDate",
+        "job.expiryDate": "job.expiryDate",
+        "job.batchNumber": "job.batchNumber",
+    };
+    const binding = bindingMap[kind];
+    if (!binding) {
+        throw new Error(`Unsupported composer kind: ${kind}`);
+    }
     return clampElementToStock(
         {
             id,
@@ -420,10 +463,16 @@ const createComposerElement = (
             rotationDeg: 0,
             text: {
                 source: "binding",
-                binding: kind === "product.price" ? "product.price" : "product.name",
+                binding: binding as Extract<
+                    LabelElement,
+                    { type: "text" }
+                >["text"]["binding"],
                 fontSizeMm: 2.5,
-                fontWeight: "bold",
-                align: "center",
+                fontWeight:
+                    kind === "product.price" || kind === "productLabel.mrp"
+                        ? "bold"
+                        : "normal",
+                align: "left",
             },
         },
         stock,
@@ -460,6 +509,23 @@ const SAMPLE_LABEL_PRODUCT = {
     productCode: "0400000000008",
     name: "Sample product name",
     price: 125,
+    labelProfile: {
+        ingredients: "Wheat flour, jeera, salt",
+        nutrition: [
+            { name: "Energy", quantity: "450", unit: "kcal" },
+            { name: "Protein", quantity: "12", unit: "g" },
+        ],
+        netWeight: "200 g",
+        unitSellingPriceText: "₹10 per piece",
+        mrp: 149,
+        shelfLifeDays: 90,
+    },
+};
+
+const SAMPLE_LABEL_JOB = {
+    packedDate: "2026-08-14",
+    expiryDate: "2026-11-12",
+    batchNumber: "BATCH-42",
 };
 
 const UpsertLabelTemplateDialog = ({
@@ -569,6 +635,7 @@ const UpsertLabelTemplateDialog = ({
                     elements,
                 },
                 product: SAMPLE_LABEL_PRODUCT,
+                job: SAMPLE_LABEL_JOB,
             });
         } catch (error) {
             return {
@@ -652,6 +719,12 @@ const UpsertLabelTemplateDialog = ({
             element.type === "text" &&
             element.text.source === "binding" &&
             element.text.binding === "product.price",
+    );
+    const hasMrpBinding = elements.some(
+        (element) =>
+            element.type === "text" &&
+            element.text.source === "binding" &&
+            element.text.binding === "productLabel.mrp",
     );
 
     const replaceSelectedElement = (next: LabelElement) => {
@@ -994,6 +1067,17 @@ const UpsertLabelTemplateDialog = ({
                                 [
                                     ["product.name", "Product name"],
                                     ["product.price", "Selling price"],
+                                    ["productLabel.mrp", "On-pack MRP"],
+                                    ["productLabel.ingredients", "Ingredients"],
+                                    ["productLabel.netWeight", "Net weight"],
+                                    [
+                                        "productLabel.unitSellingPriceText",
+                                        "Unit selling price text",
+                                    ],
+                                    ["productLabel.nutrition", "Nutrition table"],
+                                    ["job.packedDate", "Packed date"],
+                                    ["job.expiryDate", "Expiry date"],
+                                    ["job.batchNumber", "Batch number"],
                                     ["barcode", "Product Code barcode"],
                                     ["static", "Static text"],
                                     ["box", "Box"],
@@ -1017,6 +1101,11 @@ const UpsertLabelTemplateDialog = ({
                         {hasSellingPriceBinding ? (
                             <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
                                 Selling price is printed on this label. Reprint labels after any price change.
+                            </p>
+                        ) : null}
+                        {hasMrpBinding ? (
+                            <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
+                                On-pack MRP is printed on this label. Reprint labels after any MRP change.
                             </p>
                         ) : null}
                         {elements.length === 0 ? (

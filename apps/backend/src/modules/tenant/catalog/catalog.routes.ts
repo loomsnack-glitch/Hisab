@@ -16,6 +16,7 @@ import {
     UpdateCategorySchema,
     UpdateLabelTemplateSchema,
     UpdateProductAddOnAttachmentSchema,
+    UpdateProductLabelProfileSchema,
     UpdateProductSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
@@ -288,6 +289,38 @@ router.patch("/:organizationId/products/:productId", validateSchema("json", Upda
         return handleError(FILE_NAME, "updateProduct", c, error);
     }
 });
+
+router.patch(
+    "/:organizationId/products/:productId/label-profile",
+    validateSchema("json", UpdateProductLabelProfileSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const productId = c.req.param("productId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const invalidProductId = validateUuidParam(productId, "Invalid product id");
+            if (invalidProductId) {
+                return c.json(invalidProductId, invalidProductId.code);
+            }
+
+            const authUser = c.get("authUser");
+            const body = c.req.valid("json");
+            const serviceResponse = await catalogService.updateProductLabelProfile(
+                authUser.id,
+                organizationId,
+                productId,
+                body,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateProductLabelProfile", c, error);
+        }
+    },
+);
 
 router.delete("/:organizationId/products/:productId", async (c) => {
     try {

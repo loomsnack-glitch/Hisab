@@ -15,7 +15,9 @@ import {
   buildInternalLabelPreview,
   canOfferProductLabelPrint,
   canPrintInternalLabels,
+  defaultExpiryDateFromPackedDate,
   labelPrintConfirmationKey,
+  templateBoundJobFields,
 } from "./internal-label-printing";
 
 const internalCode = "0400000000008";
@@ -735,5 +737,185 @@ describe("Internal Product Code label printing", () => {
     expect(preview.encodedCode).toBe(manufacturerCode);
     expect(preview.modulePattern).toHaveLength(EAN13_MODULE_COUNT);
     expect(preview.svg).toContain(`>${manufacturerCode}</text>`);
+  });
+});
+
+const packagingLabelProfile = {
+  ingredients: "Wheat flour, jeera, salt",
+  nutrition: [
+    { name: "Energy", quantity: "450", unit: "kcal" },
+    { name: "Protein", quantity: "12", unit: "g" },
+  ],
+  netWeight: "200 g",
+  unitSellingPriceText: "₹10 per piece",
+  mrp: 149,
+  shelfLifeDays: 90,
+};
+
+const packagingTemplate = (): LabelTemplateDocument => ({
+  ...THERMAL_ROLL_LABEL_TEMPLATE,
+  name: "Packaging roll",
+  keepOuts: [],
+  elements: [
+    {
+      id: "ingredients",
+      type: "text",
+      xMm: 2,
+      yMm: 2,
+      widthMm: 54,
+      heightMm: 8,
+      rotationDeg: 0,
+      text: {
+        source: "binding",
+        binding: "productLabel.ingredients",
+        fontSizeMm: 2,
+        fontWeight: "normal",
+        align: "left",
+      },
+    },
+    {
+      id: "mrp",
+      type: "text",
+      xMm: 2,
+      yMm: 10,
+      widthMm: 54,
+      heightMm: 5,
+      rotationDeg: 0,
+      text: {
+        source: "binding",
+        binding: "productLabel.mrp",
+        fontSizeMm: 2.5,
+        fontWeight: "bold",
+        align: "left",
+      },
+    },
+    {
+      id: "nutrition-table",
+      type: "table",
+      xMm: 2,
+      yMm: 16,
+      widthMm: 54,
+      heightMm: 14,
+      rotationDeg: 0,
+      table: { binding: "productLabel.nutrition" },
+    },
+    {
+      id: "packed-date",
+      type: "text",
+      xMm: 2,
+      yMm: 31,
+      widthMm: 26,
+      heightMm: 5,
+      rotationDeg: 0,
+      text: {
+        source: "binding",
+        binding: "job.packedDate",
+        fontSizeMm: 2,
+        fontWeight: "normal",
+        align: "left",
+      },
+    },
+    {
+      id: "expiry-date",
+      type: "text",
+      xMm: 30,
+      yMm: 31,
+      widthMm: 26,
+      heightMm: 5,
+      rotationDeg: 0,
+      text: {
+        source: "binding",
+        binding: "job.expiryDate",
+        fontSizeMm: 2,
+        fontWeight: "normal",
+        align: "left",
+      },
+    },
+    {
+      id: "batch-number",
+      type: "text",
+      xMm: 2,
+      yMm: 35,
+      widthMm: 54,
+      heightMm: 5,
+      rotationDeg: 0,
+      text: {
+        source: "binding",
+        binding: "job.batchNumber",
+        fontSizeMm: 2,
+        fontWeight: "normal",
+        align: "left",
+      },
+    },
+  ],
+});
+
+describe("Product Label Profile and Label Job rendering", () => {
+  test("renders profile bindings, nutrition table, and Label Job fields for a real Product", () => {
+    const preview = buildInternalLabelPreview({
+      template: packagingTemplate(),
+      product: {
+        productCode: internalCode,
+        name: "Jeera Bhakri",
+        price: 125,
+        labelProfile: packagingLabelProfile,
+      },
+      job: {
+        packedDate: "2026-08-14",
+        expiryDate: "2026-11-12",
+        batchNumber: "BATCH-42",
+      },
+    });
+
+    expect(preview.svg).toContain("Wheat flour, jeera, salt");
+    expect(preview.svg).toContain("₹149.00");
+    expect(preview.svg).toContain("14/08/2026");
+    expect(preview.svg).toContain("12/11/2026");
+    expect(preview.svg).toContain("BATCH-42");
+    expect(preview.svg).toContain("Energy");
+    expect(preview.svg).toContain("450");
+    expect(preview.svg).toContain("kcal");
+    expect(preview.svg).toContain("Protein");
+    expect(preview.mrpWarning).toBe(
+      "On-pack MRP is printed on this label. Reprint labels after any MRP change.",
+    );
+  });
+
+  test("omits Label Elements when optional profile or job bindings are missing", () => {
+    const preview = buildInternalLabelPreview({
+      template: packagingTemplate(),
+      product: {
+        productCode: internalCode,
+        name: "Jeera Bhakri",
+        price: null,
+        labelProfile: null,
+      },
+      job: {},
+    });
+
+    expect(preview.svg).not.toContain("Wheat flour");
+    expect(preview.svg).not.toContain("₹149.00");
+    expect(preview.svg).not.toContain("BATCH-42");
+    expect(preview.svg).not.toContain("class=\"label-nutrition-table\"");
+    expect(preview.mrpWarning).toBeNull();
+  });
+
+  test("lists only Label Job fields the Template binds", () => {
+    expect(templateBoundJobFields(packagingTemplate())).toEqual({
+      packedDate: true,
+      expiryDate: true,
+      batchNumber: true,
+    });
+    expect(templateBoundJobFields(A4_SHEET_LABEL_TEMPLATE)).toEqual({
+      packedDate: false,
+      expiryDate: false,
+      batchNumber: false,
+    });
+  });
+
+  test("defaults expiry from packed date plus shelf life days", () => {
+    expect(
+      defaultExpiryDateFromPackedDate("2026-08-14", packagingLabelProfile.shelfLifeDays),
+    ).toBe("2026-11-12");
   });
 });

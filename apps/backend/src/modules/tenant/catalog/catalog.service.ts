@@ -1,6 +1,7 @@
 import {
   STATUS_CODES,
   LabelTemplateDocumentSchema,
+  UpdateProductLabelProfileSchema,
   type AddOnResponse,
   type AddOnsListResponse,
   type BundleProductResponse,
@@ -34,6 +35,7 @@ import {
   type UpdateComboProductSVC,
   type UpdateLabelTemplateSVC,
   type UpdateProductAddOnAttachmentSVC,
+  type UpdateProductLabelProfileSVC,
   type UpdateProductSVC,
   normalizeProductCodeInput,
 } from "@repo/types";
@@ -302,15 +304,40 @@ const deleteProductImageIfPossible = async (path?: string | null) => {
 
 const resolveProduct = async (
   product: ProductDTO,
-): Promise<ProductResponseDTO> => ({
-  ...product,
-  imageSignedUrl: await getSignedUrlIfPossible(product.imagePath),
-});
+): Promise<ProductResponseDTO> => {
+  const labelProfile =
+    await catalogRepository.getProductLabelProfileByProductId(
+      product.organizationId,
+      product.id,
+    );
+
+  return {
+    ...product,
+    imageSignedUrl: await getSignedUrlIfPossible(product.imagePath),
+    labelProfile,
+  };
+};
 
 const resolveProducts = async (
   products: ProductDTO[],
 ): Promise<ProductResponseDTO[]> => {
-  return Promise.all(products.map(resolveProduct));
+  if (products.length === 0) {
+    return [];
+  }
+
+  const labelProfiles =
+    await catalogRepository.getProductLabelProfilesByProductIds(
+      products[0].organizationId,
+      products.map((product) => product.id),
+    );
+
+  return Promise.all(
+    products.map(async (product) => ({
+      ...product,
+      imageSignedUrl: await getSignedUrlIfPossible(product.imagePath),
+      labelProfile: labelProfiles.get(product.id) ?? null,
+    })),
+  );
 };
 
 const getCategoryForOrganization = async (
@@ -3746,6 +3773,161 @@ export const seedDefaultLabelTemplates = async (
     status: "success",
     data: { labelTemplates },
     message: "Label Templates seeded successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+const normalizeOptionalLabelProfileText = (value?: string | null) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const normalizeLabelProfileInput = (
+  data: UpdateProductLabelProfileSVC,
+): {
+  ingredients?: string | null;
+  nutrition?: UpdateProductLabelProfileSVC["nutrition"];
+  netWeight?: string | null;
+  unitSellingPriceText?: string | null;
+  mrp?: number | null;
+  shelfLifeDays?: number | null;
+} => ({
+  ...(data.ingredients !== undefined
+    ? { ingredients: normalizeOptionalLabelProfileText(data.ingredients) }
+    : {}),
+  ...(data.nutrition !== undefined
+    ? {
+        nutrition:
+          data.nutrition === null || data.nutrition.length === 0
+            ? null
+            : data.nutrition,
+      }
+    : {}),
+  ...(data.netWeight !== undefined
+    ? { netWeight: normalizeOptionalLabelProfileText(data.netWeight) }
+    : {}),
+  ...(data.unitSellingPriceText !== undefined
+    ? {
+        unitSellingPriceText: normalizeOptionalLabelProfileText(
+          data.unitSellingPriceText,
+        ),
+      }
+    : {}),
+  ...(data.mrp !== undefined
+    ? { mrp: data.mrp === "" || data.mrp === null ? null : data.mrp }
+    : {}),
+  ...(data.shelfLifeDays !== undefined
+    ? {
+        shelfLifeDays:
+          data.shelfLifeDays === "" || data.shelfLifeDays === null
+            ? null
+            : data.shelfLifeDays,
+      }
+    : {}),
+});
+
+export const updateProductLabelProfile = async (
+  userId: string,
+  organizationId: string,
+  productId: string,
+  profileData: UpdateProductLabelProfileSVC,
+): Promise<ServiceResponse<ProductResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const parsed = UpdateProductLabelProfileSchema.safeParse(profileData);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Invalid Product Label Profile",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  const existingProduct = await getProductForOrganization(
+    organizationId,
+    productId,
+  );
+  if (!existingProduct) {
+    return {
+      status: "error",
+      message: "Product not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const existingProfile =
+    await catalogRepository.getProductLabelProfileByProductId(
+      organizationId,
+      productId,
+    );
+  const normalized = normalizeLabelProfileInput(parsed.data);
+  const nextProfile = {
+    ingredients:
+      normalized.ingredients !== undefined
+        ? normalized.ingredients
+        : (existingProfile?.ingredients ?? null),
+    nutrition:
+      normalized.nutrition !== undefined
+        ? normalized.nutrition
+        : (existingProfile?.nutrition ?? null),
+    netWeight:
+      normalized.netWeight !== undefined
+        ? normalized.netWeight
+        : (existingProfile?.netWeight ?? null),
+    unitSellingPriceText:
+      normalized.unitSellingPriceText !== undefined
+        ? normalized.unitSellingPriceText
+        : (existingProfile?.unitSellingPriceText ?? null),
+    mrp:
+      normalized.mrp !== undefined
+        ? normalized.mrp
+        : (existingProfile?.mrp ?? null),
+    shelfLifeDays:
+      normalized.shelfLifeDays !== undefined
+        ? normalized.shelfLifeDays
+        : (existingProfile?.shelfLifeDays ?? null),
+  };
+
+  const labelProfile = await catalogRepository.upsertProductLabelProfile({
+    productId,
+    organizationId,
+    ...nextProfile,
+  });
+
+  if (!labelProfile) {
+    return {
+      status: "error",
+      message: "Failed to update Product Label Profile",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  return {
+    status: "success",
+    data: {
+      product: {
+        ...(await resolveProduct(existingProduct)),
+        labelProfile,
+      },
+    },
+    message: "Product Label Profile updated successfully",
     code: STATUS_CODES.SUCCESS,
   };
 };

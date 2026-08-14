@@ -97,6 +97,101 @@ const wholeCountQuantitySchema = z
   .int("Quantity must be a whole number")
   .min(1, "Quantity must be at least 1");
 
+export const NutritionRowSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Nutrition row name is required")
+    .max(255, "Nutrition row name must be at most 255 characters"),
+  quantity: z
+    .string()
+    .trim()
+    .min(1, "Nutrition row quantity is required")
+    .max(64, "Nutrition row quantity must be at most 64 characters"),
+  unit: z
+    .string()
+    .trim()
+    .min(1, "Nutrition row unit is required")
+    .max(32, "Nutrition row unit must be at most 32 characters"),
+});
+
+export const ProductLabelProfileDTOSchema = z.object({
+  ingredients: z.string().nullable().optional(),
+  nutrition: z.array(NutritionRowSchema).nullable().optional(),
+  netWeight: z.string().nullable().optional(),
+  unitSellingPriceText: z.string().nullable().optional(),
+  mrp: z.number().nullable().optional(),
+  shelfLifeDays: z
+    .number()
+    .int("Shelf life must be a whole number of days")
+    .min(1, "Shelf life must be at least 1 day")
+    .nullable()
+    .optional(),
+});
+
+const optionalLabelProfileTextSchema = z
+  .union([
+    z.literal(""),
+    z
+      .string()
+      .trim()
+      .max(2000, "Text must be at most 2000 characters"),
+  ])
+  .nullable()
+  .optional();
+
+const optionalLabelProfileShortTextSchema = z
+  .union([
+    z.literal(""),
+    z.string().trim().max(255, "Text must be at most 255 characters"),
+  ])
+  .nullable()
+  .optional();
+
+const optionalLabelProfileNetWeightSchema = z
+  .union([
+    z.literal(""),
+    z.string().trim().max(128, "Net weight must be at most 128 characters"),
+  ])
+  .nullable()
+  .optional();
+
+const optionalLabelProfileMrpSchema = z
+  .union([z.literal(""), z.coerce.number().min(0, "On-pack MRP must be 0 or more")])
+  .nullable()
+  .optional();
+
+const optionalShelfLifeDaysSchema = z
+  .union([
+    z.literal(""),
+    z.coerce
+      .number()
+      .int("Shelf life must be a whole number of days")
+      .min(1, "Shelf life must be at least 1 day"),
+  ])
+  .nullable()
+  .optional();
+
+export const UpdateProductLabelProfileSchema = z
+  .object({
+    ingredients: optionalLabelProfileTextSchema,
+    nutrition: z.array(NutritionRowSchema).nullable().optional(),
+    netWeight: optionalLabelProfileNetWeightSchema,
+    unitSellingPriceText: optionalLabelProfileShortTextSchema,
+    mrp: optionalLabelProfileMrpSchema,
+    shelfLifeDays: optionalShelfLifeDaysSchema,
+  })
+  .refine(
+    (value) =>
+      value.ingredients !== undefined ||
+      value.nutrition !== undefined ||
+      value.netWeight !== undefined ||
+      value.unitSellingPriceText !== undefined ||
+      value.mrp !== undefined ||
+      value.shelfLifeDays !== undefined,
+    { message: "At least one field is required" },
+  );
+
 export const CategoryDTOSchema = z.object({
   id: z.uuid("Invalid category id"),
   organizationId: z.uuid("Invalid organization id"),
@@ -146,6 +241,7 @@ export const ProductDTOSchema = ProductDTOObjectSchema.refine(
 export const ProductResponseDTOSchema = ProductDTOObjectSchema.extend({
   imageSignedUrl: z.string().nullable(),
   activeAddOnCount: z.number().int().nonnegative().optional(),
+  labelProfile: ProductLabelProfileDTOSchema.nullable().optional(),
 }).refine(
   productCodeAndKindConsistencyRefine,
   productCodeAndKindConsistencyRefineOptions,

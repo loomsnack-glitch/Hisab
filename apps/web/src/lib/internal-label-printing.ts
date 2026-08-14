@@ -17,13 +17,29 @@ export { A4_SHEET_LABEL_TEMPLATE, THERMAL_ROLL_LABEL_TEMPLATE };
 
 const LABEL_TEXT_FONT = "'Noto Sans Gujarati', 'Noto Sans', Arial, sans-serif";
 
+export type LabelProductLabelProfileInput = {
+  ingredients?: string | null;
+  nutrition?: Array<{ name: string; quantity: string; unit: string }> | null;
+  netWeight?: string | null;
+  unitSellingPriceText?: string | null;
+  mrp?: number | string | null;
+  shelfLifeDays?: number | null;
+};
+
 export type LabelProductInput = {
   productCode: string;
   name?: string | null;
   price?: number | string | null;
+  labelProfile?: LabelProductLabelProfileInput | null;
 };
 
-export type LabelJobInput = {
+export type LabelJobFields = {
+  packedDate?: string | null;
+  expiryDate?: string | null;
+  batchNumber?: string | null;
+};
+
+export type LabelJobInput = LabelJobFields & {
   copyCount: number;
   startingPosition?: number;
 };
@@ -88,6 +104,7 @@ const guardModuleIndexes = new Set([0, 1, 2, 45, 46, 47, 48, 49, 92, 93, 94]);
 export type LabelPreviewInput = {
   template: LabelTemplate;
   product: LabelProductInput;
+  job?: LabelJobFields;
 };
 
 export type LabelDocumentInput = {
@@ -112,6 +129,21 @@ const templateHasBinding = (template: LabelTemplate, binding: string) =>
       element.text.binding === binding,
   );
 
+export const templateBoundJobFields = (template: LabelTemplate) => ({
+  packedDate: templateHasBinding(template, "job.packedDate"),
+  expiryDate: templateHasBinding(template, "job.expiryDate"),
+  batchNumber: templateHasBinding(template, "job.batchNumber"),
+});
+
+export const defaultExpiryDateFromPackedDate = (
+  packedDate: string,
+  shelfLifeDays: number,
+) => {
+  const packed = new Date(`${packedDate}T00:00:00`);
+  packed.setDate(packed.getDate() + shelfLifeDays);
+  return packed.toISOString().slice(0, 10);
+};
+
 const labelInputFromTemplate = (input: LabelPreviewInput): LabelFaceInput => {
   const productName = input.product.name?.trim() ?? "";
   return {
@@ -135,6 +167,7 @@ export type InternalLabelPreview = {
   textAboveBarcode: string | null;
   textBelowBarcode: string | null;
   sellingPriceWarning: string | null;
+  mrpWarning: string | null;
   svg: string;
   printSvg: string;
 };
@@ -383,25 +416,37 @@ const renderBars = (
     })
     .join("");
 
+const formatCurrencyAmount = (amount: number | string | null | undefined) => {
+  if (amount == null || amount === "") {
+    return null;
+  }
+
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount < 0) {
+    return null;
+  }
+
+  return `₹${numericAmount.toFixed(2)}`;
+};
+
 const formatSellingPrice = (
   sellingPrice: LabelFaceInput["sellingPrice"],
-) => {
-  if (sellingPrice == null || sellingPrice === "") {
+) => formatCurrencyAmount(sellingPrice);
+
+const formatLabelDate = (isoDate: string) => {
+  const [year, month, day] = isoDate.split("-");
+  if (!year || !month || !day) {
     return null;
   }
-
-  const numericSellingPrice = Number(sellingPrice);
-  if (!Number.isFinite(numericSellingPrice) || numericSellingPrice < 0) {
-    return null;
-  }
-
-  return `₹${numericSellingPrice.toFixed(2)}`;
+  return `${day}/${month}/${year}`;
 };
 
 const resolveBoundText = (
   binding: string,
   product: LabelProductInput,
+  job?: LabelJobFields,
 ): string | null => {
+  const profile = product.labelProfile;
   if (binding === "product.name") {
     const name = product.name?.trim() ?? "";
     return name.length > 0 ? name : null;
@@ -412,12 +457,40 @@ const resolveBoundText = (
   if (binding === "product.price") {
     return formatSellingPrice(product.price);
   }
+  if (binding === "productLabel.mrp") {
+    return formatCurrencyAmount(profile?.mrp);
+  }
+  if (binding === "productLabel.ingredients") {
+    const ingredients = profile?.ingredients?.trim() ?? "";
+    return ingredients.length > 0 ? ingredients : null;
+  }
+  if (binding === "productLabel.netWeight") {
+    const netWeight = profile?.netWeight?.trim() ?? "";
+    return netWeight.length > 0 ? netWeight : null;
+  }
+  if (binding === "productLabel.unitSellingPriceText") {
+    const unitSellingPriceText = profile?.unitSellingPriceText?.trim() ?? "";
+    return unitSellingPriceText.length > 0 ? unitSellingPriceText : null;
+  }
+  if (binding === "job.packedDate") {
+    const packedDate = job?.packedDate?.trim() ?? "";
+    return packedDate.length > 0 ? formatLabelDate(packedDate) : null;
+  }
+  if (binding === "job.expiryDate") {
+    const expiryDate = job?.expiryDate?.trim() ?? "";
+    return expiryDate.length > 0 ? formatLabelDate(expiryDate) : null;
+  }
+  if (binding === "job.batchNumber") {
+    const batchNumber = job?.batchNumber?.trim() ?? "";
+    return batchNumber.length > 0 ? batchNumber : null;
+  }
   return null;
 };
 
 const resolveTextElementValue = (
   element: Extract<LabelElement, { type: "text" }>,
   product: LabelProductInput,
+  job?: LabelJobFields,
 ): string | null => {
   if (element.text.source === "static") {
     const value = element.text.staticValue?.trim() ?? "";
@@ -426,7 +499,7 @@ const resolveTextElementValue = (
   if (!element.text.binding) {
     return null;
   }
-  return resolveBoundText(element.text.binding, product);
+  return resolveBoundText(element.text.binding, product, job);
 };
 
 const textAnchor = (align: "left" | "center" | "right") => {
@@ -454,6 +527,9 @@ const textClassName = (
   }
   if (element.text.binding === "product.price") {
     return "selling-price";
+  }
+  if (element.text.binding === "productLabel.mrp") {
+    return "on-pack-mrp";
   }
   return "label-text";
 };
@@ -522,14 +598,43 @@ const renderBoxElement = (element: Extract<LabelElement, { type: "box" }>) => {
   return wrapRotatedElement(element, svg);
 };
 
+const renderNutritionTableElement = (
+  element: Extract<LabelElement, { type: "table" }>,
+  rows: Array<{ name: string; quantity: string; unit: string }>,
+) => {
+  const box = placedBox(element);
+  const rowCount = rows.length + 1;
+  const rowHeight = box.height / rowCount;
+  const colWidth = box.width / 3;
+  const headerCells = ["Name", "Qty", "Unit"]
+    .map((label, index) =>
+      `<text class="label-nutrition-header" font-size="${Math.min(2, rowHeight * 0.6)}" font-family="${LABEL_TEXT_FONT}" font-weight="700" x="${index * colWidth + colWidth / 2}" y="${rowHeight * 0.75}" text-anchor="middle">${escapeHtml(label)}</text>`,
+    )
+    .join("");
+  const bodyRows = rows
+    .map((row, rowIndex) => {
+      const y = rowHeight * (rowIndex + 1);
+      const values = [row.name, row.quantity, row.unit];
+      return values
+        .map((value, colIndex) =>
+          `<text class="label-nutrition-cell" font-size="${Math.min(2, rowHeight * 0.6)}" font-family="${LABEL_TEXT_FONT}" x="${colIndex * colWidth + colWidth / 2}" y="${y + rowHeight * 0.75}" text-anchor="middle">${escapeHtml(value)}</text>`,
+        )
+        .join("");
+    })
+    .join("");
+  const svg = `<svg class="label-nutrition-table" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" viewBox="0 0 ${box.width} ${box.height}" overflow="hidden" xmlns="http://www.w3.org/2000/svg">${headerCells}${bodyRows}</svg>`;
+  return wrapRotatedElement(element, svg);
+};
+
 const renderTemplateElements = (
   template: LabelTemplate,
   product: LabelProductInput,
+  job?: LabelJobFields,
 ) =>
   template.elements
     .map((element) => {
       if (element.type === "text") {
-        const value = resolveTextElementValue(element, product);
+        const value = resolveTextElementValue(element, product, job);
         return value ? renderTextElement(element, value) : "";
       }
       if (element.type === "barcode") {
@@ -541,6 +646,13 @@ const renderTemplateElements = (
       }
       if (element.type === "box") {
         return renderBoxElement(element);
+      }
+      if (element.type === "table") {
+        const nutrition = product.labelProfile?.nutrition ?? [];
+        if (nutrition.length === 0) {
+          return "";
+        }
+        return renderNutritionTableElement(element, nutrition);
       }
       return "";
     })
@@ -595,7 +707,15 @@ export const buildInternalLabelPreview = (
   const textBelowBarcode = label.includeSellingPrice
     ? formatSellingPrice(label.sellingPrice)
     : null;
-  const content = renderTemplateElements(input.template, input.product);
+  const mrpText =
+    templateHasBinding(input.template, "productLabel.mrp")
+      ? formatCurrencyAmount(input.product.labelProfile?.mrp)
+      : null;
+  const content = renderTemplateElements(
+    input.template,
+    input.product,
+    input.job,
+  );
 
   return {
     encodedCode: label.productCode,
@@ -613,6 +733,9 @@ export const buildInternalLabelPreview = (
     textBelowBarcode,
     sellingPriceWarning: textBelowBarcode
       ? "Selling price is printed on this label. Reprint labels after any price change."
+      : null,
+    mrpWarning: mrpText
+      ? "On-pack MRP is printed on this label. Reprint labels after any MRP change."
       : null,
     svg: wrapLabelFaceSvg(content, input.template, "preview"),
     printSvg: wrapLabelFaceSvg(content, input.template, "print"),
@@ -774,6 +897,7 @@ export const buildInternalLabelLayoutPreview = (
   const preview = buildInternalLabelPreview({
     template: input.template,
     product: input.product,
+    job: input.job,
   });
   const {
     widthMm,
@@ -857,6 +981,7 @@ export const buildInternalLabelDocument = (
   const preview = buildInternalLabelPreview({
     template: input.template,
     product: input.product,
+    job: input.job,
   });
   const pages =
     input.template.stock.media === "sheet"

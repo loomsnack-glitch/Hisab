@@ -26,6 +26,7 @@ import type {
     UpdateCategoryJSON,
     UpdateLabelTemplateJSON,
     UpdateProductAddOnAttachmentJSON,
+    UpdateProductLabelProfileJSON,
     UpdateProductJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
@@ -142,6 +143,22 @@ export const updateProduct = async (
 ): Promise<ServiceResponse<ProductResponse | null>> => {
     try {
         const response = await api.patch(`/organizations/${organizationId}/products/${productId}`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateProductLabelProfile = async (
+    organizationId: string,
+    productId: string,
+    data: UpdateProductLabelProfileJSON,
+): Promise<ServiceResponse<ProductResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/products/${productId}/label-profile`,
+            data,
+        );
         return response.data;
     } catch (error) {
         return handleApiError(error);

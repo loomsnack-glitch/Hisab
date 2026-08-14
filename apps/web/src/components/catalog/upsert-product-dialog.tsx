@@ -8,6 +8,7 @@ import {
   getOrganizationCatalogSettings,
   getSignedURLForUpload,
   updateProduct,
+  updateProductLabelProfile,
   uploadFileToSignedURL,
   reuseInternalProductCode,
 } from "@repo/services";
@@ -17,6 +18,7 @@ import {
   normalizeProductCodeInput,
   type CategoryDTO,
   type CreateProductJSON,
+  type NutritionRow,
   type ProductResponseDTO,
   type ProductStatus,
 } from "@repo/types";
@@ -139,6 +141,15 @@ const createProductImagePath = (organizationId: string, file: File) => {
   return `organizations/${organizationId}/products/${safeRandomUUID()}.${extension}`;
 };
 
+const emptyLabelProfileForm = {
+  ingredients: "",
+  netWeight: "",
+  unitSellingPriceText: "",
+  mrp: "",
+  shelfLifeDays: "",
+  nutrition: [] as NutritionRow[],
+};
+
 const UpsertProductDialog = ({
   organizationId,
   categories,
@@ -156,6 +167,7 @@ const UpsertProductDialog = ({
   const [reuseCodeConfirmationOpen, setReuseCodeConfirmationOpen] =
     useState(false);
   const [releasedInternalCode, setReleasedInternalCode] = useState("");
+  const [labelProfileForm, setLabelProfileForm] = useState(emptyLabelProfileForm);
 
   const queryClient = useQueryClient();
   const catalogSettingsQuery = useQuery({
@@ -200,11 +212,26 @@ const UpsertProductDialog = ({
           status: product.status,
           productCode: product.productCode ?? "",
         });
+        setLabelProfileForm({
+          ingredients: product.labelProfile?.ingredients ?? "",
+          netWeight: product.labelProfile?.netWeight ?? "",
+          unitSellingPriceText: product.labelProfile?.unitSellingPriceText ?? "",
+          mrp:
+            product.labelProfile?.mrp != null
+              ? String(product.labelProfile.mrp)
+              : "",
+          shelfLifeDays:
+            product.labelProfile?.shelfLifeDays != null
+              ? String(product.labelProfile.shelfLifeDays)
+              : "",
+          nutrition: product.labelProfile?.nutrition ?? [],
+        });
       } else {
         form.reset({
           ...defaultValues,
           categoryId: resolveDefaultCategoryId(),
         });
+        setLabelProfileForm(emptyLabelProfileForm);
       }
     } else {
       form.reset(
@@ -229,6 +256,7 @@ const UpsertProductDialog = ({
       setCodeChangeConfirmationOpen(false);
       setReuseCodeConfirmationOpen(false);
       setReleasedInternalCode("");
+      setLabelProfileForm(emptyLabelProfileForm);
     }
   }, [categories, defaultCategoryId, form, open, product]);
 
@@ -256,6 +284,56 @@ const UpsertProductDialog = ({
       }
     };
   }, [selectedFilePreview]);
+
+  const buildLabelProfilePayload = () => {
+    const nutrition = labelProfileForm.nutrition
+      .map((row) => ({
+        name: row.name.trim(),
+        quantity: row.quantity.trim(),
+        unit: row.unit.trim(),
+      }))
+      .filter((row) => row.name && row.quantity && row.unit);
+
+    return {
+      ingredients: labelProfileForm.ingredients,
+      netWeight: labelProfileForm.netWeight,
+      unitSellingPriceText: labelProfileForm.unitSellingPriceText,
+      mrp: labelProfileForm.mrp,
+      shelfLifeDays: labelProfileForm.shelfLifeDays,
+      nutrition: nutrition.length > 0 ? nutrition : null,
+    };
+  };
+
+  const saveLabelProfileIfNeeded = async (productId: string) => {
+    if (!barcodeScanningEnabled) {
+      return;
+    }
+
+    const hasProfileInput =
+      labelProfileForm.ingredients.trim().length > 0 ||
+      labelProfileForm.netWeight.trim().length > 0 ||
+      labelProfileForm.unitSellingPriceText.trim().length > 0 ||
+      labelProfileForm.mrp.trim().length > 0 ||
+      labelProfileForm.shelfLifeDays.trim().length > 0 ||
+      labelProfileForm.nutrition.length > 0 ||
+      Boolean(product?.labelProfile);
+
+    if (!hasProfileInput) {
+      return;
+    }
+
+    const profileResponse = await updateProductLabelProfile(
+      organizationId,
+      productId,
+      buildLabelProfilePayload(),
+    );
+
+    if (profileResponse.status !== "success") {
+      throw new Error(
+        profileResponse.message || "Failed to save Product Label Profile",
+      );
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: async (data: CreateProductJSON) => {
@@ -311,9 +389,16 @@ const UpsertProductDialog = ({
         productCodeKind: nextProductCodeKind,
       };
 
-      return product
-        ? updateProduct(organizationId, product.id, payload)
-        : createProduct(organizationId, payload);
+      const response = product
+        ? await updateProduct(organizationId, product.id, payload)
+        : await createProduct(organizationId, payload);
+
+      if (response.status !== "success" || !response.data?.product.id) {
+        return response;
+      }
+
+      await saveLabelProfileIfNeeded(response.data.product.id);
+      return response;
     },
     onSuccess: (response) => {
       if (response.status === "success") {
@@ -604,6 +689,169 @@ const UpsertProductDialog = ({
                   ) : null}
                 </FieldContent>
               </Field>
+            ) : null}
+
+            {barcodeScanningEnabled ? (
+              <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div>
+                  <p className="text-sm font-medium">Product Label Profile</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optional packaging facts for label templates. On-pack MRP is
+                    not used in Billing or Sale Item snapshots.
+                  </p>
+                </div>
+                <label className="block space-y-1.5 text-sm font-medium">
+                  Ingredients
+                  <textarea
+                    className="min-h-20 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                    value={labelProfileForm.ingredients}
+                    onChange={(event) =>
+                      setLabelProfileForm((current) => ({
+                        ...current,
+                        ingredients: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Net weight
+                    <Input
+                      value={labelProfileForm.netWeight}
+                      onChange={(event) =>
+                        setLabelProfileForm((current) => ({
+                          ...current,
+                          netWeight: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. 200 g"
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Unit selling price text
+                    <Input
+                      value={labelProfileForm.unitSellingPriceText}
+                      onChange={(event) =>
+                        setLabelProfileForm((current) => ({
+                          ...current,
+                          unitSellingPriceText: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. ₹10 per piece"
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    On-pack MRP
+                    <Input
+                      value={labelProfileForm.mrp}
+                      onChange={(event) =>
+                        setLabelProfileForm((current) => ({
+                          ...current,
+                          mrp: sanitizeDecimalInput(event.target.value),
+                        }))
+                      }
+                      placeholder="Packaging MRP, not Billing price"
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Shelf life (days)
+                    <Input
+                      type="number"
+                      min={1}
+                      value={labelProfileForm.shelfLifeDays}
+                      onChange={(event) =>
+                        setLabelProfileForm((current) => ({
+                          ...current,
+                          shelfLifeDays: event.target.value.replace(/\D/g, ""),
+                        }))
+                      }
+                      placeholder="Whole days"
+                    />
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Nutrition rows</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setLabelProfileForm((current) => ({
+                          ...current,
+                          nutrition: [
+                            ...current.nutrition,
+                            { name: "", quantity: "", unit: "" },
+                          ],
+                        }))
+                      }
+                    >
+                      Add row
+                    </Button>
+                  </div>
+                  {labelProfileForm.nutrition.map((row, index) => (
+                    <div key={index} className="grid gap-2 sm:grid-cols-4">
+                      <Input
+                        placeholder="Name"
+                        value={row.name}
+                        onChange={(event) =>
+                          setLabelProfileForm((current) => ({
+                            ...current,
+                            nutrition: current.nutrition.map((entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, name: event.target.value }
+                                : entry,
+                            ),
+                          }))
+                        }
+                      />
+                      <Input
+                        placeholder="Quantity"
+                        value={row.quantity}
+                        onChange={(event) =>
+                          setLabelProfileForm((current) => ({
+                            ...current,
+                            nutrition: current.nutrition.map((entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, quantity: event.target.value }
+                                : entry,
+                            ),
+                          }))
+                        }
+                      />
+                      <Input
+                        placeholder="Unit"
+                        value={row.unit}
+                        onChange={(event) =>
+                          setLabelProfileForm((current) => ({
+                            ...current,
+                            nutrition: current.nutrition.map((entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, unit: event.target.value }
+                                : entry,
+                            ),
+                          }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setLabelProfileForm((current) => ({
+                            ...current,
+                            nutrition: current.nutrition.filter(
+                              (_, entryIndex) => entryIndex !== index,
+                            ),
+                          }))
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : null}
 
             {isEditMode && (

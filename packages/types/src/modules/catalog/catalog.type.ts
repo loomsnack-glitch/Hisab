@@ -20,6 +20,8 @@ import type {
     CreateProductSchema,
     LabelTemplateDTOSchema,
     LabelTemplateDocumentSchema,
+    NutritionRowSchema,
+    ProductLabelProfileDTOSchema,
     ProductAddOnAttachmentDTOSchema,
     ProductAddOnAttachmentResponseDTOSchema,
     ProductDTOSchema,
@@ -31,6 +33,7 @@ import type {
     UpdateCategorySchema,
     UpdateLabelTemplateSchema,
     UpdateProductAddOnAttachmentSchema,
+    UpdateProductLabelProfileSchema,
     UpdateProductSchema,
 } from "./catalog.schema";
 
@@ -49,6 +52,8 @@ export type ComboChoiceOptionResponseDTO = z.infer<typeof ComboChoiceOptionRespo
 export type AddOnDTO = z.infer<typeof AddOnDTOSchema>;
 export type LabelTemplateDocument = z.infer<typeof LabelTemplateDocumentSchema>;
 export type LabelTemplateDTO = z.infer<typeof LabelTemplateDTOSchema>;
+export type NutritionRow = z.infer<typeof NutritionRowSchema>;
+export type ProductLabelProfileDTO = z.infer<typeof ProductLabelProfileDTOSchema>;
 export type ProductAddOnAttachmentDTO = z.infer<typeof ProductAddOnAttachmentDTOSchema>;
 export type ProductAddOnAttachmentResponseDTO = z.infer<typeof ProductAddOnAttachmentResponseDTOSchema>;
 export type CategoryStatus = CategoryDTO["status"];
@@ -58,6 +63,20 @@ export type ProductCodeKind = NonNullable<ProductDTO["productCodeKind"]>;
 export type AddOnStatus = AddOnDTO["status"];
 export type LabelTemplateStatus = LabelTemplateDTO["status"];
 export type ProductAddOnAttachmentStatus = ProductAddOnAttachmentDTO["status"];
+
+export type UpdateProductLabelProfileJSON = z.infer<typeof UpdateProductLabelProfileSchema>;
+export type UpdateProductLabelProfileSVC = UpdateProductLabelProfileJSON;
+
+export type ProductLabelProfileREPO = {
+    productId: string;
+    organizationId: string;
+    ingredients?: string | null;
+    nutrition?: NutritionRow[] | null;
+    netWeight?: string | null;
+    unitSellingPriceText?: string | null;
+    mrp?: number | null;
+    shelfLifeDays?: number | null;
+};
 
 export type CreateCategoryJSON = z.infer<typeof CreateCategorySchema>;
 export type CreateCategorySVC = CreateCategoryJSON;

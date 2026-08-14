@@ -18,9 +18,11 @@ import { toast } from "sonner";
 import {
   buildInternalLabelLayoutPreview,
   canPrintInternalLabels,
+  defaultExpiryDateFromPackedDate,
   labelPrintConfirmationKey,
   printInternalLabelDocument,
   sheetLabelCapacity,
+  templateBoundJobFields,
 } from "@/lib/internal-label-printing";
 import { catalogKeys } from "@/lib/query-keys";
 
@@ -39,6 +41,10 @@ const InternalProductLabelDialog = ({
   const [templateId, setTemplateId] = useState("");
   const [copyCount, setCopyCount] = useState("1");
   const [startingPosition, setStartingPosition] = useState("1");
+  const [packedDate, setPackedDate] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [batchNumber, setBatchNumber] = useState("");
+  const [expiryManuallyEdited, setExpiryManuallyEdited] = useState(false);
   const [testPrintedFor, setTestPrintedFor] = useState<string | null>(null);
   const [testScanConfirmed, setTestScanConfirmed] = useState(false);
 
@@ -76,7 +82,39 @@ const InternalProductLabelDialog = ({
     productCode: productCode ?? "",
     name: product.name,
     price: product.price,
+    labelProfile: product.labelProfile ?? null,
   };
+  const boundJobFields = template ? templateBoundJobFields(template) : {
+    packedDate: false,
+    expiryDate: false,
+    batchNumber: false,
+  };
+  const shelfLifeDays = product.labelProfile?.shelfLifeDays ?? null;
+
+  useEffect(() => {
+    if (!open) {
+      setPackedDate("");
+      setExpiryDate("");
+      setBatchNumber("");
+      setExpiryManuallyEdited(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (
+      !expiryManuallyEdited &&
+      boundJobFields.expiryDate &&
+      packedDate &&
+      shelfLifeDays
+    ) {
+      setExpiryDate(defaultExpiryDateFromPackedDate(packedDate, shelfLifeDays));
+    }
+  }, [
+    boundJobFields.expiryDate,
+    expiryManuallyEdited,
+    packedDate,
+    shelfLifeDays,
+  ]);
   const layoutSignature = template
     ? labelPrintConfirmationKey({
         templateId: template.id,
@@ -107,6 +145,19 @@ const InternalProductLabelDialog = ({
     parsedStartingPosition <= sheetCapacity
       ? parsedStartingPosition
       : 1;
+  const labelJob = {
+    copyCount: previewCopyCount,
+    ...(isSheet ? { startingPosition: previewStartingPosition } : {}),
+    ...(boundJobFields.packedDate && packedDate
+      ? { packedDate }
+      : {}),
+    ...(boundJobFields.expiryDate && expiryDate
+      ? { expiryDate }
+      : {}),
+    ...(boundJobFields.batchNumber && batchNumber.trim()
+      ? { batchNumber: batchNumber.trim() }
+      : {}),
+  };
   const previewResult = useMemo(() => {
     if (!template) {
       return { preview: null, error: null };
@@ -116,10 +167,7 @@ const InternalProductLabelDialog = ({
         preview: buildInternalLabelLayoutPreview({
           template,
           product: labelProduct,
-          job: {
-            copyCount: previewCopyCount,
-            ...(isSheet ? { startingPosition: previewStartingPosition } : {}),
-          },
+          job: labelJob,
         }),
         error: null,
       };
@@ -133,8 +181,14 @@ const InternalProductLabelDialog = ({
       };
     }
   }, [
+    batchNumber,
+    boundJobFields.batchNumber,
+    boundJobFields.expiryDate,
+    boundJobFields.packedDate,
+    expiryDate,
     isSheet,
     labelProduct,
+    packedDate,
     previewCopyCount,
     previewStartingPosition,
     template,
@@ -165,6 +219,15 @@ const InternalProductLabelDialog = ({
       job: {
         copyCount: nextCopyCount,
         ...(isSheet ? { startingPosition: parsedStartingPosition } : {}),
+        ...(boundJobFields.packedDate && packedDate
+          ? { packedDate }
+          : {}),
+        ...(boundJobFields.expiryDate && expiryDate
+          ? { expiryDate }
+          : {}),
+        ...(boundJobFields.batchNumber && batchNumber.trim()
+          ? { batchNumber: batchNumber.trim() }
+          : {}),
       },
     };
   };
@@ -312,9 +375,60 @@ const InternalProductLabelDialog = ({
               ) : null}
             </div>
 
+            {boundJobFields.packedDate ||
+            boundJobFields.expiryDate ||
+            boundJobFields.batchNumber ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {boundJobFields.packedDate ? (
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Packed date
+                    <Input
+                      type="date"
+                      value={packedDate}
+                      onChange={(event) => setPackedDate(event.target.value)}
+                    />
+                  </label>
+                ) : null}
+                {boundJobFields.expiryDate ? (
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Expiry date
+                    <Input
+                      type="date"
+                      value={expiryDate}
+                      onChange={(event) => {
+                        setExpiryManuallyEdited(true);
+                        setExpiryDate(event.target.value);
+                      }}
+                    />
+                    {shelfLifeDays ? (
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        Defaults from packed date plus {shelfLifeDays} shelf-life
+                        days. Override when needed.
+                      </span>
+                    ) : null}
+                  </label>
+                ) : null}
+                {boundJobFields.batchNumber ? (
+                  <label className="block space-y-1.5 text-sm font-medium sm:col-span-2">
+                    Batch number
+                    <Input
+                      value={batchNumber}
+                      onChange={(event) => setBatchNumber(event.target.value)}
+                      placeholder="e.g. BATCH-42"
+                    />
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+
             {preview?.sellingPriceWarning ? (
               <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
                 {preview.sellingPriceWarning}
+              </p>
+            ) : null}
+            {preview?.mrpWarning ? (
+              <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
+                {preview.mrpWarning}
               </p>
             ) : null}
             {previewError ? (
@@ -411,7 +525,7 @@ const InternalProductLabelDialog = ({
               </div>
             )}
             <p className="text-xs text-muted-foreground">
-              EAN-13 keeps quiet zones on a white patch. Code 128 encodes the Product Code as stored.
+              EAN-13 keeps quiet zones on a white patch. Code 128 encodes the Product Code as stored. Hisab prints only the facts you configure; it does not claim the pack is FSSAI-complete.
             </p>
           </div>
         </div>

@@ -382,6 +382,25 @@ export const createLabelTemplateRepo = mock(async (data: typeof a4LabelTemplate)
 export const updateLabelTemplateRepo = mock(async (data: typeof a4LabelTemplate) => data);
 export const deleteLabelTemplateRepo = mock(async () => a4LabelTemplate);
 export const seedDefaultLabelTemplatesRepo = mock(async () => [a4LabelTemplate, thermalLabelTemplate]);
+export const getProductLabelProfileByProductId = mock(async () => null);
+export const getProductLabelProfilesByProductIds = mock(async () => new Map());
+export const upsertProductLabelProfileRepo = mock(async (data: {
+    productId: string;
+    organizationId: string;
+    ingredients?: string | null;
+    nutrition?: Array<{ name: string; quantity: string; unit: string }> | null;
+    netWeight?: string | null;
+    unitSellingPriceText?: string | null;
+    mrp?: number | null;
+    shelfLifeDays?: number | null;
+}) => ({
+    ingredients: data.ingredients ?? null,
+    nutrition: data.nutrition ?? null,
+    netWeight: data.netWeight ?? null,
+    unitSellingPriceText: data.unitSellingPriceText ?? null,
+    mrp: data.mrp ?? null,
+    shelfLifeDays: data.shelfLifeDays ?? null,
+}));
 export const begin = mock(async (callback: (tx: unknown) => Promise<void>) => callback({}));
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
@@ -460,6 +479,9 @@ mock.module("./catalog.repository", () => ({
     updateLabelTemplate: updateLabelTemplateRepo,
     deleteLabelTemplate: deleteLabelTemplateRepo,
     seedDefaultLabelTemplates: seedDefaultLabelTemplatesRepo,
+    getProductLabelProfileByProductId,
+    getProductLabelProfilesByProductIds,
+    upsertProductLabelProfile: upsertProductLabelProfileRepo,
 }));
 
 export const catalogService = await import("./catalog.service");

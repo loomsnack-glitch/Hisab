@@ -18,6 +18,8 @@ import type {
     CreateProductAddOnAttachmentREPO,
     CreateProductREPO,
     LabelTemplateDTO,
+    ProductLabelProfileDTO,
+    ProductLabelProfileREPO,
     ProductAddOnAttachmentDTO,
     ProductAddOnAttachmentResponseDTO,
     ProductDTO,
@@ -1329,4 +1331,94 @@ export const seedDefaultLabelTemplates = async (
     }
 
     return seeded;
+};
+
+const mapProductLabelProfile = (
+    row: Record<string, unknown>,
+): ProductLabelProfileDTO => ({
+    ingredients: row.ingredients ? String(row.ingredients) : null,
+    nutrition: row.nutrition
+        ? (row.nutrition as ProductLabelProfileDTO["nutrition"])
+        : null,
+    netWeight: row.net_weight ? String(row.net_weight) : null,
+    unitSellingPriceText: row.unit_selling_price_text
+        ? String(row.unit_selling_price_text)
+        : null,
+    mrp: row.mrp != null ? Number(row.mrp) : null,
+    shelfLifeDays: row.shelf_life_days != null ? Number(row.shelf_life_days) : null,
+});
+
+export const getProductLabelProfileByProductId = async (
+    organizationId: string,
+    productId: string,
+): Promise<ProductLabelProfileDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM product_label_profiles
+        WHERE organization_id = ${organizationId}
+          AND product_id = ${productId}
+    `;
+
+    return result ? mapProductLabelProfile(result) : null;
+};
+
+export const getProductLabelProfilesByProductIds = async (
+    organizationId: string,
+    productIds: string[],
+): Promise<Map<string, ProductLabelProfileDTO>> => {
+    if (productIds.length === 0) {
+        return new Map();
+    }
+
+    const results = await pg`
+        SELECT *
+        FROM product_label_profiles
+        WHERE organization_id = ${organizationId}
+          AND product_id IN ${pg(productIds)}
+    `;
+
+    return new Map(
+        results.map((result: Record<string, unknown>) => [
+            String(result.product_id),
+            mapProductLabelProfile(result),
+        ]),
+    );
+};
+
+export const upsertProductLabelProfile = async (
+    profileData: ProductLabelProfileREPO,
+): Promise<ProductLabelProfileDTO | null> => {
+    const [result] = await pg`
+        INSERT INTO product_label_profiles (
+            product_id,
+            organization_id,
+            ingredients,
+            nutrition,
+            net_weight,
+            unit_selling_price_text,
+            mrp,
+            shelf_life_days
+        )
+        VALUES (
+            ${profileData.productId},
+            ${profileData.organizationId},
+            ${profileData.ingredients ?? null},
+            ${profileData.nutrition ? JSON.stringify(profileData.nutrition) : null}::jsonb,
+            ${profileData.netWeight ?? null},
+            ${profileData.unitSellingPriceText ?? null},
+            ${profileData.mrp ?? null},
+            ${profileData.shelfLifeDays ?? null}
+        )
+        ON CONFLICT (product_id) DO UPDATE SET
+            ingredients = EXCLUDED.ingredients,
+            nutrition = EXCLUDED.nutrition,
+            net_weight = EXCLUDED.net_weight,
+            unit_selling_price_text = EXCLUDED.unit_selling_price_text,
+            mrp = EXCLUDED.mrp,
+            shelf_life_days = EXCLUDED.shelf_life_days,
+            updated_at = NOW()
+        RETURNING *
+    `;
+
+    return result ? mapProductLabelProfile(result) : null;
 };
