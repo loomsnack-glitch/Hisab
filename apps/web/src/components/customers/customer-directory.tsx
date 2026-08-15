@@ -1,6 +1,6 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, useWatch, type SubmitHandler } from "react-hook-form";
 import {
     getCustomerLedger,
@@ -12,6 +12,8 @@ import {
 import {
     UpdateCustomerSchema,
     type CustomerDTO,
+    type CustomerListQuery,
+    type CustomerListStatus,
     type UpdateCustomerJSON,
     normalizePhoneNumber,
 } from "@repo/types";
@@ -29,7 +31,18 @@ import { Input } from "@repo/ui/components/input";
 import { PhoneInput } from "@repo/ui/components/phone-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
-import { CheckCircle2, Eye, Pencil, Plus, Search, User, XCircle } from "lucide-react";
+import {
+    ArrowUpDown,
+    CheckCircle2,
+    Eye,
+    Pencil,
+    Plus,
+    RotateCcw,
+    Search,
+    SlidersHorizontal,
+    User,
+    XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
@@ -46,7 +59,25 @@ type CustomerDirectoryProps = {
     onSearchChange?: (value: string) => void;
 };
 
-type CustomerStatusFilter = "all" | "active" | "due";
+type CustomerStatusFilter = CustomerListStatus;
+type CustomerSortOption = NonNullable<CustomerListQuery["sort"]>;
+
+const customerStatusOptions: Array<{ value: CustomerStatusFilter; label: string }> = [
+    { value: "all", label: "All" },
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+    { value: "due", label: "Has due" },
+    { value: "no_due", label: "No due" },
+];
+
+const customerSortOptions: Array<{ value: CustomerSortOption; label: string }> = [
+    { value: "newest", label: "Recently added" },
+    { value: "oldest", label: "Oldest first" },
+    { value: "name_asc", label: "Name A–Z" },
+    { value: "name_desc", label: "Name Z–A" },
+    { value: "highest_due", label: "Highest due" },
+    { value: "lowest_due", label: "Lowest due" },
+];
 
 type CustomerEditDialogProps = {
     mode: BillingWorkspaceMode;
@@ -185,34 +216,56 @@ const CustomerDirectory = ({
     const queryClient = useQueryClient();
     const [localSearch, setLocalSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<CustomerStatusFilter>("all");
+    const [sortBy, setSortBy] = useState<CustomerSortOption>("newest");
     const [editingCustomer, setEditingCustomer] = useState<CustomerDTO | null>(null);
     const [detailsCustomer, setDetailsCustomer] = useState<CustomerDTO | null>(null);
+    const customerLoadMoreRef = useRef<HTMLDivElement | null>(null);
     const search = searchValue ?? localSearch;
     const deferredSearch = useDeferredValue(search.trim());
     const setSearch = onSearchChange ?? setLocalSearch;
 
-    const customersQuery = useQuery({
-        queryKey: billingKeys.customers(organizationId, { mode, search: deferredSearch }),
-        queryFn: () =>
-            mode === "device"
-                ? getPosCustomers({ search: deferredSearch || undefined, limit: 100 })
-                : getCustomers(organizationId, { search: deferredSearch || undefined, limit: 100 }),
+    const customerQueryParams = useMemo<CustomerListQuery>(
+        () => ({
+            search: deferredSearch || undefined,
+            status: statusFilter,
+            sort: sortBy,
+            limit: 40,
+        }),
+        [deferredSearch, sortBy, statusFilter],
+    );
+
+    const customersQuery = useInfiniteQuery({
+        queryKey: billingKeys.customers(organizationId, { mode, ...customerQueryParams }),
+        initialPageParam: null as string | null,
+        queryFn: async ({ pageParam }) => {
+            const params = { ...customerQueryParams, cursor: pageParam ?? undefined };
+            const response =
+                mode === "device" ? await getPosCustomers(params) : await getCustomers(organizationId, params);
+            if (response.status === "error") {
+                throw new Error(response.message || "Customers failed to load");
+            }
+            return response;
+        },
+        getNextPageParam: (lastPage) =>
+            lastPage.status === "success" && lastPage.data?.pageInfo.hasMore
+                ? lastPage.data.pageInfo.nextCursor ?? undefined
+                : undefined,
         enabled: Boolean(organizationId),
     });
 
+    const customerPages = customersQuery.data?.pages ?? [];
+    const firstCustomerPage = customerPages.find((page) => page.status === "success");
     const visibleCustomers = useMemo(
-        () => {
-            const customers =
-                customersQuery.data?.status === "success" ? customersQuery.data.data?.customers ?? [] : [];
-
-            return customers.filter((customer) => {
-                if (statusFilter === "active") return customer.isActive;
-                if (statusFilter === "due") return customer.balance > 0;
-                return true;
-            });
-        },
-        [customersQuery.data, statusFilter],
+        () =>
+            customerPages.flatMap((page) =>
+                page.status === "success" ? page.data?.customers ?? [] : [],
+            ),
+        [customerPages],
     );
+    const totalCustomerCount =
+        firstCustomerPage?.status === "success"
+            ? firstCustomerPage.data?.pageInfo.totalCount ?? visibleCustomers.length
+            : visibleCustomers.length;
 
     const ledgerQuery = useQuery({
         queryKey: billingKeys.customerLedger(organizationId, detailsCustomer?.id ?? ""),
@@ -225,7 +278,33 @@ const CustomerDirectory = ({
     };
 
     const isLoading = customersQuery.isPending;
-    const hasError = customersQuery.isError || customersQuery.data?.status === "error";
+    const hasError = customerPages.length === 0 && customersQuery.isError;
+    const hasActiveFilters = Boolean(search.trim()) || statusFilter !== "all" || sortBy !== "newest";
+    const selectedStatusLabel = customerStatusOptions.find((option) => option.value === statusFilter)?.label;
+    const selectedSortLabel = customerSortOptions.find((option) => option.value === sortBy)?.label;
+    const customerToolbarOffset = mode === "admin" ? "top-14" : "top-0";
+    const resetFilters = () => {
+        setSearch("");
+        setStatusFilter("all");
+        setSortBy("newest");
+    };
+
+    useEffect(() => {
+        const target = customerLoadMoreRef.current;
+        if (!target || !customersQuery.hasNextPage) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry?.isIntersecting && !customersQuery.isFetchingNextPage) {
+                    void customersQuery.fetchNextPage();
+                }
+            },
+            { rootMargin: "240px" },
+        );
+
+        observer.observe(target);
+        return () => observer.disconnect();
+    }, [customersQuery.fetchNextPage, customersQuery.hasNextPage, customersQuery.isFetchingNextPage]);
 
     return (
         <div className="space-y-4">
@@ -250,49 +329,75 @@ const CustomerDirectory = ({
                 />
             </div>
 
-            <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card p-3 sm:flex-row sm:items-center">
-                {!onSearchChange ? <div className="relative min-w-0 flex-1">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        className="h-10 rounded-xl pl-9 pr-9"
-                        placeholder="Search by name or phone..."
-                        aria-label="Search customers"
-                    />
-                    {search ? (
-                        <button
-                            type="button"
-                            onClick={() => setSearch("")}
-                            className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                            aria-label="Clear customer search"
-                        >
-                            <XCircle className="size-4" />
-                        </button>
-                    ) : null}
-                </div> : null}
-                {onSearchChange ? <p className="flex-1 text-sm text-muted-foreground">Use the header search to find a customer.</p> : null}
-                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
-                    {([
-                        ["all", "All"],
-                        ["active", "Active"],
-                        ["due", "Has due"],
-                    ] as const).map(([value, label]) => (
-                        <button
-                            key={value}
-                            type="button"
-                            onClick={() => setStatusFilter(value)}
-                            className={
-                                statusFilter === value
-                                    ? "shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-                                    : "shrink-0 rounded-full border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-                            }
-                        >
-                            {label}
-                        </button>
-                    ))}
+            <div className={`sticky ${customerToolbarOffset} z-10 space-y-3 rounded-2xl border border-border/70 bg-card/95 p-3 shadow-sm backdrop-blur-md sm:p-4`}>
+                <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(150px,auto)_minmax(180px,auto)_auto_auto] sm:items-center">
+                    <div className="relative col-span-2 min-w-0 sm:col-span-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            className="h-11 rounded-xl pl-9 pr-9"
+                            placeholder="Search by name or phone..."
+                            aria-label="Search customers"
+                        />
+                        {search ? (
+                            <button
+                                type="button"
+                                onClick={() => setSearch("")}
+                                className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                                aria-label="Clear customer search"
+                            >
+                                <XCircle className="size-4" />
+                            </button>
+                        ) : null}
+                    </div>
+
+                    <div className="flex min-w-0 items-center gap-2">
+                        <SlidersHorizontal className="size-4 shrink-0 text-muted-foreground" />
+                        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as CustomerStatusFilter)}>
+                            <SelectTrigger className="h-11 w-full rounded-xl" aria-label="Filter customers">
+                                <SelectValue placeholder="Filter customers">{selectedStatusLabel}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {customerStatusOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="flex min-w-0 items-center gap-2">
+                        <ArrowUpDown className="size-4 shrink-0 text-muted-foreground" />
+                        <Select value={sortBy} onValueChange={(value) => setSortBy(value as CustomerSortOption)}>
+                            <SelectTrigger className="h-11 w-full rounded-xl" aria-label="Sort customers">
+                                <SelectValue placeholder="Sort customers">{selectedSortLabel}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {customerSortOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="flex items-center gap-2 whitespace-nowrap px-1 text-xs text-muted-foreground" aria-live="polite">
+                        <span className="font-semibold text-foreground">
+                            {totalCustomerCount.toLocaleString()} {totalCustomerCount === 1 ? "customer" : "customers"}
+                        </span>
+                    </div>
+
+                    {hasActiveFilters ? (
+                        <Button type="button" variant="ghost" size="sm" className="h-11 rounded-xl" onClick={resetFilters}>
+                            <RotateCcw className="size-3.5" />
+                            <span className="sm:hidden">Clear</span>
+                        <span className="hidden sm:inline">Clear filters</span>
+                    </Button>
+                ) : <span className="hidden sm:block" aria-hidden="true" />}
                 </div>
-                <span className="shrink-0 text-xs text-muted-foreground">{visibleCustomers.length} shown</span>
             </div>
 
             {isLoading ? (
@@ -311,13 +416,19 @@ const CustomerDirectory = ({
                     <User className="size-8 text-muted-foreground/50" />
                     <p className="mt-3 font-medium">No customers found</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        {search || statusFilter !== "all" ? "Try a different search or filter." : "Add your first customer to get started."}
+                        {hasActiveFilters ? "Try a different search or filter." : "Add your first customer to get started."}
                     </p>
+                    {hasActiveFilters ? (
+                        <Button type="button" variant="outline" size="sm" className="mt-4 rounded-lg" onClick={resetFilters}>
+                            <RotateCcw className="size-3.5" />
+                            Clear filters
+                        </Button>
+                    ) : null}
                 </div>
             ) : (
                 <>
-                    <div className="hidden overflow-hidden rounded-2xl border border-border/70 bg-card md:block">
-                        <table className="w-full text-left text-sm">
+                    <div className="hidden overflow-x-auto rounded-2xl border border-border/70 bg-card md:block">
+                        <table className="min-w-[760px] w-full text-left text-sm">
                             <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3">Customer</th>
@@ -358,6 +469,26 @@ const CustomerDirectory = ({
                     </div>
                 </>
             )}
+
+            {customersQuery.isFetchNextPageError ? (
+                <div className="flex justify-center py-4">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => void customersQuery.fetchNextPage()}
+                    >
+                        Retry loading customers
+                    </Button>
+                </div>
+            ) : customersQuery.hasNextPage ? (
+                <div ref={customerLoadMoreRef} className="flex min-h-14 items-center justify-center py-3" aria-live="polite">
+                    {customersQuery.isFetchingNextPage ? <Spinner className="size-5 text-primary" /> : null}
+                </div>
+            ) : totalCustomerCount > 0 && customerPages.length > 1 ? (
+                <p className="py-4 text-center text-xs text-muted-foreground">All customers loaded</p>
+            ) : null}
 
             <CustomerEditDialog
                 mode={mode}
@@ -446,7 +577,7 @@ type CustomerRowProps = {
 };
 
 const CustomerActions = ({ customer, selected, showUseAction, onUse, onDetails, onEdit }: CustomerRowProps) => (
-    <div className="flex items-center justify-end gap-1">
+    <div className="flex flex-wrap items-center justify-end gap-1">
         {showUseAction ? (
             <Button size="sm" variant={selected ? "secondary" : "outline"} disabled={!customer.isActive} onClick={() => onUse?.(customer)}>
                 {selected ? "Selected" : "Use for order"}

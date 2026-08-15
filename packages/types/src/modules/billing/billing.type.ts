@@ -13,7 +13,9 @@ import type {
     CreatePaymentSchema,
     CustomerDTOSchema,
     CustomerLedgerEntryDTOSchema,
+    CustomerListPageInfoSchema,
     CustomerListQuerySchema,
+    CustomerSortSchema,
     ParentScopedAddOnSalesRollupDTOSchema,
     PaymentDTOSchema,
     ProductSalesSummaryAdminQuerySchema,
@@ -86,6 +88,9 @@ export type UpdateCustomerREPO = Pick<CustomerDTO, "id" | "organizationId" | "na
 };
 
 export type CustomerListQuery = z.infer<typeof CustomerListQuerySchema>;
+export type CustomerListStatus = NonNullable<CustomerListQuery["status"]>;
+export type CustomerSort = z.infer<typeof CustomerSortSchema>;
+export type CustomerListPageInfo = z.infer<typeof CustomerListPageInfoSchema>;
 export type SalesListQuery = z.infer<typeof SalesListQuerySchema>;
 export type SalesSort = z.infer<typeof SalesSortSchema>;
 export type SalesListSummary = z.infer<typeof SalesListSummarySchema>;
@@ -247,6 +252,7 @@ export type CreateCustomerLedgerEntryREPO = Pick<
 
 export type CustomersListResponse = {
     customers: CustomerDTO[];
+    pageInfo: CustomerListPageInfo;
 };
 
 export type CustomerResponse = {

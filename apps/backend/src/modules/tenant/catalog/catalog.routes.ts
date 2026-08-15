@@ -8,6 +8,8 @@ import {
     CreateLabelTemplateSchema,
     CreateProductAddOnAttachmentSchema,
     CreateProductSchema,
+    ReorderCategoriesSchema,
+    ReorderProductsSchema,
     ReuseInternalProductCodeSchema,
     STATUS_CODES,
     UpdateAddOnSchema,
@@ -75,6 +77,23 @@ router.post("/:organizationId/categories", validateSchema("json", CreateCategory
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "createCategory", c, error);
+    }
+});
+
+router.put("/:organizationId/categories/order", validateSchema("json", ReorderCategoriesSchema), async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+
+        const serviceResponse = await catalogService.reorderCategories(
+            c.get("authUser").id,
+            organizationId,
+            c.req.valid("json"),
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "reorderCategories", c, error);
     }
 });
 
@@ -197,6 +216,23 @@ router.post("/:organizationId/products", validateSchema("json", CreateProductSch
         return handleServiceResponse(c, serviceResponse);
     } catch (error) {
         return handleError(FILE_NAME, "createProduct", c, error);
+    }
+});
+
+router.put("/:organizationId/products/order", validateSchema("json", ReorderProductsSchema), async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+
+        const serviceResponse = await catalogService.reorderProducts(
+            c.get("authUser").id,
+            organizationId,
+            c.req.valid("json"),
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "reorderProducts", c, error);
     }
 });
 

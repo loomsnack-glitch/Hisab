@@ -23,6 +23,7 @@ export const category = {
     id: categoryId,
     organizationId,
     name: "Combos",
+    sortOrder: 0,
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -35,6 +36,7 @@ export const product = {
     organizationId,
     categoryId,
     name: "Burger",
+    sortOrder: 0,
     price: 100,
     discount: 0,
     imagePath: null,
@@ -59,6 +61,7 @@ export const coffee = {
     organizationId,
     categoryId,
     name: "Cold Coffee",
+    sortOrder: 1,
     price: 40,
     discount: 0,
     imagePath: null,
@@ -77,6 +80,7 @@ export const existingBundle = {
     organizationId,
     categoryId,
     name: "Existing Bundle",
+    sortOrder: 2,
     price: 99,
     discount: 0,
     imagePath: null,
@@ -162,6 +166,14 @@ export const sauceAttachment = {
 
 export const getOrganizationByIdForUser = mock(async (): Promise<typeof organization | null> => organization);
 export const getCategoryById = mock(async () => category);
+export const getCategoriesByOrganizationId = mock(async () => [category]);
+export const categoryNameExistsInOrganization = mock(async () => false);
+export const createCategoryRepo = mock(async (data: typeof category) => data);
+export const getNextCategorySortOrder = mock(async () => 0);
+export const getProductsByCategoryId = mock(async () => [product]);
+export const getNextProductSortOrder = mock(async () => 0);
+export const reorderCategoriesRepo = mock(async () => undefined);
+export const reorderProductsRepo = mock(async () => undefined);
 export const productNameExistsInCategory = mock(async () => false);
 export const getProductById = mock(async (): Promise<typeof product | null> => product);
 export const getProductByCode = mock(
@@ -401,7 +413,7 @@ export const upsertProductLabelProfileRepo = mock(async (data: {
     mrp: data.mrp ?? null,
     shelfLifeDays: data.shelfLifeDays ?? null,
 }));
-export const begin = mock(async (callback: (tx: unknown) => Promise<void>) => callback({}));
+export const begin = mock(async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback({}));
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
@@ -418,6 +430,14 @@ mock.module("@/config/db", () => ({
 
 mock.module("./catalog.repository", () => ({
     getCategoryById,
+    getCategoriesByOrganizationId,
+    categoryNameExistsInOrganization,
+    createCategory: createCategoryRepo,
+    getNextCategorySortOrder,
+    getProductsByCategoryId,
+    getNextProductSortOrder,
+    reorderCategories: reorderCategoriesRepo,
+    reorderProducts: reorderProductsRepo,
     productNameExistsInCategory,
     getProductById,
     getProductByCode,

@@ -6,6 +6,7 @@ import type {
     CreatePaymentJSON,
     CreateDraftSaleJSON,
     CustomerLedgerResponse,
+    CustomerListQuery,
     CustomerResponse,
     CustomersListResponse,
     PaymentResponse,
@@ -53,7 +54,7 @@ export const updateSaleNumberSettings = async (
 
 export const getCustomers = async (
     organizationId: string,
-    params?: { search?: string; limit?: number },
+    params?: CustomerListQuery,
 ): Promise<ServiceResponse<CustomersListResponse | null>> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/customers`, { params });

@@ -1,3 +1,5 @@
+import { sql } from "bun";
+
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
 import { camelToSnakeSql } from "@/utils/case-sql";
@@ -16,6 +18,7 @@ import type {
     CreateSaleItemREPO,
     CreateSaleREPO,
     CustomerDTO,
+    CustomerListQuery,
     CustomerLedgerEntryDTO,
     ParentScopedAddOnSalesRollupDTO,
     PaymentDTO,
@@ -33,6 +36,7 @@ import type {
     UpdateCustomerREPO,
     UpdateSaleREPO,
 } from "@repo/types";
+import { decodeCustomerCursor, encodeCustomerCursor } from "./customer-pagination";
 import { decodeSalesCursor, encodeSalesCursor } from "./sales-pagination";
 import {
     DEFAULT_SALE_NUMBER_TIMEZONE,
@@ -157,29 +161,121 @@ export const updateCustomer = async (customerData: UpdateCustomerREPO): Promise<
 
 export const getCustomersByOrganizationId = async (
     organizationId: string,
-    query: SalesListQuery | { search?: string; limit?: number },
-): Promise<CustomerDTO[]> => {
+    query: CustomerListQuery,
+): Promise<{
+    customers: CustomerDTO[];
+    pageInfo: {
+        hasMore: boolean;
+        nextCursor: string | null;
+        totalCount: number;
+    };
+}> => {
     const search = query.search?.trim() ?? "";
     const searchPattern = search ? `%${search}%` : "";
     const normalizedPhoneSearch = normalizePhoneNumber(search);
     const normalizedPhonePattern = normalizedPhoneSearch ? `%${normalizedPhoneSearch}%` : "";
+    const status = query.status ?? "all";
+    const sort = query.sort ?? "newest";
     const limit = query.limit ?? 50;
+    const cursor = query.cursor ? decodeCustomerCursor(query.cursor) : null;
+    const activeCursor = cursor?.sort === sort ? cursor : null;
+    const normalizedPhoneSearchClause = normalizedPhoneSearch
+        ? sql`OR COALESCE(c.phone, '') ILIKE ${normalizedPhonePattern}`
+        : sql``;
+    const searchClause = search
+        ? sql`AND (
+              c.name ILIKE ${searchPattern}
+              OR COALESCE(c.phone, '') ILIKE ${searchPattern}
+              ${normalizedPhoneSearchClause}
+          )`
+        : sql``;
+    const statusClause = {
+        all: sql``,
+        active: sql`AND c.is_active = TRUE`,
+        inactive: sql`AND c.is_active = FALSE`,
+        due: sql`AND c.balance > 0`,
+        no_due: sql`AND c.balance = 0`,
+    }[status];
+    const cursorClause = !activeCursor
+        ? sql``
+        : sort === "newest"
+          ? sql`AND (
+                c.created_at < ${activeCursor.createdAt}::timestamptz
+                OR (c.created_at = ${activeCursor.createdAt}::timestamptz AND c.id < ${activeCursor.id}::uuid)
+            )`
+          : sort === "oldest"
+            ? sql`AND (
+                  c.created_at > ${activeCursor.createdAt}::timestamptz
+                  OR (c.created_at = ${activeCursor.createdAt}::timestamptz AND c.id > ${activeCursor.id}::uuid)
+              )`
+            : sort === "name_asc"
+              ? sql`AND (
+                    LOWER(c.name) > LOWER(${activeCursor.name ?? ""})
+                    OR (LOWER(c.name) = LOWER(${activeCursor.name ?? ""}) AND c.id > ${activeCursor.id}::uuid)
+                )`
+              : sort === "name_desc"
+                ? sql`AND (
+                      LOWER(c.name) < LOWER(${activeCursor.name ?? ""})
+                      OR (LOWER(c.name) = LOWER(${activeCursor.name ?? ""}) AND c.id < ${activeCursor.id}::uuid)
+                  )`
+                : sort === "highest_due"
+                  ? sql`AND (
+                        c.balance < ${activeCursor.balance ?? 0}
+                        OR (c.balance = ${activeCursor.balance ?? 0} AND c.id < ${activeCursor.id}::uuid)
+                    )`
+                  : sql`AND (
+                        c.balance > ${activeCursor.balance ?? 0}
+                        OR (c.balance = ${activeCursor.balance ?? 0} AND c.id > ${activeCursor.id}::uuid)
+                    )`;
+    const orderClause = {
+        newest: sql`c.created_at DESC, c.id DESC`,
+        oldest: sql`c.created_at ASC, c.id ASC`,
+        name_asc: sql`LOWER(c.name) ASC, c.id ASC`,
+        name_desc: sql`LOWER(c.name) DESC, c.id DESC`,
+        highest_due: sql`c.balance DESC, c.id DESC`,
+        lowest_due: sql`c.balance ASC, c.id ASC`,
+    }[sort];
 
     const results = await pg`
-        SELECT *
-        FROM customers
-        WHERE organization_id = ${organizationId}
-          AND (
-              ${search} = ''
-              OR name ILIKE ${searchPattern}
-              OR COALESCE(phone, '') ILIKE ${searchPattern}
-              OR COALESCE(phone, '') ILIKE ${normalizedPhonePattern}
-          )
-        ORDER BY created_at DESC
-        LIMIT ${limit}
+        WITH filtered_customers AS (
+            SELECT c.*, COUNT(*) OVER() AS total_count
+            FROM customers c
+            WHERE c.organization_id = ${organizationId}
+              ${searchClause}
+              ${statusClause}
+        )
+        SELECT
+            c.*,
+            TO_CHAR(c.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_created_at
+        FROM filtered_customers c
+        WHERE TRUE
+          ${cursorClause}
+        ORDER BY ${orderClause}
+        LIMIT ${limit + 1}
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<CustomerDTO>(result));
+    const customersWithCursor: Array<CustomerDTO & { cursorCreatedAt: string }> = results
+        .slice(0, limit)
+        .map((result: Record<string, unknown>) => {
+            const { cursor_created_at: cursorCreatedAt, total_count: _totalCount, ...customerRow } = result;
+            return {
+                ...mapRow<CustomerDTO>(customerRow),
+                cursorCreatedAt: cursorCreatedAt as string,
+            };
+        });
+    const customers = customersWithCursor.map(({ cursorCreatedAt: _cursorCreatedAt, ...customer }) => customer);
+    const hasMore = results.length > limit;
+    const lastCustomer = customersWithCursor.at(-1);
+    const totalCount = Number(results[0]?.total_count ?? 0);
+
+    return {
+        customers,
+        pageInfo: {
+            hasMore,
+            nextCursor: hasMore && lastCustomer ? encodeCustomerCursor(lastCustomer, sort) : null,
+            totalCount,
+        },
+    };
 };
 
 export const getCustomerById = async (organizationId: string, customerId: string): Promise<CustomerDTO | null> => {

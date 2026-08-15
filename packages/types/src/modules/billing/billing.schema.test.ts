@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
     AddOnSalesRollupsResponseSchema,
+    CustomerListQuerySchema,
     ProductSalesSummaryAdminQuerySchema,
     ProductSalesSummaryResponseSchema,
     SaleItemInputSchema,
@@ -10,6 +11,18 @@ import {
 } from "./billing.schema";
 
 describe("Configured sale billing contracts", () => {
+    test("customer list queries support server-side filters and cursors", () => {
+        const result = CustomerListQuerySchema.safeParse({
+            search: "alice",
+            status: "due",
+            sort: "highest_due",
+            cursor: "encoded-customer-cursor",
+            limit: 40,
+        });
+
+        expect(result.success).toBe(true);
+    });
+
     test("sale number settings accept every supported reset period", () => {
         const base = {
             storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
