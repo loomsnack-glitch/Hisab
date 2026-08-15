@@ -47,7 +47,7 @@ const PosMobileBottomNav = ({ billsCount = 0 }: PosMobileBottomNavProps) => {
                                 aria-current={isActive ? "page" : undefined}
                             >
                                 <Icon className={cn("size-5", isActive && "text-primary")} strokeWidth={isActive ? 2.25 : 2} />
-                                <span className="truncate">{destination.label}</span>
+                                <span className="truncate">{destination.mobileLabel ?? destination.label}</span>
                                 {destination.id === "bills" && billsCount > 0 ? (
                                     <span className="absolute top-0.5 right-[calc(50%-1.25rem)] flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[9px] font-bold text-background">
                                         {billsCount > 9 ? "9+" : billsCount}

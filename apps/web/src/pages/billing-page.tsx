@@ -3346,7 +3346,6 @@ const BillingPage = ({
                                                 items.length === 0
                                             }
                                             onClick={() => {
-                                                setDiscountEditorOpen(true);
                                                 setPlaceOrderDialogOpen(true);
                                             }}
                                         >
@@ -3433,6 +3432,7 @@ const BillingPage = ({
                         setCustomerSearch("");
                         setNewCustomerName("");
                         setNewCustomerPhone("");
+                        setDiscountEditorOpen(false);
                     }
                 }}
             >
