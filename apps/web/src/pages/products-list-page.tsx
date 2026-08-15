@@ -381,7 +381,7 @@ const ProductsListPage = () => {
 
                                     <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div className="min-w-0 space-y-1">
-                                            <h4 className="font-display text-sm sm:text-[15px] font-semibold leading-snug tracking-tight text-foreground truncate" title={product.name}>
+                                            <h4 className="min-w-0 whitespace-normal break-words font-display text-sm sm:text-[15px] font-semibold leading-snug tracking-tight text-foreground">
                                                 {product.name}
                                             </h4>
                                             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
