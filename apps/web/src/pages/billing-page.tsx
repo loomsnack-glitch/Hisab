@@ -3027,7 +3027,7 @@ const BillingPage = ({
                                 className={cn(
                                     "flex min-h-0 w-full flex-col overflow-hidden border-t border-border/50 bg-card/95 backdrop-blur-sm lg:static lg:h-full lg:w-[320px] lg:border-t-0 lg:border-l",
                                     mobileCartOpen
-                                        ? "max-lg:fixed max-lg:inset-x-0 max-lg:top-[calc(var(--pos-header-height)+env(safe-area-inset-top,0px))] max-lg:bottom-0 max-lg:z-40 max-lg:max-h-none max-lg:overflow-hidden max-lg:overscroll-contain"
+                                        ? "max-lg:fixed max-lg:inset-x-0 max-lg:top-[calc(var(--pos-header-height)+env(safe-area-inset-top,0px))] max-lg:bottom-[var(--pos-mobile-nav-height)] max-lg:z-[45] max-lg:max-h-none max-lg:overflow-hidden max-lg:overscroll-contain"
                                         : "hidden lg:flex",
                                 )}
                                 style={mobileCartOpen ? undefined : { maxHeight: panelMaxHeight }}
@@ -3270,7 +3270,7 @@ const BillingPage = ({
                                 </div>
 
                                 {/* ─── Compact Checkout Summary ─── */}
-                                <div className="shrink-0 border-t border-border/40 bg-card px-3 py-2.5 max-lg:pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+                                <div className="shrink-0 border-t border-border/40 bg-card px-3 py-2.5">
                                     <div className="mb-2 space-y-0.5 rounded-lg bg-background/40 px-2.5 py-2 text-[11px]">
                                         <div className="flex justify-between text-muted-foreground">
                                             <span>Subtotal</span>
