@@ -190,8 +190,6 @@ type ScanFeedback =
     | { kind: "ambiguous"; productCode: string }
     | { kind: "unavailable"; message: string };
 
-type ProductLookupMode = "scan" | "search";
-
 const getStoredScanDiagnostics = (storageKey: string | null): ScanDiagnostic[] => {
     if (!storageKey || typeof window === "undefined") {
         return [];
@@ -507,7 +505,6 @@ const BillingPage = ({
     const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
     const [configureComboProductId, setConfigureComboProductId] = useState<string | null>(null);
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
-    const [productLookupMode, setProductLookupMode] = useState<ProductLookupMode>("scan");
     const [scanValue, setScanValue] = useState("");
     const [directScanPaused, setDirectScanPaused] = useState(false);
     const [directScanActivationOpen, setDirectScanActivationOpen] = useState(false);
@@ -516,7 +513,6 @@ const BillingPage = ({
         getStoredScanDiagnostics(scanDiagnosticStorageKey),
     );
     const scanInputRef = useRef<HTMLInputElement | null>(null);
-    const productNameSearchInputRef = useRef<HTMLInputElement | null>(null);
     const directScanBufferRef = useRef("");
 
     const productSearch = productSearchProp ?? "";
@@ -1445,7 +1441,6 @@ const BillingPage = ({
         const captureEnabled =
             isDeviceMode &&
             leftPanelTab === "products" &&
-            productLookupMode === "scan" &&
             directBarcodeScanEnabled &&
             !directScanPaused;
         if (!captureEnabled) {
@@ -1490,7 +1485,7 @@ const BillingPage = ({
             directScanBufferRef.current = "";
             window.removeEventListener("keydown", handleKeyDown, true);
         };
-    }, [directBarcodeScanEnabled, directScanPaused, handleProductCodeScan, isDeviceMode, leftPanelTab, productLookupMode]);
+    }, [directBarcodeScanEnabled, directScanPaused, handleProductCodeScan, isDeviceMode, leftPanelTab]);
 
     const addConfiguredProductToBill = (product: ProductResponseDTO, addOns: CustomizeAddOnSelection[]) => {
         if (addOns.length === 0) {
@@ -2134,14 +2129,17 @@ const BillingPage = ({
                 <div
                     ref={salesScrollContainerRef}
                     className={cn(
-                        "min-h-0 flex-1 overflow-y-auto p-4 pb-24 lg:min-w-0 lg:pb-4",
+                        "min-h-0 flex-1 lg:min-w-0",
+                        canMutate && leftPanelTab === "products"
+                            ? "flex flex-col overflow-hidden pl-4 pt-4 pb-24 pr-0 lg:pb-4"
+                            : "overflow-y-auto p-4 pb-24 lg:pb-4",
                         canMutate && leftPanelTab === "products" && "lg:pt-0",
                     )}
                     style={{ maxHeight: panelMaxHeight }}
                 >
                     {/* Tab Switcher */}
                     {canMutate ? (
-                        <div className="-mt-2 mb-3 flex min-w-0 gap-1 rounded-lg border border-border/40 bg-muted/30 p-1 lg:hidden">
+                        <div className="-mt-2 mb-3 mr-4 flex min-w-0 gap-1 rounded-lg border border-border/40 bg-muted/30 p-1 lg:hidden">
                             <button
                                 type="button"
                                 onClick={() => changePanelTab("products")}
@@ -2255,125 +2253,59 @@ const BillingPage = ({
                         ) : null
                     ) : canMutate && leftPanelTab === "products" ? (
                         <>
-                            <div className="flex min-h-full min-w-0 flex-col pt-2">
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col pt-2">
                                 {barcodeScanningEnabled ? (
-                                    <div className="mb-4 rounded-xl border border-border/60 bg-card/80 p-3 shadow-sm">
-                                        <div className="mb-3 flex w-fit rounded-lg bg-muted/70 p-1" role="tablist" aria-label="Find products">
-                                            <button
-                                                type="button"
-                                                role="tab"
-                                                aria-selected={productLookupMode === "scan"}
-                                                className={cn(
-                                                    "flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors",
-                                                    productLookupMode === "scan"
-                                                        ? "bg-background text-foreground shadow-sm"
-                                                        : "text-muted-foreground hover:text-foreground",
-                                                )}
-                                                onClick={() => {
-                                                    setProductLookupMode("scan");
-                                                    window.setTimeout(() => scanInputRef.current?.focus(), 0);
-                                                }}
-                                            >
-                                                <Barcode className="size-3.5" /> Scan code
-                                            </button>
-                                            <button
-                                                type="button"
-                                                role="tab"
-                                                aria-selected={productLookupMode === "search"}
-                                                className={cn(
-                                                    "flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors",
-                                                    productLookupMode === "search"
-                                                        ? "bg-background text-foreground shadow-sm"
-                                                        : "text-muted-foreground hover:text-foreground",
-                                                )}
-                                                onClick={() => {
-                                                    setProductLookupMode("search");
-                                                    window.setTimeout(() => productNameSearchInputRef.current?.focus(), 0);
-                                                }}
-                                            >
-                                                <Search className="size-3.5" /> Search by name
-                                            </button>
-                                        </div>
-
-                                        {productLookupMode === "scan" ? (
-                                            <div className="flex flex-wrap items-end gap-2">
-                                                <form
-                                                    className="min-w-[min(100%,16rem)] flex-1"
-                                                    onSubmit={(event) => {
-                                                        event.preventDefault();
-                                                        handleProductCodeScan(scanValue);
-                                                    }}
-                                                >
-                                                    <label
-                                                        htmlFor="product-code-scan"
-                                                        className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-foreground"
-                                                    >
-                                                        Scan or type a code
-                                                    </label>
-                                                    <div className="flex gap-2">
-                                                        <Input
-                                                            ref={scanInputRef}
-                                                            id="product-code-scan"
-                                                            value={scanValue}
-                                                            onChange={(event) => setScanValue(event.target.value)}
-                                                            placeholder="Product Code"
-                                                            autoComplete="off"
-                                                            className="h-9 rounded-lg"
-                                                        />
-                                                        <Button type="submit" size="sm" className="h-9 rounded-lg">
-                                                            Add
-                                                        </Button>
-                                                    </div>
-                                                </form>
-                                                {directBarcodeScanEnabled ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-9 rounded-lg"
-                                                        aria-pressed={!directScanPaused}
-                                                        onClick={() => setDirectScanPaused((paused) => !paused)}
-                                                    >
-                                                        {directScanPaused ? (
-                                                            <><Play className="size-3.5" /> Resume</>
-                                                        ) : (
-                                                            <><Pause className="size-3.5" /> Pause</>
-                                                        )}
-                                                    </Button>
-                                                ) : (
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-9 rounded-lg"
-                                                        disabled={!canEnableDirectBarcodeScan || updateDirectScanMutation.isPending}
-                                                        onClick={() => setDirectScanActivationOpen(true)}
-                                                    >
-                                                        <Play className="size-3.5" /> Enable direct scan
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <div role="tabpanel">
-                                                <label
-                                                    htmlFor="product-name-search"
-                                                    className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-foreground"
-                                                >
-                                                    Search products by name
-                                                </label>
+                                    <div className="mb-2 mr-4 shrink-0 rounded-lg border border-border/60 bg-card/80 p-2 shadow-sm">
+                                        <form
+                                            className="flex items-center gap-1.5"
+                                            onSubmit={(event) => {
+                                                event.preventDefault();
+                                                handleProductCodeScan(scanValue);
+                                            }}
+                                        >
+                                            <div className="relative min-w-0 flex-1">
+                                                <Barcode className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
                                                 <Input
-                                                    ref={productNameSearchInputRef}
-                                                    id="product-name-search"
-                                                    value={productSearch}
-                                                    onChange={(event) => onProductSearchChange?.(event.target.value)}
-                                                    placeholder="Start typing a product name"
+                                                    ref={scanInputRef}
+                                                    id="product-code-scan"
+                                                    value={scanValue}
+                                                    onChange={(event) => setScanValue(event.target.value)}
+                                                    placeholder="Scan or type code"
                                                     autoComplete="off"
-                                                    className="h-9 rounded-lg"
+                                                    className="h-8 rounded-lg pl-8 text-sm"
                                                 />
                                             </div>
-                                        )}
+                                            <Button type="submit" size="sm" className="h-8 shrink-0 rounded-lg px-3 text-xs">
+                                                Add
+                                            </Button>
+                                            {directBarcodeScanEnabled ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="icon-sm"
+                                                    className="size-8 shrink-0 rounded-lg"
+                                                    aria-label={directScanPaused ? "Resume direct scan" : "Pause direct scan"}
+                                                    aria-pressed={!directScanPaused}
+                                                    onClick={() => setDirectScanPaused((paused) => !paused)}
+                                                >
+                                                    {directScanPaused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 shrink-0 rounded-lg px-2 text-xs"
+                                                    disabled={!canEnableDirectBarcodeScan || updateDirectScanMutation.isPending}
+                                                    onClick={() => setDirectScanActivationOpen(true)}
+                                                >
+                                                    <Play className="size-3.5" />
+                                                    <span className="hidden sm:inline">Direct</span>
+                                                </Button>
+                                            )}
+                                        </form>
 
-                                        <details className="mt-2 text-xs text-muted-foreground">
+                                        <details className="mt-1.5 text-xs text-muted-foreground">
                                             <summary className="cursor-pointer select-none hover:text-foreground">Scanner settings</summary>
                                             <div className="mt-2 flex flex-wrap items-center gap-2">
                                                 <span>
@@ -2443,14 +2375,13 @@ const BillingPage = ({
                                                             className="h-7 rounded-md"
                                                             onClick={() => {
                                                                 setScanFeedback(null);
-                                                                setProductLookupMode("search");
                                                                 onProductSearchChange?.("");
-                                                                window.setTimeout(() => {
-                                                                    productNameSearchInputRef.current?.focus();
-                                                                }, 0);
+                                                                document
+                                                                    .querySelector<HTMLInputElement>('input[aria-label="Search products..."]')
+                                                                    ?.focus();
                                                             }}
                                                         >
-                                                            Search products manually
+                                                            Use top search
                                                         </Button>
                                                     </>
                                                 ) : null}
@@ -2513,33 +2444,15 @@ const BillingPage = ({
                                             </div>
                                         ) : null}
                                     </div>
-                                ) : (
-                                    <div className="mb-4 rounded-xl border border-border/60 bg-card/80 p-3 shadow-sm">
-                                        <label
-                                            htmlFor="product-name-search"
-                                            className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-foreground"
-                                        >
-                                            <Search className="size-3.5 text-primary" /> Search products by name
-                                        </label>
-                                        <Input
-                                            ref={productNameSearchInputRef}
-                                            id="product-name-search"
-                                            value={productSearch}
-                                            onChange={(event) => onProductSearchChange?.(event.target.value)}
-                                            placeholder="Start typing a product name"
-                                            autoComplete="off"
-                                            className="h-9 rounded-lg"
-                                        />
-                                    </div>
-                                )}
+                                ) : null}
                                 {/* Category Filter Pills */}
-                                <div className="sticky top-0 z-10 -mx-4 mb-4 bg-background/95 px-4 pt-1 pb-2 backdrop-blur-md sm:-mx-4 sm:px-4">
+                                <div className="shrink-0 border-b border-border/50 bg-background pb-3 pr-4 pt-1">
                                     <div className="mb-2 flex items-center justify-between gap-3">
                                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                             Categories
                                         </p>
                                     </div>
-                                    <div className="scrollbar-none flex min-h-9 min-w-0 touch-pan-x gap-1.5 overflow-x-auto pb-1">
+                                    <div className="scrollbar-none flex min-h-9 min-w-0 touch-pan-x gap-1.5 overflow-x-auto pb-0.5">
                                         {categoryOptions.map((category) => (
                                             <button
                                                 key={category.id}
@@ -2562,8 +2475,9 @@ const BillingPage = ({
                                 {/* Product Grid */}
                                 <div
                                     {...(canMutate ? categorySwipeHandlers : {})}
-                                    className="min-h-[320px] flex-1 touch-[pan-y_pinch-zoom]"
+                                    className="min-h-0 flex-1 touch-[pan-y_pinch-zoom] overflow-y-auto overscroll-contain pt-3"
                                 >
+                                    <div className="pr-4 pb-2">
                                     {productsQuery.isPending ? (
                                         <div className="flex min-h-[320px] items-center justify-center">
                                             <Spinner className="size-8 text-primary" />
@@ -2670,6 +2584,7 @@ const BillingPage = ({
                                             })}
                                         </div>
                                     )}
+                                    </div>
                                 </div>
                             </div>
                         </>
