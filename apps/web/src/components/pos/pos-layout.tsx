@@ -29,6 +29,8 @@ import { formatLongDate } from "@/lib/format";
 import { deviceAuthKeys } from "@/lib/query-keys";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
+import PosMobileBottomNav from "@/components/pos/pos-mobile-bottom-nav";
+import { usePosMobileNav } from "@/components/pos/pos-mobile-nav-context";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 import { whatsappKeys } from "@/lib/query-keys";
@@ -126,6 +128,7 @@ const PosLayout = ({
   showSearch = true,
 }: PosLayoutProps) => {
     const navigate = useNavigate();
+    const { billsCount } = usePosMobileNav();
     const queryClient = useQueryClient();
     const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
     const posPrinter = useOptionalPosPrinter();
@@ -243,7 +246,7 @@ const PosLayout = ({
     };
 
     return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground [--pos-header-height:6.5rem] sm:[--pos-header-height:3.5rem] lg:h-dvh lg:overflow-hidden">
+    <div className="flex min-h-dvh flex-col bg-background text-foreground [--pos-header-height:6.5rem] [--pos-mobile-nav-height:calc(3.375rem+env(safe-area-inset-bottom,0px))] sm:[--pos-header-height:3.5rem] lg:h-dvh lg:[--pos-mobile-nav-height:0px] lg:overflow-hidden">
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.1),_transparent_28%)]" />
             </div>
@@ -436,6 +439,8 @@ const PosLayout = ({
             </AlertDialog>
 
             <main className="min-h-0 w-full flex-1 overflow-hidden px-0">{children}</main>
+
+            <PosMobileBottomNav billsCount={billsCount} />
         </div>
     );
 };

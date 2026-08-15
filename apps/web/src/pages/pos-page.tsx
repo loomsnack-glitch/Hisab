@@ -6,6 +6,7 @@ import type { DeviceSessionDTO } from "@repo/types";
 import { Spinner } from "@repo/ui/components/spinner";
 
 import PosLayout from "@/components/pos/pos-layout";
+import { PosMobileNavProvider } from "@/components/pos/pos-mobile-nav-context";
 import { deviceAuthKeys } from "@/lib/query-keys";
 import {
     getPosLoginPath,
@@ -89,15 +90,17 @@ const PosPage = () => {
 
     return (
         <PosPrinterProvider>
-            <PosLayout
-                session={session}
-                searchValue={headerSearch}
-                searchPlaceholder={isSettingsRoute ? "" : posPanelConfig[activePanelTab].searchPlaceholder}
-                onSearchChange={setHeaderSearch}
-                showSearch={!isSettingsRoute && activePanelTab !== "customers" && Boolean(posPanelConfig[activePanelTab].searchPlaceholder)}
-            >
-                <Outlet context={context} />
-            </PosLayout>
+            <PosMobileNavProvider>
+                <PosLayout
+                    session={session}
+                    searchValue={headerSearch}
+                    searchPlaceholder={isSettingsRoute ? "" : posPanelConfig[activePanelTab].searchPlaceholder}
+                    onSearchChange={setHeaderSearch}
+                    showSearch={!isSettingsRoute && activePanelTab !== "customers" && Boolean(posPanelConfig[activePanelTab].searchPlaceholder)}
+                >
+                    <Outlet context={context} />
+                </PosLayout>
+            </PosMobileNavProvider>
         </PosPrinterProvider>
     );
 };

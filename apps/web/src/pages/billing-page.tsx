@@ -94,8 +94,6 @@ import {
     ChevronRight,
     Copy,
     Filter,
-    LayoutGrid,
-    MoreHorizontal,
     Minus,
     Pause,
     Plus,
@@ -103,7 +101,6 @@ import {
     Printer,
     ReceiptText,
     Search,
-    Settings2,
     ShoppingBag,
     ShoppingCart,
     Store,
@@ -116,6 +113,7 @@ import {
 import { toast } from "sonner";
 
 import PosDeviceSidebar from "@/components/pos/pos-device-sidebar";
+import { usePosMobileNav } from "@/components/pos/pos-mobile-nav-context";
 import CustomerDirectory from "@/components/customers/customer-directory";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
@@ -438,6 +436,7 @@ const BillingPage = ({
     onComposerHandoffConsumed,
 }: BillingPageProps) => {
     const queryClient = useQueryClient();
+    const { setBillsCount } = usePosMobileNav();
     const { organizationId: organizationIdParam = "" } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const isDeviceMode = mode === "device";
@@ -885,6 +884,16 @@ const BillingPage = ({
             ),
         [salesPages],
     );
+
+    useEffect(() => {
+        if (!isDeviceMode) {
+            return;
+        }
+
+        setBillsCount(sales.length);
+        return () => setBillsCount(0);
+    }, [isDeviceMode, sales.length, setBillsCount]);
+
     const firstSalesPage = salesPages[0];
     const salesServiceError =
         salesPages.length === 0 && salesQuery.error instanceof Error ? salesQuery.error.message : null;
@@ -2068,11 +2077,11 @@ const BillingPage = ({
     }
 
     const panelMaxHeight = isDeviceMode
-        ? "calc(100dvh - var(--pos-header-height, 3.5rem) - env(safe-area-inset-top, 0px))"
+        ? "calc(100dvh - var(--pos-header-height, 3.5rem) - env(safe-area-inset-top, 0px) - var(--pos-mobile-nav-height, 0px))"
         : "calc(100dvh - 3.5rem - 57px)";
 
     return (
-        <div className="billing-pos-layout flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] flex-col gap-0 lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden">
+        <div className="billing-pos-layout flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] flex-col gap-0 max-lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden">
             {receiptToPrint ? (
                 <span className="sr-only" aria-live="polite">
                     Preparing receipt for printing
@@ -2131,101 +2140,12 @@ const BillingPage = ({
                     className={cn(
                         "min-h-0 flex-1 lg:min-w-0",
                         canMutate && leftPanelTab === "products"
-                            ? "flex flex-col overflow-hidden pl-4 pt-4 pb-24 pr-0 lg:pb-4"
-                            : "overflow-y-auto p-4 pb-24 lg:pb-4",
-                        canMutate && leftPanelTab === "products" && "lg:pt-0",
+                            ? "flex flex-col overflow-hidden pl-4 pt-2 pr-0 max-lg:pb-2 lg:pb-4"
+                            : "overflow-y-auto p-4 max-lg:pb-2 lg:pb-4",
                     )}
                     style={{ maxHeight: panelMaxHeight }}
                 >
-                    {/* Tab Switcher */}
-                    {canMutate ? (
-                        <div className="-mt-2 mb-3 mr-4 flex min-w-0 gap-1 rounded-lg border border-border/40 bg-muted/30 p-1 lg:hidden">
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("products")}
-                                className={cn(
-                                    "flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-all duration-200 sm:px-2.5",
-                                    leftPanelTab === "products"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                            >
-                                <LayoutGrid className="size-3.5" />
-                                Products
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("bills")}
-                                className={cn(
-                                    "flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-all duration-200 sm:px-2.5",
-                                    leftPanelTab === "bills"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                            >
-                                <ReceiptText className="size-3.5" />
-                                Bills
-                                {sales.length > 0 && (
-                                    <span
-                                        className={cn(
-                                            "flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold",
-                                            leftPanelTab === "bills"
-                                                ? "bg-primary-foreground/20 text-primary-foreground"
-                                                : "bg-foreground/10 text-foreground",
-                                        )}
-                                    >
-                                        {sales.length}
-                                    </span>
-                                )}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("reports")}
-                                className={cn(
-                                    "flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-all duration-200 sm:px-2.5",
-                                    leftPanelTab === "reports"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                            >
-                                <BarChart3 className="size-3.5" />
-                                Reports
-                            </button>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    render={
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            className={cn(
-                                                "h-8 min-w-0 flex-1 gap-1.5 rounded-md px-1.5 text-xs font-semibold sm:px-2.5",
-                                                leftPanelTab === "customers" || leftPanelTab === "purchases"
-                                                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
-                                                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                            )}
-                                        >
-                                            <MoreHorizontal className="size-3.5" />
-                                            More
-                                        </Button>
-                                    }
-                                />
-                                <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem onClick={() => changePanelTab("customers")}>
-                                        <Users className="size-4" />
-                                        Customers
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => changePanelTab("purchases")}>
-                                        <ShoppingBag className="size-4" />
-                                        Purchases
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem render={<Link to="/pos/settings" />}>
-                                        <Settings2 className="size-4" />
-                                        Settings
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                    ) : (
+                    {!canMutate ? (
                         <div className="mb-5 flex gap-2 border-b border-border/40 pb-3 lg:hidden">
                             <button
                                 type="button"
@@ -2241,10 +2161,10 @@ const BillingPage = ({
                                 Store bills
                             </button>
                         </div>
-                    )}
+                    ) : null}
 
                     {canMutate && leftPanelTab === "reports" ? (
-                        <div className="min-h-full p-4 pb-24 lg:p-6 lg:pb-6">
+                        <div className="min-h-full p-4 max-lg:pb-2 lg:p-6 lg:pb-6">
                             {session ? <ProductSalesSummary mode="pos" storeName={session.store.name} /> : null}
                         </div>
                     ) : canMutate && leftPanelTab === "purchases" ? (
@@ -2253,9 +2173,9 @@ const BillingPage = ({
                         ) : null
                     ) : canMutate && leftPanelTab === "products" ? (
                         <>
-                            <div className="flex min-h-0 min-w-0 flex-1 flex-col pt-2">
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                 {barcodeScanningEnabled ? (
-                                    <div className="mb-2 mr-4 shrink-0 rounded-lg border border-border/60 bg-card/80 p-2 shadow-sm">
+                                    <div className="mb-1 mr-4 hidden shrink-0 rounded-lg border border-border/60 bg-card/80 p-2 shadow-sm max-lg:block">
                                         <form
                                             className="flex items-center gap-1.5"
                                             onSubmit={(event) => {
@@ -2446,13 +2366,11 @@ const BillingPage = ({
                                     </div>
                                 ) : null}
                                 {/* Category Filter Pills */}
-                                <div className="shrink-0 border-b border-border/50 bg-background pb-3 pr-4 pt-1">
-                                    <div className="mb-2 flex items-center justify-between gap-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                            Categories
-                                        </p>
-                                    </div>
-                                    <div className="scrollbar-none flex min-h-9 min-w-0 touch-pan-x gap-1.5 overflow-x-auto pb-0.5">
+                                <div className="shrink-0 border-b border-border/50 bg-background pb-2 pr-4 pt-0">
+                                    <div
+                                        aria-label="Categories"
+                                        className="scrollbar-none flex min-h-9 min-w-0 touch-pan-x gap-1.5 overflow-x-auto pb-0.5"
+                                    >
                                         {categoryOptions.map((category) => (
                                             <button
                                                 key={category.id}
@@ -2475,9 +2393,9 @@ const BillingPage = ({
                                 {/* Product Grid */}
                                 <div
                                     {...(canMutate ? categorySwipeHandlers : {})}
-                                    className="min-h-0 flex-1 touch-[pan-y_pinch-zoom] overflow-y-auto overscroll-contain pt-3"
+                                    className="min-h-0 flex-1 touch-[pan-y_pinch-zoom] overflow-y-auto overscroll-contain pt-2"
                                 >
-                                    <div className="pr-4 pb-2">
+                                    <div className="pr-4 pb-[calc(3.625rem+env(safe-area-inset-bottom,0px))] lg:pb-2">
                                     {productsQuery.isPending ? (
                                         <div className="flex min-h-[320px] items-center justify-center">
                                             <Spinner className="size-8 text-primary" />
@@ -3071,11 +2989,11 @@ const BillingPage = ({
                     leftPanelTab === "products" ? (
                         <>
                             {!mobileCartOpen ? (
-                                <div className="fixed inset-x-3 z-30 lg:hidden bottom-3 max-lg:bottom-[calc(0.75rem+env(safe-area-inset-bottom))]">
+                                <div className="fixed inset-x-3 z-[45] max-lg:bottom-[calc(var(--pos-mobile-nav-height)+0.125rem)] lg:hidden">
                                     <button
                                         type="button"
                                         onClick={() => setMobileCartOpen(true)}
-                                        className="flex min-h-16 w-full items-center justify-between rounded-2xl bg-primary px-4 text-left text-primary-foreground shadow-xl shadow-primary/25"
+                                        className="flex min-h-14 w-full items-center justify-between rounded-2xl bg-primary px-4 text-left text-primary-foreground shadow-xl shadow-primary/25"
                                         aria-label="Open current order"
                                     >
                                         <span className="flex items-center gap-3">

@@ -6,7 +6,7 @@ import AppearanceSettingsSection from "@/components/settings/appearance-settings
 
 const PosSettingsPage = () => {
     return (
-        <div className="flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] flex-col lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden lg:flex-row">
+        <div className="flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] flex-col max-lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden lg:flex-row">
             <PosDeviceSidebar activeSettings />
 
             <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">

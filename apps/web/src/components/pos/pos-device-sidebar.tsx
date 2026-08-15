@@ -1,22 +1,9 @@
 import { Link } from "react-router-dom";
-import { BarChart3, LayoutGrid, ReceiptText, Settings2, ShoppingBag, Users } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 
-import { getPosPanelPath, type PosPanelTab } from "@/pages/pos-route-context";
-
-type PosDeviceSidebarNavItem = {
-    tab: PosPanelTab;
-    label: string;
-    icon: typeof LayoutGrid;
-};
-
-const navItems: PosDeviceSidebarNavItem[] = [
-    { tab: "products", label: "Products shelf", icon: LayoutGrid },
-    { tab: "bills", label: "Recent bills and drafts", icon: ReceiptText },
-    { tab: "reports", label: "Product sales reports", icon: BarChart3 },
-    { tab: "customers", label: "Customers", icon: Users },
-    { tab: "purchases", label: "Purchases", icon: ShoppingBag },
-];
+import { posWorkspaceDestinations } from "@/components/pos/pos-nav-items";
+import type { PosPanelTab } from "@/pages/pos-route-context";
 
 type PosDeviceSidebarProps = {
     activePanelTab?: PosPanelTab;
@@ -41,31 +28,33 @@ const PosDeviceSidebar = ({
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
         );
 
+    const mainDestinations = posWorkspaceDestinations.filter((destination) => destination.id !== "settings");
+
     return (
         <nav
             aria-label="POS workspace navigation"
             className={cn(
-                "hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-border/40 bg-card/40 py-3 lg:flex lg:h-full lg:self-stretch",
+                "hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-border/40 bg-card/40 py-3 lg:flex lg:h-full lg:self-stretch lg:py-2",
                 className,
             )}
         >
             <div className="flex flex-col items-center gap-1.5">
-                {navItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = !activeSettings && activePanelTab === item.tab;
+                {mainDestinations.map((destination) => {
+                    const Icon = destination.icon;
+                    const isActive = !activeSettings && activePanelTab === destination.tab;
 
-                    if (onPanelTabChange) {
+                    if (onPanelTabChange && destination.tab) {
                         return (
                             <button
-                                key={item.tab}
+                                key={destination.id}
                                 type="button"
-                                onClick={() => onPanelTabChange(item.tab)}
+                                onClick={() => onPanelTabChange(destination.tab!)}
                                 className={navButtonClassName(isActive)}
-                                aria-label={item.label}
-                                title={item.label}
+                                aria-label={destination.label}
+                                title={destination.label}
                             >
                                 <Icon className="size-4" />
-                                {item.tab === "bills" && billsCount > 0 ? (
+                                {destination.id === "bills" && billsCount > 0 ? (
                                     <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-foreground px-1 text-[9px] font-bold text-background">
                                         {billsCount > 9 ? "9+" : billsCount}
                                     </span>
@@ -76,11 +65,11 @@ const PosDeviceSidebar = ({
 
                     return (
                         <Link
-                            key={item.tab}
-                            to={getPosPanelPath(item.tab)}
+                            key={destination.id}
+                            to={destination.path}
                             className={navButtonClassName(isActive)}
-                            aria-label={item.label}
-                            title={item.label}
+                            aria-label={destination.label}
+                            title={destination.label}
                         >
                             <Icon className="size-4" />
                         </Link>
