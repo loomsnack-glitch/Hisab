@@ -108,7 +108,8 @@ import {
     User,
     Users,
     X,
-    Link2,
+    Boxes,
+    SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -120,6 +121,7 @@ import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/bi
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
@@ -2469,34 +2471,41 @@ const BillingPage = ({
                                                                     alt={product.name}
                                                                     className="h-full w-full rounded-lg border border-border/40 object-cover"
                                                                 />
+                                                            ) : product.productType === "combo" ? (
+                                                                <Boxes className="size-5 text-sky-600/70 dark:text-sky-400/70" />
                                                             ) : (
                                                                 <ShoppingCart className="size-5 text-muted-foreground/50" />
                                                             )}
                                                         </div>
                                                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                                            <p className="whitespace-normal break-words text-base font-semibold leading-snug text-foreground">
+                                                            <p className="min-w-0 whitespace-normal break-words text-base font-semibold leading-snug text-foreground">
                                                                 {product.name}
                                                             </p>
-                                                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                                                                <ProductPriceDisplay
-                                                                    price={product.price}
-                                                                    discount={product.discount}
-                                                                    size="sm"
-                                                                    align="left"
-                                                                />
-                                                                {productAttachments.length > 0 ? (
-                                                                    <span
-                                                                        title="Click the product to customize add-ons"
-                                                                        className="inline-flex min-w-0 items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[11px] font-semibold leading-tight text-primary/80 transition-colors group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
-                                                                    >
-                                                                        <Link2 className="size-3 shrink-0" aria-hidden="true" />
-                                                                        <span className="truncate">
-                                                                            {productAttachments.length} add-ons
-                                                                        </span>
-                                                                    </span>
-                                                                ) : null}
+                                                            <div className="flex items-end justify-between gap-2">
+                                                                <div className="min-w-0">
+                                                                    <ProductPriceDisplay
+                                                                        price={product.price}
+                                                                        discount={product.discount}
+                                                                        size="sm"
+                                                                        align="left"
+                                                                    />
+                                                                </div>
+                                                                <div className="shrink-0">
+                                                                    <ProductTypeBadge productType={product.productType} />
+                                                                </div>
                                                             </div>
                                                         </div>
+                                                        {productAttachments.length > 0 ? (
+                                                            <span
+                                                                title="Click the product to customize add-ons"
+                                                                className="mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/5 text-primary/80 transition-colors group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
+                                                            >
+                                                                <SlidersHorizontal
+                                                                    className="size-[18px]"
+                                                                    aria-label="Add-ons available"
+                                                                />
+                                                            </span>
+                                                        ) : null}
                                                     </button>
                                                 );
                                             })}
