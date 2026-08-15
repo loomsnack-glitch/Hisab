@@ -25,8 +25,6 @@ import {
 import { Expand, LoaderCircle, LogOut, Minimize, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
-import ThemeToggle from "@/components/dashboard/theme-toggle";
-import DisplayScaleControl from "@/components/display-scale-control";
 import { formatLongDate } from "@/lib/format";
 import { deviceAuthKeys } from "@/lib/query-keys";
 import { useFullscreen } from "@/hooks/use-fullscreen";
@@ -362,9 +360,6 @@ const PosLayout = ({
                         </Button>
                     ) : null}
                     </div>
-
-                    <DisplayScaleControl />
-                    <ThemeToggle />
 
                     {isSupported ? (
                         <Button

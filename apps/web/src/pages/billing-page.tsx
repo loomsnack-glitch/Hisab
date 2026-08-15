@@ -103,6 +103,7 @@ import {
     Printer,
     ReceiptText,
     Search,
+    Settings2,
     ShoppingBag,
     ShoppingCart,
     Store,
@@ -114,6 +115,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import PosDeviceSidebar from "@/components/pos/pos-device-sidebar";
 import CustomerDirectory from "@/components/customers/customer-directory";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
@@ -2120,107 +2122,13 @@ const BillingPage = ({
 
             {/* ─── Main Two-Panel Layout ─── */}
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-                <nav
-                    aria-label="Billing workspace navigation"
-                    className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-border/40 bg-card/40 py-3 lg:flex"
-                >
-                    {canMutate ? (
-                        <>
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("products")}
-                                className={cn(
-                                    "relative flex size-10 items-center justify-center rounded-xl transition-all",
-                                    leftPanelTab === "products"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                                aria-label="Products shelf"
-                                title="Products shelf"
-                            >
-                                <LayoutGrid className="size-4" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("bills")}
-                                className={cn(
-                                    "relative flex size-10 items-center justify-center rounded-xl transition-all",
-                                    leftPanelTab === "bills"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                                aria-label="Recent bills and drafts"
-                                title="Recent bills and drafts"
-                            >
-                                <ReceiptText className="size-4" />
-                                {sales.length > 0 && (
-                                    <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-foreground px-1 text-[9px] font-bold text-background">
-                                        {sales.length > 9 ? "9+" : sales.length}
-                                    </span>
-                                )}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("reports")}
-                                className={cn(
-                                    "flex size-10 items-center justify-center rounded-xl transition-all",
-                                    leftPanelTab === "reports"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                                aria-label="Product sales reports"
-                                title="Product sales reports"
-                            >
-                                <BarChart3 className="size-4" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("customers")}
-                                className={cn(
-                                    "relative flex size-10 items-center justify-center rounded-xl transition-all",
-                                    leftPanelTab === "customers"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                                aria-label="Customers"
-                                title="Customers"
-                            >
-                                <Users className="size-4" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("purchases")}
-                                className={cn(
-                                    "relative flex size-10 items-center justify-center rounded-xl transition-all",
-                                    leftPanelTab === "purchases"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                                aria-label="Purchases"
-                                title="Purchases"
-                            >
-                                <ShoppingBag className="size-4" />
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <button
-                                type="button"
-                                onClick={() => changePanelTab("bills")}
-                                className={cn(
-                                    "flex size-10 items-center justify-center rounded-xl transition-all",
-                                    leftPanelTab === "bills"
-                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                                aria-label="Store bills"
-                                title="Store bills"
-                            >
-                                <ReceiptText className="size-4" />
-                            </button>
-                        </>
-                    )}
-                </nav>
+                {isDeviceMode ? (
+                    <PosDeviceSidebar
+                        activePanelTab={leftPanelTab}
+                        billsCount={sales.length}
+                        onPanelTabChange={changePanelTab}
+                    />
+                ) : null}
 
                 {/* ─── LEFT PANEL: Product Grid ─── */}
                 <div
@@ -2311,6 +2219,10 @@ const BillingPage = ({
                                     <DropdownMenuItem onClick={() => changePanelTab("purchases")}>
                                         <ShoppingBag className="size-4" />
                                         Purchases
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem render={<Link to="/pos/settings" />}>
+                                        <Settings2 className="size-4" />
+                                        Settings
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>

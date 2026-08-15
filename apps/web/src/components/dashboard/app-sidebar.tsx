@@ -28,7 +28,7 @@ const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
 const secondaryNavItems = [
     { label: "Notifications", icon: Bell, disabled: true },
-    { label: "Settings", icon: Settings2, disabled: true },
+    { label: "Settings", icon: Settings2, to: "/settings" },
     { label: "Help", icon: HelpCircle, disabled: true },
 ] as const;
 
@@ -215,6 +215,53 @@ const AppSidebar = ({
     const renderSecondaryItem = (item: (typeof secondaryNavItems)[number]) => {
         const Icon = item.icon;
         const collapsed = !isMobile && isCollapsed;
+        const isActive = "to" in item && item.to ? location.pathname === item.to : false;
+
+        if ("to" in item && item.to) {
+            const link = (
+                <NavLink
+                    to={item.to}
+                    onClick={onNavigate}
+                    className={() =>
+                        cn(
+                            "sidebar-nav-link group rounded-xl text-sm font-medium transition-all duration-200",
+                            collapsed ? collapsedNavRowClass : expandedNavRowClassNoTrail,
+                            isActive
+                                ? "bg-primary/10 text-primary"
+                                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                            collapsed && "sidebar-nav-link--collapsed",
+                        )
+                    }
+                >
+                    {() => (
+                        <>
+                            {collapsed && isActive ? <span className="sidebar-active-rail" aria-hidden /> : null}
+                            <Icon
+                                className={cn(
+                                    "size-[18px] transition-colors duration-200",
+                                    isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                                )}
+                                strokeWidth={isActive ? 2.25 : 2}
+                            />
+                            {!collapsed ? <span className="sidebar-label truncate text-left">{item.label}</span> : null}
+                        </>
+                    )}
+                </NavLink>
+            );
+
+            if (!collapsed) {
+                return link;
+            }
+
+            return (
+                <Tooltip>
+                    <TooltipTrigger render={link} />
+                    <TooltipContent side="right" className="border border-border bg-popover text-popover-foreground">
+                        {item.label}
+                    </TooltipContent>
+                </Tooltip>
+            );
+        }
 
         const button = (
             <button

@@ -26,6 +26,8 @@ import LabelTemplatesPage from "@/pages/label-templates-page";
 import LandingPage from "@/pages/landing-page";
 import ReportsPage from "@/pages/reports-page";
 import PosReportsPage from "@/pages/pos-reports-page";
+import PosSettingsPage from "@/pages/pos-settings-page";
+import SettingsPage from "@/pages/settings-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppInboxPage, { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
 import { authKeys } from "@/lib/query-keys";
@@ -114,11 +116,13 @@ const App = () => {
                                 <Route path="customers" element={<PosCustomersPage />} />
                                 <Route path="purchases" element={<PosPurchasesPage />} />
                                 <Route path="whatsapp" element={<PosWhatsAppInboxPage />} />
+                                <Route path="settings" element={<PosSettingsPage />} />
                             </Route>
                             <Route
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                             >
                                 <Route path="/dashboard" element={<Navigate to="/organizations" replace />} />
+                                <Route path="/settings" element={<SettingsPage />} />
                                 <Route path="/organizations" element={<OrganizationsPage />} />
                                 <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
                                 <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />

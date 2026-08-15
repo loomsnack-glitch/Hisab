@@ -22,8 +22,6 @@ import { toast } from "sonner";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@repo/ui/components/sheet";
 
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
-import ThemeToggle from "@/components/dashboard/theme-toggle";
-import DisplayScaleControl from "@/components/display-scale-control";
 import CreateOrganizationDialog from "@/components/organizations/create-organization-dialog";
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -359,10 +357,6 @@ const DashboardLayout = () => {
                                 <MonitorSmartphone className="size-4" />
                                 Login as device
                             </Button>
-                            <div className="hidden sm:block">
-                                <DisplayScaleControl />
-                            </div>
-                            <ThemeToggle />
                             {authUser && (
                                 <Popover>
                                     <PopoverTrigger
@@ -394,11 +388,6 @@ const DashboardLayout = () => {
                                         </div>
 
                                         <div className="h-px bg-border/60 -mx-3 my-0.5" />
-
-                                        <div className="sm:hidden px-1 py-1">
-                                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Text Scale</p>
-                                            <DisplayScaleControl />
-                                        </div>
 
                                         <Link
                                             to="/pos/login"
