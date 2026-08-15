@@ -45,7 +45,7 @@ const PosDeviceSidebar = ({
         <nav
             aria-label="POS workspace navigation"
             className={cn(
-                "hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-border/40 bg-card/40 py-3 lg:flex lg:min-h-full",
+                "hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-border/40 bg-card/40 py-3 lg:flex lg:h-full lg:self-stretch",
                 className,
             )}
         >

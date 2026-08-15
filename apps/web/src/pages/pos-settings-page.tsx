@@ -6,10 +6,10 @@ import AppearanceSettingsSection from "@/components/settings/appearance-settings
 
 const PosSettingsPage = () => {
     return (
-        <div className="flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] flex-col lg:flex-row">
+        <div className="flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] flex-col lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden lg:flex-row">
             <PosDeviceSidebar activeSettings />
 
-            <div className="min-w-0 flex-1 overflow-y-auto">
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
                 <div className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
                     <Card className="overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
                         <CardContent className="relative p-6 sm:p-8">

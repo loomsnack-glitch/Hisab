@@ -243,7 +243,7 @@ const PosLayout = ({
     };
 
     return (
-    <div className="min-h-dvh bg-background text-foreground [--pos-header-height:6.5rem] sm:[--pos-header-height:3.5rem]">
+    <div className="flex min-h-dvh flex-col bg-background text-foreground [--pos-header-height:6.5rem] sm:[--pos-header-height:3.5rem] lg:h-dvh lg:overflow-hidden">
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.1),_transparent_28%)]" />
             </div>
@@ -435,7 +435,7 @@ const PosLayout = ({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <main className="w-full px-0">{children}</main>
+            <main className="min-h-0 w-full flex-1 overflow-hidden px-0">{children}</main>
         </div>
     );
 };
