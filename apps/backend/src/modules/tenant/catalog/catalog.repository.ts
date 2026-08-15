@@ -1335,18 +1335,27 @@ export const seedDefaultLabelTemplates = async (
 
 const mapProductLabelProfile = (
     row: Record<string, unknown>,
-): ProductLabelProfileDTO => ({
-    ingredients: row.ingredients ? String(row.ingredients) : null,
-    nutrition: row.nutrition
-        ? (row.nutrition as ProductLabelProfileDTO["nutrition"])
-        : null,
-    netWeight: row.net_weight ? String(row.net_weight) : null,
-    unitSellingPriceText: row.unit_selling_price_text
-        ? String(row.unit_selling_price_text)
-        : null,
-    mrp: row.mrp != null ? Number(row.mrp) : null,
-    shelfLifeDays: row.shelf_life_days != null ? Number(row.shelf_life_days) : null,
-});
+): ProductLabelProfileDTO => {
+    let nutrition: ProductLabelProfileDTO["nutrition"] = null;
+    if (row.nutrition != null) {
+        const parsed = parseJsonColumn<unknown>(row.nutrition as string | unknown);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            nutrition = parsed as ProductLabelProfileDTO["nutrition"];
+        }
+    }
+
+    return {
+        ingredients: row.ingredients ? String(row.ingredients) : null,
+        nutrition,
+        netWeight: row.net_weight ? String(row.net_weight) : null,
+        unitSellingPriceText: row.unit_selling_price_text
+            ? String(row.unit_selling_price_text)
+            : null,
+        mrp: row.mrp != null ? Number(row.mrp) : null,
+        shelfLifeDays:
+            row.shelf_life_days != null ? Number(row.shelf_life_days) : null,
+    };
+};
 
 export const getProductLabelProfileByProductId = async (
     organizationId: string,

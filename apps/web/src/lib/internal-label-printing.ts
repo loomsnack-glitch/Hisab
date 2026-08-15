@@ -649,7 +649,7 @@ const renderTemplateElements = (
       }
       if (element.type === "table") {
         const nutrition = product.labelProfile?.nutrition ?? [];
-        if (nutrition.length === 0) {
+        if (!Array.isArray(nutrition) || nutrition.length === 0) {
           return "";
         }
         return renderNutritionTableElement(element, nutrition);

@@ -150,6 +150,26 @@ const emptyLabelProfileForm = {
   nutrition: [] as NutritionRow[],
 };
 
+const normalizeNutritionRows = (value: unknown): NutritionRow[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (row): row is NutritionRow =>
+      row != null &&
+      typeof row === "object" &&
+      typeof row.name === "string" &&
+      typeof row.quantity === "string" &&
+      typeof row.unit === "string",
+  );
+};
+
+const isNutritionRowComplete = (row: NutritionRow) =>
+  row.name.trim().length > 0 &&
+  row.quantity.trim().length > 0 &&
+  row.unit.trim().length > 0;
+
 const UpsertProductDialog = ({
   organizationId,
   categories,
@@ -224,7 +244,7 @@ const UpsertProductDialog = ({
             product.labelProfile?.shelfLifeDays != null
               ? String(product.labelProfile.shelfLifeDays)
               : "",
-          nutrition: product.labelProfile?.nutrition ?? [],
+          nutrition: normalizeNutritionRows(product.labelProfile?.nutrition),
         });
       } else {
         form.reset({
@@ -286,13 +306,13 @@ const UpsertProductDialog = ({
   }, [selectedFilePreview]);
 
   const buildLabelProfilePayload = () => {
-    const nutrition = labelProfileForm.nutrition
+    const nutrition = normalizeNutritionRows(labelProfileForm.nutrition)
       .map((row) => ({
         name: row.name.trim(),
         quantity: row.quantity.trim(),
         unit: row.unit.trim(),
       }))
-      .filter((row) => row.name && row.quantity && row.unit);
+      .filter(isNutritionRowComplete);
 
     return {
       ingredients: labelProfileForm.ingredients,
@@ -302,6 +322,21 @@ const UpsertProductDialog = ({
       shelfLifeDays: labelProfileForm.shelfLifeDays,
       nutrition: nutrition.length > 0 ? nutrition : null,
     };
+  };
+
+  const validateLabelProfileForm = () => {
+    const incompleteNutritionRow = normalizeNutritionRows(
+      labelProfileForm.nutrition,
+    ).some((row) => !isNutritionRowComplete(row));
+
+    if (incompleteNutritionRow) {
+      toast.error(
+        "Each nutrition row needs a name, quantity, and unit before saving.",
+      );
+      return false;
+    }
+
+    return true;
   };
 
   const saveLabelProfileIfNeeded = async (productId: string) => {
@@ -315,7 +350,9 @@ const UpsertProductDialog = ({
       labelProfileForm.unitSellingPriceText.trim().length > 0 ||
       labelProfileForm.mrp.trim().length > 0 ||
       labelProfileForm.shelfLifeDays.trim().length > 0 ||
-      labelProfileForm.nutrition.length > 0 ||
+      normalizeNutritionRows(labelProfileForm.nutrition).some(
+        isNutritionRowComplete,
+      ) ||
       Boolean(product?.labelProfile);
 
     if (!hasProfileInput) {
@@ -475,6 +512,10 @@ const UpsertProductDialog = ({
   };
 
   const onSubmit: SubmitHandler<CreateProductJSON> = (values) => {
+    if (barcodeScanningEnabled && !validateLabelProfileForm()) {
+      return;
+    }
+
     const nextCode =
       typeof values.productCode === "string" && values.productCode.length > 0
         ? values.productCode
@@ -780,7 +821,7 @@ const UpsertProductDialog = ({
                         setLabelProfileForm((current) => ({
                           ...current,
                           nutrition: [
-                            ...current.nutrition,
+                            ...normalizeNutritionRows(current.nutrition),
                             { name: "", quantity: "", unit: "" },
                           ],
                         }))
@@ -789,7 +830,11 @@ const UpsertProductDialog = ({
                       Add row
                     </Button>
                   </div>
-                  {labelProfileForm.nutrition.map((row, index) => (
+                  <p className="text-xs text-muted-foreground">
+                    Each row needs name, quantity, and unit (for example Energy,
+                    450, kcal).
+                  </p>
+                  {normalizeNutritionRows(labelProfileForm.nutrition).map((row, index) => (
                     <div key={index} className="grid gap-2 sm:grid-cols-4">
                       <Input
                         placeholder="Name"
@@ -797,7 +842,8 @@ const UpsertProductDialog = ({
                         onChange={(event) =>
                           setLabelProfileForm((current) => ({
                             ...current,
-                            nutrition: current.nutrition.map((entry, entryIndex) =>
+                            nutrition: normalizeNutritionRows(current.nutrition).map(
+                              (entry, entryIndex) =>
                               entryIndex === index
                                 ? { ...entry, name: event.target.value }
                                 : entry,
@@ -811,7 +857,8 @@ const UpsertProductDialog = ({
                         onChange={(event) =>
                           setLabelProfileForm((current) => ({
                             ...current,
-                            nutrition: current.nutrition.map((entry, entryIndex) =>
+                            nutrition: normalizeNutritionRows(current.nutrition).map(
+                              (entry, entryIndex) =>
                               entryIndex === index
                                 ? { ...entry, quantity: event.target.value }
                                 : entry,
@@ -825,7 +872,8 @@ const UpsertProductDialog = ({
                         onChange={(event) =>
                           setLabelProfileForm((current) => ({
                             ...current,
-                            nutrition: current.nutrition.map((entry, entryIndex) =>
+                            nutrition: normalizeNutritionRows(current.nutrition).map(
+                              (entry, entryIndex) =>
                               entryIndex === index
                                 ? { ...entry, unit: event.target.value }
                                 : entry,
@@ -840,7 +888,7 @@ const UpsertProductDialog = ({
                         onClick={() =>
                           setLabelProfileForm((current) => ({
                             ...current,
-                            nutrition: current.nutrition.filter(
+                            nutrition: normalizeNutritionRows(current.nutrition).filter(
                               (_, entryIndex) => entryIndex !== index,
                             ),
                           }))
