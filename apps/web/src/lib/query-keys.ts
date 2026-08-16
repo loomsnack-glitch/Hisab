@@ -21,6 +21,8 @@ export const serviceTableKeys = {
   all: ["service-tables"] as const,
   store: (organizationId: string, storeId: string) =>
     [...serviceTableKeys.all, organizationId, storeId] as const,
+  pos: (organizationId: string, storeId: string) =>
+    [...serviceTableKeys.all, "pos", organizationId, storeId] as const,
 };
 
 export const catalogKeys = {

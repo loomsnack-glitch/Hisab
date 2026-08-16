@@ -9,7 +9,7 @@ type PosDeviceSidebarProps = {
     activePanelTab?: PosPanelTab;
     activeSettings?: boolean;
     billsCount?: number;
-    onPanelTabChange?: (tab: PosPanelTab) => void;
+    onPanelTabChange?: (tab: Exclude<PosPanelTab, "tables" | "whatsapp">) => void;
     className?: string;
 };
 
@@ -43,12 +43,12 @@ const PosDeviceSidebar = ({
                     const Icon = destination.icon;
                     const isActive = !activeSettings && activePanelTab === destination.tab;
 
-                    if (onPanelTabChange && destination.tab) {
+                    if (onPanelTabChange && destination.tab && destination.tab !== "tables" && destination.tab !== "whatsapp") {
                         return (
                             <button
                                 key={destination.id}
                                 type="button"
-                                onClick={() => onPanelTabChange(destination.tab!)}
+                                onClick={() => onPanelTabChange(destination.tab as Exclude<PosPanelTab, "tables" | "whatsapp">)}
                                 className={navButtonClassName(isActive)}
                                 aria-label={destination.label}
                                 title={destination.label}

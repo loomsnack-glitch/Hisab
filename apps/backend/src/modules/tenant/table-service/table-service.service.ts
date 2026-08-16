@@ -2,6 +2,7 @@ import { pg } from "@/config/db";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import {
   STATUS_CODES,
+  type DeviceSessionDTO,
   type CreateServiceTableSVC,
   type ServiceResponse,
   type ServiceTableResponse,
@@ -50,6 +51,59 @@ export const getServiceTables = async (
   const tables = await tableRepository.getServiceTables(organizationId, storeId);
   return { status: "success", data: { tables }, message: "Service tables fetched successfully", code: STATUS_CODES.SUCCESS };
 };
+
+export const getServiceTablesForDevice = async (
+  session: DeviceSessionDTO,
+): Promise<ServiceResponse<ServiceTablesListResponse | null>> => {
+  const tables = await tableRepository.getServiceTables(session.organization.id, session.store.id);
+  return { status: "success", data: { tables }, message: "POS service tables fetched successfully", code: STATUS_CODES.SUCCESS };
+};
+
+const transitionServiceTableForDevice = async (
+  session: DeviceSessionDTO,
+  tableId: string,
+  fromState: "free" | "allocated",
+  toState: "free" | "allocated",
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const table = await tableRepository.transitionServiceTableState(
+    session.organization.id,
+    session.store.id,
+    tableId,
+    fromState,
+    toState,
+    session.device.id,
+  );
+  if (table) {
+    return {
+      status: "success",
+      data: { table },
+      message: toState === "allocated" ? "Service table allocated" : "Service table freed",
+      code: STATUS_CODES.SUCCESS,
+    };
+  }
+
+  const existing = await tableRepository.getServiceTableById(session.organization.id, session.store.id, tableId);
+  if (!existing) {
+    return { status: "error", message: "Service table not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
+
+  return {
+    status: "error",
+    message: fromState === "free" ? "Service table is no longer free" : "Only an allocated service table can be freed",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+  };
+};
+
+export const allocateServiceTableForDevice = async (
+  session: DeviceSessionDTO,
+  tableId: string,
+) => transitionServiceTableForDevice(session, tableId, "free", "allocated");
+
+export const freeAllocatedServiceTableForDevice = async (
+  session: DeviceSessionDTO,
+  tableId: string,
+) => transitionServiceTableForDevice(session, tableId, "allocated", "free");
 
 export const createServiceTable = async (
   userId: string,

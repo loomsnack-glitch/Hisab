@@ -12,6 +12,7 @@ import OrganizationsPage from "@/pages/organizations-page";
 import PosLoginPage from "@/pages/pos-login-page";
 import PosPage from "@/pages/pos-page";
 import PosBillsPage from "@/pages/pos-bills-page";
+import PosTablesPage from "@/pages/pos-tables-page";
 import PosCustomersPage from "@/pages/pos-customers-page";
 import PosProductsPage from "@/pages/pos-products-page";
 import PosPurchasesPage from "@/pages/pos-purchases-page";
@@ -112,6 +113,7 @@ const App = () => {
                             <Route path="/pos/login" element={<PosLoginPage />} />
                             <Route path="/pos" element={<PosPage />}>
                                 <Route index element={<PosProductsPage />} />
+                                <Route path="tables" element={<PosTablesPage />} />
                                 <Route path="bills" element={<PosBillsPage />} />
                                 <Route path="reports" element={<PosReportsPage />} />
                                 <Route path="customers" element={<PosCustomersPage />} />

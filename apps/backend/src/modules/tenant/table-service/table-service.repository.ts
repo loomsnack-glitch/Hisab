@@ -3,6 +3,7 @@ import type {
   CreateServiceTableREPO,
   ServiceTableDTO,
   ServiceTablePosition,
+  ServiceTableState,
   UpdateServiceTableREPO,
 } from "@repo/types";
 
@@ -121,6 +122,29 @@ export const updateServiceTable = async (
     WHERE id = ${table.id}
       AND organization_id = ${table.organizationId}
       AND store_id = ${table.storeId}
+    RETURNING ${pg.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
+export const transitionServiceTableState = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  fromState: ServiceTableState,
+  toState: ServiceTableState,
+  updatedBy: string,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await pg`
+    UPDATE service_tables
+    SET state = ${toState},
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND state = ${fromState}
+      AND current_sale_id IS NULL
     RETURNING ${pg.unsafe(selectColumns)}
   `;
   return row ? mapRow(row) : null;

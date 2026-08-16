@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { ServiceTableDTO } from "@repo/types";
+import type { DeviceSessionDTO, ServiceTableDTO } from "@repo/types";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -24,13 +24,28 @@ const table: ServiceTableDTO = {
   createdAt: now,
   updatedAt: now,
 };
+const allocatedTable: ServiceTableDTO = { ...table, state: "allocated" };
+const deviceSession: DeviceSessionDTO = {
+  device: {
+    id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    organizationId,
+    storeId,
+    name: "Counter",
+    loginUsername: "counter",
+    status: "active",
+    lastSeenAt: null,
+  },
+  store: { id: storeId, organizationId, name: "Main Store", address: null },
+  organization: { id: organizationId, name: "Demo Org", username: "demo", tagline: null },
+};
 
 const getOrganizationByIdForUser = mock(async () => organization);
 const getStoreById = mock(async (_organizationId: string, requestedStoreId: string) =>
   requestedStoreId === storeId ? store : null,
 );
-const getServiceTables = mock(async () => [table]);
-const getServiceTableById = mock(async () => table);
+const getServiceTables = mock(async (requestedOrganizationId?: string, requestedStoreId?: string) =>
+  requestedOrganizationId === organizationId && requestedStoreId === storeId ? [table] : []);
+const getServiceTableById = mock(async (): Promise<ServiceTableDTO | null> => table);
 const serviceTableLabelExists = mock(async () => false);
 const createServiceTableRepo = mock(async (data: {
   id: string;
@@ -46,6 +61,14 @@ const updateServiceTableRepo = mock(async (data: { position?: { x: number; y: nu
   position: data.position ?? table.position,
   updatedBy: userId,
 }));
+const transitionServiceTableState = mock(async (
+  _organizationId: string,
+  _storeId: string,
+  _tableId: string,
+  _fromState: ServiceTableDTO["state"],
+  toState: ServiceTableDTO["state"],
+) : Promise<ServiceTableDTO | null> =>
+  _organizationId === organizationId && _storeId === storeId ? { ...table, state: toState } : null);
 const begin = mock(async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback({}));
 
 mock.module("@/config/db", () => ({ pg: { begin } }));
@@ -59,6 +82,7 @@ mock.module("./table-service.repository", () => ({
   serviceTableLabelExists,
   createServiceTable: createServiceTableRepo,
   updateServiceTable: updateServiceTableRepo,
+  transitionServiceTableState,
 }));
 
 const tableService = await import("./table-service.service");
@@ -77,6 +101,7 @@ describe("Service Table application service", () => {
     serviceTableLabelExists.mockResolvedValue(false);
     createServiceTableRepo.mockClear();
     updateServiceTableRepo.mockClear();
+    transitionServiceTableState.mockClear();
     begin.mockClear();
   });
 
@@ -134,5 +159,39 @@ describe("Service Table application service", () => {
       position: { x: 0.74, y: 0.31 },
       updatedBy: userId,
     }));
+  });
+
+  test("lists only the authenticated device Store and allocates without creating a Sale", async () => {
+    const listResponse = await tableService.getServiceTablesForDevice(deviceSession);
+    const allocateResponse = await tableService.allocateServiceTableForDevice(deviceSession, tableId);
+
+    expect(listResponse).toMatchObject({ status: "success", data: { tables: [table] } });
+    expect(allocateResponse).toMatchObject({ status: "success", data: { table: { state: "allocated", currentSaleId: null } } });
+  });
+
+  test("frees an allocated table without retaining a financial record", async () => {
+    transitionServiceTableState.mockResolvedValueOnce({ ...allocatedTable, state: "free" });
+
+    const response = await tableService.freeAllocatedServiceTableForDevice(deviceSession, tableId);
+
+    expect(response).toMatchObject({ status: "success", data: { table: { state: "free", currentSaleId: null } } });
+  });
+
+  test("rejects an operation when the table state changed before the atomic transition", async () => {
+    transitionServiceTableState.mockResolvedValueOnce(null);
+    getServiceTableById.mockResolvedValueOnce(table);
+
+    const response = await tableService.allocateServiceTableForDevice(deviceSession, tableId);
+
+    expect(response).toMatchObject({ status: "error", code: 409 });
+  });
+
+  test("does not expose a table from another Store through a device operation", async () => {
+    transitionServiceTableState.mockResolvedValueOnce(null);
+    getServiceTableById.mockResolvedValueOnce(null);
+
+    const response = await tableService.allocateServiceTableForDevice(deviceSession, tableId);
+
+    expect(response).toMatchObject({ status: "error", code: 404 });
   });
 });

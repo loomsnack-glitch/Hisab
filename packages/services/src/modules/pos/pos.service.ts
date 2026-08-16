@@ -39,6 +39,8 @@ import type {
   WhatsAppMessageDTO,
   WhatsAppSendConversationTextJSON,
   WhatsAppAttachConversationCustomerJSON,
+  ServiceTableResponse,
+  ServiceTablesListResponse,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -69,6 +71,39 @@ export const getPosSettings = async (): Promise<
 > => {
   try {
     const response = await api.get("/pos/settings");
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosServiceTables = async (): Promise<
+  ServiceResponse<ServiceTablesListResponse | null>
+> => {
+  try {
+    const response = await api.get("/pos/tables");
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const allocatePosServiceTable = async (
+  tableId: string,
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  try {
+    const response = await api.post(`/pos/tables/${tableId}/allocate`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const freePosServiceTable = async (
+  tableId: string,
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  try {
+    const response = await api.post(`/pos/tables/${tableId}/free`);
     return response.data;
   } catch (error) {
     return handleApiError(error);

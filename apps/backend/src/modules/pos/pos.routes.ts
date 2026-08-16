@@ -30,6 +30,7 @@ import * as billingService from "@/modules/tenant/billing/billing.service";
 import * as catalogService from "@/modules/tenant/catalog/catalog.service";
 import * as purchaseService from "@/modules/tenant/purchase/purchase.service";
 import * as organizationService from "@/modules/tenant/organization/organization.service";
+import * as tableService from "@/modules/tenant/table-service/table-service.service";
 import * as whatsappService from "@/modules/tenant/whatsapp/whatsapp.service";
 
 const FILE_NAME = "pos.routes";
@@ -51,6 +52,42 @@ const validateUuidParam = (value: string, message: string) => {
 };
 
 router.use("*", deviceAuthMiddleware);
+
+router.get("/tables", async (c) => {
+  try {
+    return handleServiceResponse(c, await tableService.getServiceTablesForDevice(c.get("authDevice")));
+  } catch (error) {
+    return handleError(FILE_NAME, "getServiceTablesForDevice", c, error);
+  }
+});
+
+router.post("/tables/:tableId/allocate", async (c) => {
+  try {
+    const tableId = c.req.param("tableId");
+    const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+    if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+    return handleServiceResponse(
+      c,
+      await tableService.allocateServiceTableForDevice(c.get("authDevice"), tableId),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "allocateServiceTableForDevice", c, error);
+  }
+});
+
+router.post("/tables/:tableId/free", async (c) => {
+  try {
+    const tableId = c.req.param("tableId");
+    const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+    if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+    return handleServiceResponse(
+      c,
+      await tableService.freeAllocatedServiceTableForDevice(c.get("authDevice"), tableId),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "freeAllocatedServiceTableForDevice", c, error);
+  }
+});
 
 router.get("/categories", async (c) => {
   try {
