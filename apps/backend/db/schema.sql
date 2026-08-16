@@ -690,6 +690,7 @@ CREATE TABLE public.sales (
     store_id uuid NOT NULL,
     sale_number character varying(64),
     customer_id uuid,
+    service_table_id uuid,
     user_id uuid,
     status public.sale_status_enum DEFAULT 'draft'::public.sale_status_enum NOT NULL,
     payment_status public.payment_status_enum DEFAULT 'pending'::public.payment_status_enum NOT NULL,
@@ -1344,6 +1345,18 @@ CREATE UNIQUE INDEX service_tables_store_table_label_lower_unique ON public.serv
 --
 
 CREATE INDEX idx_service_tables_store_position ON public.service_tables USING btree (organization_id, store_id, position_y, position_x, id);
+
+--
+-- Name: service_tables_current_sale_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX service_tables_current_sale_unique ON public.service_tables USING btree (current_sale_id) WHERE (current_sale_id IS NOT NULL);
+
+--
+-- Name: idx_sales_service_table_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sales_service_table_id ON public.sales USING btree (organization_id, store_id, service_table_id) WHERE (service_table_id IS NOT NULL);
 
 
 --
@@ -2401,6 +2414,20 @@ ALTER TABLE ONLY public.sales
 
 ALTER TABLE ONLY public.sales
     ADD CONSTRAINT sales_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+--
+-- Name: sales sales_service_table_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales
+    ADD CONSTRAINT sales_service_table_fkey FOREIGN KEY (service_table_id, organization_id, store_id) REFERENCES public.service_tables(id, organization_id, store_id) ON DELETE RESTRICT;
+
+--
+-- Name: service_tables service_tables_current_sale_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_tables
+    ADD CONSTRAINT service_tables_current_sale_fkey FOREIGN KEY (current_sale_id, organization_id, store_id) REFERENCES public.sales(id, organization_id, store_id) ON DELETE RESTRICT;
 
 
 --

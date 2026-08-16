@@ -39,6 +39,7 @@ export const ServiceTableDTOSchema = z.object({
   position: ServiceTablePositionSchema,
   state: ServiceTableStateSchema,
   currentSaleId: z.uuid("Invalid current sale id").nullable(),
+  currentSaleTotal: z.number().nullable(),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable(),
   createdAt: dtoDateSchema,
@@ -60,4 +61,7 @@ export const UpdateServiceTableSchema = z
     position: ServiceTablePositionSchema.optional(),
   })
   .strict()
-  .refine((value) => Object.keys(value).length > 0, "At least one table field is required");
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "At least one table field is required",
+  );

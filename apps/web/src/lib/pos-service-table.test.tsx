@@ -26,7 +26,12 @@ const session: DeviceSessionDTO = {
     lastSeenAt: null,
   },
   store: { id: storeId, organizationId, name: "Main Store", address: null },
-  organization: { id: organizationId, name: "Demo Org", username: "demo", tagline: null },
+  organization: {
+    id: organizationId,
+    name: "Demo Org",
+    username: "demo",
+    tagline: null,
+  },
 };
 
 const table = (state: ServiceTableDTO["state"]): ServiceTableDTO => ({
@@ -38,6 +43,7 @@ const table = (state: ServiceTableDTO["state"]): ServiceTableDTO => ({
   position: { x: 0.05, y: 0.05 },
   state,
   currentSaleId: null,
+  currentSaleTotal: null,
   createdBy: "11111111-1111-4111-8111-111111111111",
   updatedBy: null,
   createdAt: now,
@@ -92,7 +98,9 @@ describe("POS Service Table behavior", () => {
   });
 
   test("keeps POS table cache entries isolated by Store", () => {
-    expect(serviceTableKeys.pos("org-a", "store-a")).not.toEqual(serviceTableKeys.pos("org-a", "store-b"));
+    expect(serviceTableKeys.pos("org-a", "store-a")).not.toEqual(
+      serviceTableKeys.pos("org-a", "store-b"),
+    );
   });
 
   test("renders only the action valid for each pre-order table state", () => {
@@ -103,5 +111,19 @@ describe("POS Service Table behavior", () => {
     expect(freeMarkup).not.toContain("Free table A1");
     expect(allocatedMarkup).toContain("Free table A1");
     expect(allocatedMarkup).not.toContain("Allocate table A1");
+  });
+
+  test("shows a current draft total and order actions for an engaged table", () => {
+    const markup = renderTableFloor([
+      {
+        ...table("engaged"),
+        currentSaleId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        currentSaleTotal: 125,
+      },
+    ]);
+
+    expect(markup).toContain("Current total");
+    expect(markup).toContain("Open order");
+    expect(markup).toContain("Cancel order");
   });
 });

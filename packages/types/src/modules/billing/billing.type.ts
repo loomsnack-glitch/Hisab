@@ -1,70 +1,92 @@
 import type z from "zod";
 import type {
-    AddOnSalesRollupsResponseSchema,
-    AddOnScopedSalesRollupDTOSchema,
-    BundleCommercialSalesRollupDTOSchema,
-    BundleComponentAddOnUsageRollupDTOSchema,
-    BundleComponentProductUsageRollupDTOSchema,
-    BundleSalesRollupsResponseSchema,
-    CommitSaleSchema,
-    CompleteSaleSchema,
-    CreateCustomerSchema,
-    CreateDraftSaleSchema,
-    CreatePaymentSchema,
-    CustomerDTOSchema,
-    CustomerLedgerEntryDTOSchema,
-    CustomerListPageInfoSchema,
-    CustomerListQuerySchema,
-    CustomerSortSchema,
-    ParentScopedAddOnSalesRollupDTOSchema,
-    PaymentDTOSchema,
-    ProductSalesSummaryAdminQuerySchema,
-    ProductSalesSummaryDTOSchema,
-    ProductSalesSummaryQuerySchema,
-    ProductSalesSummaryResponseSchema,
-    ReplaceSaleSchema,
-    SaleDeviceAuditDTOSchema,
-    SaleDetailDTOSchema,
-    SaleItemAddOnDTOSchema,
-    SaleItemAddOnInputSchema,
-    SaleItemBundleComponentAddOnDTOSchema,
-    SaleItemBundleComponentDTOSchema,
-    SaleItemDTOSchema,
-    SaleItemInputSchema,
-    SaleNumberResetPeriodSchema,
-    SaleNumberSettingsDTOSchema,
-    TokenNumberResetPeriodSchema,
-    SaleSummaryDTOSchema,
-    SalesListPageInfoSchema,
-    SalesListSummarySchema,
-    SalesListQuerySchema,
-    SalesSortSchema,
-    UpdateCustomerSchema,
-    UpdateDraftSaleSchema,
-    UpdateSaleNumberSettingsSchema,
-    VoidSaleSchema,
+  AddOnSalesRollupsResponseSchema,
+  AddOnScopedSalesRollupDTOSchema,
+  BundleCommercialSalesRollupDTOSchema,
+  BundleComponentAddOnUsageRollupDTOSchema,
+  BundleComponentProductUsageRollupDTOSchema,
+  BundleSalesRollupsResponseSchema,
+  CommitSaleSchema,
+  CompleteSaleSchema,
+  CreateCustomerSchema,
+  CreateDraftSaleSchema,
+  CreatePaymentSchema,
+  CustomerDTOSchema,
+  CustomerLedgerEntryDTOSchema,
+  CustomerListPageInfoSchema,
+  CustomerListQuerySchema,
+  CustomerSortSchema,
+  ParentScopedAddOnSalesRollupDTOSchema,
+  PaymentDTOSchema,
+  ProductSalesSummaryAdminQuerySchema,
+  ProductSalesSummaryDTOSchema,
+  ProductSalesSummaryQuerySchema,
+  ProductSalesSummaryResponseSchema,
+  ReplaceSaleSchema,
+  SaleDeviceAuditDTOSchema,
+  SaleDetailDTOSchema,
+  SaleItemAddOnDTOSchema,
+  SaleItemAddOnInputSchema,
+  SaleItemBundleComponentAddOnDTOSchema,
+  SaleItemBundleComponentDTOSchema,
+  SaleItemDTOSchema,
+  SaleItemInputSchema,
+  SaleNumberResetPeriodSchema,
+  SaleNumberSettingsDTOSchema,
+  TokenNumberResetPeriodSchema,
+  SaleSummaryDTOSchema,
+  SalesListPageInfoSchema,
+  SalesListSummarySchema,
+  SalesListQuerySchema,
+  SalesSortSchema,
+  UpdateCustomerSchema,
+  UpdateDraftSaleSchema,
+  UpdateSaleNumberSettingsSchema,
+  VoidSaleSchema,
 } from "./billing.schema";
 
 export type CustomerDTO = z.infer<typeof CustomerDTOSchema>;
 export type SaleItemAddOnDTO = z.infer<typeof SaleItemAddOnDTOSchema>;
-export type SaleItemBundleComponentAddOnDTO = z.infer<typeof SaleItemBundleComponentAddOnDTOSchema>;
-export type SaleItemBundleComponentDTO = z.infer<typeof SaleItemBundleComponentDTOSchema>;
+export type SaleItemBundleComponentAddOnDTO = z.infer<
+  typeof SaleItemBundleComponentAddOnDTOSchema
+>;
+export type SaleItemBundleComponentDTO = z.infer<
+  typeof SaleItemBundleComponentDTOSchema
+>;
 export type SaleItemDTO = z.infer<typeof SaleItemDTOSchema>;
 export type PaymentDTO = z.infer<typeof PaymentDTOSchema>;
-export type CustomerLedgerEntryDTO = z.infer<typeof CustomerLedgerEntryDTOSchema>;
+export type CustomerLedgerEntryDTO = z.infer<
+  typeof CustomerLedgerEntryDTOSchema
+>;
 export type SaleDeviceAuditDTO = z.infer<typeof SaleDeviceAuditDTOSchema>;
 export type SaleSummaryDTO = z.infer<typeof SaleSummaryDTOSchema>;
 export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema>;
 export type SaleNumberResetPeriod = z.infer<typeof SaleNumberResetPeriodSchema>;
-export type TokenNumberResetPeriod = z.infer<typeof TokenNumberResetPeriodSchema>;
+export type TokenNumberResetPeriod = z.infer<
+  typeof TokenNumberResetPeriodSchema
+>;
 export type SaleNumberSettingsDTO = z.infer<typeof SaleNumberSettingsDTOSchema>;
-export type ParentScopedAddOnSalesRollupDTO = z.infer<typeof ParentScopedAddOnSalesRollupDTOSchema>;
-export type AddOnScopedSalesRollupDTO = z.infer<typeof AddOnScopedSalesRollupDTOSchema>;
-export type AddOnSalesRollupsResponse = z.infer<typeof AddOnSalesRollupsResponseSchema>;
-export type BundleCommercialSalesRollupDTO = z.infer<typeof BundleCommercialSalesRollupDTOSchema>;
-export type BundleComponentProductUsageRollupDTO = z.infer<typeof BundleComponentProductUsageRollupDTOSchema>;
-export type BundleComponentAddOnUsageRollupDTO = z.infer<typeof BundleComponentAddOnUsageRollupDTOSchema>;
-export type BundleSalesRollupsResponse = z.infer<typeof BundleSalesRollupsResponseSchema>;
+export type ParentScopedAddOnSalesRollupDTO = z.infer<
+  typeof ParentScopedAddOnSalesRollupDTOSchema
+>;
+export type AddOnScopedSalesRollupDTO = z.infer<
+  typeof AddOnScopedSalesRollupDTOSchema
+>;
+export type AddOnSalesRollupsResponse = z.infer<
+  typeof AddOnSalesRollupsResponseSchema
+>;
+export type BundleCommercialSalesRollupDTO = z.infer<
+  typeof BundleCommercialSalesRollupDTOSchema
+>;
+export type BundleComponentProductUsageRollupDTO = z.infer<
+  typeof BundleComponentProductUsageRollupDTOSchema
+>;
+export type BundleComponentAddOnUsageRollupDTO = z.infer<
+  typeof BundleComponentAddOnUsageRollupDTOSchema
+>;
+export type BundleSalesRollupsResponse = z.infer<
+  typeof BundleSalesRollupsResponseSchema
+>;
 
 export type SaleStatus = SaleSummaryDTO["status"];
 export type PaymentStatus = SaleSummaryDTO["paymentStatus"];
@@ -74,17 +96,20 @@ export type CustomerLedgerEntryType = CustomerLedgerEntryDTO["entryType"];
 export type CreateCustomerJSON = z.infer<typeof CreateCustomerSchema>;
 export type CreateCustomerSVC = CreateCustomerJSON;
 export type CreateCustomerREPO = Pick<
-    CustomerDTO,
-    "id" | "organizationId" | "name" | "balance" | "isActive" | "createdBy"
+  CustomerDTO,
+  "id" | "organizationId" | "name" | "balance" | "isActive" | "createdBy"
 > & {
-    phone?: string | null;
-    updatedBy?: string | null;
+  phone?: string | null;
+  updatedBy?: string | null;
 };
 
 export type UpdateCustomerJSON = z.infer<typeof UpdateCustomerSchema>;
 export type UpdateCustomerSVC = UpdateCustomerJSON;
-export type UpdateCustomerREPO = Pick<CustomerDTO, "id" | "organizationId" | "name" | "isActive" | "updatedBy"> & {
-    phone?: string | null;
+export type UpdateCustomerREPO = Pick<
+  CustomerDTO,
+  "id" | "organizationId" | "name" | "isActive" | "updatedBy"
+> & {
+  phone?: string | null;
 };
 
 export type CustomerListQuery = z.infer<typeof CustomerListQuerySchema>;
@@ -95,10 +120,18 @@ export type SalesListQuery = z.infer<typeof SalesListQuerySchema>;
 export type SalesSort = z.infer<typeof SalesSortSchema>;
 export type SalesListSummary = z.infer<typeof SalesListSummarySchema>;
 export type SalesListPageInfo = z.infer<typeof SalesListPageInfoSchema>;
-export type ProductSalesSummaryQuery = z.infer<typeof ProductSalesSummaryQuerySchema>;
-export type ProductSalesSummaryAdminQuery = z.infer<typeof ProductSalesSummaryAdminQuerySchema>;
-export type ProductSalesSummaryDTO = z.infer<typeof ProductSalesSummaryDTOSchema>;
-export type ProductSalesSummaryResponse = z.infer<typeof ProductSalesSummaryResponseSchema>;
+export type ProductSalesSummaryQuery = z.infer<
+  typeof ProductSalesSummaryQuerySchema
+>;
+export type ProductSalesSummaryAdminQuery = z.infer<
+  typeof ProductSalesSummaryAdminQuerySchema
+>;
+export type ProductSalesSummaryDTO = z.infer<
+  typeof ProductSalesSummaryDTOSchema
+>;
+export type ProductSalesSummaryResponse = z.infer<
+  typeof ProductSalesSummaryResponseSchema
+>;
 
 export type SaleItemAddOnInput = z.infer<typeof SaleItemAddOnInputSchema>;
 export type SaleItemInput = z.infer<typeof SaleItemInputSchema>;
@@ -116,177 +149,199 @@ export type CreatePaymentJSON = z.infer<typeof CreatePaymentSchema>;
 export type CreatePaymentSVC = CreatePaymentJSON;
 export type VoidSaleJSON = z.infer<typeof VoidSaleSchema>;
 export type VoidSaleSVC = VoidSaleJSON;
-export type UpdateSaleNumberSettingsJSON = z.infer<typeof UpdateSaleNumberSettingsSchema>;
+export type UpdateSaleNumberSettingsJSON = z.infer<
+  typeof UpdateSaleNumberSettingsSchema
+>;
 export type UpdateSaleNumberSettingsSVC = UpdateSaleNumberSettingsJSON;
 export type SaleNumberSettingsResponse = { settings: SaleNumberSettingsDTO };
 
 export type CreateSaleREPO = Pick<
-    SaleSummaryDTO,
-    "id" | "organizationId" | "storeId" | "status" | "paymentStatus" | "subtotal" | "discountTotal" | "grandTotal"
+  SaleSummaryDTO,
+  | "id"
+  | "organizationId"
+  | "storeId"
+  | "status"
+  | "paymentStatus"
+  | "subtotal"
+  | "discountTotal"
+  | "grandTotal"
 > & {
-    replacementOfSaleId?: string | null;
-    completionRequestId?: string | null;
-    userId?: string | null;
-    createdByDeviceId?: string | null;
-    updatedByDeviceId?: string | null;
-    customerId?: string | null;
-    customerNameSnapshot?: string | null;
-    customerPhoneSnapshot?: string | null;
-    notes?: string | null;
-    committedAt?: string | Date | null;
-    saleNumber?: string | null;
-    saleSequenceNumber?: number | null;
-    salePeriodKey?: string | null;
-    tokenNumber?: string | null;
-    tokenSequenceNumber?: number | null;
-    tokenPeriodKey?: string | null;
-    voidedAt?: string | Date | null;
-    voidReason?: string | null;
+  replacementOfSaleId?: string | null;
+  completionRequestId?: string | null;
+  userId?: string | null;
+  createdByDeviceId?: string | null;
+  updatedByDeviceId?: string | null;
+  customerId?: string | null;
+  serviceTableId?: string | null;
+  customerNameSnapshot?: string | null;
+  customerPhoneSnapshot?: string | null;
+  notes?: string | null;
+  committedAt?: string | Date | null;
+  saleNumber?: string | null;
+  saleSequenceNumber?: number | null;
+  salePeriodKey?: string | null;
+  tokenNumber?: string | null;
+  tokenSequenceNumber?: number | null;
+  tokenPeriodKey?: string | null;
+  voidedAt?: string | Date | null;
+  voidReason?: string | null;
 };
 
 export type UpdateSaleREPO = Pick<
-    SaleSummaryDTO,
-    "id" | "organizationId" | "storeId" | "status" | "paymentStatus" | "subtotal" | "discountTotal" | "grandTotal"
+  SaleSummaryDTO,
+  | "id"
+  | "organizationId"
+  | "storeId"
+  | "status"
+  | "paymentStatus"
+  | "subtotal"
+  | "discountTotal"
+  | "grandTotal"
 > & {
-    updatedByDeviceId?: string | null;
-    customerId?: string | null;
-    customerNameSnapshot?: string | null;
-    customerPhoneSnapshot?: string | null;
-    notes?: string | null;
-    committedAt?: string | Date | null;
-    saleNumber?: string | null;
-    saleSequenceNumber?: number | null;
-    salePeriodKey?: string | null;
-    tokenNumber?: string | null;
-    tokenSequenceNumber?: number | null;
-    tokenPeriodKey?: string | null;
-    voidedAt?: string | Date | null;
-    voidReason?: string | null;
+  updatedByDeviceId?: string | null;
+  customerId?: string | null;
+  customerNameSnapshot?: string | null;
+  customerPhoneSnapshot?: string | null;
+  notes?: string | null;
+  committedAt?: string | Date | null;
+  saleNumber?: string | null;
+  saleSequenceNumber?: number | null;
+  salePeriodKey?: string | null;
+  tokenNumber?: string | null;
+  tokenSequenceNumber?: number | null;
+  tokenPeriodKey?: string | null;
+  voidedAt?: string | Date | null;
+  voidReason?: string | null;
 };
 
 export type CreateSaleItemREPO = Pick<
-    SaleItemDTO,
-    | "id"
-    | "organizationId"
-    | "storeId"
-    | "saleId"
-    | "productId"
-    | "quantity"
-    | "configurationSignature"
-    | "productNameSnapshot"
-    | "unitPriceSnapshot"
-    | "discountAmount"
-    | "lineSubtotal"
-    | "lineTotal"
+  SaleItemDTO,
+  | "id"
+  | "organizationId"
+  | "storeId"
+  | "saleId"
+  | "productId"
+  | "quantity"
+  | "configurationSignature"
+  | "productNameSnapshot"
+  | "unitPriceSnapshot"
+  | "discountAmount"
+  | "lineSubtotal"
+  | "lineTotal"
 >;
 
 export type CreateSaleItemAddOnREPO = Pick<
-    SaleItemAddOnDTO,
-    | "id"
-    | "organizationId"
-    | "storeId"
-    | "saleId"
-    | "saleItemId"
-    | "addOnId"
-    | "quantityPerParent"
-    | "totalQuantity"
-    | "addOnNameSnapshot"
-    | "unitPriceSnapshot"
-    | "unitDiscountSnapshot"
-    | "discountAmount"
-    | "lineSubtotal"
-    | "lineTotal"
+  SaleItemAddOnDTO,
+  | "id"
+  | "organizationId"
+  | "storeId"
+  | "saleId"
+  | "saleItemId"
+  | "addOnId"
+  | "quantityPerParent"
+  | "totalQuantity"
+  | "addOnNameSnapshot"
+  | "unitPriceSnapshot"
+  | "unitDiscountSnapshot"
+  | "discountAmount"
+  | "lineSubtotal"
+  | "lineTotal"
 >;
 
 export type CreateSaleItemBundleComponentREPO = Pick<
-    SaleItemBundleComponentDTO,
-    | "id"
-    | "organizationId"
-    | "storeId"
-    | "saleId"
-    | "saleItemId"
-    | "choiceGroupId"
-    | "componentProductId"
-    | "quantityPerBundle"
-    | "totalQuantity"
-    | "productNameSnapshot"
-    | "unitPriceSnapshot"
-    | "unitDiscountSnapshot"
-    | "priceAdjustmentSnapshot"
+  SaleItemBundleComponentDTO,
+  | "id"
+  | "organizationId"
+  | "storeId"
+  | "saleId"
+  | "saleItemId"
+  | "choiceGroupId"
+  | "componentProductId"
+  | "quantityPerBundle"
+  | "totalQuantity"
+  | "productNameSnapshot"
+  | "unitPriceSnapshot"
+  | "unitDiscountSnapshot"
+  | "priceAdjustmentSnapshot"
 >;
 
 export type CreateSaleItemBundleComponentAddOnREPO = Pick<
-    SaleItemBundleComponentAddOnDTO,
-    | "id"
-    | "organizationId"
-    | "storeId"
-    | "saleId"
-    | "saleItemId"
-    | "saleItemBundleComponentId"
-    | "addOnId"
-    | "quantityPerComponent"
-    | "totalQuantity"
-    | "addOnNameSnapshot"
-    | "unitPriceSnapshot"
-    | "unitDiscountSnapshot"
+  SaleItemBundleComponentAddOnDTO,
+  | "id"
+  | "organizationId"
+  | "storeId"
+  | "saleId"
+  | "saleItemId"
+  | "saleItemBundleComponentId"
+  | "addOnId"
+  | "quantityPerComponent"
+  | "totalQuantity"
+  | "addOnNameSnapshot"
+  | "unitPriceSnapshot"
+  | "unitDiscountSnapshot"
 >;
 
 export type CreatePaymentREPO = Pick<
-    PaymentDTO,
-    "id" | "organizationId" | "storeId" | "saleId" | "amount" | "method"
+  PaymentDTO,
+  "id" | "organizationId" | "storeId" | "saleId" | "amount" | "method"
 > & {
-    collectedBy?: string | null;
-    referenceNumber?: string | null;
-    notes?: string | null;
-    collectedAt?: string | Date;
+  collectedBy?: string | null;
+  referenceNumber?: string | null;
+  notes?: string | null;
+  collectedAt?: string | Date;
 };
 
 export type CreateCustomerLedgerEntryREPO = Pick<
-    CustomerLedgerEntryDTO,
-    "id" | "organizationId" | "customerId" | "entryType" | "amount" | "balanceAfter"
+  CustomerLedgerEntryDTO,
+  | "id"
+  | "organizationId"
+  | "customerId"
+  | "entryType"
+  | "amount"
+  | "balanceAfter"
 > & {
-    saleId?: string | null;
-    paymentId?: string | null;
-    notes?: string | null;
+  saleId?: string | null;
+  paymentId?: string | null;
+  notes?: string | null;
 };
 
 export type CustomersListResponse = {
-    customers: CustomerDTO[];
-    pageInfo: CustomerListPageInfo;
+  customers: CustomerDTO[];
+  pageInfo: CustomerListPageInfo;
 };
 
 export type CustomerResponse = {
-    customer: CustomerDTO;
+  customer: CustomerDTO;
 };
 
 export type CustomerLedgerResponse = {
-    customer: CustomerDTO;
-    ledger: CustomerLedgerEntryDTO[];
+  customer: CustomerDTO;
+  ledger: CustomerLedgerEntryDTO[];
 };
 
 export type SalesListResponse = {
-    sales: SaleSummaryDTO[];
-    summary: SalesListSummary | null;
-    pageInfo: SalesListPageInfo;
+  sales: SaleSummaryDTO[];
+  summary: SalesListSummary | null;
+  pageInfo: SalesListPageInfo;
 };
 
 export type SaleResponse = {
-    sale: SaleDetailDTO;
+  sale: SaleDetailDTO;
 };
 
 export type PaymentResponse = {
-    payment: PaymentDTO;
-    sale: SaleDetailDTO;
+  payment: PaymentDTO;
+  sale: SaleDetailDTO;
 };
 
 export type AddOnSalesRollupsListResponse = {
-    rollups: AddOnSalesRollupsResponse;
+  rollups: AddOnSalesRollupsResponse;
 };
 
 export type BundleSalesRollupsListResponse = {
-    rollups: BundleSalesRollupsResponse;
+  rollups: BundleSalesRollupsResponse;
 };
 
 export type ProductSalesSummaryListResponse = {
-    summary: ProductSalesSummaryResponse;
+  summary: ProductSalesSummaryResponse;
 };

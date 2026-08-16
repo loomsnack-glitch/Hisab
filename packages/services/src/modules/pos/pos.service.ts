@@ -40,6 +40,7 @@ import type {
   WhatsAppSendConversationTextJSON,
   WhatsAppAttachConversationCustomerJSON,
   ServiceTableResponse,
+  ServiceTableSaleResponse,
   ServiceTablesListResponse,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
@@ -104,6 +105,39 @@ export const freePosServiceTable = async (
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
   try {
     const response = await api.post(`/pos/tables/${tableId}/free`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const startPosServiceTableOrder = async (
+  tableId: string,
+): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  try {
+    const response = await api.post(`/pos/tables/${tableId}/order`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosServiceTableOrder = async (
+  tableId: string,
+): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  try {
+    const response = await api.get(`/pos/tables/${tableId}/order`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const cancelPosServiceTableOrder = async (
+  tableId: string,
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  try {
+    const response = await api.delete(`/pos/tables/${tableId}/order`);
     return response.data;
   } catch (error) {
     return handleApiError(error);
@@ -358,7 +392,9 @@ export const retryPosWhatsAppInvoice = async (
   }
 };
 
-export const getPosWhatsAppConversations = async (): Promise<ServiceResponse<WhatsAppConversationListResponse | null>> => {
+export const getPosWhatsAppConversations = async (): Promise<
+  ServiceResponse<WhatsAppConversationListResponse | null>
+> => {
   try {
     const response = await api.get("/pos/whatsapp/conversations");
     return response.data;
@@ -367,7 +403,9 @@ export const getPosWhatsAppConversations = async (): Promise<ServiceResponse<Wha
   }
 };
 
-export const getPosWhatsAppAccount = async (): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+export const getPosWhatsAppAccount = async (): Promise<
+  ServiceResponse<WhatsAppAccountStatusResponseDTO | null>
+> => {
   try {
     const response = await api.get("/pos/whatsapp/account");
     return response.data;
@@ -376,7 +414,9 @@ export const getPosWhatsAppAccount = async (): Promise<ServiceResponse<WhatsAppA
   }
 };
 
-export const connectPosWhatsAppAccount = async (): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+export const connectPosWhatsAppAccount = async (): Promise<
+  ServiceResponse<WhatsAppAccountStatusResponseDTO | null>
+> => {
   try {
     const response = await api.post("/pos/whatsapp/account/connect");
     return response.data;
@@ -385,7 +425,9 @@ export const connectPosWhatsAppAccount = async (): Promise<ServiceResponse<Whats
   }
 };
 
-export const syncPosWhatsAppAccount = async (): Promise<ServiceResponse<unknown>> => {
+export const syncPosWhatsAppAccount = async (): Promise<
+  ServiceResponse<unknown>
+> => {
   try {
     const response = await api.post("/pos/whatsapp/sync");
     return response.data;
@@ -398,7 +440,9 @@ export const getPosWhatsAppConversation = async (
   conversationId: string,
 ): Promise<ServiceResponse<WhatsAppConversationMessagesResponse | null>> => {
   try {
-    const response = await api.get(`/pos/whatsapp/conversations/${conversationId}`);
+    const response = await api.get(
+      `/pos/whatsapp/conversations/${conversationId}`,
+    );
     return response.data;
   } catch (error) {
     return handleApiError(error);
@@ -410,7 +454,10 @@ export const sendPosWhatsAppConversationText = async (
   data: WhatsAppSendConversationTextJSON,
 ): Promise<ServiceResponse<WhatsAppMessageDTO | null>> => {
   try {
-    const response = await api.post(`/pos/whatsapp/conversations/${conversationId}/messages`, data);
+    const response = await api.post(
+      `/pos/whatsapp/conversations/${conversationId}/messages`,
+      data,
+    );
     return response.data;
   } catch (error) {
     return handleApiError(error);
@@ -422,7 +469,10 @@ export const attachPosWhatsAppConversationCustomer = async (
   data: WhatsAppAttachConversationCustomerJSON,
 ): Promise<ServiceResponse<WhatsAppConversationDTO | null>> => {
   try {
-    const response = await api.post(`/pos/whatsapp/conversations/${conversationId}/customer`, data);
+    const response = await api.post(
+      `/pos/whatsapp/conversations/${conversationId}/customer`,
+      data,
+    );
     return response.data;
   } catch (error) {
     return handleApiError(error);
@@ -434,7 +484,9 @@ export const getPosWhatsAppAttachment = async (
   messageId: string,
 ): Promise<ServiceResponse<WhatsAppAttachmentResponse | null>> => {
   try {
-    const response = await api.get(`/pos/whatsapp/conversations/${conversationId}/messages/${messageId}/attachment`);
+    const response = await api.get(
+      `/pos/whatsapp/conversations/${conversationId}/messages/${messageId}/attachment`,
+    );
     return response.data;
   } catch (error) {
     return handleApiError(error);

@@ -55,7 +55,10 @@ router.use("*", deviceAuthMiddleware);
 
 router.get("/tables", async (c) => {
   try {
-    return handleServiceResponse(c, await tableService.getServiceTablesForDevice(c.get("authDevice")));
+    return handleServiceResponse(
+      c,
+      await tableService.getServiceTablesForDevice(c.get("authDevice")),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "getServiceTablesForDevice", c, error);
   }
@@ -68,7 +71,10 @@ router.post("/tables/:tableId/allocate", async (c) => {
     if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
     return handleServiceResponse(
       c,
-      await tableService.allocateServiceTableForDevice(c.get("authDevice"), tableId),
+      await tableService.allocateServiceTableForDevice(
+        c.get("authDevice"),
+        tableId,
+      ),
     );
   } catch (error) {
     return handleError(FILE_NAME, "allocateServiceTableForDevice", c, error);
@@ -82,10 +88,69 @@ router.post("/tables/:tableId/free", async (c) => {
     if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
     return handleServiceResponse(
       c,
-      await tableService.freeAllocatedServiceTableForDevice(c.get("authDevice"), tableId),
+      await tableService.freeAllocatedServiceTableForDevice(
+        c.get("authDevice"),
+        tableId,
+      ),
     );
   } catch (error) {
-    return handleError(FILE_NAME, "freeAllocatedServiceTableForDevice", c, error);
+    return handleError(
+      FILE_NAME,
+      "freeAllocatedServiceTableForDevice",
+      c,
+      error,
+    );
+  }
+});
+
+router.post("/tables/:tableId/order", async (c) => {
+  try {
+    const tableId = c.req.param("tableId");
+    const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+    if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+    return handleServiceResponse(
+      c,
+      await tableService.startServiceTableOrderForDevice(
+        c.get("authDevice"),
+        tableId,
+      ),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "startServiceTableOrderForDevice", c, error);
+  }
+});
+
+router.get("/tables/:tableId/order", async (c) => {
+  try {
+    const tableId = c.req.param("tableId");
+    const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+    if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+    return handleServiceResponse(
+      c,
+      await tableService.getServiceTableOrderForDevice(
+        c.get("authDevice"),
+        tableId,
+      ),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "getServiceTableOrderForDevice", c, error);
+  }
+});
+
+router.delete("/tables/:tableId/order", async (c) => {
+  try {
+    const tableId = c.req.param("tableId");
+    const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+    if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+    return handleServiceResponse(
+      c,
+      await tableService.cancelServiceTableOrderForDevice(
+        c.get("authDevice"),
+        tableId,
+      ),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "cancelServiceTableOrderForDevice", c, error);
   }
 });
 
@@ -289,13 +354,19 @@ router.get(
   validateSchema("query", ProductSalesSummaryQuerySchema),
   async (c) => {
     try {
-      const serviceResponse = await billingService.getProductSalesSummaryForDevice(
-        c.get("authDevice"),
-        c.req.valid("query"),
-      );
+      const serviceResponse =
+        await billingService.getProductSalesSummaryForDevice(
+          c.get("authDevice"),
+          c.req.valid("query"),
+        );
       return handleServiceResponse(c, serviceResponse);
     } catch (error) {
-      return handleError(FILE_NAME, "getProductSalesSummaryForDevice", c, error);
+      return handleError(
+        FILE_NAME,
+        "getProductSalesSummaryForDevice",
+        c,
+        error,
+      );
     }
   },
 );
@@ -307,7 +378,10 @@ router.get("/sales/:saleId/whatsapp", async (c) => {
     if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
     return handleServiceResponse(
       c,
-      await whatsappService.getInvoiceStatusForDevice(c.get("authDevice"), saleId),
+      await whatsappService.getInvoiceStatusForDevice(
+        c.get("authDevice"),
+        saleId,
+      ),
     );
   } catch (error) {
     return handleError(FILE_NAME, "getInvoiceStatusForDevice", c, error);
@@ -344,7 +418,10 @@ router.post("/sales/:saleId/whatsapp/retry", async (c) => {
 
 router.get("/whatsapp/conversations", async (c) => {
   try {
-    return handleServiceResponse(c, await whatsappService.listConversationsForDevice(c.get("authDevice")));
+    return handleServiceResponse(
+      c,
+      await whatsappService.listConversationsForDevice(c.get("authDevice")),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "listConversationsForDevice", c, error);
   }
@@ -352,7 +429,10 @@ router.get("/whatsapp/conversations", async (c) => {
 
 router.get("/whatsapp/account", async (c) => {
   try {
-    return handleServiceResponse(c, await whatsappService.getAccountForDevice(c.get("authDevice")));
+    return handleServiceResponse(
+      c,
+      await whatsappService.getAccountForDevice(c.get("authDevice")),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "getAccountForDevice", c, error);
   }
@@ -360,7 +440,10 @@ router.get("/whatsapp/account", async (c) => {
 
 router.post("/whatsapp/account/connect", async (c) => {
   try {
-    return handleServiceResponse(c, await whatsappService.connectAccountForDevice(c.get("authDevice")));
+    return handleServiceResponse(
+      c,
+      await whatsappService.connectAccountForDevice(c.get("authDevice")),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "connectAccountForDevice", c, error);
   }
@@ -368,7 +451,10 @@ router.post("/whatsapp/account/connect", async (c) => {
 
 router.post("/whatsapp/sync", async (c) => {
   try {
-    return handleServiceResponse(c, await whatsappService.syncAccountForDevice(c.get("authDevice")));
+    return handleServiceResponse(
+      c,
+      await whatsappService.syncAccountForDevice(c.get("authDevice")),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "syncAccountForDevice", c, error);
   }
@@ -377,9 +463,18 @@ router.post("/whatsapp/sync", async (c) => {
 router.get("/whatsapp/conversations/:conversationId", async (c) => {
   try {
     const conversationId = c.req.param("conversationId");
-    const invalid = validateUuidParam(conversationId, "Invalid conversation id");
+    const invalid = validateUuidParam(
+      conversationId,
+      "Invalid conversation id",
+    );
     if (invalid) return c.json(invalid, invalid.code);
-    return handleServiceResponse(c, await whatsappService.getConversationForDevice(c.get("authDevice"), conversationId));
+    return handleServiceResponse(
+      c,
+      await whatsappService.getConversationForDevice(
+        c.get("authDevice"),
+        conversationId,
+      ),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "getConversationForDevice", c, error);
   }
@@ -391,9 +486,19 @@ router.post(
   async (c) => {
     try {
       const conversationId = c.req.param("conversationId");
-      const invalid = validateUuidParam(conversationId, "Invalid conversation id");
+      const invalid = validateUuidParam(
+        conversationId,
+        "Invalid conversation id",
+      );
       if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(c, await whatsappService.sendTextForDevice(c.get("authDevice"), conversationId, c.req.valid("json")));
+      return handleServiceResponse(
+        c,
+        await whatsappService.sendTextForDevice(
+          c.get("authDevice"),
+          conversationId,
+          c.req.valid("json"),
+        ),
+      );
     } catch (error) {
       return handleError(FILE_NAME, "sendTextForDevice", c, error);
     }
@@ -406,26 +511,48 @@ router.post(
   async (c) => {
     try {
       const conversationId = c.req.param("conversationId");
-      const invalid = validateUuidParam(conversationId, "Invalid conversation id");
+      const invalid = validateUuidParam(
+        conversationId,
+        "Invalid conversation id",
+      );
       if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(c, await whatsappService.attachCustomerForDevice(c.get("authDevice"), conversationId, c.req.valid("json")));
+      return handleServiceResponse(
+        c,
+        await whatsappService.attachCustomerForDevice(
+          c.get("authDevice"),
+          conversationId,
+          c.req.valid("json"),
+        ),
+      );
     } catch (error) {
       return handleError(FILE_NAME, "attachCustomerForDevice", c, error);
     }
   },
 );
 
-router.get("/whatsapp/conversations/:conversationId/messages/:messageId/attachment", async (c) => {
-  try {
-    const conversationId = c.req.param("conversationId");
-    const messageId = c.req.param("messageId");
-    const invalid = validateUuidParam(conversationId, "Invalid conversation id") ?? validateUuidParam(messageId, "Invalid message id");
-    if (invalid) return c.json(invalid, invalid.code);
-    return handleServiceResponse(c, await whatsappService.getAttachmentForDevice(c.get("authDevice"), conversationId, messageId));
-  } catch (error) {
-    return handleError(FILE_NAME, "getAttachmentForDevice", c, error);
-  }
-});
+router.get(
+  "/whatsapp/conversations/:conversationId/messages/:messageId/attachment",
+  async (c) => {
+    try {
+      const conversationId = c.req.param("conversationId");
+      const messageId = c.req.param("messageId");
+      const invalid =
+        validateUuidParam(conversationId, "Invalid conversation id") ??
+        validateUuidParam(messageId, "Invalid message id");
+      if (invalid) return c.json(invalid, invalid.code);
+      return handleServiceResponse(
+        c,
+        await whatsappService.getAttachmentForDevice(
+          c.get("authDevice"),
+          conversationId,
+          messageId,
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "getAttachmentForDevice", c, error);
+    }
+  },
+);
 
 router.get(
   "/purchases",

@@ -4,6 +4,7 @@ import type {
   ServiceTableDTOSchema,
   UpdateServiceTableSchema,
 } from "./table-service.schema";
+import type { SaleDetailDTO } from "../billing";
 
 export type ServiceTableDTO = z.infer<typeof ServiceTableDTOSchema>;
 export type ServiceTableState = ServiceTableDTO["state"];
@@ -16,10 +17,19 @@ export type UpdateServiceTableSVC = UpdateServiceTableJSON;
 
 export type CreateServiceTableREPO = Pick<
   ServiceTableDTO,
-  "id" | "organizationId" | "storeId" | "tableLabel" | "capacity" | "position" | "createdBy"
+  | "id"
+  | "organizationId"
+  | "storeId"
+  | "tableLabel"
+  | "capacity"
+  | "position"
+  | "createdBy"
 >;
 
-export type UpdateServiceTableREPO = Pick<ServiceTableDTO, "id" | "organizationId" | "storeId"> & {
+export type UpdateServiceTableREPO = Pick<
+  ServiceTableDTO,
+  "id" | "organizationId" | "storeId"
+> & {
   tableLabel?: string;
   capacity?: number | null;
   position?: ServiceTablePosition;
@@ -32,4 +42,9 @@ export type ServiceTablesListResponse = {
 
 export type ServiceTableResponse = {
   table: ServiceTableDTO;
+};
+
+export type ServiceTableSaleResponse = {
+  table: ServiceTableDTO;
+  sale: SaleDetailDTO;
 };

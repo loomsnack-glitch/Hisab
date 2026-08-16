@@ -19,6 +19,7 @@ const table: ServiceTableDTO = {
   position: { x: 0.05, y: 0.05 },
   state: "free",
   currentSaleId: null,
+  currentSaleTotal: null,
   createdBy: userId,
   updatedBy: null,
   createdAt: now,
@@ -36,40 +37,109 @@ const deviceSession: DeviceSessionDTO = {
     lastSeenAt: null,
   },
   store: { id: storeId, organizationId, name: "Main Store", address: null },
-  organization: { id: organizationId, name: "Demo Org", username: "demo", tagline: null },
+  organization: {
+    id: organizationId,
+    name: "Demo Org",
+    username: "demo",
+    tagline: null,
+  },
 };
 
 const getOrganizationByIdForUser = mock(async () => organization);
-const getStoreById = mock(async (_organizationId: string, requestedStoreId: string) =>
-  requestedStoreId === storeId ? store : null,
+const getStoreById = mock(
+  async (_organizationId: string, requestedStoreId: string) =>
+    requestedStoreId === storeId ? store : null,
 );
-const getServiceTables = mock(async (requestedOrganizationId?: string, requestedStoreId?: string) =>
-  requestedOrganizationId === organizationId && requestedStoreId === storeId ? [table] : []);
-const getServiceTableById = mock(async (): Promise<ServiceTableDTO | null> => table);
+const getServiceTables = mock(
+  async (requestedOrganizationId?: string, requestedStoreId?: string) =>
+    requestedOrganizationId === organizationId && requestedStoreId === storeId
+      ? [table]
+      : [],
+);
+const getServiceTableById = mock(
+  async (): Promise<ServiceTableDTO | null> => table,
+);
 const serviceTableLabelExists = mock(async () => false);
-const createServiceTableRepo = mock(async (data: {
-  id: string;
-  organizationId: string;
-  storeId: string;
-  tableLabel: string;
-  capacity: number | null;
-  position: { x: number; y: number };
-  createdBy: string;
-}) => ({ ...table, ...data }));
-const updateServiceTableRepo = mock(async (data: { position?: { x: number; y: number } }) => ({
-  ...table,
-  position: data.position ?? table.position,
-  updatedBy: userId,
+const createServiceTableRepo = mock(
+  async (data: {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    tableLabel: string;
+    capacity: number | null;
+    position: { x: number; y: number };
+    createdBy: string;
+  }) => ({ ...table, ...data }),
+);
+const updateServiceTableRepo = mock(
+  async (data: { position?: { x: number; y: number } }) => ({
+    ...table,
+    position: data.position ?? table.position,
+    updatedBy: userId,
+  }),
+);
+const transitionServiceTableState = mock(
+  async (
+    _organizationId: string,
+    _storeId: string,
+    _tableId: string,
+    _fromState: ServiceTableDTO["state"],
+    toState: ServiceTableDTO["state"],
+  ): Promise<ServiceTableDTO | null> =>
+    _organizationId === organizationId && _storeId === storeId
+      ? { ...table, state: toState }
+      : null,
+);
+const lockServiceTableForDevice = mock(async () => allocatedTable);
+const attachDraftSale = mock(
+  async (
+    _organizationId: string,
+    _storeId: string,
+    _tableId: string,
+    saleId: string,
+  ) => ({
+    ...allocatedTable,
+    state: "engaged" as const,
+    currentSaleId: saleId,
+    currentSaleTotal: 0,
+  }),
+);
+const clearDraftSale = mock(async () => ({
+  ...allocatedTable,
+  state: "free" as const,
+  currentSaleId: null,
+  currentSaleTotal: null,
 }));
-const transitionServiceTableState = mock(async (
-  _organizationId: string,
-  _storeId: string,
-  _tableId: string,
-  _fromState: ServiceTableDTO["state"],
-  toState: ServiceTableDTO["state"],
-) : Promise<ServiceTableDTO | null> =>
-  _organizationId === organizationId && _storeId === storeId ? { ...table, state: toState } : null);
-const begin = mock(async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback({}));
+const createSale = mock(async (data: Record<string, unknown>) => ({
+  ...data,
+  paidTotal: 0,
+  dueTotal: 0,
+  itemCount: 0,
+  itemsSummary: null,
+  paymentMethods: null,
+  customer: null,
+  createdByDevice: null,
+  updatedByDevice: null,
+  createdAt: now,
+  updatedAt: now,
+}));
+const getSaleById = mock(async () => ({
+  id: "sale-id",
+  status: "draft",
+  serviceTableId: tableId,
+  grandTotal: 0,
+}));
+const lockDraftSale = mock(async () => true);
+const deleteDraftSale = mock(async () => true);
+const getSaleDetailsForDevice = mock(async () => ({
+  status: "success" as const,
+  data: { sale: { id: "sale-id", status: "draft", serviceTableId: tableId } },
+  message: "loaded",
+  code: 200,
+}));
+const begin = mock(
+  async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback({}),
+);
 
 mock.module("@/config/db", () => ({ pg: { begin } }));
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
@@ -83,6 +153,18 @@ mock.module("./table-service.repository", () => ({
   createServiceTable: createServiceTableRepo,
   updateServiceTable: updateServiceTableRepo,
   transitionServiceTableState,
+  lockServiceTableForDevice,
+  attachDraftSale,
+  clearDraftSale,
+}));
+mock.module("@/modules/tenant/billing/billing.repository", () => ({
+  createSale,
+  lockDraftSale,
+  getSaleById,
+  deleteDraftSale,
+}));
+mock.module("@/modules/tenant/billing/billing.service", () => ({
+  getSaleDetailsForDevice,
 }));
 
 const tableService = await import("./table-service.service");
@@ -92,8 +174,9 @@ describe("Service Table application service", () => {
     getOrganizationByIdForUser.mockClear();
     getOrganizationByIdForUser.mockResolvedValue(organization);
     getStoreById.mockClear();
-    getStoreById.mockImplementation(async (_organizationId, requestedStoreId) =>
-      requestedStoreId === storeId ? store : null,
+    getStoreById.mockImplementation(
+      async (_organizationId, requestedStoreId) =>
+        requestedStoreId === storeId ? store : null,
     );
     getServiceTables.mockClear();
     getServiceTableById.mockClear();
@@ -102,43 +185,75 @@ describe("Service Table application service", () => {
     createServiceTableRepo.mockClear();
     updateServiceTableRepo.mockClear();
     transitionServiceTableState.mockClear();
+    lockServiceTableForDevice.mockClear();
+    lockServiceTableForDevice.mockResolvedValue(allocatedTable);
+    attachDraftSale.mockClear();
+    clearDraftSale.mockClear();
+    createSale.mockClear();
+    getSaleById.mockClear();
+    lockDraftSale.mockClear();
+    deleteDraftSale.mockClear();
+    getSaleDetailsForDevice.mockClear();
     begin.mockClear();
   });
 
   test("creates a trimmed table with Store scope and a blank capacity", async () => {
-    const response = await tableService.createServiceTable(userId, organizationId, storeId, {
-      tableLabel: "  Patio-2  ",
-      capacity: null,
-    });
-
-    expect(response.status).toBe("success");
-    expect(createServiceTableRepo).toHaveBeenCalledWith(expect.objectContaining({
+    const response = await tableService.createServiceTable(
+      userId,
       organizationId,
       storeId,
-      tableLabel: "Patio-2",
-      capacity: null,
-      position: { x: 0.05, y: 0.05 },
-      createdBy: userId,
-    }), expect.anything());
+      {
+        tableLabel: "  Patio-2  ",
+        capacity: null,
+      },
+    );
+
+    expect(response.status).toBe("success");
+    expect(createServiceTableRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId,
+        storeId,
+        tableLabel: "Patio-2",
+        capacity: null,
+        position: { x: 0.05, y: 0.05 },
+        createdBy: userId,
+      }),
+      expect.anything(),
+    );
   });
 
   test("rejects a duplicate label case-insensitively before writing", async () => {
     serviceTableLabelExists.mockResolvedValue(true);
 
-    const response = await tableService.createServiceTable(userId, organizationId, storeId, {
-      tableLabel: " a1 ",
-      capacity: 4,
-    });
+    const response = await tableService.createServiceTable(
+      userId,
+      organizationId,
+      storeId,
+      {
+        tableLabel: " a1 ",
+        capacity: 4,
+      },
+    );
 
     expect(response).toMatchObject({ status: "error", code: 409 });
     expect(createServiceTableRepo).not.toHaveBeenCalled();
   });
 
   test("cannot read or mutate a Store outside the Organization scope", async () => {
-    const listResponse = await tableService.getServiceTables(userId, organizationId, otherStoreId);
-    const updateResponse = await tableService.updateServiceTable(userId, organizationId, otherStoreId, tableId, {
-      position: { x: 0.8, y: 0.8 },
-    });
+    const listResponse = await tableService.getServiceTables(
+      userId,
+      organizationId,
+      otherStoreId,
+    );
+    const updateResponse = await tableService.updateServiceTable(
+      userId,
+      organizationId,
+      otherStoreId,
+      tableId,
+      {
+        position: { x: 0.8, y: 0.8 },
+      },
+    );
 
     expect(listResponse).toMatchObject({ status: "error", code: 404 });
     expect(updateResponse).toMatchObject({ status: "error", code: 404 });
@@ -147,41 +262,71 @@ describe("Service Table application service", () => {
   });
 
   test("updates only the normalized floor position through the Store-scoped table", async () => {
-    const response = await tableService.updateServiceTable(userId, organizationId, storeId, tableId, {
-      position: { x: 0.74, y: 0.31 },
-    });
-
-    expect(response.status).toBe("success");
-    expect(updateServiceTableRepo).toHaveBeenCalledWith(expect.objectContaining({
-      id: tableId,
+    const response = await tableService.updateServiceTable(
+      userId,
       organizationId,
       storeId,
-      position: { x: 0.74, y: 0.31 },
-      updatedBy: userId,
-    }));
+      tableId,
+      {
+        position: { x: 0.74, y: 0.31 },
+      },
+    );
+
+    expect(response.status).toBe("success");
+    expect(updateServiceTableRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: tableId,
+        organizationId,
+        storeId,
+        position: { x: 0.74, y: 0.31 },
+        updatedBy: userId,
+      }),
+    );
   });
 
   test("lists only the authenticated device Store and allocates without creating a Sale", async () => {
-    const listResponse = await tableService.getServiceTablesForDevice(deviceSession);
-    const allocateResponse = await tableService.allocateServiceTableForDevice(deviceSession, tableId);
+    const listResponse =
+      await tableService.getServiceTablesForDevice(deviceSession);
+    const allocateResponse = await tableService.allocateServiceTableForDevice(
+      deviceSession,
+      tableId,
+    );
 
-    expect(listResponse).toMatchObject({ status: "success", data: { tables: [table] } });
-    expect(allocateResponse).toMatchObject({ status: "success", data: { table: { state: "allocated", currentSaleId: null } } });
+    expect(listResponse).toMatchObject({
+      status: "success",
+      data: { tables: [table] },
+    });
+    expect(allocateResponse).toMatchObject({
+      status: "success",
+      data: { table: { state: "allocated", currentSaleId: null } },
+    });
   });
 
   test("frees an allocated table without retaining a financial record", async () => {
-    transitionServiceTableState.mockResolvedValueOnce({ ...allocatedTable, state: "free" });
+    transitionServiceTableState.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "free",
+    });
 
-    const response = await tableService.freeAllocatedServiceTableForDevice(deviceSession, tableId);
+    const response = await tableService.freeAllocatedServiceTableForDevice(
+      deviceSession,
+      tableId,
+    );
 
-    expect(response).toMatchObject({ status: "success", data: { table: { state: "free", currentSaleId: null } } });
+    expect(response).toMatchObject({
+      status: "success",
+      data: { table: { state: "free", currentSaleId: null } },
+    });
   });
 
   test("rejects an operation when the table state changed before the atomic transition", async () => {
     transitionServiceTableState.mockResolvedValueOnce(null);
     getServiceTableById.mockResolvedValueOnce(table);
 
-    const response = await tableService.allocateServiceTableForDevice(deviceSession, tableId);
+    const response = await tableService.allocateServiceTableForDevice(
+      deviceSession,
+      tableId,
+    );
 
     expect(response).toMatchObject({ status: "error", code: 409 });
   });
@@ -190,8 +335,175 @@ describe("Service Table application service", () => {
     transitionServiceTableState.mockResolvedValueOnce(null);
     getServiceTableById.mockResolvedValueOnce(null);
 
-    const response = await tableService.allocateServiceTableForDevice(deviceSession, tableId);
+    const response = await tableService.allocateServiceTableForDevice(
+      deviceSession,
+      tableId,
+    );
 
     expect(response).toMatchObject({ status: "error", code: 404 });
+  });
+
+  test("starts one empty Draft Sale atomically from an Allocated table", async () => {
+    const response = await tableService.startServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: {
+        table: { state: "engaged", currentSaleId: expect.any(String) },
+        sale: { id: "sale-id", status: "draft" },
+      },
+    });
+    expect(createSale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serviceTableId: tableId,
+        status: "draft",
+        grandTotal: 0,
+      }),
+      expect.anything(),
+    );
+    expect(attachDraftSale).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      tableId,
+      expect.any(String),
+      deviceSession.device.id,
+      expect.anything(),
+    );
+  });
+
+  test("rejects a competing start when the table already has an active order", async () => {
+    lockServiceTableForDevice.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "existing-sale",
+    });
+
+    const response = await tableService.startServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({ status: "error", code: 409 });
+    expect(createSale).not.toHaveBeenCalled();
+  });
+
+  test("allows a same-Store device to resume the current Draft Sale", async () => {
+    getServiceTableById.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentSaleTotal: 42,
+    });
+
+    const response = await tableService.getServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: {
+        table: {
+          state: "engaged",
+          currentSaleId: "sale-id",
+          currentSaleTotal: 42,
+        },
+        sale: { id: "sale-id" },
+      },
+    });
+    expect(getSaleDetailsForDevice).toHaveBeenCalledWith(
+      deviceSession,
+      "sale-id",
+    );
+  });
+
+  test("lets concurrent start attempts produce only one active table draft", async () => {
+    let lockAttempts = 0;
+    lockServiceTableForDevice.mockImplementation(async () => {
+      lockAttempts += 1;
+      return lockAttempts === 1
+        ? allocatedTable
+        : {
+            ...allocatedTable,
+            state: "engaged",
+            currentSaleId: "sale-id",
+            currentSaleTotal: 0,
+          };
+    });
+
+    const responses = await Promise.all([
+      tableService.startServiceTableOrderForDevice(deviceSession, tableId),
+      tableService.startServiceTableOrderForDevice(deviceSession, tableId),
+    ]);
+
+    expect(
+      responses.filter((response) => response.status === "success"),
+    ).toHaveLength(1);
+    expect(
+      responses.filter(
+        (response) => response.status === "error" && response.code === 409,
+      ),
+    ).toHaveLength(1);
+    expect(createSale).toHaveBeenCalledTimes(1);
+  });
+
+  test("cancels only the current Draft Sale and frees the table in one transaction", async () => {
+    lockServiceTableForDevice.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentSaleTotal: 0,
+    });
+    const response = await tableService.cancelServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: { table: { state: "free", currentSaleId: null } },
+    });
+    expect(clearDraftSale).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      tableId,
+      expect.any(String),
+      deviceSession.device.id,
+      expect.anything(),
+    );
+    expect(deleteDraftSale).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      "sale-id",
+      expect.anything(),
+    );
+  });
+
+  test("does not cancel a committed Sale through the table action", async () => {
+    lockServiceTableForDevice.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentSaleTotal: 0,
+    });
+    getSaleById.mockResolvedValueOnce({
+      id: "sale-id",
+      status: "completed",
+      serviceTableId: tableId,
+      grandTotal: 10,
+    });
+    lockDraftSale.mockResolvedValueOnce(false);
+
+    const response = await tableService.cancelServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({ status: "error", code: 409 });
+    expect(clearDraftSale).not.toHaveBeenCalled();
+    expect(deleteDraftSale).not.toHaveBeenCalled();
   });
 });
