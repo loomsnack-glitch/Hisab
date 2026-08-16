@@ -163,14 +163,27 @@ const pendingOutboxLimit = (): number => {
     return Number.isInteger(value) && value > 0 ? value : 1_000;
 };
 
+const parseAssignedStoreIds = (value: unknown, defaultStoreId: string | null): string[] => {
+    if (Array.isArray(value)) return value.map(String).filter(Boolean);
+    if (typeof value === "string" && value.startsWith("{") && value.endsWith("}")) {
+        return value
+            .slice(1, -1)
+            .split(",")
+            .map(item => item.trim().replace(/^"|"$/g, ""))
+            .filter(Boolean);
+    }
+    return defaultStoreId ? [defaultStoreId] : [];
+};
+
+const parseProviderEventPayload = (value: unknown): WhatsAppWorkerMessageEventJSON => {
+    if (typeof value === "string") return JSON.parse(value) as WhatsAppWorkerMessageEventJSON;
+    return value as WhatsAppWorkerMessageEventJSON;
+};
+
 const mapAccount = (row: AccountRow): WhatsAppAccountDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     const defaultStoreId = (mapped.defaultStoreId as string | null | undefined) ?? null;
-    const assignedStoreIds = Array.isArray(mapped.assignedStoreIds)
-        ? mapped.assignedStoreIds.map(String)
-        : defaultStoreId
-          ? [defaultStoreId]
-          : [];
+    const assignedStoreIds = parseAssignedStoreIds(mapped.assignedStoreIds, defaultStoreId);
     return {
         id: String(mapped.id),
         organizationId: String(mapped.organizationId),
@@ -493,7 +506,7 @@ export const createInvoiceOutbox = async (params: InvoiceOutboxParams): Promise<
                 ${params.customerPhone},
                 ${params.customerName}
             )
-            ON CONFLICT (whatsapp_account_id, external_chat_id)
+            ON CONFLICT (whatsapp_account_id, store_id, external_chat_id)
             DO UPDATE SET
                 customer_id = EXCLUDED.customer_id,
                 contact_phone_number = EXCLUDED.contact_phone_number,
@@ -693,6 +706,67 @@ export const hasProviderMessage = async (accountId: string, providerMessageId: s
     return Boolean(row);
 };
 
+export type MessageEventStoreParams = Pick<
+    MessageEventParams,
+    | "whatsappAccountId"
+    | "externalChatId"
+    | "direction"
+    | "messageType"
+    | "body"
+    | "caption"
+    | "attachmentFileName"
+    | "occurredAt"
+>;
+
+export const resolveMessageEventStore = async (params: MessageEventStoreParams): Promise<string | null> => {
+    if (params.direction === "outbound") {
+        const [pendingOutbound] = await pg`
+            SELECT conversation.store_id
+            FROM whatsapp_messages message
+            INNER JOIN whatsapp_conversations conversation ON conversation.id = message.conversation_id
+            INNER JOIN whatsapp_account_stores assignment
+                ON assignment.whatsapp_account_id = conversation.whatsapp_account_id
+               AND assignment.store_id = conversation.store_id
+            WHERE message.whatsapp_account_id = ${params.whatsappAccountId}
+              AND conversation.external_chat_id = ${params.externalChatId}
+              AND message.direction = 'outbound'
+              AND message.provider_message_id IS NULL
+              AND message.status IN ('queued', 'sending')
+              AND message.message_type = ${params.messageType}
+              AND message.body IS NOT DISTINCT FROM ${params.body}
+              AND message.caption IS NOT DISTINCT FROM ${params.caption}
+              AND message.attachment_file_name IS NOT DISTINCT FROM ${params.attachmentFileName}
+              AND message.created_at BETWEEN ${params.occurredAt}::timestamptz - INTERVAL '5 minutes'
+                  AND ${params.occurredAt}::timestamptz + INTERVAL '5 minutes'
+            ORDER BY message.created_at DESC, conversation.store_id ASC
+            LIMIT 1
+        `;
+        if (pendingOutbound) return String(pendingOutbound.store_id);
+    }
+
+    const [conversation] = await pg`
+        SELECT conversation.store_id
+        FROM whatsapp_conversations conversation
+        INNER JOIN whatsapp_account_stores assignment
+            ON assignment.whatsapp_account_id = conversation.whatsapp_account_id
+           AND assignment.store_id = conversation.store_id
+        LEFT JOIN LATERAL (
+            SELECT MAX(message.created_at) AS latest_outbound_at
+            FROM whatsapp_messages message
+            WHERE message.conversation_id = conversation.id
+              AND message.direction = 'outbound'
+        ) latest_outbound ON TRUE
+        WHERE conversation.whatsapp_account_id = ${params.whatsappAccountId}
+          AND conversation.external_chat_id = ${params.externalChatId}
+        ORDER BY latest_outbound.latest_outbound_at DESC NULLS LAST,
+            conversation.last_message_at DESC NULLS LAST,
+            conversation.updated_at DESC,
+            conversation.store_id ASC
+        LIMIT 1
+    `;
+    return conversation ? String(conversation.store_id) : null;
+};
+
 export const markConversationRead = async (
     organizationId: string,
     storeId: string,
@@ -746,7 +820,7 @@ export const createMessageEvent = async (params: MessageEventParams): Promise<{ 
                 ${params.organizationId}, ${params.storeId}, ${params.whatsappAccountId}, ${params.customerId},
                 ${params.externalChatId}, ${params.contactPhoneNumber}, ${params.displayName}, ${params.occurredAt}::timestamptz
             )
-            ON CONFLICT (whatsapp_account_id, external_chat_id)
+            ON CONFLICT (whatsapp_account_id, store_id, external_chat_id)
             DO UPDATE SET
                 customer_id = COALESCE(whatsapp_conversations.customer_id, EXCLUDED.customer_id),
                 contact_phone_number = EXCLUDED.contact_phone_number,
@@ -755,10 +829,6 @@ export const createMessageEvent = async (params: MessageEventParams): Promise<{ 
             RETURNING id, store_id
         `;
         if (!conversation) throw new Error("Failed to create WhatsApp conversation");
-        // Existing chats stay owned by their original Store. New chats use the
-        // account default Store, which keeps inbound history store-scoped and
-        // avoids breaking the conversation/message composite foreign key.
-        const conversationStoreId = String(conversation.store_id);
 
         if (params.direction === "outbound") {
             const [existingOutbound] = await tx`
@@ -807,7 +877,7 @@ export const createMessageEvent = async (params: MessageEventParams): Promise<{ 
                 idempotency_key, created_at, sent_at, delivered_at
             )
             VALUES (
-                ${params.organizationId}, ${conversationStoreId}, ${params.whatsappAccountId}, ${conversation.id},
+                ${params.organizationId}, ${params.storeId}, ${params.whatsappAccountId}, ${conversation.id},
                 ${params.direction}, ${params.messageType}, ${params.body}, ${params.caption}, ${params.attachmentStorageKey},
                 ${params.attachmentFileName}, ${params.attachmentMimeType}, ${params.direction === "inbound" ? "delivered" : "sent"}, ${params.providerMessageId},
                 ${"provider:" + params.providerMessageId}, ${params.occurredAt}::timestamptz,
@@ -934,6 +1004,12 @@ export const claimNextInvoiceOutbox = async (
               AND o.status IN ('pending', 'retryable')
               AND o.next_attempt_at <= NOW()
               AND a.status = 'connected'
+              AND EXISTS (
+                  SELECT 1
+                  FROM whatsapp_account_stores assignment
+                  WHERE assignment.whatsapp_account_id = o.whatsapp_account_id
+                    AND assignment.store_id = o.store_id
+              )
               AND (((hashtext(a.id::text)::bigint % ${partition.count}) + ${partition.count}) % ${partition.count}) = ${partition.index}
               AND NOT EXISTS (
                   SELECT 1
@@ -1218,6 +1294,9 @@ export const getHistoryAnchorsForWorker = async (accountId: string): Promise<Wha
             FLOOR(EXTRACT(EPOCH FROM m.created_at))::bigint AS message_timestamp
         FROM whatsapp_messages m
         INNER JOIN whatsapp_conversations c ON c.id = m.conversation_id
+        INNER JOIN whatsapp_account_stores assignment
+            ON assignment.whatsapp_account_id = m.whatsapp_account_id
+           AND assignment.store_id = c.store_id
         WHERE m.whatsapp_account_id = ${accountId}
           AND m.provider_message_id IS NOT NULL
         ORDER BY m.conversation_id, m.created_at ASC, m.id ASC
@@ -1267,7 +1346,7 @@ export const claimProviderEvent = async (
                 id: String(insertedRow.id),
                 accountId: String(insertedRow.whatsapp_account_id),
                 providerEventId: String(insertedRow.provider_event_id),
-                payload: insertedRow.payload as WhatsAppWorkerMessageEventJSON,
+                payload: parseProviderEventPayload(insertedRow.payload),
             },
             completed: false,
         };
@@ -1292,7 +1371,7 @@ export const claimProviderEvent = async (
                 id: String(claimedRow.id),
                 accountId: String(claimedRow.whatsapp_account_id),
                 providerEventId: String(claimedRow.provider_event_id),
-                payload: claimedRow.payload as WhatsAppWorkerMessageEventJSON,
+                payload: parseProviderEventPayload(claimedRow.payload),
             },
             completed: false,
         };
@@ -1359,7 +1438,7 @@ export const claimPendingProviderEvents = async (limit = 50): Promise<ProviderEv
         id: String(row.id),
         accountId: String(row.whatsapp_account_id),
         providerEventId: String(row.provider_event_id),
-        payload: row.payload as WhatsAppWorkerMessageEventJSON,
+        payload: parseProviderEventPayload(row.payload),
     }));
 };
 
@@ -1455,6 +1534,43 @@ export const createAccount = async (
             WHERE id = ${accountId}
         `;
 
+        const account = await getAccountForTransaction(tx, accountId);
+        if (!account) throw new Error("Unable to load created WhatsApp account");
+        return account;
+    });
+};
+
+export const createOrganizationAccount = async (
+    organizationId: string,
+    phoneNumber: string,
+    userId: string,
+): Promise<WhatsAppAccountDTO> => {
+    return pg.begin(async tx => {
+        const accountId = randomUUID();
+        const [row] = await tx`
+            INSERT INTO whatsapp_accounts (
+                id,
+                organization_id,
+                provider,
+                phone_number,
+                phone_number_normalized,
+                session_reference,
+                created_by,
+                updated_by
+            )
+            VALUES (
+                ${accountId},
+                ${organizationId},
+                'baileys',
+                ${phoneNumber},
+                ${phoneNumber},
+                ${"whatsapp-auth/" + accountId},
+                ${userId},
+                ${userId}
+            )
+            RETURNING *
+        `;
+        if (!row) throw new Error("Unable to create WhatsApp account");
         const account = await getAccountForTransaction(tx, accountId);
         if (!account) throw new Error("Unable to load created WhatsApp account");
         return account;

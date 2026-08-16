@@ -149,7 +149,7 @@ const PosLayout = ({
     const whatsappConnectMutation = useMutation({
         mutationFn: connectPosWhatsAppAccount,
         onSuccess: response => {
-            if (response.status === "success" && response.data) {
+            if (response.data) {
                 queryClient.setQueryData(whatsappKeys.posAccount(), response);
             }
             void queryClient.invalidateQueries({ queryKey: whatsappKeys.posAccount() });

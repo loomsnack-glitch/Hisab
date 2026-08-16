@@ -248,12 +248,23 @@ const processMessageEvent = async (
 ): Promise<{ stored: boolean }> => {
     const account = await repository.getAccountById(accountId);
     if (!account) throw new Error("WhatsApp account not found");
-    const defaultStoreId = account.defaultStoreId;
-    if (!defaultStoreId) throw new Error("WhatsApp account is not assigned to a Store");
     if (data.externalChatId !== `${data.contactPhoneNumber.slice(1)}@s.whatsapp.net`) {
         throw new Error("Unsupported WhatsApp chat id");
     }
     if (await repository.hasProviderMessage(accountId, data.providerMessageId)) return { stored: false };
+
+    const routedStoreId = await repository.resolveMessageEventStore({
+        whatsappAccountId: account.id,
+        externalChatId: data.externalChatId,
+        direction: data.direction,
+        messageType: data.messageType,
+        body: data.body,
+        caption: data.caption,
+        attachmentFileName: data.attachmentFileName,
+        occurredAt: String(data.occurredAt),
+    });
+    const storeId = routedStoreId ?? account.defaultStoreId ?? account.assignedStoreIds[0] ?? null;
+    if (!storeId) throw new Error("WhatsApp account is not assigned to a Store");
 
     let attachmentStorageKey: string | null = null;
     const bucket = privateBucket();
@@ -261,7 +272,7 @@ const processMessageEvent = async (
         if (!bucket || !data.documentBase64) throw new Error("WhatsApp document storage is not configured");
         const document = Buffer.from(data.documentBase64, "base64");
         if (document.byteLength > MAX_MEDIA_BYTES) throw new Error("WhatsApp document is too large");
-        attachmentStorageKey = attachmentObjectKey(account.organizationId, defaultStoreId, account.id, data.providerMessageId);
+        attachmentStorageKey = attachmentObjectKey(account.organizationId, storeId, account.id, data.providerMessageId);
         await storage.uploadBuffer(bucket, attachmentStorageKey, document, data.attachmentMimeType ?? "application/octet-stream");
     }
 
@@ -269,7 +280,7 @@ const processMessageEvent = async (
         const customer = await repository.getCustomerByPhone(account.organizationId, data.contactPhoneNumber);
         const result = await repository.createMessageEvent({
             organizationId: account.organizationId,
-            storeId: defaultStoreId,
+            storeId,
             whatsappAccountId: account.id,
             customerId: customer?.id ?? null,
             externalChatId: data.externalChatId,

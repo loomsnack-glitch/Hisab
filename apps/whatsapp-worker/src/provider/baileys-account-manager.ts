@@ -345,7 +345,8 @@ export class BaileysAccountManager {
             account.status = "disconnected";
             account.qrImageDataUrl = null;
         }
-        await Promise.all(accounts.map(account => this.report(account)));
+        // A process shutdown is not a user disconnect. Keep the persisted status
+        // unchanged so the next worker boot can reconcile and restore the session.
     }
 
     public async sendText(accountId: string, phoneNumber: string, body: string): Promise<string> {

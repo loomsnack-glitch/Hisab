@@ -142,6 +142,146 @@ export const listAccounts = async (
     };
 };
 
+export const getOrganizationAccountStatus = async (
+    userId: string,
+    organizationId: string,
+    accountId: string,
+): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const scoped = await getOrganizationAccount(userId, organizationId, accountId);
+    if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    try {
+        const snapshot = await workerClient.getAccountStatus(scoped.account.id);
+        const response = await saveWorkerSnapshot(snapshot);
+        return response
+            ? { status: "success", message: "WhatsApp account status fetched successfully", data: response, code: STATUS_CODES.SUCCESS }
+            : workerUnavailable(scoped.account);
+    } catch {
+        return workerUnavailable(scoped.account);
+    }
+};
+
+export const createOrganizationAccount = async (
+    userId: string,
+    organizationId: string,
+    data: WhatsAppCreateAccountJSON,
+): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
+    if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+
+    const phoneNumber = normalizePhoneNumber(data.phoneNumber);
+    if (!phoneNumber) {
+        return { status: "error", message: "Enter a valid phone number with country code", data: null, code: STATUS_CODES.BAD_REQUEST };
+    }
+    if (await repository.getAccountByPhoneNumber(phoneNumber)) {
+        return {
+            status: "error",
+            message: "This WhatsApp number is already linked to another account",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    let account: WhatsAppAccountDTO;
+    try {
+        account = await repository.createOrganizationAccount(organizationId, phoneNumber, userId);
+    } catch (error) {
+        if (postgresCode(error) === "23505") {
+            return {
+                status: "error",
+                message: "This WhatsApp number is already linked to another account",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+        console.error("[whatsapp] createOrganizationAccount failed", error instanceof Error ? error.message : error);
+        return { status: "error", message: "WhatsApp operation failed", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+    }
+
+    try {
+        const snapshot = await workerClient.connectAccount(account.id, account.phoneNumber);
+        const response = await saveWorkerSnapshot(snapshot);
+        return { status: "success", message: "WhatsApp account linking started", data: response, code: STATUS_CODES.CREATED };
+    } catch {
+        await markAccountWorkerUnavailable(account.id);
+        return workerUnavailable(account);
+    }
+};
+
+const getOrganizationAccount = async (userId: string, organizationId: string, accountId: string) => {
+    const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
+    if (!organization) return { error: "Organization not found" as const, code: STATUS_CODES.NOT_FOUND };
+    const account = await repository.getAccountById(accountId);
+    if (!account || account.organizationId !== organizationId) {
+        return { error: "WhatsApp account not found" as const, code: STATUS_CODES.NOT_FOUND };
+    }
+    return { account };
+};
+
+export const connectOrganizationAccount = async (
+    userId: string,
+    organizationId: string,
+    accountId: string,
+): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const scoped = await getOrganizationAccount(userId, organizationId, accountId);
+    if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    try {
+        const snapshot = await workerClient.connectAccount(scoped.account.id, scoped.account.phoneNumber);
+        const response = await saveWorkerSnapshot(snapshot);
+        return { status: "success", message: "WhatsApp account linking started", data: response, code: STATUS_CODES.SUCCESS };
+    } catch {
+        return workerUnavailable(scoped.account);
+    }
+};
+
+export const disconnectOrganizationAccount = async (
+    userId: string,
+    organizationId: string,
+    accountId: string,
+): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const scoped = await getOrganizationAccount(userId, organizationId, accountId);
+    if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    try {
+        const snapshot = await workerClient.disconnectAccount(scoped.account.id);
+        const response = await saveWorkerSnapshot(snapshot);
+        return { status: "success", message: "WhatsApp account disconnected", data: response, code: STATUS_CODES.SUCCESS };
+    } catch {
+        return workerUnavailable(scoped.account);
+    }
+};
+
+export const changeOrganizationAccountNumber = async (
+    userId: string,
+    organizationId: string,
+    accountId: string,
+    data: WhatsAppChangeAccountNumberJSON,
+): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const scoped = await getOrganizationAccount(userId, organizationId, accountId);
+    if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+
+    const phoneNumber = normalizePhoneNumber(data.phoneNumber);
+    if (!phoneNumber) return { status: "error", message: "Enter a valid phone number with country code", data: null, code: STATUS_CODES.BAD_REQUEST };
+    if (phoneNumber === scoped.account.phoneNumber) return { status: "error", message: "Enter a different phone number", data: null, code: STATUS_CODES.BAD_REQUEST };
+    if (await repository.getAccountByPhoneNumber(phoneNumber)) {
+        return { status: "error", message: "This WhatsApp number is already linked to another account", data: null, code: STATUS_CODES.CONFLICT };
+    }
+
+    let updatedAccount: WhatsAppAccountDTO | null = null;
+    try {
+        const disconnected = await workerClient.disconnectAccount(scoped.account.id);
+        await saveWorkerSnapshot(disconnected);
+        updatedAccount = await repository.updateAccountPhoneNumber(scoped.account.id, phoneNumber, userId);
+        if (!updatedAccount) return { status: "error", message: "WhatsApp account could not be updated", data: null, code: STATUS_CODES.NOT_FOUND };
+        const snapshot = await workerClient.connectAccount(updatedAccount.id, updatedAccount.phoneNumber);
+        const response = await saveWorkerSnapshot(snapshot);
+        return { status: "success", message: "WhatsApp number changed. Scan the new QR code.", data: response, code: STATUS_CODES.SUCCESS };
+    } catch (error) {
+        if (postgresCode(error) === "23505") {
+            return { status: "error", message: "This WhatsApp number is already linked to another account", data: null, code: STATUS_CODES.CONFLICT };
+        }
+        return workerUnavailable(updatedAccount ?? scoped.account);
+    }
+};
+
 export const assignAccount = async (
     userId: string,
     organizationId: string,
