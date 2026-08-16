@@ -22,6 +22,7 @@ export {
   getPosProductSalesSummary,
   getPosSettings,
   getPosServiceTables,
+  getPosServiceAreas,
   allocatePosServiceTable,
   freePosServiceTable,
   startPosServiceTableOrder,

@@ -3369,25 +3369,9 @@ const BillingPage = ({
                     ) : null
                 ) : (
                     <aside
-                        className="flex w-full flex-col border-t border-border/50 bg-card/90 backdrop-blur-sm lg:w-[380px] lg:border-t-0 lg:border-l"
+                        className="hidden w-full flex-col overflow-y-auto border-t border-border/50 bg-card/90 backdrop-blur-sm lg:flex lg:w-[320px] lg:border-t-0 lg:border-l"
                         style={{ maxHeight: panelMaxHeight }}
                     >
-                        <div className="space-y-5 border-b border-border/40 px-5 py-5">
-                            <span className="w-fit rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-700 dark:text-sky-300">
-                                Admin read-only
-                            </span>
-                            <div>
-                                <h2 className="text-lg font-bold text-foreground">Inspect store billing safely</h2>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    This workspace is now inspection-only for admin users. Open the POS login to create
-                                    drafts, complete bills, or collect money.
-                                </p>
-                            </div>
-                            <Button className="w-full rounded-xl" render={<Link to="/pos/login" />}>
-                                Open POS login
-                            </Button>
-                        </div>
-
                         <div className="grid gap-3 px-5 py-5">
                             <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
                                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Store</p>

@@ -34,6 +34,7 @@ export const ServiceTableDTOSchema = z.object({
   id: z.uuid("Invalid table id"),
   organizationId: z.uuid("Invalid organization id"),
   storeId: z.uuid("Invalid store id"),
+  serviceAreaId: z.uuid("Invalid area id").nullable(),
   tableLabel: tableLabelSchema,
   capacity: z.number().int().positive().nullable(),
   position: ServiceTablePositionSchema,
@@ -65,3 +66,56 @@ export const UpdateServiceTableSchema = z
     (value) => Object.keys(value).length > 0,
     "At least one table field is required",
   );
+
+const areaTitleSchema = z
+  .string()
+  .trim()
+  .min(1, "Title is required")
+  .max(128, "Title must be at most 128 characters")
+  .regex(/^[^\r\n]+$/, "Title cannot contain line breaks");
+
+const areaDescriptionSchema = z
+  .union([
+    z.literal(""),
+    z.string().trim().max(1000, "Description must be at most 1000 characters"),
+  ])
+  .nullable()
+  .optional();
+
+export const ServiceAreaDTOSchema = z.object({
+  id: z.uuid("Invalid area id"),
+  organizationId: z.uuid("Invalid organization id"),
+  storeId: z.uuid("Invalid store id"),
+  title: areaTitleSchema,
+  description: z.string().nullable(),
+  createdBy: z.uuid("Invalid creator id"),
+  updatedBy: z.uuid("Invalid updater id").nullable(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+});
+
+export const CreateServiceAreaSchema = z
+  .object({
+    title: areaTitleSchema,
+    description: areaDescriptionSchema,
+  })
+  .strict();
+
+export const UpdateServiceAreaSchema = z
+  .object({
+    title: areaTitleSchema.optional(),
+    description: areaDescriptionSchema,
+  })
+  .strict()
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "At least one area field is required",
+  );
+
+export const AssignServiceTablesToAreaSchema = z
+  .object({
+    tableIds: z
+      .array(z.uuid("Invalid table id"))
+      .min(1, "Select at least one table"),
+  })
+  .strict();

@@ -2,17 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
-import type { DeviceSessionDTO, ServiceTableDTO } from "@repo/types";
+import type { DeviceSessionDTO, ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
 
 import {
   getPosServiceTableAction,
   getPosServiceTableStateLabel,
 } from "./pos-service-table";
-import { serviceTableKeys } from "./query-keys";
+import { serviceAreaKeys, serviceTableKeys } from "./query-keys";
 import PosTablesPage from "@/pages/pos-tables-page";
 import PosTablesWorkspace from "@/pages/pos-tables-workspace";
 import type { PosRouteContext } from "@/pages/pos-route-context";
-import { tableServiceUnavailableMessage } from "@/lib/table-service-availability";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -46,15 +45,29 @@ const table = (state: ServiceTableDTO["state"]): ServiceTableDTO => ({
   state,
   currentSaleId: null,
   currentSaleTotal: null,
+  serviceAreaId: null,
   createdBy: "11111111-1111-4111-8111-111111111111",
   updatedBy: null,
   createdAt: now,
   updatedAt: now,
 });
 
+const area: ServiceAreaDTO = {
+  id: "99999999-9999-4999-8999-999999999999",
+  organizationId,
+  storeId,
+  title: "First Floor",
+  description: null,
+  createdBy: "11111111-1111-4111-8111-111111111111",
+  updatedBy: null,
+  createdAt: now,
+  updatedAt: now,
+};
+
 const renderTablesPage = (
   tables: ServiceTableDTO[],
   Page: typeof PosTablesPage | typeof PosTablesWorkspace,
+  areaResult: "success" | "error" = "success",
 ) => {
   const queryClient = new QueryClient();
   queryClient.setQueryData(serviceTableKeys.pos(organizationId, storeId), {
@@ -62,6 +75,15 @@ const renderTablesPage = (
     data: { tables },
     message: "Service tables fetched successfully",
     code: 200,
+  });
+  queryClient.setQueryData(serviceAreaKeys.pos(organizationId, storeId), {
+    status: areaResult,
+    data: areaResult === "success" ? { areas: [area] } : null,
+    message:
+      areaResult === "success"
+        ? "POS service areas fetched successfully"
+        : "POS service areas unavailable",
+    code: areaResult === "success" ? 200 : 500,
   });
   const context: PosRouteContext = {
     session,
@@ -110,13 +132,44 @@ describe("POS Service Table behavior", () => {
     );
   });
 
-  test("shows under development on the live POS Tables tab", () => {
+  test("renders the live POS Tables tab workspace", () => {
     const markup = renderTablesPage([table("free")], PosTablesPage);
 
-    expect(markup).toContain("under-development");
-    expect(markup).toContain("Tables is under development");
-    expect(markup).toContain(tableServiceUnavailableMessage);
-    expect(markup).not.toContain("Allocate table A1");
+    expect(markup).toContain("Allocate table A1");
+    expect(markup).not.toContain("under-development");
+  });
+
+  test("defaults to the simple aligned grid instead of the floor canvas", () => {
+    const markup = renderTableFloor([table("free")]);
+
+    expect(markup).toContain("service-table-simple-grid");
+    expect(markup).toContain("Simple view");
+    expect(markup).toContain("Floor layout");
+    expect(markup).not.toContain("floor-canvas");
+  });
+
+  test("groups POS simple-view tables under their Service Area", () => {
+    const markup = renderTableFloor([
+      { ...table("free"), serviceAreaId: area.id, tableLabel: "T1" },
+      { ...table("free"), id: "88888888-8888-4888-8888-888888888888", tableLabel: "T3" },
+    ]);
+
+    expect(markup).toContain("First Floor");
+    expect(markup).toContain("Unassigned");
+    expect(markup).toContain("Allocate table T1");
+    expect(markup).toContain("Allocate table T3");
+  });
+
+  test("does not relabel assigned tables when POS Service Areas cannot be loaded", () => {
+    const markup = renderTablesPage(
+      [{ ...table("free"), serviceAreaId: area.id, tableLabel: "T1" }],
+      PosTablesWorkspace,
+      "error",
+    );
+
+    expect(markup).toContain("POS service areas unavailable");
+    expect(markup).not.toContain("Unassigned");
+    expect(markup).not.toContain("Allocate table T1");
   });
 
   test("renders only the action valid for each pre-order table state", () => {

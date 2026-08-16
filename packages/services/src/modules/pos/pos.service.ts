@@ -42,6 +42,7 @@ import type {
   ServiceTableResponse,
   ServiceTableSaleResponse,
   ServiceTablesListResponse,
+  ServiceAreasListResponse,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -83,6 +84,17 @@ export const getPosServiceTables = async (): Promise<
 > => {
   try {
     const response = await api.get("/pos/tables");
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosServiceAreas = async (): Promise<
+  ServiceResponse<ServiceAreasListResponse | null>
+> => {
+  try {
+    const response = await api.get("/pos/areas");
     return response.data;
   } catch (error) {
     return handleApiError(error);

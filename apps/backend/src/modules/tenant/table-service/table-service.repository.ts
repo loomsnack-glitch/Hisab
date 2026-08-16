@@ -1,18 +1,36 @@
 import { pg } from "@/config/db";
 import type {
+  CreateServiceAreaREPO,
   CreateServiceTableREPO,
+  ServiceAreaDTO,
   ServiceTableDTO,
   ServiceTablePosition,
   ServiceTableState,
+  UpdateServiceAreaREPO,
   UpdateServiceTableREPO,
 } from "@repo/types";
 
 type Db = typeof pg | Bun.TransactionSQL;
 
+type ServiceAreaScope = {
+  organizationId: string;
+  storeId: string;
+  areaId: string;
+};
+
+type ServiceTableAreaScope = ServiceAreaScope & {
+  tableId: string;
+};
+
+type ServiceTableAreaWrite = ServiceTableAreaScope & {
+  updatedBy: string;
+};
+
 const mapRow = (row: Record<string, unknown>): ServiceTableDTO => ({
   id: row.id as string,
   organizationId: row.organization_id as string,
   storeId: row.store_id as string,
+  serviceAreaId: (row.service_area_id as string | null | undefined) ?? null,
   tableLabel: row.table_label as string,
   capacity:
     row.capacity === null || row.capacity === undefined
@@ -35,7 +53,7 @@ const mapRow = (row: Record<string, unknown>): ServiceTableDTO => ({
 });
 
 const selectColumns = `
-  id, organization_id, store_id, table_label, capacity,
+  id, organization_id, store_id, service_area_id, table_label, capacity,
   position_x, position_y, state, current_sale_id,
   created_by, updated_by, created_at, updated_at
 `;
@@ -44,6 +62,7 @@ const selectColumnsWithSaleTotal = `
   service_tables.id,
   service_tables.organization_id,
   service_tables.store_id,
+  service_tables.service_area_id,
   service_tables.table_label,
   service_tables.capacity,
   service_tables.position_x,
@@ -437,9 +456,198 @@ export const releasePaidTable = (
   tx: Bun.TransactionSQL,
 ) => releaseCommittedTable(organizationId, storeId, tableId, saleId, "paid", updatedBy, tx);
 
+export const assignServiceTableToArea = async (
+  {
+    organizationId,
+    storeId,
+    areaId,
+    tableId,
+    updatedBy,
+  }: ServiceTableAreaWrite,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET service_area_id = ${areaId},
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND service_area_id IS NULL
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
+export const unassignServiceTableFromArea = async (
+  {
+    organizationId,
+    storeId,
+    areaId,
+    tableId,
+    updatedBy,
+  }: ServiceTableAreaWrite,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET service_area_id = NULL,
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND service_area_id = ${areaId}
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
 export const normalizePosition = (
   position: ServiceTablePosition,
 ): ServiceTablePosition => ({
   x: Math.min(1, Math.max(0, position.x)),
   y: Math.min(1, Math.max(0, position.y)),
 });
+
+const mapAreaRow = (row: Record<string, unknown>): ServiceAreaDTO => ({
+  id: row.id as string,
+  organizationId: row.organization_id as string,
+  storeId: row.store_id as string,
+  title: row.title as string,
+  description: (row.description as string | null | undefined) ?? null,
+  createdBy: row.created_by as string,
+  updatedBy: (row.updated_by as string | null | undefined) ?? null,
+  createdAt: row.created_at as string | Date,
+  updatedAt: row.updated_at as string | Date,
+});
+
+const areaSelectColumns = `
+  id, organization_id, store_id, title, description,
+  created_by, updated_by, created_at, updated_at
+`;
+
+export const lockServiceArea = async (
+  { organizationId, storeId, areaId }: ServiceAreaScope,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceAreaDTO | null> => {
+  const [row] = await tx`
+    SELECT ${tx.unsafe(areaSelectColumns)}
+    FROM service_areas
+    WHERE id = ${areaId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+    FOR UPDATE
+  `;
+  return row ? mapAreaRow(row) : null;
+};
+
+export const getServiceAreas = async (
+  organizationId: string,
+  storeId: string,
+): Promise<ServiceAreaDTO[]> => {
+  const rows = await pg`
+    SELECT ${pg.unsafe(areaSelectColumns)}
+    FROM service_areas
+    WHERE organization_id = ${organizationId}
+      AND store_id = ${storeId}
+    ORDER BY lower(title) ASC, created_at ASC, id ASC
+  `;
+  return rows.map((row: Record<string, unknown>) => mapAreaRow(row));
+};
+
+export const getServiceAreaById = async (
+  organizationId: string,
+  storeId: string,
+  areaId: string,
+): Promise<ServiceAreaDTO | null> => {
+  const [row] = await pg`
+    SELECT ${pg.unsafe(areaSelectColumns)}
+    FROM service_areas
+    WHERE id = ${areaId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+  `;
+  return row ? mapAreaRow(row) : null;
+};
+
+export const serviceAreaTitleExists = async (
+  storeId: string,
+  title: string,
+  excludeId?: string,
+): Promise<boolean> => {
+  const rows = excludeId
+    ? await pg`
+        SELECT 1 FROM service_areas
+        WHERE store_id = ${storeId}
+          AND lower(btrim(title)) = lower(btrim(${title}))
+          AND id <> ${excludeId}
+        LIMIT 1
+      `
+    : await pg`
+        SELECT 1 FROM service_areas
+        WHERE store_id = ${storeId}
+          AND lower(btrim(title)) = lower(btrim(${title}))
+        LIMIT 1
+      `;
+  return Boolean(rows[0]);
+};
+
+export const createServiceArea = async (
+  area: CreateServiceAreaREPO,
+  tx?: Bun.TransactionSQL,
+): Promise<ServiceAreaDTO | null> => {
+  const db: Db = tx || pg;
+  const [row] = await db`
+    INSERT INTO service_areas (
+      id, organization_id, store_id, title, description, created_by
+    ) VALUES (
+      ${area.id}, ${area.organizationId}, ${area.storeId}, ${area.title}, ${area.description}, ${area.createdBy}
+    )
+    RETURNING ${db.unsafe(areaSelectColumns)}
+  `;
+  return row ? mapAreaRow(row) : null;
+};
+
+export const updateServiceArea = async (
+  area: UpdateServiceAreaREPO,
+): Promise<ServiceAreaDTO | null> => {
+  const current = await getServiceAreaById(
+    area.organizationId,
+    area.storeId,
+    area.id,
+  );
+  if (!current) return null;
+
+  const nextTitle = area.title ?? current.title;
+  const nextDescription =
+    area.description === undefined ? current.description : area.description;
+  const [row] = await pg`
+    UPDATE service_areas
+    SET title = ${nextTitle},
+        description = ${nextDescription},
+        updated_by = ${area.updatedBy},
+        updated_at = NOW()
+    WHERE id = ${area.id}
+      AND organization_id = ${area.organizationId}
+      AND store_id = ${area.storeId}
+    RETURNING ${pg.unsafe(areaSelectColumns)}
+  `;
+  return row ? mapAreaRow(row) : null;
+};
+
+export const deleteServiceArea = async (
+  organizationId: string,
+  storeId: string,
+  areaId: string,
+): Promise<ServiceAreaDTO | null> => {
+  const [row] = await pg`
+    DELETE FROM service_areas
+    WHERE id = ${areaId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+    RETURNING ${pg.unsafe(areaSelectColumns)}
+  `;
+  return row ? mapAreaRow(row) : null;
+};

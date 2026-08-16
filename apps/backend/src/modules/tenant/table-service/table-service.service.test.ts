@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { DeviceSessionDTO, ServiceTableDTO } from "@repo/types";
+import type { DeviceSessionDTO, ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const otherStoreId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const userId = "11111111-1111-4111-8111-111111111111";
 const tableId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const areaId = "99999999-9999-4999-8999-999999999999";
+const otherAreaId = "77777777-7777-4777-8777-777777777777";
 const now = new Date("2026-08-16T12:00:00.000Z");
 
 const organization = { id: organizationId, name: "Demo Org" };
@@ -14,12 +16,24 @@ const table: ServiceTableDTO = {
   id: tableId,
   organizationId,
   storeId,
+  serviceAreaId: null,
   tableLabel: "A1",
   capacity: 4,
   position: { x: 0.05, y: 0.05 },
   state: "free",
   currentSaleId: null,
   currentSaleTotal: null,
+  createdBy: userId,
+  updatedBy: null,
+  createdAt: now,
+  updatedAt: now,
+};
+const area: ServiceAreaDTO = {
+  id: areaId,
+  organizationId,
+  storeId,
+  title: "Patio",
+  description: "Outdoor seating",
   createdBy: userId,
   updatedBy: null,
   createdAt: now,
@@ -75,6 +89,50 @@ const updateServiceTableRepo = mock(
   async (data: { position?: { x: number; y: number } }) => ({
     ...table,
     position: data.position ?? table.position,
+    updatedBy: userId,
+  }),
+);
+const getServiceAreas = mock(
+  async (requestedOrganizationId?: string, requestedStoreId?: string) =>
+    requestedOrganizationId === organizationId && requestedStoreId === storeId
+      ? [area]
+      : [],
+);
+const getServiceAreaById = mock(
+  async (): Promise<ServiceAreaDTO | null> => area,
+);
+const serviceAreaTitleExists = mock(async () => false);
+const createServiceAreaRepo = mock(
+  async (data: {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    title: string;
+    description: string | null;
+    createdBy: string;
+  }) => ({ ...area, ...data }),
+);
+const updateServiceAreaRepo = mock(
+  async (data: { title?: string; description?: string | null }) => ({
+    ...area,
+    title: data.title ?? area.title,
+    description: data.description === undefined ? area.description : data.description,
+    updatedBy: userId,
+  }),
+);
+const deleteServiceAreaRepo = mock(async () => area);
+const lockServiceArea = mock(async (): Promise<ServiceAreaDTO | null> => area);
+const assignServiceTableToArea = mock(
+  async (): Promise<ServiceTableDTO | null> => ({
+    ...table,
+    serviceAreaId: areaId,
+    updatedBy: userId,
+  }),
+);
+const unassignServiceTableFromArea = mock(
+  async (): Promise<ServiceTableDTO | null> => ({
+    ...table,
+    serviceAreaId: null,
     updatedBy: userId,
   }),
 );
@@ -184,6 +242,15 @@ mock.module("./table-service.repository", () => ({
   serviceTableLabelExists,
   createServiceTable: createServiceTableRepo,
   updateServiceTable: updateServiceTableRepo,
+  getServiceAreas,
+  getServiceAreaById,
+  serviceAreaTitleExists,
+  createServiceArea: createServiceAreaRepo,
+  updateServiceArea: updateServiceAreaRepo,
+  deleteServiceArea: deleteServiceAreaRepo,
+  lockServiceArea,
+  assignServiceTableToArea,
+  unassignServiceTableFromArea,
   transitionServiceTableState,
   lockServiceTableForDevice,
   attachDraftSale,
@@ -220,6 +287,29 @@ describe("Service Table application service", () => {
     serviceTableLabelExists.mockResolvedValue(false);
     createServiceTableRepo.mockClear();
     updateServiceTableRepo.mockClear();
+    getServiceAreas.mockClear();
+    getServiceAreaById.mockClear();
+    getServiceAreaById.mockResolvedValue(area);
+    serviceAreaTitleExists.mockClear();
+    serviceAreaTitleExists.mockResolvedValue(false);
+    createServiceAreaRepo.mockClear();
+    updateServiceAreaRepo.mockClear();
+    deleteServiceAreaRepo.mockClear();
+    deleteServiceAreaRepo.mockResolvedValue(area);
+    lockServiceArea.mockClear();
+    lockServiceArea.mockResolvedValue(area);
+    assignServiceTableToArea.mockClear();
+    assignServiceTableToArea.mockResolvedValue({
+      ...table,
+      serviceAreaId: areaId,
+      updatedBy: userId,
+    });
+    unassignServiceTableFromArea.mockClear();
+    unassignServiceTableFromArea.mockResolvedValue({
+      ...table,
+      serviceAreaId: null,
+      updatedBy: userId,
+    });
     transitionServiceTableState.mockClear();
     lockServiceTableForDevice.mockReset();
     lockServiceTableForDevice.mockResolvedValue(allocatedTable);
@@ -345,6 +435,15 @@ describe("Service Table application service", () => {
     expect(allocateResponse).toMatchObject({
       status: "success",
       data: { table: { state: "allocated", currentSaleId: null } },
+    });
+  });
+
+  test("lists Store-scoped areas for the authenticated device", async () => {
+    const response = await tableService.getServiceAreasForDevice(deviceSession);
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: { areas: [area] },
     });
   });
 
@@ -720,5 +819,278 @@ describe("Service Table application service", () => {
       deviceSession.device.id,
       expect.anything(),
     );
+  });
+});
+
+describe("Service Area application service", () => {
+  beforeEach(() => {
+    getOrganizationByIdForUser.mockClear();
+    getOrganizationByIdForUser.mockResolvedValue(organization);
+    getStoreById.mockClear();
+    getStoreById.mockImplementation(
+      async (_organizationId, requestedStoreId) =>
+        requestedStoreId === storeId ? store : null,
+    );
+    getServiceAreas.mockClear();
+    getServiceAreaById.mockClear();
+    getServiceAreaById.mockResolvedValue(area);
+    serviceAreaTitleExists.mockClear();
+    serviceAreaTitleExists.mockResolvedValue(false);
+    createServiceAreaRepo.mockClear();
+    updateServiceAreaRepo.mockClear();
+    deleteServiceAreaRepo.mockClear();
+    deleteServiceAreaRepo.mockResolvedValue(area);
+    lockServiceArea.mockClear();
+    lockServiceArea.mockResolvedValue(area);
+    lockServiceTableForDevice.mockReset();
+    lockServiceTableForDevice.mockResolvedValue({ ...table, serviceAreaId: null });
+    assignServiceTableToArea.mockClear();
+    assignServiceTableToArea.mockResolvedValue({
+      ...table,
+      serviceAreaId: areaId,
+      updatedBy: userId,
+    });
+    unassignServiceTableFromArea.mockClear();
+    unassignServiceTableFromArea.mockResolvedValue({
+      ...table,
+      serviceAreaId: null,
+      updatedBy: userId,
+    });
+    begin.mockClear();
+  });
+
+  test("creates a trimmed area with Store scope and a blank description", async () => {
+    const response = await tableService.createServiceArea(
+      userId,
+      organizationId,
+      storeId,
+      {
+        title: "  Indoor  ",
+        description: "   ",
+      },
+    );
+
+    expect(response.status).toBe("success");
+    expect(createServiceAreaRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId,
+        storeId,
+        title: "Indoor",
+        description: null,
+        createdBy: userId,
+      }),
+      expect.anything(),
+    );
+  });
+
+  test("rejects a duplicate title case-insensitively before writing", async () => {
+    serviceAreaTitleExists.mockResolvedValue(true);
+
+    const response = await tableService.createServiceArea(
+      userId,
+      organizationId,
+      storeId,
+      {
+        title: " patio ",
+        description: "Outdoor seating",
+      },
+    );
+
+    expect(response).toMatchObject({ status: "error", code: 409 });
+    expect(createServiceAreaRepo).not.toHaveBeenCalled();
+  });
+
+  test("cannot read or mutate a Store outside the Organization scope", async () => {
+    const listResponse = await tableService.getServiceAreas(
+      userId,
+      organizationId,
+      otherStoreId,
+    );
+    const updateResponse = await tableService.updateServiceArea(
+      userId,
+      organizationId,
+      otherStoreId,
+      areaId,
+      { title: "Indoor" },
+    );
+    const deleteResponse = await tableService.deleteServiceArea(
+      userId,
+      organizationId,
+      otherStoreId,
+      areaId,
+    );
+
+    expect(listResponse).toMatchObject({ status: "error", code: 404 });
+    expect(updateResponse).toMatchObject({ status: "error", code: 404 });
+    expect(deleteResponse).toMatchObject({ status: "error", code: 404 });
+    expect(getServiceAreas).not.toHaveBeenCalled();
+    expect(updateServiceAreaRepo).not.toHaveBeenCalled();
+    expect(deleteServiceAreaRepo).not.toHaveBeenCalled();
+  });
+
+  test("updates title and description through the Store-scoped area", async () => {
+    const response = await tableService.updateServiceArea(
+      userId,
+      organizationId,
+      storeId,
+      areaId,
+      {
+        title: "  Indoor  ",
+        description: "Ground floor seating",
+      },
+    );
+
+    expect(response.status).toBe("success");
+    expect(updateServiceAreaRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: areaId,
+        organizationId,
+        storeId,
+        title: "Indoor",
+        description: "Ground floor seating",
+        updatedBy: userId,
+      }),
+    );
+  });
+
+  test("deletes a Store-scoped area", async () => {
+    const response = await tableService.deleteServiceArea(
+      userId,
+      organizationId,
+      storeId,
+      areaId,
+    );
+
+    expect(response.status).toBe("success");
+    expect(deleteServiceAreaRepo).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      areaId,
+    );
+  });
+
+  test("returns not found when the area does not belong to the Store", async () => {
+    getServiceAreaById.mockResolvedValue(null);
+
+    const updateResponse = await tableService.updateServiceArea(
+      userId,
+      organizationId,
+      storeId,
+      areaId,
+      { title: "Indoor" },
+    );
+    const deleteResponse = await tableService.deleteServiceArea(
+      userId,
+      organizationId,
+      storeId,
+      areaId,
+    );
+
+    expect(updateResponse).toMatchObject({ status: "error", code: 404 });
+    expect(deleteResponse).toMatchObject({ status: "error", code: 404 });
+    expect(updateServiceAreaRepo).not.toHaveBeenCalled();
+    expect(deleteServiceAreaRepo).not.toHaveBeenCalled();
+  });
+
+  test("assigns an Unassigned Service Table to the selected area", async () => {
+    const response = await tableService.assignServiceTablesToArea(
+      { userId, organizationId, storeId, areaId },
+      { tableIds: [tableId] },
+    );
+
+    expect(response.status).toBe("success");
+    expect(response.data?.tables).toEqual([
+      expect.objectContaining({ id: tableId, serviceAreaId: areaId }),
+    ]);
+    expect(assignServiceTableToArea).toHaveBeenCalledWith(
+      {
+        organizationId,
+        storeId,
+        areaId,
+        tableId,
+        updatedBy: userId,
+      },
+      expect.anything(),
+    );
+  });
+
+  test("rejects assigning a table that already belongs to another area", async () => {
+    lockServiceTableForDevice.mockResolvedValue({
+      ...table,
+      serviceAreaId: otherAreaId,
+    });
+
+    const response = await tableService.assignServiceTablesToArea(
+      { userId, organizationId, storeId, areaId },
+      { tableIds: [tableId] },
+    );
+
+    expect(response).toMatchObject({
+      status: "error",
+      code: 409,
+      message: "Table A1 must be unassigned before it can be assigned to an area",
+    });
+    expect(assignServiceTableToArea).not.toHaveBeenCalled();
+  });
+
+  test("rejects assigning a table that is already assigned to the selected area", async () => {
+    lockServiceTableForDevice.mockResolvedValue({
+      ...table,
+      serviceAreaId: areaId,
+    });
+
+    const response = await tableService.assignServiceTablesToArea(
+      { userId, organizationId, storeId, areaId },
+      { tableIds: [tableId] },
+    );
+
+    expect(response).toMatchObject({
+      status: "error",
+      code: 409,
+      message: "Table A1 must be unassigned before it can be assigned to an area",
+    });
+    expect(assignServiceTableToArea).not.toHaveBeenCalled();
+  });
+
+  test("unassigns a table from the selected area", async () => {
+    lockServiceTableForDevice.mockResolvedValue({
+      ...table,
+      serviceAreaId: areaId,
+    });
+
+    const response = await tableService.unassignServiceTableFromArea(
+      { userId, organizationId, storeId, areaId, tableId },
+    );
+
+    expect(response.status).toBe("success");
+    expect(response.data?.table).toEqual(
+      expect.objectContaining({ id: tableId, serviceAreaId: null }),
+    );
+    expect(unassignServiceTableFromArea).toHaveBeenCalledWith(
+      {
+        organizationId,
+        storeId,
+        areaId,
+        tableId,
+        updatedBy: userId,
+      },
+      expect.anything(),
+    );
+  });
+
+  test("cannot assign or unassign tables outside the Store scope", async () => {
+    const assignResponse = await tableService.assignServiceTablesToArea(
+      { userId, organizationId, storeId: otherStoreId, areaId },
+      { tableIds: [tableId] },
+    );
+    const unassignResponse = await tableService.unassignServiceTableFromArea(
+      { userId, organizationId, storeId: otherStoreId, areaId, tableId },
+    );
+
+    expect(assignResponse).toMatchObject({ status: "error", code: 404 });
+    expect(unassignResponse).toMatchObject({ status: "error", code: 404 });
+    expect(lockServiceArea).not.toHaveBeenCalled();
+    expect(assignServiceTableToArea).not.toHaveBeenCalled();
+    expect(unassignServiceTableFromArea).not.toHaveBeenCalled();
   });
 });

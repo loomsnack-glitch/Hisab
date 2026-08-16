@@ -100,6 +100,14 @@ _Avoid_: Draft bill number, pre-commit sequence
 A physical customer table configured for one Store, identified by a short Store-unique table label (shown as “Table no” in the UI). It may carry a positive whole-number seating capacity and a position in that Store's floor layout; a blank capacity means it is unknown.
 _Avoid_: Organization table, shared table, seating chart item
 
+**Service Area**:
+A named grouping of a Store's floor, identified by a Store-unique title and an optional description. A Service Table may belong to at most one Service Area, or to none.
+_Avoid_: Floor section, zone, room, named layout region
+
+**Unassigned Service Table**:
+A Service Table that does not belong to any Service Area. It can be assigned to a Service Area only while unassigned; moving it to another area requires unassigning it first.
+_Avoid_: Unallocated table when referring to area membership, free-floating table
+
 **Active Table Sale**:
 The single Draft Sale currently linked to a Service Table. A Service Table may have at most one Active Table Sale at a time, and that Sale is its current order.
 _Avoid_: Parallel table drafts, duplicate current bill, table cart

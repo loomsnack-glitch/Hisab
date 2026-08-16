@@ -25,6 +25,14 @@ export const serviceTableKeys = {
     [...serviceTableKeys.all, "pos", organizationId, storeId] as const,
 };
 
+export const serviceAreaKeys = {
+  all: ["service-areas"] as const,
+  store: (organizationId: string, storeId: string) =>
+    [...serviceAreaKeys.all, organizationId, storeId] as const,
+  pos: (organizationId: string, storeId: string) =>
+    [...serviceAreaKeys.all, "pos", organizationId, storeId] as const,
+};
+
 export const catalogKeys = {
   all: ["catalog"] as const,
   categories: (organizationId: string) =>

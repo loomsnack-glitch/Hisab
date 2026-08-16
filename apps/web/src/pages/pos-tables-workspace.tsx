@@ -10,12 +10,11 @@ import {
   freePosServiceTable,
   getPosServiceTableOrder,
   getPosServiceTables,
+  getPosServiceAreas,
   markPosServiceTableReadyToBill,
   startPosServiceTableOrder,
 } from "@repo/services";
 import type { CreatePaymentJSON, PaymentMethod, ServiceTableDTO } from "@repo/types";
-import { Badge } from "@repo/ui/components/badge";
-import { Button } from "@repo/ui/components/button";
 import {
   Card,
   CardContent,
@@ -31,42 +30,29 @@ import {
   EmptyTitle,
 } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
-import {
-  Armchair,
-  Check,
-  CircleOff,
-  LayoutGrid,
-  Play,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { Armchair, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 
 import PosDeviceSidebar from "@/components/pos/pos-device-sidebar";
-import { serviceTableKeys } from "@/lib/query-keys";
+import PosServiceTableCard from "@/components/table-service/pos-service-table-card";
+import ServiceTableAreaSections from "@/components/table-service/service-table-area-sections";
+import ServiceTableViewToggle from "@/components/table-service/service-table-view-toggle";
+import { groupServiceTablesByArea } from "@/lib/service-area-tables";
+import { serviceAreaKeys, serviceTableKeys } from "@/lib/query-keys";
+import type { PosServiceTableAction } from "@/lib/pos-service-table";
 import {
-  getPosServiceTableAction,
-  getPosServiceTableStateLabel,
-  type PosServiceTableAction,
-} from "@/lib/pos-service-table";
-import { tablePositionStyle, TABLE_BOX_SIZE } from "@/lib/service-table-layout";
-import { formatCurrency } from "@/lib/format";
+  tablePositionStyle,
+  TABLE_BOX_SIZE,
+} from "@/lib/service-table-layout";
+import {
+  persistServiceTableViewMode,
+  readServiceTableViewMode,
+  type ServiceTableViewMode,
+} from "@/lib/service-table-view";
 import type { PosRouteContext } from "@/pages/pos-route-context";
 
 type TableOperation = { tableId: string; action: PosServiceTableAction };
 type OrderOperation = { tableId: string; mode: "start" | "resume" };
-
-const stateClassName: Record<ServiceTableDTO["state"], string> = {
-  free: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  allocated:
-    "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  engaged: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  ready_to_bill:
-    "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300",
-  payment_due:
-    "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-  paid: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-};
 
 const PosTablesWorkspace = () => {
   const { session, onPanelTabChange } = useOutletContext<PosRouteContext>();
@@ -74,6 +60,9 @@ const PosTablesWorkspace = () => {
   const [paymentTableId, setPaymentTableId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [viewMode, setViewMode] = useState<ServiceTableViewMode>(() =>
+    readServiceTableViewMode("pos"),
+  );
   const tablesQuery = useQuery({
     queryKey: serviceTableKeys.pos(session.organization.id, session.store.id),
     queryFn: getPosServiceTables,
@@ -83,6 +72,25 @@ const PosTablesWorkspace = () => {
     tablesQuery.data?.status === "success"
       ? (tablesQuery.data.data?.tables ?? [])
       : [];
+  const areasQuery = useQuery({
+    queryKey: serviceAreaKeys.pos(session.organization.id, session.store.id),
+    queryFn: getPosServiceAreas,
+    refetchOnWindowFocus: true,
+  });
+  const areas =
+    areasQuery.data?.status === "success"
+      ? (areasQuery.data.data?.areas ?? [])
+      : [];
+  const simpleViewAreasPending = viewMode === "simple" && areasQuery.isPending;
+  const simpleViewAreasError =
+    viewMode === "simple"
+      ? areasQuery.data?.status === "error"
+        ? areasQuery.data.message
+        : areasQuery.isError
+          ? "Service areas could not be loaded"
+          : null
+      : null;
+  const tableGroups = groupServiceTablesByArea(tables, areas);
 
   const operationMutation = useMutation({
     mutationFn: ({ tableId, action }: TableOperation) =>
@@ -212,11 +220,9 @@ const PosTablesWorkspace = () => {
       toast.error(error.message ?? "Payment could not be collected"),
   });
 
-  const handleTableOperation = (
-    tableId: string,
-    action: PosServiceTableAction,
-  ) => {
-    operationMutation.mutate({ tableId, action });
+  const handleViewModeChange = (mode: ServiceTableViewMode) => {
+    setViewMode(mode);
+    persistServiceTableViewMode("pos", mode);
   };
 
   const submitPayment = (table: ServiceTableDTO) => {
@@ -236,6 +242,61 @@ const PosTablesWorkspace = () => {
       },
     });
   };
+
+  const renderTableCard = (table: ServiceTableDTO, layout: ServiceTableViewMode) => (
+    <PosServiceTableCard
+      key={table.id}
+      table={table}
+      layout={layout}
+      paymentTableId={paymentTableId}
+      paymentAmount={paymentAmount}
+      paymentMethod={paymentMethod}
+      busy={{
+        allocateOrFree:
+          operationMutation.isPending &&
+          operationMutation.variables?.tableId === table.id,
+        opening:
+          orderMutation.isPending &&
+          orderMutation.variables?.tableId === table.id,
+        cancelling:
+          cancelMutation.isPending && cancelMutation.variables === table.id,
+        markingReady:
+          readyMutation.isPending && readyMutation.variables === table.id,
+        releasing:
+          releaseMutation.isPending &&
+          releaseMutation.variables?.tableId === table.id,
+        collecting: collectMutation.isPending,
+        anyMutation:
+          operationMutation.isPending ||
+          orderMutation.isPending ||
+          cancelMutation.isPending,
+      }}
+      onAllocateOrFree={(tableId, action) =>
+        operationMutation.mutate({ tableId, action })
+      }
+      onStartOrder={(tableId) =>
+        orderMutation.mutate({ tableId, mode: "start" })
+      }
+      onOpenOrder={(tableId) =>
+        orderMutation.mutate({ tableId, mode: "resume" })
+      }
+      onCancelOrder={(tableId) => cancelMutation.mutate(tableId)}
+      onMarkReady={(tableId) => readyMutation.mutate(tableId)}
+      onBeginCollect={(current) => {
+        setPaymentTableId(current.id);
+        setPaymentAmount(String(current.currentSaleTotal ?? ""));
+      }}
+      onSubmitPayment={submitPayment}
+      onPaymentAmountChange={setPaymentAmount}
+      onPaymentMethodChange={setPaymentMethod}
+      onFreeDue={(tableId) =>
+        releaseMutation.mutate({ tableId, state: "due" })
+      }
+      onFreePaid={(tableId) =>
+        releaseMutation.mutate({ tableId, state: "paid" })
+      }
+    />
+  );
 
   return (
     <div
@@ -261,11 +322,17 @@ const PosTablesWorkspace = () => {
                   : "Loading your Store floor..."}
               </p>
             </div>
-            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-sm text-muted-foreground">
-              <LayoutGrid className="size-4 text-primary" />
-              <span>
-                {tables.length} {tables.length === 1 ? "table" : "tables"}
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <ServiceTableViewToggle
+                value={viewMode}
+                onChange={handleViewModeChange}
+              />
+              <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-sm text-muted-foreground">
+                <LayoutGrid className="size-4 text-primary" />
+                <span>
+                  {tables.length} {tables.length === 1 ? "table" : "tables"}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -280,14 +347,15 @@ const PosTablesWorkspace = () => {
                     {session.store.name} floor
                   </CardTitle>
                   <CardDescription>
-                    Free and Allocated tables can be changed before an order
-                    exists.
+                    {viewMode === "simple"
+                      ? "Tables are grouped by area. Color shows whether a table is free, seated, or billed."
+                      : "Free and Allocated tables can be changed before an order exists."}
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-3 sm:p-5">
-              {tablesQuery.isPending ? (
+              {tablesQuery.isPending || simpleViewAreasPending ? (
                 <div className="flex min-h-80 items-center justify-center">
                   <Spinner className="size-6 text-primary" />
                 </div>
@@ -297,6 +365,13 @@ const PosTablesWorkspace = () => {
                   className="p-8 text-center text-sm text-destructive"
                 >
                   {tablesQuery.data.message}
+                </p>
+              ) : simpleViewAreasError ? (
+                <p
+                  role="alert"
+                  className="p-8 text-center text-sm text-destructive"
+                >
+                  {simpleViewAreasError}
                 </p>
               ) : tables.length === 0 ? (
                 <Empty className="min-h-80 rounded-2xl border border-dashed">
@@ -311,236 +386,29 @@ const PosTablesWorkspace = () => {
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
+              ) : viewMode === "simple" ? (
+                <ServiceTableAreaSections
+                  groups={tableGroups}
+                  gridClassName="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+                  renderTable={(table) => renderTableCard(table, "simple")}
+                />
               ) : (
-                <div className="relative min-h-[32rem] overflow-hidden rounded-2xl border border-dashed border-border/70 bg-[radial-gradient(circle,_var(--color-border)_1px,_transparent_1px)] [background-size:24px_24px]">
-                  {tables.map((table) => {
-                    const action = getPosServiceTableAction(table.state);
-                    const isOperating =
-                      operationMutation.isPending &&
-                      operationMutation.variables?.tableId === table.id;
-                    const isOpening =
-                      orderMutation.isPending &&
-                      orderMutation.variables?.tableId === table.id;
-                    const isCancelling =
-                      cancelMutation.isPending &&
-                      cancelMutation.variables === table.id;
-                    return (
-                      <div
-                        key={table.id}
-                        data-testid={`pos-table-${table.id}`}
-                        className="absolute flex flex-col items-center"
-                        style={{
-                          ...tablePositionStyle(table.position),
-                          width: TABLE_BOX_SIZE.width + 24,
-                        }}
-                      >
-                        <div
-                          className={`flex h-16 w-32 flex-col items-center justify-center rounded-2xl border-2 bg-card shadow-md ${stateClassName[table.state]}`}
-                        >
-                          <span className="font-display text-lg font-semibold text-foreground">
-                            {table.tableLabel}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={`mt-1 ${stateClassName[table.state]}`}
-                          >
-                            {getPosServiceTableStateLabel(table.state)}
-                          </Badge>
-                        </div>
-                        {table.capacity !== null ? (
-                          <span className="mt-1 flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                            <Users className="size-3" />
-                            {table.capacity}
-                          </span>
-                        ) : (
-                          <span className="mt-1 h-4" aria-hidden="true" />
-                        )}
-                        {table.currentSaleTotal !== null ? (
-                          <span className="mt-1 text-xs font-semibold text-foreground">
-                            {table.state === "payment_due" ? "Outstanding" : "Current total"}{" "}
-                            {formatCurrency(table.currentSaleTotal)}
-                          </span>
-                        ) : null}
-                        {action ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={action === "free" ? "outline" : "default"}
-                            className="mt-2 min-w-28 rounded-lg"
-                            disabled={operationMutation.isPending}
-                            isLoading={isOperating}
-                            onClick={() =>
-                              handleTableOperation(table.id, action)
-                            }
-                            aria-label={`${action === "allocate" ? "Allocate" : "Free"} table ${table.tableLabel}`}
-                          >
-                            {action === "allocate" ? (
-                              <Check className="size-3.5" />
-                            ) : (
-                              <CircleOff className="size-3.5" />
-                            )}
-                            {action === "allocate" ? "Allocate" : "Free"}
-                          </Button>
-                        ) : null}
-                        {table.state === "allocated" ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="mt-2 min-w-28 rounded-lg"
-                            disabled={
-                              operationMutation.isPending ||
-                              orderMutation.isPending ||
-                              cancelMutation.isPending
-                            }
-                            isLoading={isOpening}
-                            onClick={() =>
-                              orderMutation.mutate({
-                                tableId: table.id,
-                                mode: "start",
-                              })
-                            }
-                            aria-label={`Start order for table ${table.tableLabel}`}
-                          >
-                            <Play className="size-3.5" />
-                            Start order
-                          </Button>
-                        ) : null}
-                        {(table.state === "engaged" ||
-                          table.state === "ready_to_bill") &&
-                        table.currentSaleId ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="mt-2 min-w-28 rounded-lg"
-                            disabled={
-                              orderMutation.isPending ||
-                              cancelMutation.isPending
-                            }
-                            isLoading={isOpening}
-                            onClick={() =>
-                              orderMutation.mutate({
-                                tableId: table.id,
-                                mode: "resume",
-                              })
-                            }
-                            aria-label={`Open order for table ${table.tableLabel}`}
-                          >
-                            <Play className="size-3.5" />
-                            Open order
-                          </Button>
-                        ) : null}
-                        {(table.state === "engaged" || table.state === "ready_to_bill") && table.currentSaleId ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="mt-2 min-w-28 rounded-lg text-destructive hover:text-destructive"
-                            disabled={
-                              orderMutation.isPending ||
-                              cancelMutation.isPending
-                            }
-                            isLoading={isCancelling}
-                            onClick={() => cancelMutation.mutate(table.id)}
-                            aria-label={`Cancel order for table ${table.tableLabel}`}
-                          >
-                            <Trash2 className="size-3.5" />
-                            Cancel order
-                          </Button>
-                        ) : null}
-                        {table.state === "engaged" && table.currentSaleId ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="mt-2 min-w-28 rounded-lg"
-                            disabled={readyMutation.isPending}
-                            isLoading={readyMutation.isPending && readyMutation.variables === table.id}
-                            onClick={() => readyMutation.mutate(table.id)}
-                            aria-label={`Mark table ${table.tableLabel} Ready to bill`}
-                          >
-                            <Check className="size-3.5" />
-                            Ready to bill
-                          </Button>
-                        ) : null}
-                        {table.state === "payment_due" && table.currentSaleId ? (
-                          <>
-                            {paymentTableId === table.id ? (
-                              <div className="mt-2 flex w-36 flex-col gap-1.5">
-                                <input
-                                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
-                                  type="number"
-                                  min="0.01"
-                                  step="0.01"
-                                  value={paymentAmount}
-                                  onChange={(event) => setPaymentAmount(event.target.value)}
-                                  placeholder="Amount"
-                                  aria-label={`Payment amount for table ${table.tableLabel}`}
-                                />
-                                <select
-                                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
-                                  value={paymentMethod}
-                                  onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
-                                  aria-label={`Payment method for table ${table.tableLabel}`}
-                                >
-                                  <option value="cash">Cash</option>
-                                  <option value="upi">UPI</option>
-                                  <option value="card">Card</option>
-                                </select>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="rounded-lg"
-                                  disabled={collectMutation.isPending}
-                                  isLoading={collectMutation.isPending}
-                                  onClick={() => submitPayment(table)}
-                                >
-                                  Collect payment
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="mt-2 min-w-28 rounded-lg"
-                                onClick={() => {
-                                  setPaymentTableId(table.id);
-                                  setPaymentAmount(String(table.currentSaleTotal ?? ""));
-                                }}
-                                aria-label={`Collect payment for table ${table.tableLabel}`}
-                              >
-                                Collect payment
-                              </Button>
-                            )}
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="mt-2 min-w-28 rounded-lg"
-                              disabled={releaseMutation.isPending}
-                              onClick={() => releaseMutation.mutate({ tableId: table.id, state: "due" })}
-                              aria-label={`Free table ${table.tableLabel} with bill due`}
-                            >
-                              Free with bill due
-                            </Button>
-                          </>
-                        ) : null}
-                        {table.state === "paid" && table.currentSaleId ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="mt-2 min-w-28 rounded-lg"
-                            disabled={releaseMutation.isPending}
-                            isLoading={releaseMutation.isPending && releaseMutation.variables?.tableId === table.id}
-                            onClick={() => releaseMutation.mutate({ tableId: table.id, state: "paid" })}
-                            aria-label={`Free paid table ${table.tableLabel}`}
-                          >
-                            <CircleOff className="size-3.5" />
-                            Free paid table
-                          </Button>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                <div
+                  data-testid="floor-canvas"
+                  className="relative min-h-[32rem] overflow-hidden rounded-2xl border border-dashed border-border/70 bg-[radial-gradient(circle,_var(--color-border)_1px,_transparent_1px)] [background-size:24px_24px]"
+                >
+                  {tables.map((table) => (
+                    <div
+                      key={table.id}
+                      className="absolute flex flex-col items-center"
+                      style={{
+                        ...tablePositionStyle(table.position),
+                        width: TABLE_BOX_SIZE.width + 24,
+                      }}
+                    >
+                      {renderTableCard(table, "floor")}
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>

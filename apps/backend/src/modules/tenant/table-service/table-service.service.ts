@@ -3,11 +3,17 @@ import * as organizationRepository from "@/modules/tenant/organization/organizat
 import {
   STATUS_CODES,
   type DeviceSessionDTO,
+  type CreateServiceAreaSVC,
   type CreateServiceTableSVC,
+  type AssignServiceTablesToAreaSVC,
+  type ServiceAreaResponse,
+  type ServiceAreasListResponse,
   type ServiceResponse,
+  type ServiceTableDTO,
   type ServiceTableResponse,
   type ServiceTableSaleResponse,
   type ServiceTablesListResponse,
+  type UpdateServiceAreaSVC,
   type UpdateServiceTableSVC,
 } from "@repo/types";
 import * as billingRepository from "@/modules/tenant/billing/billing.repository";
@@ -19,6 +25,17 @@ const defaultPosition = { x: 0.05, y: 0.05 } as const;
 type StoreScopeResult =
   | { ok: true }
   | { ok: false; error: string; code: typeof STATUS_CODES.NOT_FOUND };
+
+type AdminServiceAreaScope = {
+  userId: string;
+  organizationId: string;
+  storeId: string;
+  areaId: string;
+};
+
+type AdminServiceTableAreaScope = AdminServiceAreaScope & {
+  tableId: string;
+};
 
 const getStoreForUser = async (
   userId: string,
@@ -101,6 +118,21 @@ export const getServiceTablesForDevice = async (
     status: "success",
     data: { tables },
     message: "POS service tables fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const getServiceAreasForDevice = async (
+  session: DeviceSessionDTO,
+): Promise<ServiceResponse<ServiceAreasListResponse | null>> => {
+  const areas = await tableRepository.getServiceAreas(
+    session.organization.id,
+    session.store.id,
+  );
+  return {
+    status: "success",
+    data: { areas },
+    message: "POS service areas fetched successfully",
     code: STATUS_CODES.SUCCESS,
   };
 };
@@ -724,4 +756,359 @@ export const updateServiceTable = async (
     if (isUniqueViolation(error)) return conflictResponse();
     throw error;
   }
+};
+
+const areaConflictResponse = (
+  message = "An area with the same title already exists in this store",
+) => conflictResponse(message);
+
+const normalizeAreaDescription = (value: string | null | undefined) => {
+  if (value === undefined) return undefined;
+  const trimmed = (value ?? "").trim();
+  return trimmed === "" ? null : trimmed;
+};
+
+const scopeError = (scope: Exclude<StoreScopeResult, { ok: true }>) => ({
+  status: "error" as const,
+  message: scope.error,
+  data: null,
+  code: scope.code,
+});
+
+export const getServiceAreas = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+): Promise<ServiceResponse<ServiceAreasListResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok) return scopeError(scope);
+
+  const areas = await tableRepository.getServiceAreas(organizationId, storeId);
+  return {
+    status: "success",
+    data: { areas },
+    message: "Service areas fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const createServiceArea = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  data: CreateServiceAreaSVC,
+): Promise<ServiceResponse<ServiceAreaResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok) return scopeError(scope);
+
+  const title = data.title.trim();
+  if (await tableRepository.serviceAreaTitleExists(storeId, title))
+    return areaConflictResponse();
+
+  try {
+    const area = await pg.begin((tx) =>
+      tableRepository.createServiceArea(
+        {
+          id: crypto.randomUUID(),
+          organizationId,
+          storeId,
+          title,
+          description: normalizeAreaDescription(data.description) ?? null,
+          createdBy: userId,
+        },
+        tx,
+      ),
+    );
+    if (!area)
+      return {
+        status: "error",
+        message: "Failed to create service area",
+        data: null,
+        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+      };
+    return {
+      status: "success",
+      data: { area },
+      message: "Service area created successfully",
+      code: STATUS_CODES.CREATED,
+    };
+  } catch (error) {
+    if (isUniqueViolation(error)) return areaConflictResponse();
+    throw error;
+  }
+};
+
+export const updateServiceArea = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  areaId: string,
+  data: UpdateServiceAreaSVC,
+): Promise<ServiceResponse<ServiceAreaResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok) return scopeError(scope);
+
+  const existing = await tableRepository.getServiceAreaById(
+    organizationId,
+    storeId,
+    areaId,
+  );
+  if (!existing)
+    return {
+      status: "error",
+      message: "Service area not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+
+  const nextTitle = data.title?.trim();
+  if (nextTitle && nextTitle.toLowerCase() !== existing.title.toLowerCase()) {
+    if (await tableRepository.serviceAreaTitleExists(storeId, nextTitle, areaId))
+      return areaConflictResponse();
+  }
+
+  try {
+    const area = await tableRepository.updateServiceArea({
+      id: areaId,
+      organizationId,
+      storeId,
+      ...(nextTitle ? { title: nextTitle } : {}),
+      ...(data.description !== undefined
+        ? { description: normalizeAreaDescription(data.description) ?? null }
+        : {}),
+      updatedBy: userId,
+    });
+    if (!area)
+      return {
+        status: "error",
+        message: "Failed to update service area",
+        data: null,
+        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+      };
+    return {
+      status: "success",
+      data: { area },
+      message: "Service area updated successfully",
+      code: STATUS_CODES.SUCCESS,
+    };
+  } catch (error) {
+    if (isUniqueViolation(error)) return areaConflictResponse();
+    throw error;
+  }
+};
+
+export const deleteServiceArea = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  areaId: string,
+): Promise<ServiceResponse<ServiceAreaResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok) return scopeError(scope);
+
+  const existing = await tableRepository.getServiceAreaById(
+    organizationId,
+    storeId,
+    areaId,
+  );
+  if (!existing)
+    return {
+      status: "error",
+      message: "Service area not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+
+  const area = await tableRepository.deleteServiceArea(
+    organizationId,
+    storeId,
+    areaId,
+  );
+  if (!area)
+    return {
+      status: "error",
+      message: "Failed to delete service area",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+
+  return {
+    status: "success",
+    data: { area },
+    message: "Service area deleted successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const assignServiceTablesToArea = async (
+  { userId, organizationId, storeId, areaId }: AdminServiceAreaScope,
+  data: AssignServiceTablesToAreaSVC,
+): Promise<ServiceResponse<ServiceTablesListResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok) return scopeError(scope);
+
+  const tableIds = [...new Set(data.tableIds)];
+  const result = await pg.begin(async (tx) => {
+    const area = await tableRepository.lockServiceArea(
+      { organizationId, storeId, areaId },
+      tx,
+    );
+    if (!area) return { kind: "area_not_found" as const };
+
+    const lockedTables: ServiceTableDTO[] = [];
+    for (const tableId of tableIds) {
+      const table = await tableRepository.lockServiceTableForDevice(
+        organizationId,
+        storeId,
+        tableId,
+        tx,
+      );
+      if (!table) return { kind: "table_not_found" as const };
+      if (table.serviceAreaId) {
+        return {
+          kind: "already_assigned" as const,
+          tableLabel: table.tableLabel,
+        };
+      }
+      lockedTables.push(table);
+    }
+
+    const tables: ServiceTableDTO[] = [];
+    for (const table of lockedTables) {
+      const assigned = await tableRepository.assignServiceTableToArea(
+        {
+          organizationId,
+          storeId,
+          areaId,
+          tableId: table.id,
+          updatedBy: userId,
+        },
+        tx,
+      );
+      if (!assigned) throw new Error("Failed to assign service table to area");
+      tables.push({
+        ...assigned,
+        currentSaleTotal: table.currentSaleTotal,
+      });
+    }
+
+    return { kind: "ok" as const, tables };
+  });
+
+  if (result.kind === "area_not_found") {
+    return {
+      status: "error",
+      message: "Service area not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+  if (result.kind === "table_not_found") {
+    return {
+      status: "error",
+      message: "Service table not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+  if (result.kind === "already_assigned") {
+    return {
+      status: "error",
+      message: `Table ${result.tableLabel} must be unassigned before it can be assigned to an area`,
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { tables: result.tables },
+    message: "Service tables assigned to area",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const unassignServiceTableFromArea = async (
+  {
+    userId,
+    organizationId,
+    storeId,
+    areaId,
+    tableId,
+  }: AdminServiceTableAreaScope,
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok) return scopeError(scope);
+
+  const result = await pg.begin(async (tx) => {
+    const area = await tableRepository.lockServiceArea(
+      { organizationId, storeId, areaId },
+      tx,
+    );
+    if (!area) return { kind: "area_not_found" as const };
+
+    const table = await tableRepository.lockServiceTableForDevice(
+      organizationId,
+      storeId,
+      tableId,
+      tx,
+    );
+    if (!table) return { kind: "table_not_found" as const };
+    if (table.serviceAreaId !== areaId) {
+      return { kind: "not_in_area" as const };
+    }
+
+    const unassigned = await tableRepository.unassignServiceTableFromArea(
+      {
+        organizationId,
+        storeId,
+        areaId,
+        tableId,
+        updatedBy: userId,
+      },
+      tx,
+    );
+    if (!unassigned) throw new Error("Failed to unassign service table from area");
+
+    return {
+      kind: "ok" as const,
+      table: {
+        ...unassigned,
+        serviceAreaId: null,
+        currentSaleTotal: table.currentSaleTotal,
+      },
+    };
+  });
+
+  if (result.kind === "area_not_found") {
+    return {
+      status: "error",
+      message: "Service area not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+  if (result.kind === "table_not_found") {
+    return {
+      status: "error",
+      message: "Service table not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+  if (result.kind === "not_in_area") {
+    return {
+      status: "error",
+      message: "Service table is not assigned to this area",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { table: result.table },
+    message: "Service table unassigned from area",
+    code: STATUS_CODES.SUCCESS,
+  };
 };

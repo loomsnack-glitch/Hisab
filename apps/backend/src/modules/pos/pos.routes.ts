@@ -64,6 +64,17 @@ router.get("/tables", async (c) => {
   }
 });
 
+router.get("/areas", async (c) => {
+  try {
+    return handleServiceResponse(
+      c,
+      await tableService.getServiceAreasForDevice(c.get("authDevice")),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "getServiceAreasForDevice", c, error);
+  }
+});
+
 router.post("/tables/:tableId/allocate", async (c) => {
   try {
     const tableId = c.req.param("tableId");

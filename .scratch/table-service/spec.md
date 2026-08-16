@@ -70,6 +70,12 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 43. As a store owner, I want no new waiter/cashier permission system in this release, so that existing device-authenticated POS access remains simple.
 44. As a store owner, I want admin billing to remain read-only, so that table-service configuration is not mistaken for permission to create or alter Sales from the Admin workspace.
 45. As a POS operator, I want table operations to remain confined to my device’s Store, so that tables and their bills never cross Store boundaries.
+46. As an administrator, I want to see which Service Tables belong to a selected Service Area, so that I can review that part of the floor.
+47. As an administrator, I want to assign Unassigned Service Tables to a Service Area, so that those tables belong to that part of the floor.
+48. As an administrator, I want to unassign a table from its Service Area, so that it becomes available for another area.
+49. As an administrator, I want a table that already belongs to one Service Area rejected from assignment to another until I unassign it first, so that tables cannot silently move between areas.
+50. As an administrator, I want deleting a Service Area to unassign its tables rather than delete them, so that the tables remain configured for the Store.
+51. As an administrator or POS operator, I want Simple view to group tables under their Service Area headings, so that the floor is scanned by area rather than as one flat list.
 
 ## Implementation Decisions
 
@@ -90,6 +96,7 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 - Free table with bill due is a deliberate release command for a currently `payment_due` table. It preserves the outstanding Sale, total, payment status, and historical `serviceTableId`; it does not forgive debt, void the Sale, or affect a Customer ledger beyond the normal recorded balance.
 - Manually free a `paid` table by clearing its current sale. Do not automatically free a table after payment, because service staff may need to wait for guests to leave or the table to be cleaned.
 - Add typed DTOs, request schemas, query keys, client service functions, backend routes, application-service commands, and repositories for the table model and live table view. Admin configuration routes remain user-authenticated and explicitly Store-scoped. POS operational routes derive Store scope from the authenticated Store Device, following the existing device-scoped billing-route rule.
+- A Service Table may belong to at most one Service Area through a nullable area association. Only Unassigned Service Tables can be assigned to an area. A table already assigned to another area must be unassigned first; there is no direct move between areas. Deleting an area unassigns its tables and does not delete the tables. Area assignment is admin configuration only and does not change table operational state. Simple view groups tables under each Service Area heading and lists Unassigned tables last; Floor layout remains a single canvas.
 - Add **Tables** to both workspace route trees. Admin Tables is a manager configuration screen. POS Tables is a live floor/status screen and hands table drafts into the existing POS composer instead of duplicating product-selection, settlement, invoice, or printing UI.
 - Keep access role-neutral: every Active Store Device may allocate, order, mark ready, place, collect, cancel, and release tables. No waiter/cashier role or per-action authorization schema is added.
 - Maintain the current read-only Admin Billing boundary. The Admin Tables page manages Service Table configuration and layout only; Sales and Payments remain writable only through device-authenticated POS flows.
@@ -97,8 +104,8 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 ## Testing Decisions
 
 - Test observable outcomes at the table-service application-service boundary: returned table state, current-sale linkage, persisted Table-Linked Sale association, Sale status, Payment status, totals, and Customer Ledger effects. Do not assert private helper calls or UI implementation structure.
-- Add contract tests for Service Table creation and update payloads: trimmed labels, per-Store uniqueness behavior, optional positive integer capacity, valid floor coordinates, and rejection of invalid states or cross-Store identifiers. Follow the existing Zod billing-contract tests in the types package.
-- Add service tests following the existing billing service’s repository-mocked test style. Cover allocation with no Sale, freeing allocation with no bill, start order, one-current-draft enforcement, resume/update, ready-to-bill, canceling a draft, commit-and-print handoff, paid, partial, due, collection, manual release, and free-with-bill-due.
+- Add contract tests for Service Table creation and update payloads: trimmed labels, per-Store uniqueness behavior, optional positive integer capacity, valid floor coordinates, and rejection of invalid states or cross-Store identifiers. Follow the existing Zod billing-contract tests in the types package. Cover Service Area assignment payloads and rejection of writing `serviceAreaId` through the generic table update contract.
+- Add service tests following the existing billing service’s repository-mocked test style. Cover allocation with no Sale, freeing allocation with no bill, start order, one-current-draft enforcement, resume/update, ready-to-bill, canceling a draft, commit-and-print handoff, paid, partial, due, collection, manual release, and free-with-bill-due. Cover assigning Unassigned Service Tables to an area, rejecting a table already assigned to another area, and unassigning a table from the selected area.
 - Test the receivable-rule change through billing service behavior: committed Due and partial Sales with customer-only, table-only, both, and neither; confirm ledger entries only exist for a Customer-linked Sale; confirm later collection works for a customerless due Sale.
 - Add persistence/migration coverage for Store isolation, case-insensitive table-label uniqueness, historical Sale table linkage after release, and a new draft being allowed after an earlier due Sale is released.
 - Test concurrent Start order attempts so only one Draft Sale becomes the table’s Active Table Sale, and test concurrent release/payment commands so table state and Sale state cannot diverge.
@@ -111,7 +118,7 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 - Automated state changes, automatic receipt printing, auto-freeing after payment, timers, table turnover alerts, or cleaning workflows.
 - Kitchen-order tickets, kitchen display integration, table-side printer routing, and restaurant course management.
 - Splitting one table bill, merging tables, moving an active order between tables, or multiple simultaneous current orders on one table.
-- Custom table shapes, rotation, named floor sections, walls, furniture, seating diagrams beyond the optional capacity number, or multi-floor layout editing.
+- Custom table shapes, rotation, walls, furniture, seating diagrams beyond the optional capacity number, or multi-floor layout editing.
 - Writing off, forgiving, sending reminders for, or reconciling a Released Table Due. The feature only preserves the outstanding Sale and permits ordinary future Payment collection.
 - Changing payment-method taxonomy by adding an `unpaid` tender; existing Due settlement remains the representation of no money collected.
 - Deleting or archiving Service Tables and retroactively changing historical table associations.
@@ -119,7 +126,7 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 
 ## Further Notes
 
-- The agreed canonical vocabulary is in `CONTEXT.md`: Service Table, Active Table Sale, Allocated Service Table, Discarded Table Draft, Table-Linked Sale, Released Table Due, Receivable Sale, and Role-Neutral Table Access.
+- The agreed canonical vocabulary is in `CONTEXT.md`: Service Table, Service Area, Unassigned Service Table, Active Table Sale, Allocated Service Table, Discarded Table Draft, Table-Linked Sale, Released Table Due, Receivable Sale, and Role-Neutral Table Access. Area membership uses assign/unassign so it is not confused with allocating a table to seated guests.
 - A person count is informational; it does not limit the number of items, require a Customer, or calculate a bill.
 - A current table total is the Draft Sale total before placement and the committed Sale’s due/paid amount after placement. Free and Allocated tables have no current bill total.
 - Table state is physical-service state, not a replacement for Sale Status or Payment Status. A Released Table Due is Free physically while its historical Sale remains completed and pending or partial financially.

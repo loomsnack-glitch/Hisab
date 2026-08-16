@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, NavLink, useLocation, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
     Bell,
@@ -64,7 +64,13 @@ const AppSidebar = ({
     onNavigate,
 }: AppSidebarProps) => {
     const location = useLocation();
+    const navigate = useNavigate();
     const { organizationId } = useParams();
+
+    const goTo = (to: string) => {
+        navigate(to);
+        onNavigate?.();
+    };
 
     const organizationsQuery = useQuery({
         queryKey: organizationKeys.list(),
@@ -152,57 +158,49 @@ const AppSidebar = ({
         const Icon = item.icon;
         const collapsed = !isMobile && isCollapsed;
 
+        const active = item.isActive;
         const link = (
-            <NavLink
-                to={item.to}
-                onClick={onNavigate}
-                className={() => {
-                    const active = item.isActive;
-                    return cn(
-                        "sidebar-nav-link group rounded-xl text-sm font-medium transition-all duration-200",
-                        collapsed
-                            ? collapsedNavRowClass
-                            : badge !== undefined && badge > 0
-                              ? expandedNavRowClass
-                              : expandedNavRowClassNoTrail,
-                        active
-                            ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                        collapsed && "sidebar-nav-link--collapsed",
-                    );
-                }}
+            <button
+                type="button"
+                onClick={() => goTo(item.to)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                    "sidebar-nav-link group cursor-pointer appearance-none rounded-xl border-0 bg-transparent text-sm font-medium transition-all duration-200",
+                    collapsed
+                        ? collapsedNavRowClass
+                        : badge !== undefined && badge > 0
+                          ? expandedNavRowClass
+                          : expandedNavRowClassNoTrail,
+                    active
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                    collapsed && "sidebar-nav-link--collapsed",
+                )}
             >
-                {() => {
-                    const active = item.isActive;
-                    return (
-                        <>
-                            {collapsed && active ? <span className="sidebar-active-rail" aria-hidden /> : null}
-                            <Icon
-                                className={cn(
-                                    "size-[18px] transition-colors duration-200",
-                                    active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-                                )}
-                                strokeWidth={active ? 2.25 : 2}
-                            />
-                            {!collapsed ? (
-                                <>
-                                    <span className="sidebar-label truncate text-left">{item.label}</span>
-                                    {badge !== undefined && badge > 0 ? (
-                                        <span className="flex h-5 min-w-5 items-center justify-center justify-self-end rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white">
-                                            {badge}
-                                        </span>
-                                    ) : null}
-                                </>
-                            ) : null}
-                            {collapsed && badge !== undefined && badge > 0 ? (
-                                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold text-white">
-                                    {badge}
-                                </span>
-                            ) : null}
-                        </>
-                    );
-                }}
-            </NavLink>
+                {collapsed && active ? <span className="sidebar-active-rail" aria-hidden /> : null}
+                <Icon
+                    className={cn(
+                        "size-[18px] transition-colors duration-200",
+                        active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                    )}
+                    strokeWidth={active ? 2.25 : 2}
+                />
+                {!collapsed ? (
+                    <>
+                        <span className="sidebar-label truncate text-left">{item.label}</span>
+                        {badge !== undefined && badge > 0 ? (
+                            <span className="flex h-5 min-w-5 items-center justify-center justify-self-end rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white">
+                                {badge}
+                            </span>
+                        ) : null}
+                    </>
+                ) : null}
+                {collapsed && badge !== undefined && badge > 0 ? (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold text-white">
+                        {badge}
+                    </span>
+                ) : null}
+            </button>
         );
 
         if (!collapsed) {
@@ -226,34 +224,29 @@ const AppSidebar = ({
 
         if ("to" in item && item.to) {
             const link = (
-                <NavLink
-                    to={item.to}
-                    onClick={onNavigate}
-                    className={() =>
-                        cn(
-                            "sidebar-nav-link group rounded-xl text-sm font-medium transition-all duration-200",
-                            collapsed ? collapsedNavRowClass : expandedNavRowClassNoTrail,
-                            isActive
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                            collapsed && "sidebar-nav-link--collapsed",
-                        )
-                    }
-                >
-                    {() => (
-                        <>
-                            {collapsed && isActive ? <span className="sidebar-active-rail" aria-hidden /> : null}
-                            <Icon
-                                className={cn(
-                                    "size-[18px] transition-colors duration-200",
-                                    isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-                                )}
-                                strokeWidth={isActive ? 2.25 : 2}
-                            />
-                            {!collapsed ? <span className="sidebar-label truncate text-left">{item.label}</span> : null}
-                        </>
+                <button
+                    type="button"
+                    onClick={() => goTo(item.to)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                        "sidebar-nav-link group cursor-pointer appearance-none rounded-xl border-0 bg-transparent text-sm font-medium transition-all duration-200",
+                        collapsed ? collapsedNavRowClass : expandedNavRowClassNoTrail,
+                        isActive
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                        collapsed && "sidebar-nav-link--collapsed",
                     )}
-                </NavLink>
+                >
+                    {collapsed && isActive ? <span className="sidebar-active-rail" aria-hidden /> : null}
+                    <Icon
+                        className={cn(
+                            "size-[18px] transition-colors duration-200",
+                            isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                        )}
+                        strokeWidth={isActive ? 2.25 : 2}
+                    />
+                    {!collapsed ? <span className="sidebar-label truncate text-left">{item.label}</span> : null}
+                </button>
             );
 
             if (!collapsed) {
@@ -313,16 +306,16 @@ const AppSidebar = ({
                         isCollapsed && !isMobile ? "justify-center px-2" : "justify-between px-3",
                     )}
                 >
-                    <Link
-                        to={homePath}
-                        onClick={onNavigate}
+                    <button
+                        type="button"
+                        onClick={() => goTo(homePath)}
                         className={cn(
-                            "flex min-w-0 items-center transition-opacity hover:opacity-90",
+                            "flex min-w-0 cursor-pointer items-center appearance-none border-0 bg-transparent p-0 transition-opacity hover:opacity-90",
                             isCollapsed && !isMobile ? "justify-center" : "gap-2.5",
                         )}
                     >
                         <WorkspaceBrand workspace="admin" showLabel={!isCollapsed || isMobile} />
-                    </Link>
+                    </button>
 
                     {!isMobile && !isCollapsed ? (
                         <Button

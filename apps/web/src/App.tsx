@@ -34,6 +34,7 @@ import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppInboxPage, { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
+import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import type { DisplayScaleScope } from "@/lib/display-scale";
 
@@ -98,6 +99,7 @@ const App = () => {
 
     return (
         <DisplayScaleProvider scope={displayScaleScope}>
+            <WebAppHead />
             <div data-workspace={isPosRoute ? "pos" : "admin"}>
                 {!isPosRoute && authQuery.isPending ? (
                     <div className="min-h-screen bg-background" aria-busy="true" aria-label="Loading" />

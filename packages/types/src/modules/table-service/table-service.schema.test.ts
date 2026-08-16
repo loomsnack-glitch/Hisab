@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  AssignServiceTablesToAreaSchema,
+  CreateServiceAreaSchema,
   CreateServiceTableSchema,
+  ServiceAreaDTOSchema,
   ServiceTableDTOSchema,
+  UpdateServiceAreaSchema,
   UpdateServiceTableSchema,
 } from "./table-service.schema";
 
@@ -78,6 +82,7 @@ describe("Service Table contracts", () => {
         id: tableId,
         organizationId,
         storeId,
+        serviceAreaId: null,
         tableLabel: "A1",
         capacity: 4,
         position: { x: 0.1, y: 0.2 },
@@ -90,5 +95,90 @@ describe("Service Table contracts", () => {
         updatedAt: new Date(),
       }).success,
     ).toBe(true);
+    expect(
+      UpdateServiceTableSchema.safeParse({
+        serviceAreaId: tableId,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("Service Area contracts", () => {
+  test("trims a title and accepts a blank description", () => {
+    const result = CreateServiceAreaSchema.safeParse({
+      title: "  Patio  ",
+      description: "   ",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.title).toBe("Patio");
+      expect(result.data.description).toBe("");
+    }
+  });
+
+  test("rejects missing, empty, and overlong titles", () => {
+    expect(CreateServiceAreaSchema.safeParse({ title: "   " }).success).toBe(
+      false,
+    );
+    expect(CreateServiceAreaSchema.safeParse({}).success).toBe(false);
+    expect(
+      CreateServiceAreaSchema.safeParse({ title: "a".repeat(129) }).success,
+    ).toBe(false);
+  });
+
+  test("rejects a description longer than 1000 characters", () => {
+    expect(
+      CreateServiceAreaSchema.safeParse({
+        title: "Patio",
+        description: "a".repeat(1001),
+      }).success,
+    ).toBe(false);
+  });
+
+  test("does not allow clients to write store identifiers on create or update", () => {
+    expect(
+      CreateServiceAreaSchema.safeParse({
+        title: "Patio",
+        storeId,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateServiceAreaSchema.safeParse({
+        storeId,
+        title: "Indoor",
+      }).success,
+    ).toBe(false);
+    expect(UpdateServiceAreaSchema.safeParse({}).success).toBe(false);
+    expect(
+      ServiceAreaDTOSchema.safeParse({
+        id: tableId,
+        organizationId,
+        storeId,
+        title: "Patio",
+        description: "Outdoor seating",
+        createdBy: userId,
+        updatedBy: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }).success,
+    ).toBe(true);
+  });
+
+  test("assigns only explicit table ids and rejects an empty selection", () => {
+    expect(
+      AssignServiceTablesToAreaSchema.safeParse({
+        tableIds: [tableId],
+      }).success,
+    ).toBe(true);
+    expect(AssignServiceTablesToAreaSchema.safeParse({ tableIds: [] }).success).toBe(
+      false,
+    );
+    expect(
+      AssignServiceTablesToAreaSchema.safeParse({
+        tableIds: [tableId],
+        storeId,
+      }).success,
+    ).toBe(false);
   });
 });
