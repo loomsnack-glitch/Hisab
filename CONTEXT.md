@@ -13,8 +13,8 @@ The settlement state of a Sale based on how much money has been collected agains
 _Avoid_: Transaction status, order status
 
 **Receivable Sale**:
-A Sale whose payment status is pending or partial, and therefore still has money owed by a Customer. A Receivable Sale must belong to a specific Customer.
-_Avoid_: Open bill, unpaid order
+A committed Sale whose payment status is pending or partial and therefore still has money owed. A Receivable Sale may be linked to a Customer, a Service Table, both, or neither.
+_Avoid_: Customer-only due bill, synthetic unpaid payment
 
 **Customer Ledger**:
 The append-only history of balance-changing entries for a Customer, including sales, payments, void reversals, and manual adjustments. It exists to explain why the Customer's running balance is what it is.
@@ -96,6 +96,30 @@ _Avoid_: Post-payment void, accounting erase
 A Sale Number is assigned when a Sale is committed, not while it is still a Draft Sale.
 _Avoid_: Draft bill number, pre-commit sequence
 
+**Service Table**:
+A physical customer table configured for one Store, identified by a short Store-unique table label (shown as “Table no” in the UI). It may carry a positive whole-number seating capacity and a position in that Store's floor layout; a blank capacity means it is unknown.
+_Avoid_: Organization table, shared table, seating chart item
+
+**Active Table Sale**:
+The single Draft Sale currently linked to a Service Table. A Service Table may have at most one Active Table Sale at a time, and that Sale is its current order.
+_Avoid_: Parallel table drafts, duplicate current bill, table cart
+
+**Allocated Service Table**:
+A Service Table that has been occupied by guests but has no Active Table Sale yet. Allocation reserves the physical table without creating a Draft Sale.
+_Avoid_: Empty draft, free seated table, unstarted order
+
+**Discarded Table Draft**:
+An Active Table Sale intentionally abandoned before checkout because the guests left or the order is no longer wanted. Discarding it removes the uncommitted draft and frees its Service Table without creating a financial bill.
+_Avoid_: Void completed sale, unpaid cancellation, retained abandoned cart
+
+**Table-Linked Sale**:
+A Sale associated with a Service Table as the setting in which it was ordered. The association may remain as historical context after the table is released for another guest.
+_Avoid_: Customer-required table bill, anonymous table history
+
+**Released Table Due**:
+A Receivable Sale whose Service Table has been released for reuse before its balance was collected. Releasing the table preserves the sale's original table association and does not write off or otherwise settle the balance.
+_Avoid_: Deleted table bill, forgiven balance, lost table history
+
 **Store Device**:
 A registered terminal that belongs to exactly one Store within an Organization and acts as the audit identity for billing activity created from that terminal.
 _Avoid_: Browser device id, anonymous client id, generic handset
@@ -143,6 +167,10 @@ _Avoid_: Device-private bill list, terminal-only history
 **Cross-Device Bill Continuation**:
 The rule that any Active Store Device in the same Store may continue work on that Store's bills, including draft edits, payment collection, and allowed void actions.
 _Avoid_: Creator-device lock, single-terminal bill ownership
+
+**Role-Neutral Table Access**:
+The rule that any Active Store Device for a Store may perform all table-service actions. In the initial table-service release, labels such as waiter and cashier describe operating roles rather than system-enforced permissions.
+_Avoid_: Waiter-only device, cashier-only device, table role authorization
 
 **Read-Only Admin Billing View**:
 A user-authenticated management view that may inspect a Store's bills but cannot create or mutate billing data. Writing billing data requires a Device-Authenticated Billing Session.
