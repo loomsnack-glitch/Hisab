@@ -9,6 +9,8 @@ import type {
   StoreDevicePosSettingsDTOSchema,
   StoreDeviceDTOSchema,
   StoreDTOSchema,
+  StoreMessageLinkSchema,
+  StoreMessageTemplatesSchema,
   UpdateOrganizationSchema,
   UpdateOrganizationCatalogSettingsSchema,
   UpdateStoreDeviceSchema,
@@ -18,6 +20,8 @@ import type {
 
 export type OrganizationDTO = z.infer<typeof OrganizationDTOSchema>;
 export type StoreDTO = z.infer<typeof StoreDTOSchema>;
+export type StoreMessageLink = z.infer<typeof StoreMessageLinkSchema>;
+export type StoreMessageTemplates = z.infer<typeof StoreMessageTemplatesSchema>;
 export type StoreDeviceDTO = z.infer<typeof StoreDeviceDTOSchema>;
 export type OrganizationCatalogSettingsDTO = z.infer<
   typeof OrganizationCatalogSettingsDTOSchema
@@ -88,6 +92,8 @@ export type UpdateStoreREPO = Pick<StoreDTO, "id" | "name"> & {
   reviewLink: string | null;
   socialMediaName: string | null;
   socialMediaLink: string | null;
+  whatsappLinks: StoreMessageLink[];
+  whatsappMessageTemplates: StoreMessageTemplates;
   updatedBy: string;
 };
 

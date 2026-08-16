@@ -6,6 +6,7 @@ import type {
     CreatePaymentJSON,
     CreateDraftSaleJSON,
     CustomerLedgerResponse,
+    CustomerDueSalesResponse,
     CustomerListQuery,
     CustomerResponse,
     CustomersListResponse,
@@ -95,6 +96,19 @@ export const getCustomerLedger = async (
 ): Promise<ServiceResponse<CustomerLedgerResponse | null>> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/customers/${customerId}/ledger`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getCustomerDueSales = async (
+    organizationId: string,
+    storeId: string,
+    customerId: string,
+): Promise<ServiceResponse<CustomerDueSalesResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/customers/${customerId}/due-sales`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

@@ -102,6 +102,7 @@ export const CustomerDTOSchema = z.object({
   phone: phoneSchema.nullable().optional(),
   balance: moneySchema,
   isActive: z.boolean(),
+  marketingOptedOut: z.boolean().default(false),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,
@@ -273,6 +274,11 @@ export const SaleDetailDTOSchema = SaleSummaryDTOSchema.extend({
   orderDiscountAmount: moneySchema,
 });
 
+export const CustomerDueSalesResponseSchema = z.object({
+  customer: CustomerDTOSchema,
+  sales: z.array(SaleSummaryDTOSchema),
+});
+
 export const CreateCustomerSchema = z.object({
   name: nameSchema,
   phone: optionalPhoneSchema,
@@ -284,12 +290,14 @@ export const UpdateCustomerSchema = z
     name: nameSchema.optional(),
     phone: optionalPhoneSchema,
     isActive: z.boolean().optional(),
+    marketingOptedOut: z.boolean().optional(),
   })
   .refine(
     (value) =>
       value.name !== undefined ||
       value.phone !== undefined ||
-      value.isActive !== undefined,
+      value.isActive !== undefined ||
+      value.marketingOptedOut !== undefined,
     {
       message: "At least one field is required",
     },

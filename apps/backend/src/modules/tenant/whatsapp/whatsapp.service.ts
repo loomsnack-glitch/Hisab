@@ -6,15 +6,19 @@ import {
     type WhatsAppAccountStatusResponseDTO,
     type WhatsAppChangeAccountNumberJSON,
     type WhatsAppCreateAccountJSON,
+    type WhatsAppReminderQueueResponseDTO,
     type WhatsAppWorkerStatusUpdateJSON,
     type DeviceSessionDTO,
 } from "@repo/types";
 import { redis } from "@/config/redis";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import * as billingRepository from "@/modules/tenant/billing/billing.repository";
 import * as repository from "./whatsapp.repository";
 import * as workerClient from "./whatsapp.worker-client";
 import * as invoiceService from "./invoice";
 import * as conversationService from "./conversation";
+import { formatDueReminderText } from "./due-reminder";
+import * as promotionService from "./promotion";
 
 const QR_KEY_PREFIX = "whatsapp:account:qr:";
 const QR_TTL_SECONDS = 120;
@@ -660,6 +664,87 @@ export const receiveWorkerStatus = async (accountId: string, update: WhatsAppWor
 
 export const queueInvoice = invoiceService.queueInvoice;
 export const queueInvoiceForDevice = invoiceService.queueInvoiceForDevice;
+
+const queueDueReminderForStore = async (
+    organizationId: string,
+    storeId: string,
+    customerId: string,
+    customMessage?: string,
+    saleId?: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+    const store = await organizationRepository.getStoreById(organizationId, storeId);
+    const customer = await billingRepository.getCustomerById(organizationId, customerId);
+    if (!store || !customer) return { status: "error", message: "Store or customer not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const phone = normalizePhoneNumber(customer.phone);
+    if (!phone) return { status: "error", message: "Customer must have a valid phone number", data: null, code: STATUS_CODES.BAD_REQUEST };
+    const sales = await billingRepository.getDueSalesByCustomerStore(organizationId, storeId, customerId);
+    if (sales.length === 0) return { status: "error", message: "This customer has no due bills in this Store", data: null, code: STATUS_CODES.CONFLICT };
+    const reminderSales = saleId ? sales.filter(sale => sale.id === saleId) : sales;
+    if (reminderSales.length === 0) return { status: "error", message: "This bill has no remaining due amount", data: null, code: STATUS_CODES.CONFLICT };
+    const account = await repository.getAccount(organizationId, storeId);
+    if (!account) return { status: "error", message: "Link the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
+    if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
+    try {
+        const queued = await repository.createCustomerTextOutbox({
+            organizationId,
+            storeId,
+            accountId: account.id,
+            customerId,
+            saleId: saleId ?? null,
+            customerPhone: phone,
+            customerName: customer.name,
+            body: formatDueReminderText(customer, reminderSales, store.name, customMessage ?? store.whatsappMessageTemplates.dueReminder, store.whatsappLinks),
+        });
+        return {
+            status: "success",
+            message: "Due reminder queued for WhatsApp",
+            data: { customerId, saleId: saleId ?? null, ...queued },
+            code: STATUS_CODES.CREATED,
+        };
+    } catch (error) {
+        if (error instanceof repository.WhatsAppOutboxLimitError) return { status: "error", message: "WhatsApp account queue is full; retry shortly", data: null, code: STATUS_CODES.TOO_MANY_REQUESTS };
+        throw error;
+    }
+};
+
+export const queueDueReminder = async (userId: string, organizationId: string, storeId: string, customerId: string, customMessage?: string, saleId?: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return queueDueReminderForStore(organizationId, storeId, customerId, customMessage, saleId);
+};
+
+export const queueDueReminderForDevice = (session: DeviceSessionDTO, customerId: string, customMessage?: string, saleId?: string) =>
+    queueDueReminderForStore(session.organization.id, session.store.id, customerId, customMessage, saleId);
+
+const getDueReminderStatusForStore = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+    const sale = await billingRepository.getSaleById(organizationId, storeId, saleId);
+    const customerId = sale?.customerId ?? null;
+    if (!customerId) return { status: "success", message: "Due reminder has not been sent for this bill", data: null, code: STATUS_CODES.SUCCESS };
+    const account = await repository.getAccount(organizationId, storeId);
+    const existing = account ? await repository.getCustomerReminderOutbox(organizationId, storeId, account.id, saleId) : null;
+    return existing
+        ? {
+            status: "success",
+            message: "Due reminder status fetched successfully",
+            data: { customerId, saleId, ...existing },
+            code: STATUS_CODES.SUCCESS,
+        }
+        : { status: "success", message: "Due reminder has not been sent for this bill", data: null, code: STATUS_CODES.SUCCESS };
+};
+
+export const getDueReminderStatus = async (userId: string, organizationId: string, storeId: string, saleId: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return getDueReminderStatusForStore(organizationId, storeId, saleId);
+};
+
+export const getDueReminderStatusForDevice = (session: DeviceSessionDTO, saleId: string) =>
+    getDueReminderStatusForStore(session.organization.id, session.store.id, saleId);
+export const createPromotion = promotionService.createPromotion;
 export const getInvoiceStatusForDevice = invoiceService.getInvoiceStatusForDevice;
 export const retryInvoiceForDevice = invoiceService.retryInvoiceForDevice;
 export const getInvoiceStatus = invoiceService.getInvoiceStatus;

@@ -145,5 +145,8 @@ export const whatsappKeys = {
   invoice: (organizationId: string, storeId: string, saleId: string) =>
     [...whatsappKeys.all, "invoice", organizationId, storeId, saleId] as const,
   posInvoice: (saleId: string) => [...whatsappKeys.all, "pos-invoice", saleId] as const,
+  dueReminder: (organizationId: string, storeId: string, saleId: string) =>
+    [...whatsappKeys.all, "due-reminder", organizationId, storeId, saleId] as const,
+  posDueReminder: (saleId: string) => [...whatsappKeys.all, "pos-due-reminder", saleId] as const,
   posAccount: () => [...whatsappKeys.all, "pos-account"] as const,
 };

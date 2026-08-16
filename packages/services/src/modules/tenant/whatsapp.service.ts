@@ -6,6 +6,7 @@ import type {
     WhatsAppChangeAccountNumberJSON,
     WhatsAppCreateAccountJSON,
     WhatsAppInvoiceQueueResponseDTO,
+    WhatsAppReminderQueueResponseDTO,
     WhatsAppConversationListResponse,
     WhatsAppConversationMessagesResponse,
     WhatsAppConversationDTO,
@@ -13,12 +14,14 @@ import type {
     WhatsAppMessageDTO,
     WhatsAppSendConversationTextJSON,
     WhatsAppAttachConversationCustomerJSON,
+    WhatsAppCreatePromotionJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
 type WhatsAppResponse = ServiceResponse<WhatsAppAccountStatusResponseDTO | null>;
 type WhatsAppAccountsResponse = ServiceResponse<WhatsAppAccountsResponseDTO | null>;
 type WhatsAppInvoiceResponse = ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
+type WhatsAppReminderResponse = ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
 type WhatsAppConversationListResponseType = ServiceResponse<WhatsAppConversationListResponse | null>;
 type WhatsAppConversationResponse = ServiceResponse<WhatsAppConversationMessagesResponse | null>;
 const accountPath = (organizationId: string, storeId: string) =>
@@ -176,9 +179,10 @@ export const queueWhatsAppInvoice = async (
     organizationId: string,
     storeId: string,
     saleId: string,
+    customMessage?: string,
 ): Promise<WhatsAppInvoiceResponse> => {
     try {
-        const response = await api.post(invoicePath(organizationId, storeId, saleId), { saleId });
+        const response = await api.post(invoicePath(organizationId, storeId, saleId), { saleId, customMessage });
         return response.data;
     } catch (error) {
         return handleApiError(error);
@@ -205,6 +209,47 @@ export const retryWhatsAppInvoice = async (
 ): Promise<WhatsAppInvoiceResponse> => {
     try {
         const response = await api.post(invoicePath(organizationId, storeId, saleId) + "/retry");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const queueWhatsAppDueReminder = async (
+    organizationId: string,
+    storeId: string,
+    customerId: string,
+    customMessage?: string,
+    saleId?: string,
+): Promise<WhatsAppReminderResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/customers/${customerId}/due-reminder`, { customMessage, saleId });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppDueReminderStatus = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<WhatsAppReminderResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/whatsapp/due-reminder/${saleId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createWhatsAppPromotion = async (
+    organizationId: string,
+    storeId: string,
+    data: WhatsAppCreatePromotionJSON,
+) => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/promotions`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

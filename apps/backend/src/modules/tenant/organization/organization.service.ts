@@ -506,6 +506,9 @@ export const updateStore = async (
       storeData.socialMediaLink === undefined
         ? (store.socialMediaLink ?? null)
         : normalizeOptionalText(storeData.socialMediaLink),
+    whatsappLinks: storeData.whatsappLinks ?? store.whatsappLinks,
+    whatsappMessageTemplates:
+      storeData.whatsappMessageTemplates ?? store.whatsappMessageTemplates,
     updatedBy: userId,
   });
 

@@ -16,7 +16,11 @@ import {
     WhatsAppChangeAccountNumberSchema,
     WhatsAppAccountsResponseSchema,
     WhatsAppSendInvoiceSchema,
+    WhatsAppDueReminderRequestSchema,
     WhatsAppInvoiceQueueResponseSchema,
+    WhatsAppReminderQueueResponseSchema,
+    WhatsAppCreatePromotionSchema,
+    WhatsAppPromotionResponseSchema,
     WhatsAppSendTextSchema,
     WhatsAppSendConversationTextSchema,
     WhatsAppAttachConversationCustomerSchema,
@@ -72,7 +76,11 @@ export type WhatsAppSendTextJSON = z.infer<typeof WhatsAppSendTextSchema>;
 export type WhatsAppSendConversationTextJSON = z.infer<typeof WhatsAppSendConversationTextSchema>;
 export type WhatsAppAttachConversationCustomerJSON = z.infer<typeof WhatsAppAttachConversationCustomerSchema>;
 export type WhatsAppSendInvoiceJSON = z.infer<typeof WhatsAppSendInvoiceSchema>;
+export type WhatsAppDueReminderRequestJSON = z.infer<typeof WhatsAppDueReminderRequestSchema>;
 export type WhatsAppInvoiceQueueResponseDTO = z.infer<typeof WhatsAppInvoiceQueueResponseSchema>;
+export type WhatsAppReminderQueueResponseDTO = z.infer<typeof WhatsAppReminderQueueResponseSchema>;
+export type WhatsAppCreatePromotionJSON = z.infer<typeof WhatsAppCreatePromotionSchema>;
+export type WhatsAppPromotionResponseDTO = z.infer<typeof WhatsAppPromotionResponseSchema>;
 export type WhatsAppWorkerInvoiceJobDTO = z.infer<typeof WhatsAppWorkerInvoiceJobSchema>;
 export type WhatsAppWorkerInvoiceResultJSON = z.infer<typeof WhatsAppWorkerInvoiceResultSchema>;
 export type WhatsAppWorkerMessageStatusJSON = z.infer<typeof WhatsAppWorkerMessageStatusSchema>;

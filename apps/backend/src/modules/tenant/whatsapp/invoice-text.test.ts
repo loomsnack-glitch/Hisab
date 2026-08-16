@@ -82,4 +82,25 @@ describe("invoice text", () => {
                 "👉 Instagram Link - https://instagram.com/paninihouse",
         );
     });
+
+    it("renders a Store template and configured bill links", () => {
+        const text = formatInvoiceText(sale, {
+            organizationName: "Panini House",
+            storeName: "Central Store",
+            template: "Hi {{customer_name}}, bill {{bill_number}} total {{total}}, due {{balance_due}}.",
+            links: [
+                {
+                    type: "app_install",
+                    label: "Install our app",
+                    url: "https://example.com/app",
+                    includeInBill: true,
+                    includeInReminder: false,
+                    includeInPromotion: false,
+                },
+            ],
+        });
+
+        expect(text).toContain("Hi Original customer, bill INV-42 total ₹90.00, due ₹40.00.");
+        expect(text).toContain("Install our app: https://example.com/app");
+    });
 });

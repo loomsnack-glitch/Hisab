@@ -2530,6 +2530,7 @@ const BillingPage = ({
                         <CustomerDirectory
                             mode="device"
                             organizationId={organizationId}
+                            storeId={selectedStoreId}
                             selectedCustomerId={selectedCustomerId}
                             searchValue={customerSearchProp}
                             onSearchChange={onCustomerSearchChange}

@@ -4,11 +4,15 @@ import {
     collectPayment,
     collectPosPayment,
     getPosSale,
+    getPosWhatsAppDueReminderStatus,
     getPosWhatsAppInvoiceStatus,
     getSale,
+    getWhatsAppDueReminderStatus,
     getWhatsAppInvoiceStatus,
     queuePosWhatsAppInvoice,
+    queuePosWhatsAppDueReminder,
     queueWhatsAppInvoice,
+    queueWhatsAppDueReminder,
     retryPosWhatsAppInvoice,
     retryWhatsAppInvoice,
     voidPosSale,
@@ -93,6 +97,8 @@ const SaleDetailDialog = ({
     const canMutate = mode === "device";
     const [paymentDraft, setPaymentDraft] = useState<CreatePaymentJSON | null>(null);
     const [voidDraft, setVoidDraft] = useState<VoidSaleJSON>({ reason: "" });
+    const [customMessageOpen, setCustomMessageOpen] = useState(false);
+    const [customMessage, setCustomMessage] = useState("");
     const [formError, setFormError] = useState<string | null>(null);
     const posPrinter = useOptionalPosPrinter();
 
@@ -119,6 +125,21 @@ const SaleDetailDialog = ({
 
     const whatsappInvoice = whatsappInvoiceQuery.data?.status === "success"
         ? (whatsappInvoiceQuery.data.data ?? null)
+        : null;
+    const whatsappDueReminderQuery = useQuery({
+        queryKey: saleId
+            ? mode === "device"
+                ? whatsappKeys.posDueReminder(saleId)
+                : whatsappKeys.dueReminder(organizationId, storeId, saleId)
+            : ["whatsapp", "due-reminder", "idle"],
+        queryFn: () =>
+            mode === "device"
+                ? getPosWhatsAppDueReminderStatus(saleId as string)
+                : getWhatsAppDueReminderStatus(organizationId, storeId, saleId as string),
+        enabled: open && Boolean(saleId) && Boolean(sale?.customerId),
+    });
+    const whatsappDueReminder = whatsappDueReminderQuery.data?.status === "success"
+        ? (whatsappDueReminderQuery.data.data ?? null)
         : null;
     const itemDiscountTotal = sale
         ? sale.items.reduce((total, item) => {
@@ -198,11 +219,11 @@ const SaleDetailDialog = ({
         mutationFn: () => {
             const canRetry = whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter";
             if (mode === "device") {
-                return canRetry ? retryPosWhatsAppInvoice(saleId as string) : queuePosWhatsAppInvoice(saleId as string);
+                return canRetry ? retryPosWhatsAppInvoice(saleId as string) : queuePosWhatsAppInvoice(saleId as string, customMessage.trim() || undefined);
             }
             return canRetry
                 ? retryWhatsAppInvoice(organizationId, storeId, saleId as string)
-                : queueWhatsAppInvoice(organizationId, storeId, saleId as string);
+                : queueWhatsAppInvoice(organizationId, storeId, saleId as string, customMessage.trim() || undefined);
         },
         onSuccess: response => {
             if (response.status !== "success") {
@@ -215,6 +236,24 @@ const SaleDetailDialog = ({
         onError: (error: { message?: string }) => {
             toast.error(error?.message || "Invoice could not be queued for WhatsApp");
         },
+    });
+
+    const dueReminderMutation = useMutation({
+        mutationFn: () => {
+            if (!sale?.customerId) throw new Error("This bill has no customer");
+            return mode === "device"
+                ? queuePosWhatsAppDueReminder(sale.customerId, undefined, sale.id)
+                : queueWhatsAppDueReminder(organizationId, storeId, sale.customerId, undefined, sale.id);
+        },
+        onSuccess: response => {
+            if (response.status !== "success") {
+                toast.error(response.message || "Due reminder could not be queued");
+                return;
+            }
+            toast.success("Due reminder queued for WhatsApp");
+            void whatsappDueReminderQuery.refetch();
+        },
+        onError: (error: { message?: string }) => toast.error(error?.message || "Due reminder could not be queued"),
     });
 
     const handlePrint = async () => {
@@ -263,6 +302,7 @@ const SaleDetailDialog = ({
     };
 
     return (
+        <>
         <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
             <DialogContent className="max-h-[92vh] w-[95vw] sm:w-[90vw] md:w-[85vw] max-w-4xl sm:max-w-4xl md:max-w-4xl lg:max-w-4xl overflow-y-auto overflow-x-hidden rounded-[32px] border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">
                 {saleQuery.isPending ? (
@@ -315,6 +355,11 @@ const SaleDetailDialog = ({
                                             {sale.status === "completed" ? (
                                                 <Badge className="rounded-full border border-[#25D366]/25 bg-[#25D366]/10 text-xs text-[#168c45] dark:text-[#6ee7a1]">
                                                     WhatsApp {whatsappInvoice?.messageStatus ?? "not sent"}
+                                                </Badge>
+                                            ) : null}
+                                            {sale.status === "completed" && sale.paymentStatus !== "paid" && sale.customerId ? (
+                                                <Badge className="rounded-full border border-orange-500/25 bg-orange-500/10 text-xs text-orange-700 dark:text-orange-300">
+                                                    Due reminder {whatsappDueReminder?.messageStatus ?? "not sent"}
                                                 </Badge>
                                             ) : null}
                                             <Badge
@@ -408,7 +453,10 @@ const SaleDetailDialog = ({
                                             variant="outline"
                                             size="sm"
                                             disabled={whatsappInvoiceMutation.isPending || whatsappInvoiceQuery.isPending}
-                                            onClick={() => whatsappInvoiceMutation.mutate()}
+                                            onClick={() => {
+                                                setCustomMessage("");
+                                                setCustomMessageOpen(true);
+                                            }}
                                             className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
                                         >
                                             <Smartphone className="size-4 text-[#25D366]" />
@@ -421,6 +469,18 @@ const SaleDetailDialog = ({
                                                         ? "Send again"
                                                         : "WhatsApp"}
                                             </span>
+                                        </Button>
+                                    ) : null}
+                                    {sale.status === "completed" && sale.paymentStatus !== "paid" && sale.customerId ? (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={dueReminderMutation.isPending || whatsappDueReminderQuery.isPending}
+                                            onClick={() => dueReminderMutation.mutate()}
+                                            className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
+                                        >
+                                            <Clock className="size-4 text-orange-500" />
+                                            <span>{dueReminderMutation.isPending ? "Queueing..." : whatsappDueReminder ? "Remind again" : "Remind due"}</span>
                                         </Button>
                                     ) : null}
                                     <Button
@@ -897,6 +957,37 @@ const SaleDetailDialog = ({
                 )}
             </DialogContent>
         </Dialog>
+        <Dialog open={customMessageOpen} onOpenChange={setCustomMessageOpen}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Message with bill</DialogTitle>
+                    <DialogDescription>
+                        Add a one-time message, or leave this empty to use the Store WhatsApp template.
+                    </DialogDescription>
+                </DialogHeader>
+                <Textarea
+                    autoFocus
+                    value={customMessage}
+                    maxLength={4096}
+                    onChange={event => setCustomMessage(event.target.value)}
+                    placeholder="Hello {{customer_name}}, your bill is attached..."
+                    className="min-h-40 rounded-2xl"
+                />
+                <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setCustomMessageOpen(false)}>Cancel</Button>
+                    <Button
+                        disabled={whatsappInvoiceMutation.isPending}
+                        onClick={() => {
+                            setCustomMessageOpen(false);
+                            whatsappInvoiceMutation.mutate();
+                        }}
+                    >
+                        {whatsappInvoiceMutation.isPending ? "Queueing..." : "Send bill"}
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+        </>
     );
 };
 

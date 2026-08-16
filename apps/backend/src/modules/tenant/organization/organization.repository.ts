@@ -16,6 +16,26 @@ import type {
 } from "@repo/types";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
+const parseStoreConfig = <T>(value: unknown, fallback: T): T => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return value as T;
+};
+
+const mapStore = (row: Record<string, unknown>): StoreDTO => {
+  const store = mapRow<StoreDTO>(row);
+  return {
+    ...store,
+    whatsappLinks: parseStoreConfig(store.whatsappLinks, []),
+    whatsappMessageTemplates: parseStoreConfig(store.whatsappMessageTemplates, {}),
+  };
+};
 type StoreDeviceSecretRow = { deviceSecretEncrypted: string };
 
 export const createOrganizationCatalogSettings = async (
@@ -70,7 +90,7 @@ export const createOrganization = async (
         RETURNING *
     `;
 
-  return result ? snakeToCamel(result) : null;
+  return result ? mapRow<OrganizationDTO>(result) : null;
 };
 
 export const getOrganizationsByUserId = async (
@@ -97,7 +117,7 @@ export const getOrganizationById = async (
         WHERE id = ${organizationId}
     `;
 
-  return result ? snakeToCamel(result) : null;
+  return result ? mapRow<OrganizationDTO>(result) : null;
 };
 
 export const getOrganizationByUsername = async (
@@ -109,7 +129,7 @@ export const getOrganizationByUsername = async (
         WHERE username = ${username}
     `;
 
-  return result ? snakeToCamel(result) : null;
+  return result ? mapRow<OrganizationDTO>(result) : null;
 };
 
 export const getOrganizationByIdForUser = async (
@@ -200,7 +220,7 @@ export const createStore = async (
         RETURNING *
     `;
 
-  return result ? snakeToCamel(result) : null;
+  return result ? mapStore(result) : null;
 };
 
 export const getStoresByOrganizationId = async (
@@ -213,9 +233,7 @@ export const getStoresByOrganizationId = async (
         ORDER BY created_at ASC
     `;
 
-  return results.map((result: Record<string, unknown>) =>
-    mapRow<StoreDTO>(result),
-  );
+  return results.map((result: Record<string, unknown>) => mapStore(result));
 };
 
 export const getStoreById = async (
@@ -229,7 +247,7 @@ export const getStoreById = async (
           AND organization_id = ${organizationId}
     `;
 
-  return result ? snakeToCamel(result) : null;
+  return result ? mapStore(result) : null;
 };
 
 export const storeNameExistsInOrganization = async (
@@ -268,13 +286,15 @@ export const updateStore = async (
             review_link = ${storeData.reviewLink},
             social_media_name = ${storeData.socialMediaName},
             social_media_link = ${storeData.socialMediaLink},
+            whatsapp_links = ${JSON.stringify(storeData.whatsappLinks)}::jsonb,
+            whatsapp_message_templates = ${JSON.stringify(storeData.whatsappMessageTemplates)}::jsonb,
             updated_by = ${storeData.updatedBy},
             updated_at = NOW()
         WHERE id = ${storeData.id}
         RETURNING *
     `;
 
-  return result ? snakeToCamel(result) : null;
+  return result ? mapStore(result) : null;
 };
 
 export const createStoreDevice = async (

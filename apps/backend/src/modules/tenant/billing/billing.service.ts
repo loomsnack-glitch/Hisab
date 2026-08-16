@@ -18,6 +18,7 @@ import {
   type CreateSaleItemREPO,
   type CustomerDTO,
   type CustomerLedgerResponse,
+  type CustomerDueSalesResponse,
   type CustomerListQuery,
   type CustomerResponse,
   type CustomersListResponse,
@@ -3350,6 +3351,27 @@ export const getCustomerDetails = async (
   };
 };
 
+export const getCustomerDueSales = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  customerId: string,
+): Promise<ServiceResponse<CustomerDueSalesResponse | null>> => {
+  const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
+  if (scopeError) return scopeError as ServiceResponse<CustomerDueSalesResponse | null>;
+  const customer = await getCustomerForOrganization(organizationId, customerId);
+  if (!customer) {
+    return { status: "error", message: "Customer not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
+  const sales = await billingRepository.getDueSalesByCustomerStore(organizationId, storeId, customerId);
+  return {
+    status: "success",
+    data: { customer, sales },
+    message: "Customer due bills fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
 export const updateCustomer = async (
   userId: string,
   organizationId: string,
@@ -3412,6 +3434,8 @@ export const updateCustomer = async (
     name: customerData.name ?? existingCustomer.name,
     phone,
     isActive: customerData.isActive ?? existingCustomer.isActive,
+    marketingOptedOut:
+      customerData.marketingOptedOut ?? existingCustomer.marketingOptedOut,
     updatedBy: userId,
   });
 

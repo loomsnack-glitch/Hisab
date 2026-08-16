@@ -6,6 +6,8 @@ import {
     getCustomerLedger,
     getCustomers,
     getPosCustomers,
+    queuePosWhatsAppDueReminder,
+    queueWhatsAppDueReminder,
     updateCustomer,
     updatePosCustomer,
 } from "@repo/services";
@@ -46,6 +48,7 @@ import {
 import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
+import PromotionDialog from "@/components/customers/promotion-dialog";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { billingKeys } from "@/lib/query-keys";
@@ -53,6 +56,7 @@ import { billingKeys } from "@/lib/query-keys";
 type CustomerDirectoryProps = {
     mode: BillingWorkspaceMode;
     organizationId: string;
+    storeId?: string;
     selectedCustomerId?: string;
     onUseForOrder?: (customer: CustomerDTO) => void;
     searchValue?: string;
@@ -102,6 +106,7 @@ const CustomerEditDialog = ({
             name: "",
             phone: "",
             isActive: true,
+            marketingOptedOut: false,
         },
     });
     const isActive = useWatch({ control: form.control, name: "isActive" });
@@ -112,6 +117,7 @@ const CustomerEditDialog = ({
             name: customer.name,
             phone: normalizePhoneNumber(customer.phone) ?? "",
             isActive: customer.isActive,
+            marketingOptedOut: customer.marketingOptedOut,
         });
     }, [customer, form]);
 
@@ -191,6 +197,14 @@ const CustomerEditDialog = ({
                         </Select>
                     </Field>
 
+                    <label className="flex items-start gap-3 rounded-xl border border-border/60 p-3 text-sm">
+                        <input type="checkbox" className="mt-0.5 size-4 accent-primary" {...form.register("marketingOptedOut")} />
+                        <span>
+                            <span className="font-medium">Do not send promotions</span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">Bill and due reminders are not affected.</span>
+                        </span>
+                    </label>
+
                     <DialogFooter className="gap-2 pt-2 sm:gap-2">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={mutation.isPending}>
                             Cancel
@@ -208,6 +222,7 @@ const CustomerEditDialog = ({
 const CustomerDirectory = ({
     mode,
     organizationId,
+    storeId,
     selectedCustomerId,
     onUseForOrder,
     searchValue,
@@ -273,6 +288,20 @@ const CustomerDirectory = ({
         enabled: mode === "admin" && Boolean(detailsCustomer?.id),
     });
 
+    const dueReminderMutation = useMutation({
+        mutationFn: () => {
+            if (!storeId || !detailsCustomer?.id) return Promise.reject(new Error("Select a Store before sending a reminder"));
+            return mode === "device"
+                ? queuePosWhatsAppDueReminder(detailsCustomer.id)
+                : queueWhatsAppDueReminder(organizationId, storeId, detailsCustomer.id);
+        },
+        onSuccess: response => {
+            if (response.status === "success") toast.success("Due reminder queued for WhatsApp");
+            else toast.error(response.message || "Due reminder could not be queued");
+        },
+        onError: (error: { message?: string }) => toast.error(error?.message || "Due reminder could not be queued"),
+    });
+
     const invalidateCustomers = () => {
         void queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
     };
@@ -316,17 +345,22 @@ const CustomerDirectory = ({
                         Manage customer details and attach customers to bills.
                     </p>
                 </div>
-                <CustomerQuickCreateDialog
-                    organizationId={organizationId}
-                    mode={mode}
-                    onCreated={invalidateCustomers}
-                    trigger={
-                        <Button>
-                            <Plus className="size-4" />
-                            Add customer
-                        </Button>
-                    }
-                />
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                    <CustomerQuickCreateDialog
+                        organizationId={organizationId}
+                        mode={mode}
+                        onCreated={invalidateCustomers}
+                        trigger={
+                            <Button className="min-w-0 flex-1 sm:flex-none">
+                                <Plus className="size-4" />
+                                Add customer
+                            </Button>
+                        }
+                    />
+                    {mode === "admin" && storeId ? (
+                        <PromotionDialog organizationId={organizationId} storeId={storeId} className="min-w-0 flex-1 sm:flex-none" />
+                    ) : null}
+                </div>
             </div>
 
             <div className={`sticky ${customerToolbarOffset} z-10 space-y-3 rounded-2xl border border-border/70 bg-card/95 p-3 shadow-sm backdrop-blur-md sm:p-4`}>
@@ -532,6 +566,18 @@ const CustomerDirectory = ({
                                         </dd>
                                     </div>
                                 </dl>
+                                {storeId && detailsCustomer.balance > 0 ? (
+                                    <div className="flex justify-end border-t border-border/60 p-3">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={dueReminderMutation.isPending}
+                                            onClick={() => dueReminderMutation.mutate()}
+                                        >
+                                            {dueReminderMutation.isPending ? "Queueing..." : "Send due reminder"}
+                                        </Button>
+                                    </div>
+                                ) : null}
                             </div>
                             {mode === "admin" ? (
                                 <div className="rounded-xl border border-border/60">

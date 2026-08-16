@@ -22,6 +22,9 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { whatsappKeys } from "@/lib/query-keys";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
+const ACCOUNT_STATUS_POLL_INTERVAL_MS = 2_000;
+const ACCOUNT_STATUS_POLL_WINDOW_MS = 60_000;
+
 const statusLabel: Record<string, string> = {
     pending_qr: "Scan the QR code",
     connecting: "Connecting",
@@ -39,6 +42,7 @@ const WhatsAppOrganizationPage = () => {
     const [qrByAccountId, setQrByAccountId] = useState<Record<string, string>>({});
     const [changeAccountId, setChangeAccountId] = useState("");
     const [newPhoneNumber, setNewPhoneNumber] = useState("");
+    const [statusPollUntilByAccountId, setStatusPollUntilByAccountId] = useState<Record<string, number>>({});
     const accountsKey = whatsappKeys.accounts(organizationId);
     const accountsQuery = useQuery({
         queryKey: accountsKey,
@@ -53,13 +57,29 @@ const WhatsAppOrganizationPage = () => {
             enabled: Boolean(organizationId),
             refetchInterval: query => {
                 const status = query.state.data?.data?.account.status;
-                return status === "pending_qr" || status === "connecting" ? 2_000 : false;
+                const pollUntil = statusPollUntilByAccountId[account.id] ?? 0;
+                const pollRequested = pollUntil > Date.now() && status !== "connected" && status !== "failed" && status !== "revoked";
+                return (pollRequested || status === "pending_qr" || status === "connecting") ? ACCOUNT_STATUS_POLL_INTERVAL_MS : false;
             },
         })),
     });
     const phoneError = phoneNumber.length > 0 && !normalizePhoneNumber(phoneNumber);
 
-    const refresh = () => void queryClient.invalidateQueries({ queryKey: accountsKey });
+    const pollAccountStatus = (accountId: string) => {
+        setStatusPollUntilByAccountId(current => ({
+            ...current,
+            [accountId]: Date.now() + ACCOUNT_STATUS_POLL_WINDOW_MS,
+        }));
+    };
+    const refresh = (accountId?: string) => {
+        void queryClient.invalidateQueries({ queryKey: accountsKey });
+        if (accountId) {
+            void queryClient.invalidateQueries({
+                queryKey: whatsappKeys.organizationAccount(organizationId, accountId),
+                refetchType: "active",
+            });
+        }
+    };
     const createMutation = useMutation({
         mutationFn: () => createWhatsAppOrganizationAccount(organizationId, { phoneNumber: phoneNumber.trim() }),
         onSuccess: response => {
@@ -78,6 +98,9 @@ const WhatsAppOrganizationPage = () => {
     });
     const connectMutation = useMutation({
         mutationFn: (accountId: string) => connectWhatsAppOrganizationAccount(organizationId, accountId),
+        onMutate: accountId => {
+            pollAccountStatus(accountId);
+        },
         onSuccess: response => {
             const accountId = connectMutation.variables;
             if (accountId && response.data) {
@@ -91,7 +114,7 @@ const WhatsAppOrganizationPage = () => {
                 setQrByAccountId(current => ({ ...current, [response.data!.account.id]: response.data!.qrImageDataUrl! }));
             }
             toast.success("WhatsApp account linking started");
-            refresh();
+            refresh(accountId);
         },
     });
     const disconnectMutation = useMutation({
@@ -102,7 +125,7 @@ const WhatsAppOrganizationPage = () => {
                 return;
             }
             toast.success("WhatsApp account disconnected");
-            refresh();
+            refresh(disconnectMutation.variables);
         },
     });
     const changeMutation = useMutation({
@@ -112,16 +135,18 @@ const WhatsAppOrganizationPage = () => {
                 toast.error(response.message);
                 return;
             }
+            const accountId = response.data?.account.id ?? changeAccountId;
             setChangeAccountId("");
             setNewPhoneNumber("");
             if (response.data?.qrImageDataUrl) setQrByAccountId(current => ({ ...current, [response.data!.account.id]: response.data!.qrImageDataUrl! }));
             toast.success("WhatsApp number changed. Scan the new QR code.");
-            refresh();
+            refresh(accountId);
         },
     });
     const newPhoneError = newPhoneNumber.length > 0 && !normalizePhoneNumber(newPhoneNumber);
     const isBusy = createMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeMutation.isPending;
-    const connectedCount = accounts.filter(account => account.status === "connected").length;
+    const liveAccounts = accounts.map((account, index) => statusQueries[index]?.data?.data?.account ?? account);
+    const connectedCount = liveAccounts.filter(account => account.status === "connected").length;
     const assignedStoreCount = accounts.reduce((total, account) => total + account.assignedStoreIds.length, 0);
 
     if (accountsQuery.isPending) {
@@ -186,7 +211,6 @@ const WhatsAppOrganizationPage = () => {
                                     <p className="mt-2 text-sm text-muted-foreground">
                                         Assigned to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"}
                                     </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">New inbound chats use the default Store; existing conversations keep their original Store.</p>
                                     {qrImageDataUrl ? (
                                         <div className="mt-4 flex flex-col items-start gap-2">
                                             <img src={qrImageDataUrl} alt={`QR code for ${account.phoneNumber}`} className="size-56 rounded-xl border bg-white p-2" />

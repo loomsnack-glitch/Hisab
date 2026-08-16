@@ -149,6 +149,12 @@ export const updateCustomer = async (customerData: UpdateCustomerREPO): Promise<
         SET name = ${customerData.name},
             phone = ${customerData.phone ?? null},
             is_active = ${customerData.isActive},
+            marketing_opted_out = COALESCE(${customerData.marketingOptedOut ?? null}, marketing_opted_out),
+            marketing_opted_out_at = CASE
+                WHEN ${customerData.marketingOptedOut ?? null} = TRUE THEN COALESCE(marketing_opted_out_at, NOW())
+                WHEN ${customerData.marketingOptedOut ?? null} = FALSE THEN NULL
+                ELSE marketing_opted_out_at
+            END,
             updated_by = ${customerData.updatedBy ?? null},
             updated_at = NOW()
         WHERE id = ${customerData.id}
@@ -608,6 +614,32 @@ export const getSalesByStore = async (
             nextCursor: hasMore && lastSale ? encodeSalesCursor(lastSale, sort) : null,
         },
     };
+};
+
+export const getDueSalesByCustomerStore = async (
+    organizationId: string,
+    storeId: string,
+    customerId: string,
+): Promise<SaleSummaryDTO[]> => {
+    const [pending, partial] = await Promise.all([
+        getSalesByStore(organizationId, storeId, {
+            status: "completed",
+            paymentStatus: "pending",
+            customerId,
+            sort: "newest",
+            limit: 100,
+        }),
+        getSalesByStore(organizationId, storeId, {
+            status: "completed",
+            paymentStatus: "partial",
+            customerId,
+            sort: "newest",
+            limit: 100,
+        }),
+    ]);
+    return [...pending.sales, ...partial.sales].sort((left, right) =>
+        String(right.createdAt).localeCompare(String(left.createdAt)),
+    );
 };
 
 export const getSalesSummaryByStore = async (

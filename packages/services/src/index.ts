@@ -36,6 +36,8 @@ export {
   voidPosSale,
   getPosWhatsAppInvoiceStatus,
   queuePosWhatsAppInvoice,
+  queuePosWhatsAppDueReminder,
+  getPosWhatsAppDueReminderStatus,
   retryPosWhatsAppInvoice,
   getPosWhatsAppConversations,
   getPosWhatsAppAccount,

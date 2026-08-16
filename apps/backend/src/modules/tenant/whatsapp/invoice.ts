@@ -69,6 +69,7 @@ export const queueInvoiceForStore = async (
   organizationId: string,
   storeId: string,
   saleId: string,
+  customMessage?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   const store = await organizationRepository.getStoreById(
     organizationId,
@@ -191,6 +192,9 @@ export const queueInvoiceForStore = async (
         sale.customerNameSnapshot ?? sale.customer?.name ?? "Customer",
       caption: formatInvoiceText(sale, {
         organizationName: organization.name,
+        storeName: store.name,
+        template: customMessage ?? store.whatsappMessageTemplates.bill,
+        links: store.whatsappLinks,
         reviewPlatform: store.reviewPlatform,
         reviewLink: store.reviewLink,
         socialMediaName: store.socialMediaName,
@@ -248,6 +252,7 @@ export const queueInvoice = async (
   organizationId: string,
   storeId: string,
   saleId: string,
+  customMessage?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
   if (!organization) {
@@ -258,7 +263,7 @@ export const queueInvoice = async (
       code: STATUS_CODES.NOT_FOUND,
     };
   }
-  return queueInvoiceForStore(organizationId, storeId, saleId);
+  return queueInvoiceForStore(organizationId, storeId, saleId, customMessage);
 };
 
 const getExistingInvoice = async (
@@ -307,8 +312,9 @@ export const retryInvoice = async (
 export const queueInvoiceForDevice = async (
   session: DeviceSessionDTO,
   saleId: string,
+  customMessage?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> =>
-  queueInvoiceForStore(session.organization.id, session.store.id, saleId);
+  queueInvoiceForStore(session.organization.id, session.store.id, saleId, customMessage);
 
 export const getInvoiceStatusForDevice = async (
   session: DeviceSessionDTO,

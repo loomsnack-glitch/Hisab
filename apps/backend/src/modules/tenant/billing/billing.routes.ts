@@ -183,6 +183,25 @@ router.get("/:organizationId/customers/:customerId/ledger", async (c) => {
     }
 });
 
+router.get("/:organizationId/stores/:storeId/customers/:customerId/due-sales", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const customerId = c.req.param("customerId");
+        const invalidParams = validateOrgAndStoreParams(organizationId, storeId)
+            ?? validateUuidParam(customerId, "Invalid customer id");
+        if (invalidParams) return c.json(invalidParams, invalidParams.code);
+        return handleServiceResponse(c, await billingService.getCustomerDueSales(
+            c.get("authUser").id,
+            organizationId,
+            storeId,
+            customerId,
+        ));
+    } catch (error) {
+        return handleError(FILE_NAME, "getCustomerDueSales", c, error);
+    }
+});
+
 router.get(
     "/:organizationId/stores/:storeId/sales",
     validateSchema("query", SalesListQuerySchema),

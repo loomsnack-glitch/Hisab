@@ -11,9 +11,9 @@ export const WhatsAppAccountStatusSchema = z.enum([
     "revoked",
 ]);
 export const WhatsAppConversationMessageDirectionSchema = z.enum(["inbound", "outbound"]);
-export const WhatsAppMessageTypeSchema = z.enum(["text", "document"]);
+export const WhatsAppMessageTypeSchema = z.enum(["text", "document", "image"]);
 export const WhatsAppMessageStatusSchema = z.enum(["queued", "sending", "sent", "delivered", "read", "failed"]);
-export const WhatsAppOutboxKindSchema = z.enum(["invoice", "text", "document"]);
+export const WhatsAppOutboxKindSchema = z.enum(["invoice", "text", "document", "promotion"]);
 export const WhatsAppOutboxStatusSchema = z.enum([
     "pending",
     "processing",
@@ -123,7 +123,27 @@ export const WhatsAppAttachConversationCustomerSchema = z.object({
 });
 
 export const WhatsAppSendInvoiceSchema = z.object({
-    saleId: z.uuid("Invalid sale id"),
+  saleId: z.uuid("Invalid sale id"),
+  customMessage: z.string().trim().min(1).max(4096).optional(),
+});
+
+export const WhatsAppDueReminderRequestSchema = z.object({
+    saleId: z.uuid("Invalid sale id").optional(),
+    customMessage: z.string().trim().min(1).max(4096).optional(),
+});
+
+export const WhatsAppCreatePromotionSchema = z.object({
+    title: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(4096),
+    imageBase64: z.string().min(1).max(14_000_000),
+    imageFileName: z.string().trim().min(1).max(255),
+    imageMimeType: z.string().regex(/^image\/[a-z0-9.+-]+$/i).max(255),
+});
+
+export const WhatsAppPromotionResponseSchema = z.object({
+    campaignId: z.uuid("Invalid campaign id"),
+    recipientCount: z.number().int().min(0),
+    queuedCount: z.number().int().min(0),
 });
 
 export const WhatsAppInvoiceQueueResponseSchema = z.object({
@@ -133,6 +153,15 @@ export const WhatsAppInvoiceQueueResponseSchema = z.object({
     messageStatus: WhatsAppMessageStatusSchema,
     outboxStatus: WhatsAppOutboxStatusSchema,
     alreadyQueued: z.boolean(),
+});
+
+export const WhatsAppReminderQueueResponseSchema = z.object({
+    customerId: z.uuid("Invalid customer id"),
+    saleId: z.uuid("Invalid sale id").nullable(),
+    messageId: z.uuid("Invalid message id"),
+    outboxId: z.uuid("Invalid outbox id"),
+    messageStatus: WhatsAppMessageStatusSchema,
+    outboxStatus: WhatsAppOutboxStatusSchema,
 });
 
 export const WhatsAppWorkerInvoiceJobSchema = z.object({
@@ -191,15 +220,15 @@ const WhatsAppWorkerMessageFields = {
 };
 
 const validateWorkerMessageContent = (value: {
-    messageType: "text" | "document";
+    messageType: "text" | "document" | "image";
     body: string | null;
     documentBase64: string | null;
 }, context: z.RefinementCtx): void => {
     if (value.messageType === "text" && !value.body?.trim()) {
         context.addIssue({ code: "custom", path: ["body"], message: "Text message body is required" });
     }
-    if (value.messageType === "document" && !value.documentBase64) {
-        context.addIssue({ code: "custom", path: ["documentBase64"], message: "Document content is required" });
+    if ((value.messageType === "document" || value.messageType === "image") && !value.documentBase64) {
+        context.addIssue({ code: "custom", path: ["documentBase64"], message: "Media content is required" });
     }
 };
 

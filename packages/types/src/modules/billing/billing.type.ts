@@ -13,6 +13,7 @@ import type {
   CreatePaymentSchema,
   CustomerDTOSchema,
   CustomerLedgerEntryDTOSchema,
+  CustomerDueSalesResponseSchema,
   CustomerListPageInfoSchema,
   CustomerListQuerySchema,
   CustomerSortSchema,
@@ -110,6 +111,7 @@ export type UpdateCustomerREPO = Pick<
   "id" | "organizationId" | "name" | "isActive" | "updatedBy"
 > & {
   phone?: string | null;
+  marketingOptedOut?: boolean;
 };
 
 export type CustomerListQuery = z.infer<typeof CustomerListQuerySchema>;
@@ -318,6 +320,8 @@ export type CustomerLedgerResponse = {
   customer: CustomerDTO;
   ledger: CustomerLedgerEntryDTO[];
 };
+
+export type CustomerDueSalesResponse = z.infer<typeof CustomerDueSalesResponseSchema>;
 
 export type SalesListResponse = {
   sales: SaleSummaryDTO[];

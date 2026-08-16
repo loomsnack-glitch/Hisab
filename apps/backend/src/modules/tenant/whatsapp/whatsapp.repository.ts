@@ -42,7 +42,7 @@ export type InvoiceOutboxJobRecord = {
     outboxId: string;
     messageId: string;
     phoneNumber: string;
-    messageType: "text" | "document";
+    messageType: "text" | "document" | "image";
     body: string | null;
     caption: string | null;
     attachmentStorageKey: string | null;
@@ -63,7 +63,7 @@ export type MessageEventParams = {
     providerMessageId: string;
     direction: "inbound" | "outbound";
     source: "realtime" | "history";
-    messageType: "text" | "document";
+    messageType: "text" | "document" | "image";
     body: string | null;
     caption: string | null;
     attachmentStorageKey: string | null;
@@ -447,6 +447,37 @@ export const getInvoiceOutbox = async (
           AND o.whatsapp_account_id = ${whatsappAccountId}
           AND o.sale_id = ${saleId}
           AND o.kind = 'invoice'
+        LIMIT 1
+    `;
+    if (!row) return null;
+    return {
+        messageId: String(row.message_id),
+        outboxId: String(row.outbox_id),
+        messageStatus: row.message_status as InvoiceOutboxRecord["messageStatus"],
+        outboxStatus: row.outbox_status as InvoiceOutboxRecord["outboxStatus"],
+    };
+};
+
+export const getCustomerReminderOutbox = async (
+    organizationId: string,
+    storeId: string,
+    whatsappAccountId: string,
+    saleId: string,
+): Promise<InvoiceOutboxRecord | null> => {
+    const [row] = await pg`
+        SELECT
+            o.id AS outbox_id,
+            o.status AS outbox_status,
+            m.id AS message_id,
+            m.status AS message_status
+        FROM whatsapp_outbox o
+        INNER JOIN whatsapp_messages m ON m.id = o.message_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+          AND o.whatsapp_account_id = ${whatsappAccountId}
+          AND o.sale_id = ${saleId}
+          AND o.kind = 'text'
+        ORDER BY o.created_at DESC
         LIMIT 1
     `;
     if (!row) return null;
@@ -979,6 +1010,76 @@ export const createTextOutbox = async (
     });
 };
 
+export const createCustomerTextOutbox = async (params: {
+    organizationId: string;
+    storeId: string;
+    accountId: string;
+    customerId: string;
+    saleId?: string | null;
+    customerPhone: string;
+    customerName: string;
+    body: string;
+}): Promise<InvoiceOutboxRecord> => {
+    return pg.begin(async tx => {
+        const [account] = await tx`
+            SELECT id FROM whatsapp_accounts WHERE id = ${params.accountId} FOR UPDATE
+        `;
+        if (!account) throw new Error("WhatsApp account not found");
+        const [queued] = await tx`
+            SELECT COUNT(*) AS count FROM whatsapp_outbox
+            WHERE whatsapp_account_id = ${params.accountId}
+              AND status IN ('pending', 'processing', 'retryable')
+        `;
+        if (Number(queued?.count ?? 0) >= pendingOutboxLimit()) throw new WhatsAppOutboxLimitError();
+
+        const externalChatId = `${params.customerPhone.replace(/^\+/, "")}@s.whatsapp.net`;
+        const [conversation] = await tx`
+            INSERT INTO whatsapp_conversations (
+                organization_id, store_id, whatsapp_account_id, customer_id,
+                external_chat_id, contact_phone_number, display_name
+            ) VALUES (
+                ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${params.customerId},
+                ${externalChatId}, ${params.customerPhone}, ${params.customerName}
+            )
+            ON CONFLICT (whatsapp_account_id, store_id, external_chat_id)
+            DO UPDATE SET customer_id = EXCLUDED.customer_id,
+                contact_phone_number = EXCLUDED.contact_phone_number,
+                display_name = EXCLUDED.display_name,
+                updated_at = NOW()
+            RETURNING id
+        `;
+        if (!conversation) throw new Error("Failed to create WhatsApp conversation");
+        const messageId = crypto.randomUUID();
+        const [message] = await tx`
+            INSERT INTO whatsapp_messages (
+                id, organization_id, store_id, whatsapp_account_id, conversation_id,
+                direction, message_type, body, status, idempotency_key
+            ) VALUES (
+                ${messageId}, ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${conversation.id},
+                'outbound', 'text', ${params.body}, 'queued', ${"customer-text:" + messageId}
+            ) RETURNING id, status
+        `;
+        if (!message) throw new Error("Failed to create WhatsApp text message");
+        const [outbox] = await tx`
+            INSERT INTO whatsapp_outbox (
+                organization_id, store_id, whatsapp_account_id, message_id, sale_id, kind, status
+            ) VALUES (${params.organizationId}, ${params.storeId}, ${params.accountId}, ${message.id}, ${params.saleId ?? null}, 'text', 'pending')
+            RETURNING id, status
+        `;
+        if (!outbox) throw new Error("Failed to create WhatsApp text outbox");
+        await tx`
+            UPDATE whatsapp_conversations SET last_message_at = NOW(), updated_at = NOW()
+            WHERE id = ${conversation.id}
+        `;
+        return {
+            messageId: String(message.id),
+            outboxId: String(outbox.id),
+            messageStatus: message.status as InvoiceOutboxRecord["messageStatus"],
+            outboxStatus: outbox.status as InvoiceOutboxRecord["outboxStatus"],
+        };
+    });
+};
+
 export const claimNextInvoiceOutbox = async (
     leaseOwner: string,
     leaseSeconds: number,
@@ -1000,7 +1101,7 @@ export const claimNextInvoiceOutbox = async (
             SELECT o.id
             FROM whatsapp_outbox o
             INNER JOIN whatsapp_accounts a ON a.id = o.whatsapp_account_id
-            WHERE o.kind IN ('invoice', 'text', 'document')
+            WHERE o.kind IN ('invoice', 'text', 'document', 'promotion')
               AND o.status IN ('pending', 'retryable')
               AND o.next_attempt_at <= NOW()
               AND a.status = 'connected'
@@ -1100,7 +1201,7 @@ export const completeInvoiceOutbox = async (
 ): Promise<boolean> => {
     return pg.begin(async tx => {
         const [outbox] = await tx`
-            SELECT id, message_id, attempt_count
+            SELECT id, message_id, attempt_count, kind
             FROM whatsapp_outbox
             WHERE id = ${outboxId}
               AND status = 'processing'
@@ -1129,6 +1230,29 @@ export const completeInvoiceOutbox = async (
                     updated_at = NOW()
                 WHERE id = ${outbox.id}
             `;
+            if (outbox.kind === "promotion") {
+                await tx`
+                    UPDATE whatsapp_campaign_recipients
+                    SET status = 'sent', provider_message_id = ${providerMessageId}, updated_at = NOW()
+                    WHERE outbox_id = ${outbox.id} AND status <> 'sent'
+                `;
+                await tx`
+                    UPDATE whatsapp_campaigns campaign
+                    SET sent_recipients = (
+                            SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
+                            WHERE recipient.campaign_id = campaign.id AND recipient.status = 'sent'
+                        ),
+                        status = CASE
+                            WHEN (
+                                SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
+                                WHERE recipient.campaign_id = campaign.id AND recipient.status IN ('pending', 'processing', 'retryable')
+                            ) = 0 THEN 'completed'::whatsapp_campaign_status_enum
+                            ELSE campaign.status
+                        END,
+                        updated_at = NOW()
+                    WHERE id = (SELECT campaign_id FROM whatsapp_campaign_recipients WHERE outbox_id = ${outbox.id} LIMIT 1)
+                `;
+            }
             return true;
         }
 
@@ -1153,6 +1277,29 @@ export const completeInvoiceOutbox = async (
                 updated_at = NOW()
             WHERE id = ${outbox.id}
         `;
+        if (outbox.kind === "promotion" && permanentlyFailed) {
+            await tx`
+                UPDATE whatsapp_campaign_recipients
+                SET status = 'dead_letter', failure_code = ${failureCode}, failure_message = ${failureMessage}, updated_at = NOW()
+                WHERE outbox_id = ${outbox.id}
+            `;
+            await tx`
+                UPDATE whatsapp_campaigns campaign
+                SET failed_recipients = (
+                        SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
+                        WHERE recipient.campaign_id = campaign.id AND recipient.status = 'dead_letter'
+                    ),
+                    status = CASE
+                        WHEN (
+                            SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
+                            WHERE recipient.campaign_id = campaign.id AND recipient.status IN ('pending', 'processing', 'retryable')
+                        ) = 0 THEN 'failed'::whatsapp_campaign_status_enum
+                        ELSE campaign.status
+                    END,
+                    updated_at = NOW()
+                WHERE id = (SELECT campaign_id FROM whatsapp_campaign_recipients WHERE outbox_id = ${outbox.id} LIMIT 1)
+            `;
+        }
         return true;
     });
 };
