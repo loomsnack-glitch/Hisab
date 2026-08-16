@@ -2319,15 +2319,6 @@ const completeSaleInStore = async (
 
     const paymentStatus = totalPayment === 0 ? "pending" : totalPayment === grandTotal ? "paid" : "partial";
 
-    if (!customerId && paymentStatus !== "paid") {
-        return {
-            status: "error",
-            message: "A customer is required when the full bill is not paid",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
-
     const committedAt = new Date();
     const notes = normalizeOptionalText(saleData.notes);
 
@@ -2448,15 +2439,6 @@ const replaceSaleInStore = async (
     }
 
     const paymentStatus = totalPayment === 0 ? "pending" : totalPayment === grandTotal ? "paid" : "partial";
-    if (!customerId && paymentStatus !== "paid") {
-        return {
-            status: "error",
-            message: "A customer is required when the full bill is not paid",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
-
     const committedAt = new Date();
     const notes = normalizeOptionalText(saleData.notes);
     const replacementReason = normalizeOptionalText(saleData.replacementReason) ?? "Bill edited";
@@ -2590,6 +2572,15 @@ const collectPaymentInStore = async (
 
     const dueTotal = moneyFrom(existingSale.dueTotal);
     const amount = roundMoney(paymentData.amount);
+    if (amount <= 0) {
+        return {
+            status: "error",
+            message: "Collected payment must be greater than zero",
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+        };
+    }
+
     if (amount > dueTotal) {
         return {
             status: "error",
@@ -2599,17 +2590,10 @@ const collectPaymentInStore = async (
         };
     }
 
-    if (!existingSale.customerId) {
-        return {
-            status: "error",
-            message: "Payments after commit require the sale to be attached to a customer",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
-
-    const customer = await getCustomerForOrganization(organizationId, existingSale.customerId);
-    if (!customer) {
+    const customer = existingSale.customerId
+        ? await getCustomerForOrganization(organizationId, existingSale.customerId)
+        : null;
+    if (existingSale.customerId && !customer) {
         return {
             status: "error",
             message: "Customer not found",
@@ -2641,15 +2625,17 @@ const collectPaymentInStore = async (
             throw new Error("Failed to create payment");
         }
 
-        await appendCustomerLedgerEntry(tx, {
-            customer,
-            organizationId,
-            amount: -amount,
-            entryType: "payment",
-            saleId,
-            paymentId: createdPayment.id,
-            notes: normalizeOptionalText(paymentData.notes),
-        });
+        if (customer) {
+            await appendCustomerLedgerEntry(tx, {
+                customer,
+                organizationId,
+                amount: -amount,
+                entryType: "payment",
+                saleId,
+                paymentId: createdPayment.id,
+                notes: normalizeOptionalText(paymentData.notes),
+            });
+        }
 
         const nextPaidTotal = roundMoney(moneyFrom(existingSale.paidTotal) + amount);
         const nextPaymentStatus = nextPaidTotal === moneyFrom(existingSale.grandTotal) ? "paid" : "partial";

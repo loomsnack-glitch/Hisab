@@ -289,6 +289,14 @@ const createPayment = mock(async (data: Record<string, unknown>) => {
     createdPayments.push(payment);
     return payment;
 });
+const createCustomerLedgerEntry = mock(async (data: Record<string, unknown>) => ({
+    ...data,
+    createdAt: now,
+    updatedAt: now,
+}));
+const updateCustomerBalance = mock(async (_organizationId: string, customerId: string, balance: number) =>
+    customerId === amendmentCustomerId ? { ...amendmentCustomer, balance } : null,
+);
 const getParentScopedAddOnSalesRollups = mock(async () => []);
 const getAddOnScopedSalesRollups = mock(async () => []);
 const lockDraftSale = mock(async () => true);
@@ -337,14 +345,8 @@ mock.module("./billing.repository", () => ({
         dueTotal: 0,
     })),
     createPayment,
-    createCustomerLedgerEntry: mock(async (data: Record<string, unknown>) => ({
-        ...data,
-        createdAt: now,
-        updatedAt: now,
-    })),
-    updateCustomerBalance: mock(async (_organizationId: string, customerId: string, balance: number) =>
-        customerId === amendmentCustomerId ? { ...amendmentCustomer, balance } : null,
-    ),
+    createCustomerLedgerEntry,
+    updateCustomerBalance,
     lockDraftSale,
     allocateSaleNumber,
     getParentScopedAddOnSalesRollups,
@@ -390,6 +392,8 @@ describe("Configured product billing with trusted snapshots", () => {
         deleteDraftSale.mockClear();
         updateSale.mockClear();
         createPayment.mockClear();
+        createCustomerLedgerEntry.mockClear();
+        updateCustomerBalance.mockClear();
         getParentScopedAddOnSalesRollups.mockClear();
         getAddOnScopedSalesRollups.mockClear();
         lockDraftSale.mockClear();
@@ -460,6 +464,136 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(firstResponse.data?.sale.id).toBe(secondResponse.data?.sale.id);
         expect(createdSales).toHaveLength(1);
         expect(createPayment).toHaveBeenCalledTimes(1);
+    });
+
+    test("completes a customerless due sale and collects later without ledger effects", async () => {
+        const requestId = "78787878-7878-4787-8787-787878787878";
+
+        const completed = await billingService.completeSale(userId, organizationId, storeId, {
+            requestId,
+            items: [{ productId, quantity: 1, addOns: [] }],
+            payments: [],
+        });
+
+        expect(completed.status).toBe("success");
+        expect(completed.data?.sale.paymentStatus).toBe("pending");
+        expect(completed.data?.sale.customer).toBeNull();
+        expect(createdPayments).toHaveLength(0);
+        expect(createCustomerLedgerEntry).not.toHaveBeenCalled();
+        expect(updateCustomerBalance).not.toHaveBeenCalled();
+
+        const collected = await billingService.collectPayment(
+            userId,
+            organizationId,
+            storeId,
+            completed.data?.sale.id!,
+            { amount: 90, method: "cash" },
+        );
+
+        expect(collected.status).toBe("success");
+        expect(collected.data?.payment.amount).toBe(90);
+        expect(collected.data?.payment.method).toBe("cash");
+        expect(collected.data?.sale.paymentStatus).toBe("paid");
+        expect(createdPayments).toHaveLength(1);
+        expect(createCustomerLedgerEntry).not.toHaveBeenCalled();
+        expect(updateCustomerBalance).not.toHaveBeenCalled();
+    });
+
+    test("completes a customerless partial sale without creating ledger effects", async () => {
+        const response = await billingService.completeSale(userId, organizationId, storeId, {
+            requestId: "79797979-7979-4797-8797-797979797979",
+            items: [{ productId, quantity: 1, addOns: [] }],
+            payments: [{ amount: 45, method: "cash" }],
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.sale.paymentStatus).toBe("partial");
+        expect(response.data?.sale.customer).toBeNull();
+        expect(createdPayments).toHaveLength(1);
+        expect(createCustomerLedgerEntry).not.toHaveBeenCalled();
+        expect(updateCustomerBalance).not.toHaveBeenCalled();
+    });
+
+    test("keeps customer ledger effects for customer-linked Due and partial sales", async () => {
+        const dueDraft = await billingService.createDraftSale(userId, organizationId, storeId, {
+            customerId: amendmentCustomerId,
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const dueSale = await billingService.commitSale(userId, organizationId, storeId, dueDraft.data?.sale.id!, {
+            payments: [],
+        });
+
+        expect(dueSale.status).toBe("success");
+        expect(createCustomerLedgerEntry).toHaveBeenCalledTimes(1);
+        expect(updateCustomerBalance).toHaveBeenCalledTimes(1);
+        expect(createCustomerLedgerEntry.mock.calls[0]?.[0]).toMatchObject({
+            customerId: amendmentCustomerId,
+            entryType: "sale",
+            amount: 90,
+        });
+
+        createCustomerLedgerEntry.mockClear();
+        updateCustomerBalance.mockClear();
+
+        const partialDraft = await billingService.createDraftSale(userId, organizationId, storeId, {
+            customerId: amendmentCustomerId,
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const partialSale = await billingService.commitSale(
+            userId,
+            organizationId,
+            storeId,
+            partialDraft.data?.sale.id!,
+            { payments: [{ amount: 45, method: "cash" }] },
+        );
+
+        expect(partialSale.status).toBe("success");
+        expect(createCustomerLedgerEntry).toHaveBeenCalledTimes(2);
+        expect(updateCustomerBalance).toHaveBeenCalledTimes(2);
+        expect(createCustomerLedgerEntry.mock.calls.map(([entry]) => entry.amount)).toEqual([90, -45]);
+    });
+
+    test("keeps later collection guards for overpayment, fully paid, and draft sales", async () => {
+        const due = await billingService.completeSale(userId, organizationId, storeId, {
+            requestId: "80808080-8080-4808-8808-808080808080",
+            items: [{ productId, quantity: 1, addOns: [] }],
+            payments: [],
+        });
+        const dueSaleId = due.data?.sale.id!;
+
+        const overpayment = await billingService.collectPayment(userId, organizationId, storeId, dueSaleId, {
+            amount: 91,
+            method: "cash",
+        });
+        expect(overpayment.status).toBe("error");
+        expect(overpayment.code).toBe(409);
+        expect(createdPayments).toHaveLength(0);
+
+        const paid = await billingService.collectPayment(userId, organizationId, storeId, dueSaleId, {
+            amount: 90,
+            method: "cash",
+        });
+        expect(paid.status).toBe("success");
+
+        const alreadyPaid = await billingService.collectPayment(userId, organizationId, storeId, dueSaleId, {
+            amount: 1,
+            method: "cash",
+        });
+        expect(alreadyPaid.status).toBe("error");
+        expect(alreadyPaid.code).toBe(409);
+
+        const draft = await billingService.createDraftSale(userId, organizationId, storeId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const draftPayment = await billingService.collectPayment(
+            userId,
+            organizationId,
+            storeId,
+            draft.data?.sale.id!,
+            { amount: 1, method: "cash" },
+        );
+        expect(draftPayment.status).toBe("error");
+        expect(draftPayment.code).toBe(409);
     });
 
     test("does not allocate a number when the draft is already committed", async () => {

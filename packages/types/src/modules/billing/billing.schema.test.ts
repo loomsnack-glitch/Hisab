@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
     AddOnSalesRollupsResponseSchema,
     CustomerListQuerySchema,
+    CompleteSaleSchema,
+    PaymentMethodSchema,
     ProductSalesSummaryAdminQuerySchema,
     ProductSalesSummaryResponseSchema,
     SaleItemInputSchema,
@@ -11,6 +13,23 @@ import {
 } from "./billing.schema";
 
 describe("Configured sale billing contracts", () => {
+    test("accepts an unassigned Due sale without adding an unpaid payment method", () => {
+        const result = CompleteSaleSchema.safeParse({
+            requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            customerId: null,
+            items: [
+                {
+                    productId: "11111111-1111-4111-8111-111111111111",
+                    quantity: 1,
+                },
+            ],
+            payments: [],
+        });
+
+        expect(result.success).toBe(true);
+        expect(PaymentMethodSchema.safeParse("unpaid").success).toBe(false);
+    });
+
     test("customer list queries support server-side filters and cursors", () => {
         const result = CustomerListQuerySchema.safeParse({
             search: "alice",

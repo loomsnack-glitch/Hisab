@@ -715,15 +715,13 @@ CREATE TABLE public.sales (
     CONSTRAINT sales_draft_commit_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (committed_at IS NULL) AND (payment_status = 'pending'::public.payment_status_enum)) OR ((status <> 'draft'::public.sale_status_enum) AND (committed_at IS NOT NULL)))),
     CONSTRAINT sales_draft_sale_number_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL)))),
     CONSTRAINT sales_grand_total_check CHECK (((grand_total >= (0)::numeric) AND (grand_total = (subtotal - discount_total)))),
-    CONSTRAINT sales_receivable_customer_check CHECK (((status = 'draft'::public.sale_status_enum) OR (payment_status = 'paid'::public.payment_status_enum) OR (customer_id IS NOT NULL))),
     CONSTRAINT sales_replacement_not_self_check CHECK (((replacement_of_sale_id IS NULL) OR (replacement_of_sale_id <> id))),
     CONSTRAINT sales_sale_number_metadata_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (sale_number IS NULL) AND (sale_sequence_number IS NULL) AND (sale_period_key IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (sale_number IS NOT NULL) AND (sale_sequence_number IS NOT NULL) AND (sale_period_key IS NOT NULL) AND (length(TRIM(BOTH FROM sale_period_key)) > 0)))),
     CONSTRAINT sales_sale_sequence_number_check CHECK (((sale_sequence_number IS NULL) OR (sale_sequence_number > 0))),
     CONSTRAINT sales_subtotal_check CHECK ((subtotal >= (0)::numeric)),
     CONSTRAINT sales_token_number_metadata_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (token_number IS NULL) AND (token_sequence_number IS NULL) AND (token_period_key IS NULL)) OR ((status <> 'draft'::public.sale_status_enum) AND (((token_number IS NULL) AND (token_sequence_number IS NULL) AND (token_period_key IS NULL)) OR ((token_number IS NOT NULL) AND (token_sequence_number IS NOT NULL) AND (token_sequence_number > 0) AND (token_period_key IS NOT NULL) AND (length(TRIM(BOTH FROM token_period_key)) > 0))))),
     CONSTRAINT sales_token_sequence_number_check CHECK (((token_sequence_number IS NULL) OR (token_sequence_number > 0))),
-    CONSTRAINT sales_void_metadata_check CHECK (((status <> 'voided'::public.sale_status_enum) OR ((voided_at IS NOT NULL) AND (void_reason IS NOT NULL)))),
-    CONSTRAINT sales_walk_in_payment_check CHECK (((status = 'draft'::public.sale_status_enum) OR (customer_id IS NOT NULL) OR (payment_status = 'paid'::public.payment_status_enum)))
+    CONSTRAINT sales_void_metadata_check CHECK (((status <> 'voided'::public.sale_status_enum) OR ((voided_at IS NOT NULL) AND (void_reason IS NOT NULL))))
 );
 
 

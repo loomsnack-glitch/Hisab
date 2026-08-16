@@ -1125,8 +1125,6 @@ const BillingPage = ({
     const isPartialAmountMissing = settlementMode === "partial" && rawPartialPaymentAmount <= 0;
     const matchesFullPayment = settlementMode === "partial" && grandTotal > 0 && rawPartialPaymentAmount === grandTotal;
     const hasInvalidPartialPayment = isOverpaid || isPartialAmountMissing || matchesFullPayment;
-    const requiresCustomerForReceivable = displayedDueTotal > 0 && !selectedCustomerId;
-
     const changeDiscountMode = (nextMode: "amount" | "percent") => {
         if (nextMode === discountMode) {
             return;
@@ -1711,10 +1709,6 @@ const BillingPage = ({
 
             if (matchesFullPayment) {
                 throw new Error("Select 'Paid' when the customer is paying the full bill amount");
-            }
-
-            if (requiresCustomerForReceivable) {
-                throw new Error("Select a customer before creating a bill with a due balance");
             }
 
             if (replacingSaleId) {
@@ -3658,8 +3652,6 @@ const BillingPage = ({
                                         selectedCustomer
                                             ? "border-primary/25 bg-primary/5 hover:bg-primary/10"
                                             : "border-border/60 bg-card/60 hover:bg-muted/50",
-                                        requiresCustomerForReceivable &&
-                                            "border-amber-500/40 bg-amber-500/5 ring-1 ring-amber-500/20",
                                     )}
                                     aria-label="Select customer"
                                 >
@@ -3680,11 +3672,7 @@ const BillingPage = ({
                                             {selectedCustomer?.name || "Walk-in customer"}
                                         </span>
                                         <span className="block truncate text-[11px] text-muted-foreground">
-                                            {selectedCustomer?.phone
-                                                ? selectedCustomer.phone
-                                                : requiresCustomerForReceivable
-                                                  ? "Customer required for due balance"
-                                                  : "Optional · tap to assign"}
+                                            {selectedCustomer?.phone ? selectedCustomer.phone : "Optional · tap to assign"}
                                         </span>
                                     </span>
                                     <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -3908,16 +3896,6 @@ const BillingPage = ({
                                         />
                                     ) : null}
 
-                                    {requiresCustomerForReceivable ? (
-                                        <button
-                                            type="button"
-                                            onClick={openCustomerPicker}
-                                            className="w-full rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700 transition-colors hover:bg-amber-500/15 dark:text-amber-300"
-                                        >
-                                            Select a customer to save a bill with a due balance.
-                                        </button>
-                                    ) : null}
-
                                     {isOverpaid ? (
                                         <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
                                             Collected amount exceeds the bill total.
@@ -4085,8 +4063,7 @@ const BillingPage = ({
                                     disabled={
                                         completeSaleMutation.isPending ||
                                         hasInvalidDiscount ||
-                                        hasInvalidPartialPayment ||
-                                        requiresCustomerForReceivable
+                                        hasInvalidPartialPayment
                                     }
                                     onClick={handleCompleteSale}
                                 >
