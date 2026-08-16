@@ -1150,7 +1150,16 @@ const BillingPage = ({
     };
 
     const applyDiscountPreset = (percentage: number, amount: number) => {
-        setDiscountInput(String(discountMode === "percent" ? percentage : amount));
+        const presetValue = discountMode === "percent" ? percentage : amount;
+        const isSelected = Number(discountInput) === presetValue;
+
+        if (isSelected) {
+            setDiscountInput("");
+            setDiscountEditorOpen(true);
+            return;
+        }
+
+        setDiscountInput(String(presetValue));
         setDiscountEditorOpen(true);
     };
 

@@ -31,6 +31,7 @@ import PosSettingsPage from "@/pages/pos-settings-page";
 import SettingsPage from "@/pages/settings-page";
 import TablesPage from "@/pages/tables-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
+import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
 import WhatsAppInboxPage, { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -143,6 +144,7 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                                 <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                                 <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
+                                <Route path="/organizations/:organizationId/whatsapp" element={<WhatsAppOrganizationPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp" element={<WhatsAppAccountPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp/inbox" element={<WhatsAppInboxPage />} />
                             </Route>

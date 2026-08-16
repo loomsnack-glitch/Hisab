@@ -21,11 +21,12 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Textarea } from "@repo/ui/components/textarea";
-import { ArrowLeft, FileText, MessageCircle, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, FileText, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { whatsappKeys } from "@/lib/query-keys";
 import type { PosRouteContext } from "@/pages/pos-route-context";
+import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
 type AdminInbox = {
     mode: "admin";
@@ -176,7 +177,7 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
             <div className="flex items-center justify-between gap-3">
                 <div>
                     <h1 className="flex items-center gap-2 font-display text-2xl font-semibold">
-                        <MessageCircle className="size-5 text-primary" />
+                        <WhatsAppIcon className="size-5 text-primary" />
                         WhatsApp conversations
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">Direct customer chats for this Store.</p>

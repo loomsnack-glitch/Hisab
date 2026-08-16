@@ -6,7 +6,7 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
-import { ExternalLink, MessageCircle, MonitorSmartphone, Pencil, PlusCircle, Store, Search, X } from "lucide-react";
+import { ExternalLink, MonitorSmartphone, Pencil, PlusCircle, Store, Search, X, Settings2 } from "lucide-react";
 
 import CreateDeviceDialog from "@/components/organizations/create-device-dialog";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
@@ -15,6 +15,7 @@ import DeviceStatusBadge from "@/components/organizations/device-status-badge";
 import EditDeviceDialog from "@/components/organizations/edit-device-dialog";
 import EditStoreDialog from "@/components/organizations/edit-store-dialog";
 import SaleNumberSettingsDialog from "@/components/organizations/sale-number-settings-dialog";
+import StoreWhatsAppDialog from "@/components/organizations/store-whatsapp-dialog";
 import { formatDateTime } from "@/lib/format";
 
 type StoresSectionProps = {
@@ -46,7 +47,11 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                 Add your first branch to begin registering POS devices and operational endpoints.
                             </EmptyDescription>
                         </EmptyHeader>
-                        <EmptyContent>
+                        <EmptyContent className="flex flex-wrap justify-center gap-2">
+                            <Button variant="outline" className="rounded-full" render={<Link to={`/organizations/${organizationId}/whatsapp`} />}>
+                                <Settings2 className="size-4" />
+                                WhatsApp accounts
+                            </Button>
                             <CreateStoreDialog organizationId={organizationId} />
                         </EmptyContent>
                     </Empty>
@@ -81,6 +86,10 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <Button variant="outline" className="rounded-full h-11 px-5" render={<Link to={`/organizations/${organizationId}/whatsapp`} />}>
+                        <Settings2 className="size-4" />
+                        WhatsApp accounts
+                    </Button>
                     <CreateStoreDialog
                         organizationId={organizationId}
                         trigger={
@@ -147,14 +156,7 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                                         organizationId={organizationId}
                                         store={store}
                                     />
-                                    <Button
-                                        variant="outline"
-                                        className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4"
-                                        render={<Link to={"/organizations/" + organizationId + "/stores/" + store.id + "/whatsapp"} />}
-                                    >
-                                        <MessageCircle className="size-3.5 sm:size-4" />
-                                        WhatsApp
-                                    </Button>
+                                    <StoreWhatsAppDialog organizationId={organizationId} storeId={store.id} storeName={store.name} />
                                     <EditStoreDialog
                                         organizationId={organizationId}
                                         store={store}
