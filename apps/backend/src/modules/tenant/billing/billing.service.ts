@@ -40,6 +40,7 @@ import {
   type VoidSaleSVC,
 } from "@repo/types";
 import * as billingRepository from "./billing.repository";
+import * as tableRepository from "@/modules/tenant/table-service/table-service.repository";
 import { decodeSalesCursor } from "./sales-pagination";
 import { DEFAULT_SALE_NUMBER_TIMEZONE } from "./sale-numbering";
 
@@ -2021,6 +2022,16 @@ const updateSaleInStore = async (
       throw new Error("Failed to update draft sale");
     }
 
+    if (existingSale.serviceTableId) {
+      await tableRepository.markReadyDraftAsEngaged(
+        organizationId,
+        storeId,
+        saleId,
+        actor.deviceId ?? "",
+        tx,
+      );
+    }
+
     if (saleData.items !== undefined) {
       await billingRepository.deleteSaleItemsBySaleId(
         organizationId,
@@ -2387,6 +2398,22 @@ const commitSaleInStore = async (
           paymentId: createdPayment.id,
           notes: normalizeOptionalText(paymentInput.notes),
         });
+      }
+    }
+
+    if (existingSale.serviceTableId) {
+      const tableState = paymentStatus === "paid" ? "paid" : "payment_due";
+      const table = await tableRepository.setCommittedSaleTableState(
+        organizationId,
+        storeId,
+        existingSale.serviceTableId,
+        saleId,
+        tableState,
+        actor.deviceId ?? "",
+        tx,
+      );
+      if (!table) {
+        throw new Error("Failed to transition service table after placing sale");
       }
     }
 
@@ -2922,8 +2949,40 @@ const collectPaymentInStore = async (
   let createdPayment: Awaited<
     ReturnType<typeof billingRepository.createPayment>
   > = null;
+  let saleWasCurrentTableSale = false;
+  let saleForPayment = existingSale;
 
   await pg.begin(async (tx) => {
+    if (existingSale.serviceTableId) {
+      const table = await tableRepository.lockServiceTableForSale(
+        organizationId,
+        storeId,
+        saleId,
+        tx,
+      );
+      saleWasCurrentTableSale = table?.state === "payment_due";
+    }
+
+    if (
+      existingSale.serviceTableId &&
+      !(await billingRepository.lockCommittedSale(organizationId, storeId, saleId, tx))
+    ) {
+      throw new Error("Sale is no longer available for payment collection");
+    }
+
+    const latestSale = await buildSaleDetails(
+      organizationId,
+      storeId,
+      saleId,
+      tx,
+    );
+    if (!latestSale) throw new Error("Sale is no longer available for payment collection");
+    saleForPayment = latestSale;
+    const latestDueTotal = moneyFrom(latestSale.dueTotal);
+    if (amount > latestDueTotal) {
+      throw new Error("Collected payment cannot exceed the remaining due amount");
+    }
+
     createdPayment = await billingRepository.createPayment(
       {
         id: crypto.randomUUID(),
@@ -2957,41 +3016,55 @@ const collectPaymentInStore = async (
     }
 
     const nextPaidTotal = roundMoney(
-      moneyFrom(existingSale.paidTotal) + amount,
+      moneyFrom(saleForPayment.paidTotal) + amount,
     );
     const nextPaymentStatus =
-      nextPaidTotal === moneyFrom(existingSale.grandTotal) ? "paid" : "partial";
+      nextPaidTotal === moneyFrom(saleForPayment.grandTotal) ? "paid" : "partial";
 
     const updatedSale = await billingRepository.updateSale(
       {
         id: saleId,
         organizationId,
         storeId,
-        customerId: existingSale.customerId,
-        customerNameSnapshot: existingSale.customerNameSnapshot ?? null,
-        customerPhoneSnapshot: existingSale.customerPhoneSnapshot ?? null,
-        status: existingSale.status,
+        customerId: saleForPayment.customerId,
+        customerNameSnapshot: saleForPayment.customerNameSnapshot ?? null,
+        customerPhoneSnapshot: saleForPayment.customerPhoneSnapshot ?? null,
+        status: saleForPayment.status,
         paymentStatus: nextPaymentStatus,
         updatedByDeviceId: actor.deviceId ?? null,
-        subtotal: moneyFrom(existingSale.subtotal),
-        discountTotal: moneyFrom(existingSale.discountTotal),
-        grandTotal: moneyFrom(existingSale.grandTotal),
-        notes: existingSale.notes ?? null,
-        committedAt: existingSale.committedAt ?? null,
-        saleNumber: existingSale.saleNumber ?? null,
-        saleSequenceNumber: existingSale.saleSequenceNumber ?? null,
-        salePeriodKey: existingSale.salePeriodKey ?? null,
-        tokenNumber: existingSale.tokenNumber ?? null,
-        tokenSequenceNumber: existingSale.tokenSequenceNumber ?? null,
-        tokenPeriodKey: existingSale.tokenPeriodKey ?? null,
-        voidedAt: existingSale.voidedAt ?? null,
-        voidReason: existingSale.voidReason ?? null,
+        subtotal: moneyFrom(saleForPayment.subtotal),
+        discountTotal: moneyFrom(saleForPayment.discountTotal),
+        grandTotal: moneyFrom(saleForPayment.grandTotal),
+        notes: saleForPayment.notes ?? null,
+        committedAt: saleForPayment.committedAt ?? null,
+        saleNumber: saleForPayment.saleNumber ?? null,
+        saleSequenceNumber: saleForPayment.saleSequenceNumber ?? null,
+        salePeriodKey: saleForPayment.salePeriodKey ?? null,
+        tokenNumber: saleForPayment.tokenNumber ?? null,
+        tokenSequenceNumber: saleForPayment.tokenSequenceNumber ?? null,
+        tokenPeriodKey: saleForPayment.tokenPeriodKey ?? null,
+        voidedAt: saleForPayment.voidedAt ?? null,
+        voidReason: saleForPayment.voidReason ?? null,
       },
       tx,
     );
 
     if (!updatedSale) {
       throw new Error("Failed to update sale payment status");
+    }
+
+    if (saleWasCurrentTableSale) {
+      const table = await tableRepository.syncCommittedSalePaymentState(
+        organizationId,
+        storeId,
+        saleId,
+        nextPaymentStatus === "paid" ? "paid" : "payment_due",
+        actor.deviceId ?? "",
+        tx,
+      );
+      if (!table) {
+        throw new Error("Failed to transition service table after payment collection");
+      }
     }
   });
 

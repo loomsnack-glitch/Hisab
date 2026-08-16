@@ -327,7 +327,10 @@ export const cancelServiceTableOrderForDevice = async (
       tx,
     );
     if (!table) return { kind: "not_found" as const };
-    if (table.state !== "engaged" || !table.currentSaleId)
+    if (
+      (table.state !== "engaged" && table.state !== "ready_to_bill") ||
+      !table.currentSaleId
+    )
       return { kind: "conflict" as const };
 
     const saleIsDraft = await billingRepository.lockDraftSale(
@@ -392,6 +395,159 @@ export const cancelServiceTableOrderForDevice = async (
     code: STATUS_CODES.SUCCESS,
   };
 };
+
+export const markServiceTableReadyToBillForDevice = async (
+  session: DeviceSessionDTO,
+  tableId: string,
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const result = await pg.begin(async (tx) => {
+    const table = await tableRepository.lockServiceTableForDevice(
+      session.organization.id,
+      session.store.id,
+      tableId,
+      tx,
+    );
+    if (!table) return { kind: "not_found" as const };
+    if (table.state !== "engaged" || !table.currentSaleId)
+      return { kind: "conflict" as const };
+
+    const sale = await billingRepository.getSaleById(
+      session.organization.id,
+      session.store.id,
+      table.currentSaleId,
+      tx,
+    );
+    if (!sale || sale.status !== "draft" || sale.serviceTableId !== tableId)
+      return { kind: "conflict" as const };
+
+    const readyTable = await tableRepository.markTableReadyToBill(
+      session.organization.id,
+      session.store.id,
+      tableId,
+      table.currentSaleId,
+      session.device.id,
+      tx,
+    );
+    if (!readyTable) return { kind: "conflict" as const };
+    return { kind: "ready" as const, table: readyTable };
+  });
+
+  if (result.kind === "not_found")
+    return {
+      status: "error",
+      message: "Service table not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  if (result.kind === "conflict")
+    return {
+      status: "error",
+      message: "Only an engaged table with its current Draft Sale can be marked Ready to bill",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  return {
+    status: "success",
+    data: { table: result.table },
+    message: "Service table marked Ready to bill",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+const releaseCommittedServiceTableForDevice = async (
+  session: DeviceSessionDTO,
+  tableId: string,
+  expectedState: "payment_due" | "paid",
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const result = await pg.begin(async (tx) => {
+    const table = await tableRepository.lockServiceTableForDevice(
+      session.organization.id,
+      session.store.id,
+      tableId,
+      tx,
+    );
+    if (!table) return { kind: "not_found" as const };
+    if (table.state !== expectedState || !table.currentSaleId)
+      return { kind: "conflict" as const };
+
+    const sale = await billingRepository.getSaleById(
+      session.organization.id,
+      session.store.id,
+      table.currentSaleId,
+      tx,
+    );
+    const saleMatchesTableState =
+      expectedState === "paid"
+        ? sale?.paymentStatus === "paid"
+        : sale?.paymentStatus === "pending" || sale?.paymentStatus === "partial";
+    if (
+      !sale ||
+      sale.status !== "completed" ||
+      sale.serviceTableId !== tableId ||
+      !saleMatchesTableState
+    ) {
+      return { kind: "conflict" as const };
+    }
+
+    const releasedTable =
+      expectedState === "paid"
+        ? await tableRepository.releasePaidTable(
+            session.organization.id,
+            session.store.id,
+            tableId,
+            table.currentSaleId,
+            session.device.id,
+            tx,
+          )
+        : await tableRepository.releaseDueTable(
+            session.organization.id,
+            session.store.id,
+            tableId,
+            table.currentSaleId,
+            session.device.id,
+            tx,
+          );
+    if (!releasedTable) return { kind: "conflict" as const };
+    return { kind: "released" as const, table: releasedTable };
+  });
+
+  if (result.kind === "not_found")
+    return {
+      status: "error",
+      message: "Service table not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  if (result.kind === "conflict")
+    return {
+      status: "error",
+      message:
+        expectedState === "paid"
+          ? "Only a Paid service table can be freed"
+          : "Only a Payment due service table can be freed with bill due",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  return {
+    status: "success",
+    data: { table: result.table },
+    message:
+      expectedState === "paid"
+        ? "Paid service table freed"
+        : "Payment due service table freed with bill due",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const freePaidServiceTableForDevice = (
+  session: DeviceSessionDTO,
+  tableId: string,
+) => releaseCommittedServiceTableForDevice(session, tableId, "paid");
+
+export const freeDueServiceTableForDevice = (
+  session: DeviceSessionDTO,
+  tableId: string,
+) => releaseCommittedServiceTableForDevice(session, tableId, "payment_due");
 
 export const createServiceTable = async (
   userId: string,

@@ -50,7 +50,16 @@ const selectColumnsWithSaleTotal = `
   service_tables.position_y,
   service_tables.state,
   service_tables.current_sale_id,
-  current_sale.grand_total AS current_sale_total,
+  CASE
+    WHEN current_sale.id IS NULL THEN NULL
+    WHEN current_sale.status = 'draft' THEN current_sale.grand_total
+    WHEN current_sale.payment_status = 'paid' THEN current_sale.grand_total
+    ELSE current_sale.grand_total - COALESCE((
+      SELECT SUM(payment.amount)
+      FROM payments AS payment
+      WHERE payment.sale_id = current_sale.id
+    ), 0)
+  END AS current_sale_total,
   service_tables.created_by,
   service_tables.updated_by,
   service_tables.created_at,
@@ -68,7 +77,7 @@ export const getServiceTables = async (
       ON current_sale.id = service_tables.current_sale_id
      AND current_sale.organization_id = service_tables.organization_id
      AND current_sale.store_id = service_tables.store_id
-     AND current_sale.status = 'draft'
+     AND current_sale.status IN ('draft', 'completed')
     WHERE service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
     ORDER BY position_y ASC, position_x ASC, created_at ASC, id ASC
@@ -88,7 +97,7 @@ export const getServiceTableById = async (
       ON current_sale.id = service_tables.current_sale_id
      AND current_sale.organization_id = service_tables.organization_id
      AND current_sale.store_id = service_tables.store_id
-     AND current_sale.status = 'draft'
+     AND current_sale.status IN ('draft', 'completed')
     WHERE service_tables.id = ${tableId}
       AND service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
@@ -202,7 +211,7 @@ export const lockServiceTableForDevice = async (
       ON current_sale.id = service_tables.current_sale_id
      AND current_sale.organization_id = service_tables.organization_id
      AND current_sale.store_id = service_tables.store_id
-     AND current_sale.status = 'draft'
+     AND current_sale.status IN ('draft', 'completed')
     WHERE service_tables.id = ${tableId}
       AND service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
@@ -252,12 +261,157 @@ export const clearDraftSale = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND state IN ('engaged', 'ready_to_bill')
+      AND current_sale_id = ${saleId}
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
+export const markTableReadyToBill = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  saleId: string,
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = 'ready_to_bill', updated_by = ${updatedBy}, updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
       AND state = 'engaged'
       AND current_sale_id = ${saleId}
     RETURNING ${tx.unsafe(selectColumns)}
   `;
   return row ? mapRow(row) : null;
 };
+
+export const markReadyDraftAsEngaged = async (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<boolean> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = 'engaged', updated_by = ${updatedBy}, updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND current_sale_id = ${saleId}
+      AND state = 'ready_to_bill'
+    RETURNING id
+  `;
+  return Boolean(row);
+};
+
+export const setCommittedSaleTableState = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  saleId: string,
+  state: "payment_due" | "paid",
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = ${state}, updated_by = ${updatedBy}, updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND current_sale_id = ${saleId}
+      AND state = 'ready_to_bill'
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
+export const syncCommittedSalePaymentState = async (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  state: "payment_due" | "paid",
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = ${state}, updated_by = ${updatedBy}, updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND current_sale_id = ${saleId}
+      AND state IN ('payment_due', 'paid')
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
+export const lockServiceTableForSale = async (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    SELECT ${tx.unsafe(selectColumnsWithSaleTotal)}
+    FROM service_tables
+    LEFT JOIN sales AS current_sale
+      ON current_sale.id = service_tables.current_sale_id
+     AND current_sale.organization_id = service_tables.organization_id
+     AND current_sale.store_id = service_tables.store_id
+     AND current_sale.status IN ('draft', 'completed')
+    WHERE service_tables.organization_id = ${organizationId}
+      AND service_tables.store_id = ${storeId}
+      AND service_tables.current_sale_id = ${saleId}
+    FOR UPDATE OF service_tables
+  `;
+  return row ? mapRow(row) : null;
+};
+
+const releaseCommittedTable = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  saleId: string,
+  fromState: "payment_due" | "paid",
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = 'free', current_sale_id = NULL,
+        updated_by = ${updatedBy}, updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND state = ${fromState}
+      AND current_sale_id = ${saleId}
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
+export const releaseDueTable = (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  saleId: string,
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+) => releaseCommittedTable(organizationId, storeId, tableId, saleId, "payment_due", updatedBy, tx);
+
+export const releasePaidTable = (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  saleId: string,
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+) => releaseCommittedTable(organizationId, storeId, tableId, saleId, "paid", updatedBy, tx);
 
 export const normalizePosition = (
   position: ServiceTablePosition,

@@ -126,4 +126,25 @@ describe("POS Service Table behavior", () => {
     expect(markup).toContain("Open order");
     expect(markup).toContain("Cancel order");
   });
+
+  test("renders billing, collection, and release actions for committed table states", () => {
+    const markup = renderTableFloor([
+      {
+        ...table("payment_due"),
+        currentSaleId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        currentSaleTotal: 17,
+      },
+      {
+        ...table("paid"),
+        id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        currentSaleId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        currentSaleTotal: 42,
+      },
+    ]);
+
+    expect(markup).toContain("Outstanding");
+    expect(markup).toContain("Collect payment");
+    expect(markup).toContain("Free with bill due");
+    expect(markup).toContain("Free paid table");
+  });
 });

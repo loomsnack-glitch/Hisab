@@ -1,14 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import {
   allocatePosServiceTable,
   cancelPosServiceTableOrder,
+  collectPosPayment,
+  freeDuePosServiceTable,
+  freePaidPosServiceTable,
   freePosServiceTable,
   getPosServiceTableOrder,
   getPosServiceTables,
+  markPosServiceTableReadyToBill,
   startPosServiceTableOrder,
 } from "@repo/services";
-import type { ServiceTableDTO } from "@repo/types";
+import type { CreatePaymentJSON, PaymentMethod, ServiceTableDTO } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -66,6 +71,9 @@ const stateClassName: Record<ServiceTableDTO["state"], string> = {
 const PosTablesPage = () => {
   const { session, onPanelTabChange } = useOutletContext<PosRouteContext>();
   const queryClient = useQueryClient();
+  const [paymentTableId, setPaymentTableId] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const tablesQuery = useQuery({
     queryKey: serviceTableKeys.pos(session.organization.id, session.store.id),
     queryFn: getPosServiceTables,
@@ -149,11 +157,84 @@ const PosTablesPage = () => {
       toast.error(error.message ?? "Table order could not be cancelled"),
   });
 
+  const readyMutation = useMutation({
+    mutationFn: (tableId: string) => markPosServiceTableReadyToBill(tableId),
+    onSuccess: async (response) => {
+      if (response.status !== "success") {
+        toast.error(response.message);
+        return;
+      }
+      await queryClient.invalidateQueries({
+        queryKey: serviceTableKeys.pos(session.organization.id, session.store.id),
+      });
+      toast.success("Table marked Ready to bill");
+    },
+    onError: (error: { message?: string }) =>
+      toast.error(error.message ?? "Table could not be marked Ready to bill"),
+  });
+
+  const releaseMutation = useMutation({
+    mutationFn: ({ tableId, state }: { tableId: string; state: "paid" | "due" }) =>
+      state === "paid"
+        ? freePaidPosServiceTable(tableId)
+        : freeDuePosServiceTable(tableId),
+    onSuccess: async (response, variables) => {
+      if (response.status !== "success") {
+        toast.error(response.message);
+        return;
+      }
+      await queryClient.invalidateQueries({
+        queryKey: serviceTableKeys.pos(session.organization.id, session.store.id),
+      });
+      setPaymentTableId(null);
+      toast.success(variables.state === "paid" ? "Paid table freed" : "Table freed with bill due");
+    },
+    onError: (error: { message?: string }) =>
+      toast.error(error.message ?? "Table could not be freed"),
+  });
+
+  const collectMutation = useMutation({
+    mutationFn: ({ saleId, data }: { saleId: string; data: CreatePaymentJSON }) =>
+      collectPosPayment(saleId, data),
+    onSuccess: async (response) => {
+      if (response.status !== "success") {
+        toast.error(response.message);
+        return;
+      }
+      await queryClient.invalidateQueries({
+        queryKey: serviceTableKeys.pos(session.organization.id, session.store.id),
+      });
+      setPaymentTableId(null);
+      setPaymentAmount("");
+      toast.success("Payment collected");
+    },
+    onError: (error: { message?: string }) =>
+      toast.error(error.message ?? "Payment could not be collected"),
+  });
+
   const handleTableOperation = (
     tableId: string,
     action: PosServiceTableAction,
   ) => {
     operationMutation.mutate({ tableId, action });
+  };
+
+  const submitPayment = (table: ServiceTableDTO) => {
+    if (!table.currentSaleId) return;
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a positive payment amount");
+      return;
+    }
+    collectMutation.mutate({
+      saleId: table.currentSaleId,
+      data: {
+        amount,
+        method: paymentMethod,
+        referenceNumber: null,
+        notes: null,
+      },
+    });
   };
 
   return (
@@ -276,7 +357,7 @@ const PosTablesPage = () => {
                         )}
                         {table.currentSaleTotal !== null ? (
                           <span className="mt-1 text-xs font-semibold text-foreground">
-                            Current total{" "}
+                            {table.state === "payment_due" ? "Outstanding" : "Current total"}{" "}
                             {formatCurrency(table.currentSaleTotal)}
                           </span>
                         ) : null}
@@ -348,7 +429,7 @@ const PosTablesPage = () => {
                             Open order
                           </Button>
                         ) : null}
-                        {table.state === "engaged" && table.currentSaleId ? (
+                        {(table.state === "engaged" || table.state === "ready_to_bill") && table.currentSaleId ? (
                           <Button
                             type="button"
                             size="sm"
@@ -364,6 +445,97 @@ const PosTablesPage = () => {
                           >
                             <Trash2 className="size-3.5" />
                             Cancel order
+                          </Button>
+                        ) : null}
+                        {table.state === "engaged" && table.currentSaleId ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="mt-2 min-w-28 rounded-lg"
+                            disabled={readyMutation.isPending}
+                            isLoading={readyMutation.isPending && readyMutation.variables === table.id}
+                            onClick={() => readyMutation.mutate(table.id)}
+                            aria-label={`Mark table ${table.tableLabel} Ready to bill`}
+                          >
+                            <Check className="size-3.5" />
+                            Ready to bill
+                          </Button>
+                        ) : null}
+                        {table.state === "payment_due" && table.currentSaleId ? (
+                          <>
+                            {paymentTableId === table.id ? (
+                              <div className="mt-2 flex w-36 flex-col gap-1.5">
+                                <input
+                                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                                  type="number"
+                                  min="0.01"
+                                  step="0.01"
+                                  value={paymentAmount}
+                                  onChange={(event) => setPaymentAmount(event.target.value)}
+                                  placeholder="Amount"
+                                  aria-label={`Payment amount for table ${table.tableLabel}`}
+                                />
+                                <select
+                                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                                  value={paymentMethod}
+                                  onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+                                  aria-label={`Payment method for table ${table.tableLabel}`}
+                                >
+                                  <option value="cash">Cash</option>
+                                  <option value="upi">UPI</option>
+                                  <option value="card">Card</option>
+                                </select>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="rounded-lg"
+                                  disabled={collectMutation.isPending}
+                                  isLoading={collectMutation.isPending}
+                                  onClick={() => submitPayment(table)}
+                                >
+                                  Collect payment
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="mt-2 min-w-28 rounded-lg"
+                                onClick={() => {
+                                  setPaymentTableId(table.id);
+                                  setPaymentAmount(String(table.currentSaleTotal ?? ""));
+                                }}
+                                aria-label={`Collect payment for table ${table.tableLabel}`}
+                              >
+                                Collect payment
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="mt-2 min-w-28 rounded-lg"
+                              disabled={releaseMutation.isPending}
+                              onClick={() => releaseMutation.mutate({ tableId: table.id, state: "due" })}
+                              aria-label={`Free table ${table.tableLabel} with bill due`}
+                            >
+                              Free with bill due
+                            </Button>
+                          </>
+                        ) : null}
+                        {table.state === "paid" && table.currentSaleId ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 min-w-28 rounded-lg"
+                            disabled={releaseMutation.isPending}
+                            isLoading={releaseMutation.isPending && releaseMutation.variables?.tableId === table.id}
+                            onClick={() => releaseMutation.mutate({ tableId: table.id, state: "paid" })}
+                            aria-label={`Free paid table ${table.tableLabel}`}
+                          >
+                            <CircleOff className="size-3.5" />
+                            Free paid table
                           </Button>
                         ) : null}
                       </div>

@@ -391,6 +391,25 @@ export const lockDraftSale = async (
     return Boolean(result);
 };
 
+export const lockCommittedSale = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+    tx: Bun.TransactionSQL,
+): Promise<boolean> => {
+    const [result] = await tx`
+        SELECT id
+        FROM sales
+        WHERE id = ${saleId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND status = 'completed'
+        FOR UPDATE
+    `;
+
+    return Boolean(result);
+};
+
 export const deleteDraftSale = async (
     organizationId: string,
     storeId: string,
