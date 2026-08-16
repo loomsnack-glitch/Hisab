@@ -165,10 +165,17 @@ const pendingOutboxLimit = (): number => {
 
 const mapAccount = (row: AccountRow): WhatsAppAccountDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
+    const defaultStoreId = (mapped.defaultStoreId as string | null | undefined) ?? null;
+    const assignedStoreIds = Array.isArray(mapped.assignedStoreIds)
+        ? mapped.assignedStoreIds.map(String)
+        : defaultStoreId
+          ? [defaultStoreId]
+          : [];
     return {
         id: String(mapped.id),
         organizationId: String(mapped.organizationId),
-        storeId: String(mapped.storeId),
+        defaultStoreId,
+        assignedStoreIds,
         provider: mapped.provider as WhatsAppAccountDTO["provider"],
         phoneNumber: String(mapped.phoneNumber),
         status: mapped.status as WhatsAppAccountStatus,
@@ -182,11 +189,23 @@ const mapAccount = (row: AccountRow): WhatsAppAccountDTO => {
 
 export const getAccount = async (organizationId: string, storeId: string): Promise<WhatsAppAccountDTO | null> => {
     const [row] = await pg`
-        SELECT *
-        FROM whatsapp_accounts
-       WHERE organization_id = ${organizationId}
-         AND store_id = ${storeId}
-        ORDER BY created_at DESC
+        SELECT
+            account.*,
+            COALESCE(
+                (
+                    SELECT ARRAY_AGG(account_store.store_id ORDER BY account_store.created_at ASC)
+                    FROM whatsapp_account_stores account_store
+                    WHERE account_store.whatsapp_account_id = account.id
+                ),
+                ARRAY[]::UUID[]
+            ) AS assigned_store_ids
+        FROM whatsapp_accounts account
+        INNER JOIN whatsapp_account_stores assignment
+            ON assignment.whatsapp_account_id = account.id
+           AND assignment.organization_id = account.organization_id
+           AND assignment.store_id = ${storeId}
+       WHERE account.organization_id = ${organizationId}
+        ORDER BY account.created_at DESC
         LIMIT 1
     `;
     return row ? mapAccount(row) : null;
@@ -194,20 +213,204 @@ export const getAccount = async (organizationId: string, storeId: string): Promi
 
 export const getAccountById = async (accountId: string): Promise<WhatsAppAccountDTO | null> => {
     const [row] = await pg`
-        SELECT *
-        FROM whatsapp_accounts
-       WHERE id = ${accountId}
+        SELECT
+            account.*,
+            COALESCE(
+                (
+                    SELECT ARRAY_AGG(account_store.store_id ORDER BY account_store.created_at ASC)
+                    FROM whatsapp_account_stores account_store
+                    WHERE account_store.whatsapp_account_id = account.id
+                ),
+                ARRAY[]::UUID[]
+            ) AS assigned_store_ids
+        FROM whatsapp_accounts account
+       WHERE account.id = ${accountId}
     `;
     return row ? mapAccount(row) : null;
 };
 
 export const getAccountByPhoneNumber = async (phoneNumber: string): Promise<WhatsAppAccountDTO | null> => {
     const [row] = await pg`
-        SELECT *
-        FROM whatsapp_accounts
-        WHERE provider = 'baileys'
-          AND phone_number_normalized = ${phoneNumber}
+        SELECT
+            account.*,
+            COALESCE(
+                (
+                    SELECT ARRAY_AGG(account_store.store_id ORDER BY account_store.created_at ASC)
+                    FROM whatsapp_account_stores account_store
+                    WHERE account_store.whatsapp_account_id = account.id
+                ),
+                ARRAY[]::UUID[]
+            ) AS assigned_store_ids
+        FROM whatsapp_accounts account
+        WHERE account.provider = 'baileys'
+          AND account.phone_number_normalized = ${phoneNumber}
         LIMIT 1
+    `;
+    return row ? mapAccount(row) : null;
+};
+
+export const getAccountsForOrganization = async (organizationId: string): Promise<WhatsAppAccountDTO[]> => {
+    const rows = await pg`
+        SELECT
+            account.*,
+            COALESCE(
+                (
+                    SELECT ARRAY_AGG(account_store.store_id ORDER BY account_store.created_at ASC)
+                    FROM whatsapp_account_stores account_store
+                    WHERE account_store.whatsapp_account_id = account.id
+                ),
+                ARRAY[]::UUID[]
+            ) AS assigned_store_ids
+        FROM whatsapp_accounts account
+        WHERE account.organization_id = ${organizationId}
+        ORDER BY account.created_at DESC
+    `;
+    return rows.map(mapAccount);
+};
+
+export const assignAccountToStore = async (
+    organizationId: string,
+    accountId: string,
+    storeId: string,
+    userId: string,
+): Promise<WhatsAppAccountDTO | null> => {
+    return pg.begin(async tx => {
+        const [account] = await tx`
+            SELECT id, store_id
+            FROM whatsapp_accounts
+            WHERE id = ${accountId}
+              AND organization_id = ${organizationId}
+            FOR UPDATE
+        `;
+        if (!account) return null;
+
+        const [assignment] = await tx`
+            INSERT INTO whatsapp_account_stores (
+                organization_id,
+                whatsapp_account_id,
+                store_id,
+                is_default_for_inbound,
+                created_by,
+                updated_by
+            )
+            VALUES (
+                ${organizationId},
+                ${accountId},
+                ${storeId},
+                NOT EXISTS (
+                    SELECT 1
+                    FROM whatsapp_account_stores
+                    WHERE whatsapp_account_id = ${accountId}
+                ),
+                ${userId},
+                ${userId}
+            )
+            ON CONFLICT (whatsapp_account_id, store_id) DO NOTHING
+            RETURNING store_id
+        `;
+        if (!assignment) return getAccountForTransaction(tx, accountId);
+
+        await tx`
+            UPDATE whatsapp_accounts
+            SET store_id = COALESCE(store_id, ${storeId}),
+                updated_by = ${userId},
+                updated_at = NOW()
+            WHERE id = ${accountId}
+        `;
+
+        return getAccountForTransaction(tx, accountId);
+    });
+};
+
+export const unassignAccountFromStore = async (
+    organizationId: string,
+    accountId: string,
+    storeId: string,
+    userId: string,
+): Promise<boolean> => {
+    return pg.begin(async tx => {
+        const [account] = await tx`
+            SELECT id
+            FROM whatsapp_accounts
+            WHERE id = ${accountId}
+              AND organization_id = ${organizationId}
+            FOR UPDATE
+        `;
+        if (!account) return false;
+
+        const [assignment] = await tx`
+            SELECT is_default_for_inbound
+            FROM whatsapp_account_stores
+            WHERE organization_id = ${organizationId}
+              AND whatsapp_account_id = ${accountId}
+              AND store_id = ${storeId}
+            FOR UPDATE
+        `;
+        if (!assignment) return false;
+
+        await tx`
+            DELETE FROM whatsapp_account_stores
+            WHERE organization_id = ${organizationId}
+              AND whatsapp_account_id = ${accountId}
+              AND store_id = ${storeId}
+        `;
+
+        if (assignment.is_default_for_inbound) {
+            const [nextAssignment] = await tx`
+                SELECT store_id
+                FROM whatsapp_account_stores
+                WHERE organization_id = ${organizationId}
+                  AND whatsapp_account_id = ${accountId}
+                ORDER BY created_at ASC, store_id ASC
+                LIMIT 1
+                FOR UPDATE
+            `;
+            if (nextAssignment) {
+                await tx`
+                    UPDATE whatsapp_account_stores
+                    SET is_default_for_inbound = TRUE,
+                        updated_by = ${userId},
+                        updated_at = NOW()
+                    WHERE organization_id = ${organizationId}
+                      AND whatsapp_account_id = ${accountId}
+                      AND store_id = ${nextAssignment.store_id}
+                `;
+                await tx`
+                    UPDATE whatsapp_accounts
+                    SET store_id = ${nextAssignment.store_id},
+                        updated_by = ${userId},
+                        updated_at = NOW()
+                    WHERE id = ${accountId}
+                `;
+            } else {
+                await tx`
+                    UPDATE whatsapp_accounts
+                    SET store_id = NULL,
+                        updated_by = ${userId},
+                        updated_at = NOW()
+                    WHERE id = ${accountId}
+                `;
+            }
+        }
+
+        return true;
+    });
+};
+
+const getAccountForTransaction = async (tx: Bun.TransactionSQL, accountId: string): Promise<WhatsAppAccountDTO | null> => {
+    const [row] = await tx`
+        SELECT
+            account.*,
+            COALESCE(
+                (
+                    SELECT ARRAY_AGG(account_store.store_id ORDER BY account_store.created_at ASC)
+                    FROM whatsapp_account_stores account_store
+                    WHERE account_store.whatsapp_account_id = account.id
+                ),
+                ARRAY[]::UUID[]
+            ) AS assigned_store_ids
+        FROM whatsapp_accounts account
+        WHERE account.id = ${accountId}
     `;
     return row ? mapAccount(row) : null;
 };
@@ -549,9 +752,13 @@ export const createMessageEvent = async (params: MessageEventParams): Promise<{ 
                 contact_phone_number = EXCLUDED.contact_phone_number,
                 display_name = CASE WHEN whatsapp_conversations.customer_id IS NULL THEN EXCLUDED.display_name ELSE whatsapp_conversations.display_name END,
                 updated_at = NOW()
-            RETURNING id
+            RETURNING id, store_id
         `;
         if (!conversation) throw new Error("Failed to create WhatsApp conversation");
+        // Existing chats stay owned by their original Store. New chats use the
+        // account default Store, which keeps inbound history store-scoped and
+        // avoids breaking the conversation/message composite foreign key.
+        const conversationStoreId = String(conversation.store_id);
 
         if (params.direction === "outbound") {
             const [existingOutbound] = await tx`
@@ -600,7 +807,7 @@ export const createMessageEvent = async (params: MessageEventParams): Promise<{ 
                 idempotency_key, created_at, sent_at, delivered_at
             )
             VALUES (
-                ${params.organizationId}, ${params.storeId}, ${params.whatsappAccountId}, ${conversation.id},
+                ${params.organizationId}, ${conversationStoreId}, ${params.whatsappAccountId}, ${conversation.id},
                 ${params.direction}, ${params.messageType}, ${params.body}, ${params.caption}, ${params.attachmentStorageKey},
                 ${params.attachmentFileName}, ${params.attachmentMimeType}, ${params.direction === "inbound" ? "delivered" : "sent"}, ${params.providerMessageId},
                 ${"provider:" + params.providerMessageId}, ${params.occurredAt}::timestamptz,
@@ -1200,34 +1407,58 @@ export const createAccount = async (
     phoneNumber: string,
     userId: string,
 ): Promise<WhatsAppAccountDTO> => {
-    const accountId = crypto.randomUUID();
-    const [row] = await pg`
-        INSERT INTO whatsapp_accounts (
-            id,
-            organization_id,
-            store_id,
-            provider,
-            phone_number,
-            phone_number_normalized,
-            session_reference,
-            created_by,
-            updated_by
-        )
-        VALUES (
-            ${accountId},
-            ${organizationId},
-            ${storeId},
-            'baileys',
-            ${phoneNumber},
-            ${phoneNumber},
-            ${"whatsapp-auth/" + accountId},
-            ${userId},
-            ${userId}
-        )
-        RETURNING *
-    `;
-    if (!row) throw new Error("Unable to create WhatsApp account");
-    return mapAccount(row);
+    return pg.begin(async tx => {
+        const accountId = randomUUID();
+        const [row] = await tx`
+            INSERT INTO whatsapp_accounts (
+                id,
+                organization_id,
+                provider,
+                phone_number,
+                phone_number_normalized,
+                session_reference,
+                created_by,
+                updated_by
+            )
+            VALUES (
+                ${accountId},
+                ${organizationId},
+                'baileys',
+                ${phoneNumber},
+                ${phoneNumber},
+                ${"whatsapp-auth/" + accountId},
+                ${userId},
+                ${userId}
+            )
+            RETURNING *
+        `;
+        if (!row) throw new Error("Unable to create WhatsApp account");
+
+        const [assignment] = await tx`
+            INSERT INTO whatsapp_account_stores (
+                organization_id,
+                whatsapp_account_id,
+                store_id,
+                is_default_for_inbound,
+                created_by,
+                updated_by
+            )
+            VALUES (${organizationId}, ${accountId}, ${storeId}, TRUE, ${userId}, ${userId})
+            RETURNING store_id
+        `;
+        if (!assignment) throw new Error("Unable to assign WhatsApp account to Store");
+
+        await tx`
+            UPDATE whatsapp_accounts
+            SET store_id = ${storeId},
+                updated_at = NOW()
+            WHERE id = ${accountId}
+        `;
+
+        const account = await getAccountForTransaction(tx, accountId);
+        if (!account) throw new Error("Unable to load created WhatsApp account");
+        return account;
+    });
 };
 
 export const updateAccountStatus = async (
@@ -1247,7 +1478,7 @@ export const updateAccountStatus = async (
         WHERE id = ${accountId}
         RETURNING *
     `;
-    return row ? mapAccount(row) : null;
+    return row ? getAccountById(accountId) : null;
 };
 
 export const updateAccountPhoneNumber = async (
@@ -1264,7 +1495,7 @@ export const updateAccountPhoneNumber = async (
         WHERE id = ${accountId}
         RETURNING *
     `;
-    return row ? mapAccount(row) : null;
+    return row ? getAccountById(accountId) : null;
 };
 
 export type WhatsAppAccountUsage = {

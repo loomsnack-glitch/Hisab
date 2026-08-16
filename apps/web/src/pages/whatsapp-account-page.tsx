@@ -7,9 +7,11 @@ import { toast } from "sonner";
 import { normalizePhoneNumber, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import {
     connectWhatsAppAccount,
+    assignWhatsAppAccount,
     changeWhatsAppAccountNumber,
     createWhatsAppAccount,
     disconnectWhatsAppAccount,
+    getWhatsAppAccounts,
     getWhatsAppAccount,
     removeWhatsAppAccount,
 } from "@repo/services";
@@ -18,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo
 import { PhoneInput } from "@repo/ui/components/phone-input";
 import { Badge } from "@repo/ui/components/badge";
 import { Spinner } from "@repo/ui/components/spinner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { whatsappKeys } from "@/lib/query-keys";
 
 const statusLabel: Record<string, string> = {
@@ -38,12 +41,14 @@ const WhatsAppAccountPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
     const queryClient = useQueryClient();
     const [phoneNumber, setPhoneNumber] = useState("");
+    const [selectedAccountId, setSelectedAccountId] = useState("");
     const [changeNumberOpen, setChangeNumberOpen] = useState(false);
     const [newPhoneNumber, setNewPhoneNumber] = useState("");
     const [removeNumberOpen, setRemoveNumberOpen] = useState(false);
     const [changeNumberError, setChangeNumberError] = useState("");
     const [removeNumberError, setRemoveNumberError] = useState("");
     const accountKey = whatsappKeys.account(organizationId, storeId);
+    const accountsKey = whatsappKeys.accounts(organizationId);
 
     const accountQuery = useQuery({
         queryKey: accountKey,
@@ -57,6 +62,13 @@ const WhatsAppAccountPage = () => {
     });
 
     const refresh = () => void queryClient.invalidateQueries({ queryKey: accountKey });
+    const accountsQuery = useQuery({
+        queryKey: accountsKey,
+        queryFn: () => getWhatsAppAccounts(organizationId),
+        enabled: Boolean(organizationId),
+    });
+    const organizationAccounts = accountsQuery.data?.data?.accounts ?? [];
+    const availableAccounts = organizationAccounts.filter(account => !account.assignedStoreIds.includes(storeId));
     const createMutation = useMutation({
         mutationFn: () => createWhatsAppAccount(organizationId, storeId, { phoneNumber: phoneNumber.trim() }),
         onSuccess: response => {
@@ -67,6 +79,7 @@ const WhatsAppAccountPage = () => {
                     queryClient.setQueryData(accountKey, response);
                 }
                 refresh();
+                void queryClient.invalidateQueries({ queryKey: accountsKey });
             } else {
                 toast.error(response.message);
             }
@@ -74,6 +87,23 @@ const WhatsAppAccountPage = () => {
         onError: error => {
             const message = (error as { message?: string })?.message ?? "Unable to link the WhatsApp number";
             toast.error(message);
+        },
+    });
+    const assignMutation = useMutation({
+        mutationFn: () => assignWhatsAppAccount(organizationId, storeId, { whatsappAccountId: selectedAccountId }),
+        onSuccess: response => {
+            if (response.status === "success") {
+                toast.success("WhatsApp account assigned to this Store");
+                setSelectedAccountId("");
+                if (response.data) queryClient.setQueryData(accountKey, response);
+                refresh();
+                void queryClient.invalidateQueries({ queryKey: accountsKey });
+            } else {
+                toast.error(response.message);
+            }
+        },
+        onError: error => {
+            toast.error((error as { message?: string })?.message ?? "Unable to assign the WhatsApp account");
         },
     });
     const connectMutation = useMutation({
@@ -110,6 +140,7 @@ const WhatsAppAccountPage = () => {
                 setChangeNumberOpen(false);
                 setNewPhoneNumber("");
                 refresh();
+                void queryClient.invalidateQueries({ queryKey: accountsKey });
             } else {
                 setChangeNumberError(response.message);
                 toast.error(response.message);
@@ -126,9 +157,10 @@ const WhatsAppAccountPage = () => {
         onMutate: () => setRemoveNumberError(""),
         onSuccess: response => {
             if (response.status === "success") {
-                toast.success("WhatsApp number removed");
+                toast.success("WhatsApp account unassigned from this Store");
                 setRemoveNumberOpen(false);
                 refresh();
+                void queryClient.invalidateQueries({ queryKey: accountsKey });
             } else {
                 setRemoveNumberError(response.message);
                 toast.error(response.message);
@@ -149,7 +181,7 @@ const WhatsAppAccountPage = () => {
     const account = accountData?.account;
     const accountLoadError = accountQuery.isError && !account;
     const accountErrorMessage = queryError?.message ?? accountQuery.data?.message ?? "Unable to load the WhatsApp account.";
-    const isBusy = createMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeNumberMutation.isPending || removeNumberMutation.isPending;
+    const isBusy = createMutation.isPending || assignMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeNumberMutation.isPending || removeNumberMutation.isPending;
     const phoneError = phoneNumber.length > 0 && !normalizePhoneNumber(phoneNumber);
     const newPhoneError = newPhoneNumber.length > 0 && !normalizePhoneNumber(newPhoneNumber);
     const samePhoneNumber = Boolean(account && newPhoneNumber && normalizePhoneNumber(newPhoneNumber) === account.phoneNumber);
@@ -175,7 +207,7 @@ const WhatsAppAccountPage = () => {
                                 Store WhatsApp
                             </CardTitle>
                             <CardDescription className="mt-2">
-                                Link one store-owned WhatsApp account. QR and session data are handled by the private worker.
+                                Assign an organization WhatsApp account to this Store. QR and session data are handled by the private worker.
                             </CardDescription>
                         </div>
                         {account ? <Badge variant="outline" className="rounded-full">{statusText}</Badge> : null}
@@ -200,43 +232,101 @@ const WhatsAppAccountPage = () => {
                             </Button>
                         </div>
                     ) : !account ? (
-                        <form
-                            className="space-y-4"
-                            onSubmit={event => {
-                                event.preventDefault();
-                                if (phoneError) {
-                                    toast.error("Enter a valid phone number");
-                                    return;
-                                }
-                                createMutation.mutate();
-                            }}
-                        >
-                            <div className="space-y-2">
-                                <label htmlFor="whatsapp-phone" className="text-sm font-medium">WhatsApp phone number</label>
-                                <PhoneInput
-                                    id="whatsapp-phone"
-                                    className="h-9"
-                                    value={phoneNumber || undefined}
-                                    onChange={value => setPhoneNumber(value ?? "")}
-                                    placeholder="9876543210"
-                                    inputMode="tel"
-                                    aria-invalid={phoneError}
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    India (+91) is selected by default. Choose another country when needed.
-                                </p>
+                        <div className="space-y-5">
+                            {availableAccounts.length > 0 ? (
+                                <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
+                                    <div>
+                                        <p className="text-sm font-medium">Use an existing organization account</p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            Assign a linked number to this Store. The WhatsApp session remains shared by the organization.
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                        <Select value={selectedAccountId} onValueChange={value => setSelectedAccountId(value ?? "")}>
+                                            <SelectTrigger className="h-10 flex-1 rounded-xl bg-background/70">
+                                                <SelectValue placeholder="Select a WhatsApp account" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableAccounts.map(organizationAccount => (
+                                                    <SelectItem key={organizationAccount.id} value={organizationAccount.id}>
+                                                        {organizationAccount.phoneNumber} · {statusLabel[organizationAccount.status] ?? organizationAccount.status}
+                                                        {organizationAccount.assignedStoreIds.length > 0
+                                                            ? ` · ${organizationAccount.assignedStoreIds.length} Store${organizationAccount.assignedStoreIds.length === 1 ? "" : "s"}`
+                                                            : " · Unassigned"}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <Button
+                                            type="button"
+                                            className="rounded-full"
+                                            disabled={isBusy || !selectedAccountId}
+                                            onClick={() => assignMutation.mutate()}
+                                        >
+                                            {assignMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}
+                                            Assign account
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <div className="border-t border-border/60 pt-5">
+                                <form
+                                    className="space-y-4"
+                                    onSubmit={event => {
+                                        event.preventDefault();
+                                        if (phoneError) {
+                                            toast.error("Enter a valid phone number");
+                                            return;
+                                        }
+                                        createMutation.mutate();
+                                    }}
+                                >
+                                    <div>
+                                        <p className="text-sm font-medium">Link a new WhatsApp account</p>
+                                        <p className="mt-1 text-xs text-muted-foreground">This number will be added to the organization account pool and assigned to this Store.</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label htmlFor="whatsapp-phone" className="text-sm font-medium">WhatsApp phone number</label>
+                                        <PhoneInput
+                                            id="whatsapp-phone"
+                                            className="h-9"
+                                            value={phoneNumber || undefined}
+                                            onChange={value => setPhoneNumber(value ?? "")}
+                                            placeholder="9876543210"
+                                            inputMode="tel"
+                                            aria-invalid={phoneError}
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            India (+91) is selected by default. Choose another country when needed.
+                                        </p>
+                                    </div>
+                                    <Button type="submit" className="rounded-full" disabled={isBusy || phoneError || !phoneNumber.trim()}>
+                                        {createMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}
+                                        Start linking
+                                    </Button>
+                                </form>
                             </div>
-                            <Button type="submit" className="rounded-full" disabled={isBusy || phoneError || !phoneNumber.trim()}>
-                                {createMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}
-                                Start linking
-                            </Button>
-                        </form>
+                        </div>
                     ) : (
                         <>
                             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 p-4">
                                 <div>
                                     <p className="text-sm font-medium">Linked number</p>
                                     <p className="mt-1 text-sm text-muted-foreground">{account.phoneNumber}</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Assigned to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"}
+                                    </p>
+                                    {account.assignedStoreIds.length > 0 ? (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            New inbound chats use the default Store; existing conversations keep their original Store.
+                                        </p>
+                                    ) : null}
+                                    {account.assignedStoreIds.length > 1 ? (
+                                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                                            Disconnecting or changing this number affects all assigned Stores.
+                                        </p>
+                                    ) : null}
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                     <Button
@@ -262,7 +352,7 @@ const WhatsAppAccountPage = () => {
                                         }}
                                     >
                                         <Trash2 className="size-4" />
-                                        Remove number
+                                        Unassign from Store
                                     </Button>
                                     {(account.status === "disconnected" || account.status === "failed" || account.status === "revoked") ? (
                                         <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => connectMutation.mutate()}>
@@ -288,7 +378,7 @@ const WhatsAppAccountPage = () => {
 
                             {account.status === "connected" ? (
                                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200">
-                                    This store WhatsApp account is connected and ready for the invoice-send phase.
+                                    This Store WhatsApp account is connected and ready for the invoice-send phase.
                                 </div>
                             ) : null}
                         </>
@@ -299,9 +389,9 @@ const WhatsAppAccountPage = () => {
             <AlertDialog open={changeNumberOpen} onOpenChange={setChangeNumberOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Change WhatsApp number?</AlertDialogTitle>
+                        <AlertDialogTitle>Change shared WhatsApp number?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            The current WhatsApp session will be disconnected. You will need to scan a new QR code for the replacement number. Existing conversations and invoices will remain saved.
+                            This changes the number for every Store assigned to this account. The current WhatsApp session will be disconnected, and you will need to scan a new QR code. Existing conversations and invoices remain saved.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="space-y-2">
@@ -338,9 +428,9 @@ const WhatsAppAccountPage = () => {
             <AlertDialog open={removeNumberOpen} onOpenChange={setRemoveNumberOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Remove this WhatsApp number?</AlertDialogTitle>
+                        <AlertDialogTitle>Unassign WhatsApp from this Store?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            The current WhatsApp session will be disconnected and this account entry will be removed. Saved conversations and invoice history will not be deleted; removal will be refused if this number is already used by saved WhatsApp records.
+                            This only removes the assignment from this Store. The organization account, WhatsApp session, and saved conversation or invoice history are not deleted.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     {removeNumberError ? <p className="text-sm text-destructive">{removeNumberError}</p> : null}
@@ -355,7 +445,7 @@ const WhatsAppAccountPage = () => {
                             }}
                         >
                             {removeNumberMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                            Remove number
+                            Unassign from Store
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

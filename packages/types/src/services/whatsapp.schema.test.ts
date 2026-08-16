@@ -18,7 +18,8 @@ describe("WhatsApp schemas", () => {
         const result = WhatsAppAccountDTOSchema.safeParse({
             id: uuid,
             organizationId: uuid,
-            storeId: "22222222-2222-4222-8222-222222222222",
+            defaultStoreId: "22222222-2222-4222-8222-222222222222",
+            assignedStoreIds: ["22222222-2222-4222-8222-222222222222"],
             provider: "baileys",
             phoneNumber: "+919876543210",
             status: "connected",
@@ -47,7 +48,8 @@ describe("WhatsApp schemas", () => {
             WhatsAppAccountDTOSchema.safeParse({
                 id: uuid,
                 organizationId: uuid,
-                storeId: uuid,
+                defaultStoreId: uuid,
+                assignedStoreIds: [uuid],
                 provider: "baileys",
                 phoneNumber: "9876543210",
                 status: "connected",

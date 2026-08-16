@@ -77,7 +77,7 @@ describe("createAccount", () => {
 
     test("returns conflict when postgres reports a unique violation", async () => {
         createAccountRepo.mockImplementationOnce(async () => {
-            const error = new Error("duplicate key");
+            const error = new Error('duplicate key value violates unique constraint "whatsapp_account_stores_one_store_account_key"');
             (error as Error & { code: string }).code = "23505";
             throw error;
         });
@@ -87,7 +87,7 @@ describe("createAccount", () => {
         });
 
         expect(response.code).toBe(409);
-        expect(response.message).toBe("This store already has a WhatsApp account");
+        expect(response.message).toBe("This Store already has a WhatsApp account");
     });
 
     test("returns the phone conflict when the phone unique constraint wins a race", async () => {
@@ -109,7 +109,8 @@ describe("createAccount", () => {
         getAccountByPhoneNumber.mockResolvedValueOnce({
             id: "96095f81-550b-4cc7-9db0-458701b4d7b2",
             organizationId: "9a2f3d8e-a7f6-47b6-bd8a-5d3f4a1f8c22",
-            storeId: "b6d9e2f7-9f69-4f54-8ea8-3d2bc6f3c7cb",
+            defaultStoreId: "b6d9e2f7-9f69-4f54-8ea8-3d2bc6f3c7cb",
+            assignedStoreIds: ["b6d9e2f7-9f69-4f54-8ea8-3d2bc6f3c7cb"],
             provider: "baileys",
             phoneNumber: "+919876543210",
             status: "connected",

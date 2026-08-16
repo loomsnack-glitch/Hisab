@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { z } from "zod";
 import {
     STATUS_CODES,
+    WhatsAppAssignAccountSchema,
     WhatsAppAttachConversationCustomerSchema,
     WhatsAppCreateAccountSchema,
     WhatsAppChangeAccountNumberSchema,
@@ -54,6 +55,17 @@ const workerPartitionFromQuery = (c: Context): { count: number; index: number } 
 
 userRouter.use("*", authMiddleware);
 
+userRouter.get("/:organizationId/whatsapp/accounts", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await service.listAccounts(c.get("authUser").id, organizationId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
 userRouter.get("/:organizationId/stores/:storeId/whatsapp/account", async c => {
     try {
         const organizationId = c.req.param("organizationId");
@@ -82,6 +94,30 @@ userRouter.post(
                     organizationId,
                     storeId,
                     c.req.valid("json"),
+                ),
+            );
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.post(
+    "/:organizationId/stores/:storeId/whatsapp/account/assign",
+    validateSchema("json", WhatsAppAssignAccountSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(
+                c,
+                await service.assignAccount(
+                    c.get("authUser").id,
+                    organizationId,
+                    storeId,
+                    c.req.valid("json").whatsappAccountId,
                 ),
             );
         } catch (error) {

@@ -128,6 +128,76 @@ export const getAccount = async (
     }
 };
 
+export const listAccounts = async (
+    userId: string,
+    organizationId: string,
+): Promise<ServiceResponse<{ accounts: WhatsAppAccountDTO[] } | null>> => {
+    const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
+    if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    return {
+        status: "success",
+        message: "WhatsApp accounts loaded",
+        data: { accounts: await repository.getAccountsForOrganization(organizationId) },
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const assignAccount = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    if (await repository.getAccount(organizationId, storeId)) {
+        return {
+            status: "error",
+            message: "This Store already has a WhatsApp account",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    try {
+        const account = await repository.assignAccountToStore(organizationId, accountId, storeId, userId);
+        if (!account) {
+            return { status: "error", message: "WhatsApp account not found", data: null, code: STATUS_CODES.NOT_FOUND };
+        }
+        return {
+            status: "success",
+            message: "WhatsApp account assigned to Store",
+            data: accountResponse(account, null),
+            code: STATUS_CODES.SUCCESS,
+        };
+    } catch (error) {
+        if (postgresCode(error) === "23505") {
+            return {
+                status: "error",
+                message: "This Store already has a WhatsApp account",
+                data: null,
+                code: STATUS_CODES.CONFLICT,
+            };
+        }
+        throw error;
+    }
+};
+
+export const unassignAccount = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<null>> => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    const account = await repository.getAccount(organizationId, storeId);
+    if (!account) return { status: "error", message: "WhatsApp account is not assigned to this Store", data: null, code: STATUS_CODES.NOT_FOUND };
+    const removed = await repository.unassignAccountFromStore(organizationId, account.id, storeId, userId);
+    return removed
+        ? { status: "success", message: "WhatsApp account unassigned from Store", data: null, code: STATUS_CODES.SUCCESS }
+        : { status: "error", message: "WhatsApp account assignment was not found", data: null, code: STATUS_CODES.NOT_FOUND };
+};
+
 export const createAccount = async (
     userId: string,
     organizationId: string,
@@ -175,7 +245,9 @@ export const createAccount = async (
                 message:
                     postgresConstraint(error) === "whatsapp_accounts_provider_phone_number_normalized_key"
                         ? "This WhatsApp number is already linked to another account"
-                        : "This store already has a WhatsApp account",
+                        : postgresConstraint(error) === "whatsapp_account_stores_one_store_account_key"
+                          ? "This Store already has a WhatsApp account"
+                          : "WhatsApp account could not be created",
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };
@@ -362,45 +434,10 @@ export const removeAccount = async (
         return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
     }
 
-    const usage = await repository.getAccountUsage(account.id);
-    if (usage.conversations > 0 || usage.messages > 0 || usage.outbox > 0) {
-        return {
-            status: "error",
-            message: "This WhatsApp number has saved conversations or invoices. Use Change number to preserve that history.",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
-
-    try {
-        const disconnected = await workerClient.disconnectAccount(account.id);
-        await saveWorkerSnapshot(disconnected);
-    } catch {
-        return workerUnavailable(account);
-    }
-
-    try {
-        const deleted = await repository.deleteAccount(account.id);
-        if (!deleted) {
-            return { status: "error", message: "WhatsApp account could not be removed", data: null, code: STATUS_CODES.NOT_FOUND };
-        }
-        return {
-            status: "success",
-            message: "WhatsApp number removed",
-            data: null,
-            code: STATUS_CODES.SUCCESS,
-        };
-    } catch (error) {
-        if ((error as { code?: string }).code === "23503") {
-            return {
-                status: "error",
-                message: "This WhatsApp number has saved conversations or invoices. Use Change number to preserve that history.",
-                data: null,
-                code: STATUS_CODES.CONFLICT,
-            };
-        }
-        throw error;
-    }
+    const removed = await repository.unassignAccountFromStore(organizationId, account.id, storeId, userId);
+    return removed
+        ? { status: "success", message: "WhatsApp number unassigned from Store", data: null, code: STATUS_CODES.SUCCESS }
+        : { status: "error", message: "WhatsApp account assignment was not found", data: null, code: STATUS_CODES.NOT_FOUND };
 };
 
 const syncAccountForScope = async (account: WhatsAppAccountDTO): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO>> => {

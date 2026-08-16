@@ -1,4 +1,6 @@
 import type {
+    WhatsAppAssignAccountJSON,
+    WhatsAppAccountsResponseDTO,
     ServiceResponse,
     WhatsAppAccountStatusResponseDTO,
     WhatsAppChangeAccountNumberJSON,
@@ -15,11 +17,21 @@ import type {
 import { api, handleApiError } from "../../api";
 
 type WhatsAppResponse = ServiceResponse<WhatsAppAccountStatusResponseDTO | null>;
+type WhatsAppAccountsResponse = ServiceResponse<WhatsAppAccountsResponseDTO | null>;
 type WhatsAppInvoiceResponse = ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
 type WhatsAppConversationListResponseType = ServiceResponse<WhatsAppConversationListResponse | null>;
 type WhatsAppConversationResponse = ServiceResponse<WhatsAppConversationMessagesResponse | null>;
 const accountPath = (organizationId: string, storeId: string) =>
     "/organizations/" + organizationId + "/stores/" + storeId + "/whatsapp/account";
+
+export const getWhatsAppAccounts = async (organizationId: string): Promise<WhatsAppAccountsResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/whatsapp/accounts`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
 
 export const getWhatsAppAccount = async (organizationId: string, storeId: string): Promise<WhatsAppResponse> => {
     try {
@@ -37,6 +49,19 @@ export const createWhatsAppAccount = async (
 ): Promise<WhatsAppResponse> => {
     try {
         const response = await api.post(accountPath(organizationId, storeId), data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const assignWhatsAppAccount = async (
+    organizationId: string,
+    storeId: string,
+    data: WhatsAppAssignAccountJSON,
+): Promise<WhatsAppResponse> => {
+    try {
+        const response = await api.post(accountPath(organizationId, storeId) + "/assign", data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

@@ -26,7 +26,8 @@ export const WhatsAppOutboxStatusSchema = z.enum([
 export const WhatsAppAccountDTOSchema = z.object({
     id: z.uuid("Invalid WhatsApp account id"),
     organizationId: z.uuid("Invalid organization id"),
-    storeId: z.uuid("Invalid store id"),
+    defaultStoreId: z.uuid("Invalid store id").nullable(),
+    assignedStoreIds: z.array(z.uuid("Invalid store id")),
     provider: WhatsAppProviderSchema,
     phoneNumber: phoneSchema,
     status: WhatsAppAccountStatusSchema,
@@ -77,11 +78,19 @@ export const WhatsAppCreateAccountSchema = z.object({
     phoneNumber: phoneSchema,
 });
 
+export const WhatsAppAssignAccountSchema = z.object({
+    whatsappAccountId: z.uuid("Invalid WhatsApp account id"),
+});
+
 export const WhatsAppChangeAccountNumberSchema = WhatsAppCreateAccountSchema;
 
 export const WhatsAppAccountStatusResponseSchema = z.object({
     account: WhatsAppAccountDTOSchema,
     qrImageDataUrl: z.string().startsWith("data:image/png;base64,").max(200_000).nullable(),
+});
+
+export const WhatsAppAccountsResponseSchema = z.object({
+    accounts: z.array(WhatsAppAccountDTOSchema),
 });
 
 export const WhatsAppWorkerAccountSchema = z.object({
