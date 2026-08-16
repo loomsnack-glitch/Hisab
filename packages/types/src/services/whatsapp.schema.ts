@@ -22,6 +22,7 @@ export const WhatsAppOutboxStatusSchema = z.enum([
     "dead_letter",
     "cancelled",
 ]);
+export const WhatsAppMessageTemplateKindSchema = z.enum(["bill", "due_reminder", "promotion"]);
 
 export const WhatsAppAccountDTOSchema = z.object({
     id: z.uuid("Invalid WhatsApp account id"),
@@ -125,6 +126,40 @@ export const WhatsAppAttachConversationCustomerSchema = z.object({
 export const WhatsAppSendInvoiceSchema = z.object({
   saleId: z.uuid("Invalid sale id"),
   customMessage: z.string().trim().min(1).max(4096).optional(),
+  templateId: z.uuid("Invalid template id").optional(),
+});
+
+export const WhatsAppMessageTemplateDTOSchema = z.object({
+    id: z.uuid("Invalid template id"),
+    organizationId: z.uuid("Invalid organization id"),
+    storeId: z.uuid("Invalid store id"),
+    kind: WhatsAppMessageTemplateKindSchema,
+    name: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(4096),
+    isDefault: z.boolean(),
+    isActive: z.boolean(),
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const WhatsAppCreateMessageTemplateSchema = z.object({
+    kind: WhatsAppMessageTemplateKindSchema,
+    name: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(4096),
+    isDefault: z.boolean().optional(),
+});
+
+export const WhatsAppUpdateMessageTemplateSchema = z.object({
+    name: z.string().trim().min(1).max(120).optional(),
+    body: z.string().trim().min(1).max(4096).optional(),
+    isDefault: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+}).refine(value => Object.keys(value).length > 0, "At least one template field is required");
+
+export const WhatsAppMessageTemplatesResponseSchema = z.object({
+    templates: z.array(WhatsAppMessageTemplateDTOSchema),
 });
 
 export const WhatsAppDueReminderRequestSchema = z.object({

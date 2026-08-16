@@ -20,6 +20,7 @@ import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import BillTemplateManager from "@/components/organizations/bill-template-manager";
 
 type EditStoreDialogProps = {
     organizationId: string;
@@ -100,7 +101,10 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                             ...(values.socialMediaName && values.socialMediaLink ? [{ type: "social" as const, label: values.socialMediaName, url: values.socialMediaLink, includeInBill: true, includeInReminder: false, includeInPromotion: true }] : []),
                             ...extraLinks.filter(link => link.label.trim() && link.url.trim()),
                         ],
-                        whatsappMessageTemplates: values.whatsappMessageTemplates,
+                        whatsappMessageTemplates: {
+                            dueReminder: values.whatsappMessageTemplates.dueReminder,
+                            promotion: values.whatsappMessageTemplates.promotion,
+                        },
                     });
                     if (response.status === "success") {
                         result = true;
@@ -140,7 +144,10 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                 ...(values.socialMediaName && values.socialMediaLink ? [{ type: "social" as const, label: values.socialMediaName, url: values.socialMediaLink, includeInBill: true, includeInReminder: false, includeInPromotion: true }] : []),
                 ...extraLinks.filter(link => link.label.trim() && link.url.trim()),
             ],
-            whatsappMessageTemplates: values.whatsappMessageTemplates,
+            whatsappMessageTemplates: {
+                dueReminder: values.whatsappMessageTemplates.dueReminder,
+                promotion: values.whatsappMessageTemplates.promotion,
+            },
         });
     };
 
@@ -284,7 +291,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                             </div>
                         ))}
                         <Button type="button" variant="outline" size="sm" onClick={() => setExtraLinks(current => [...current, { type: "custom", label: "", url: "", includeInBill: true, includeInReminder: false, includeInPromotion: true }])}>Add link</Button>
-                        <Textarea className="min-h-24 rounded-xl" placeholder="Default bill message (optional)" {...form.register("whatsappMessageTemplates.bill")} />
+                        <BillTemplateManager organizationId={organizationId} storeId={store.id} />
                         <Textarea className="min-h-24 rounded-xl" placeholder="Due reminder message (optional)" {...form.register("whatsappMessageTemplates.dueReminder")} />
                         <Textarea className="min-h-24 rounded-xl" placeholder="Promotion message template (optional)" {...form.register("whatsappMessageTemplates.promotion")} />
                     </section>

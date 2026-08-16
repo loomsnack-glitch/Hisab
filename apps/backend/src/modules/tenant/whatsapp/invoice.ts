@@ -15,6 +15,7 @@ import * as organizationRepository from "@/modules/tenant/organization/organizat
 import * as repository from "./whatsapp.repository";
 import { formatInvoiceText } from "./invoice-text";
 import { renderSalePdf } from "./invoice-pdf";
+import * as messageTemplate from "./message-template";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
@@ -70,6 +71,7 @@ export const queueInvoiceForStore = async (
   storeId: string,
   saleId: string,
   customMessage?: string,
+  templateId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   const store = await organizationRepository.getStoreById(
     organizationId,
@@ -165,6 +167,17 @@ export const queueInvoiceForStore = async (
   const attachmentStorageKey = invoiceObjectKey(organizationId, storeId, account.id, sale.id);
 
   try {
+    const selectedTemplate = templateId
+      ? await messageTemplate.getTemplate(organizationId, storeId, templateId)
+      : await messageTemplate.getDefaultTemplate(organizationId, storeId, "bill");
+    if (templateId && (!selectedTemplate || selectedTemplate.kind !== "bill" || !selectedTemplate.isActive)) {
+      return {
+        status: "error",
+        message: "The selected bill template is unavailable",
+        data: null,
+        code: STATUS_CODES.NOT_FOUND,
+      };
+    }
     const pdf = await renderSalePdf(sale, {
       organizationName: organization.name,
       organizationTagline: organization.tagline,
@@ -193,7 +206,7 @@ export const queueInvoiceForStore = async (
       caption: formatInvoiceText(sale, {
         organizationName: organization.name,
         storeName: store.name,
-        template: customMessage ?? store.whatsappMessageTemplates.bill,
+        template: customMessage ?? selectedTemplate?.body ?? store.whatsappMessageTemplates.bill,
         links: store.whatsappLinks,
         reviewPlatform: store.reviewPlatform,
         reviewLink: store.reviewLink,
@@ -253,6 +266,7 @@ export const queueInvoice = async (
   storeId: string,
   saleId: string,
   customMessage?: string,
+  templateId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
   if (!organization) {
@@ -263,7 +277,7 @@ export const queueInvoice = async (
       code: STATUS_CODES.NOT_FOUND,
     };
   }
-  return queueInvoiceForStore(organizationId, storeId, saleId, customMessage);
+  return queueInvoiceForStore(organizationId, storeId, saleId, customMessage, templateId);
 };
 
 const getExistingInvoice = async (
@@ -313,8 +327,9 @@ export const queueInvoiceForDevice = async (
   session: DeviceSessionDTO,
   saleId: string,
   customMessage?: string,
+  templateId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> =>
-  queueInvoiceForStore(session.organization.id, session.store.id, saleId, customMessage);
+  queueInvoiceForStore(session.organization.id, session.store.id, saleId, customMessage, templateId);
 
 export const getInvoiceStatusForDevice = async (
   session: DeviceSessionDTO,

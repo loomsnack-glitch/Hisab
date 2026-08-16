@@ -31,6 +31,7 @@ import type {
   UpdatePurchaseJSON,
   VoidPurchaseJSON,
   WhatsAppInvoiceQueueResponseDTO,
+  WhatsAppMessageTemplatesResponseDTO,
   WhatsAppReminderQueueResponseDTO,
   WhatsAppAccountStatusResponseDTO,
   WhatsAppConversationListResponse,
@@ -419,9 +420,21 @@ export const getPosWhatsAppInvoiceStatus = async (
 export const queuePosWhatsAppInvoice = async (
   saleId: string,
   customMessage?: string,
+  templateId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   try {
-    const response = await api.post(`/pos/sales/${saleId}/whatsapp`, { customMessage });
+    const response = await api.post(`/pos/sales/${saleId}/whatsapp`, { customMessage, templateId });
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosWhatsAppMessageTemplates = async (): Promise<
+  ServiceResponse<WhatsAppMessageTemplatesResponseDTO | null>
+> => {
+  try {
+    const response = await api.get("/pos/whatsapp/templates", { params: { kind: "bill" } });
     return response.data;
   } catch (error) {
     return handleApiError(error);

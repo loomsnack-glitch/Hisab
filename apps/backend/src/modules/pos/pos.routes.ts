@@ -54,6 +54,17 @@ const validateUuidParam = (value: string, message: string) => {
 
 router.use("*", deviceAuthMiddleware);
 
+router.get("/whatsapp/templates", async (c) => {
+  try {
+    const rawKind = c.req.query("kind");
+    const kind = rawKind === "bill" || rawKind === "due_reminder" || rawKind === "promotion" ? rawKind : undefined;
+    if (rawKind && !kind) return c.json({ status: "error", message: "Invalid template kind", code: STATUS_CODES.BAD_REQUEST }, STATUS_CODES.BAD_REQUEST);
+    return handleServiceResponse(c, await whatsappService.listMessageTemplatesForDevice(c.get("authDevice"), kind));
+  } catch (error) {
+    return handleError(FILE_NAME, "listMessageTemplatesForDevice", c, error);
+  }
+});
+
 router.get("/tables", async (c) => {
   try {
     return handleServiceResponse(
@@ -458,9 +469,12 @@ router.post("/sales/:saleId/whatsapp", async (c) => {
     if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
     const payload = await c.req.json().catch(() => ({}));
     const customMessage = typeof payload?.customMessage === "string" ? payload.customMessage : undefined;
+    const templateId = typeof payload?.templateId === "string" ? payload.templateId : undefined;
+    const invalidTemplateId = templateId ? validateUuidParam(templateId, "Invalid template id") : null;
+    if (invalidTemplateId) return c.json(invalidTemplateId, invalidTemplateId.code);
     return handleServiceResponse(
       c,
-      await whatsappService.queueInvoiceForDevice(c.get("authDevice"), saleId, customMessage),
+      await whatsappService.queueInvoiceForDevice(c.get("authDevice"), saleId, customMessage, templateId),
     );
   } catch (error) {
     return handleError(FILE_NAME, "queueInvoiceForDevice", c, error);

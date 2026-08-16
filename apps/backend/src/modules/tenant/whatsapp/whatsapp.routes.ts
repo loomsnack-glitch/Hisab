@@ -11,6 +11,9 @@ import {
     WhatsAppSendInvoiceSchema,
     WhatsAppDueReminderRequestSchema,
     WhatsAppCreatePromotionSchema,
+    WhatsAppCreateMessageTemplateSchema,
+    WhatsAppUpdateMessageTemplateSchema,
+    WhatsAppMessageTemplateKindSchema,
     WhatsAppWorkerInboundMessageSchema,
     WhatsAppWorkerMessageEventSchema,
     WhatsAppWorkerInvoiceResultSchema,
@@ -327,18 +330,85 @@ userRouter.post(
             const storeId = c.req.param("storeId");
             const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
             if (invalid) return c.json(invalid, invalid.code);
-            const { saleId, customMessage } = c.req.valid("json");
+            const { saleId, customMessage, templateId } = c.req.valid("json");
             const invalidSaleId = invalidUuid(saleId, "Invalid sale id");
             if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
+            const invalidTemplateId = templateId ? invalidUuid(templateId, "Invalid template id") : null;
+            if (invalidTemplateId) return c.json(invalidTemplateId, invalidTemplateId.code);
             return handleServiceResponse(
                 c,
-                await service.queueInvoice(c.get("authUser").id, organizationId, storeId, saleId, customMessage),
+                await service.queueInvoice(c.get("authUser").id, organizationId, storeId, saleId, customMessage, templateId),
             );
         } catch (error) {
             return unexpectedError(c, error);
         }
     },
 );
+
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/templates", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const rawKind = c.req.query("kind");
+        const parsedKind = rawKind ? WhatsAppMessageTemplateKindSchema.safeParse(rawKind) : null;
+        if (parsedKind && !parsedKind.success) return c.json({ status: "error", message: "Invalid template kind" }, STATUS_CODES.BAD_REQUEST);
+        return handleServiceResponse(c, await service.listMessageTemplates(c.get("authUser").id, organizationId, storeId, parsedKind?.success ? parsedKind.data : undefined));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post(
+    "/:organizationId/stores/:storeId/whatsapp/templates",
+    validateSchema("json", WhatsAppCreateMessageTemplateSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await service.createMessageTemplate(c.get("authUser").id, organizationId, storeId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.patch(
+    "/:organizationId/stores/:storeId/whatsapp/templates/:templateId",
+    validateSchema("json", WhatsAppUpdateMessageTemplateSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const templateId = c.req.param("templateId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id")
+                ?? invalidUuid(storeId, "Invalid store id")
+                ?? invalidUuid(templateId, "Invalid template id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await service.updateMessageTemplate(c.get("authUser").id, organizationId, storeId, templateId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.delete("/:organizationId/stores/:storeId/whatsapp/templates/:templateId", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const templateId = c.req.param("templateId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id")
+            ?? invalidUuid(storeId, "Invalid store id")
+            ?? invalidUuid(templateId, "Invalid template id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await service.deleteMessageTemplate(c.get("authUser").id, organizationId, storeId, templateId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
 
 userRouter.post("/:organizationId/stores/:storeId/whatsapp/customers/:customerId/due-reminder", async c => {
     try {

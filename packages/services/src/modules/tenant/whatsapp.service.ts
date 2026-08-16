@@ -7,6 +7,11 @@ import type {
     WhatsAppCreateAccountJSON,
     WhatsAppInvoiceQueueResponseDTO,
     WhatsAppReminderQueueResponseDTO,
+    WhatsAppMessageTemplateKind,
+    WhatsAppCreateMessageTemplateJSON,
+    WhatsAppUpdateMessageTemplateJSON,
+    WhatsAppMessageTemplatesResponseDTO,
+    WhatsAppMessageTemplateDTO,
     WhatsAppConversationListResponse,
     WhatsAppConversationMessagesResponse,
     WhatsAppConversationDTO,
@@ -174,15 +179,77 @@ export const syncWhatsAppAccount = async (organizationId: string, storeId: strin
 
 const invoicePath = (organizationId: string, storeId: string, saleId: string) =>
     "/organizations/" + organizationId + "/stores/" + storeId + "/whatsapp/invoice/" + saleId;
+const invoiceQueuePath = (organizationId: string, storeId: string) =>
+    "/organizations/" + organizationId + "/stores/" + storeId + "/whatsapp/invoice";
 
 export const queueWhatsAppInvoice = async (
     organizationId: string,
     storeId: string,
     saleId: string,
     customMessage?: string,
+    templateId?: string,
 ): Promise<WhatsAppInvoiceResponse> => {
     try {
-        const response = await api.post(invoicePath(organizationId, storeId, saleId), { saleId, customMessage });
+        const response = await api.post(invoiceQueuePath(organizationId, storeId), { saleId, customMessage, templateId });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+const templatesPath = (organizationId: string, storeId: string) =>
+    `/organizations/${organizationId}/stores/${storeId}/whatsapp/templates`;
+
+type WhatsAppTemplatesResponse = ServiceResponse<WhatsAppMessageTemplatesResponseDTO | null>;
+type WhatsAppTemplateResponse = ServiceResponse<{ template: WhatsAppMessageTemplateDTO } | null>;
+
+export const getWhatsAppMessageTemplates = async (
+    organizationId: string,
+    storeId: string,
+    kind?: WhatsAppMessageTemplateKind,
+): Promise<WhatsAppTemplatesResponse> => {
+    try {
+        const response = await api.get(templatesPath(organizationId, storeId), { params: kind ? { kind } : undefined });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createWhatsAppMessageTemplate = async (
+    organizationId: string,
+    storeId: string,
+    data: WhatsAppCreateMessageTemplateJSON,
+): Promise<WhatsAppTemplateResponse> => {
+    try {
+        const response = await api.post(templatesPath(organizationId, storeId), data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateWhatsAppMessageTemplate = async (
+    organizationId: string,
+    storeId: string,
+    templateId: string,
+    data: WhatsAppUpdateMessageTemplateJSON,
+): Promise<WhatsAppTemplateResponse> => {
+    try {
+        const response = await api.patch(`${templatesPath(organizationId, storeId)}/${templateId}`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const deleteWhatsAppMessageTemplate = async (
+    organizationId: string,
+    storeId: string,
+    templateId: string,
+): Promise<ServiceResponse<null>> => {
+    try {
+        const response = await api.delete(`${templatesPath(organizationId, storeId)}/${templateId}`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

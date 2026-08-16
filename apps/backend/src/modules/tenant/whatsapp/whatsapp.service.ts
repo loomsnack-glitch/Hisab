@@ -19,6 +19,7 @@ import * as invoiceService from "./invoice";
 import * as conversationService from "./conversation";
 import { formatDueReminderText } from "./due-reminder";
 import * as promotionService from "./promotion";
+import * as messageTemplate from "./message-template";
 
 const QR_KEY_PREFIX = "whatsapp:account:qr:";
 const QR_TTL_SECONDS = 120;
@@ -664,6 +665,73 @@ export const receiveWorkerStatus = async (accountId: string, update: WhatsAppWor
 
 export const queueInvoice = invoiceService.queueInvoice;
 export const queueInvoiceForDevice = invoiceService.queueInvoiceForDevice;
+
+export const listMessageTemplatesForDevice = async (
+    session: DeviceSessionDTO,
+    kind?: import("@repo/types").WhatsAppMessageTemplateKind,
+) => ({
+    status: "success" as const,
+    message: "WhatsApp message templates fetched successfully",
+    data: { templates: await messageTemplate.listTemplates(session.organization.id, session.store.id, kind) },
+    code: STATUS_CODES.SUCCESS,
+});
+
+export const listMessageTemplates = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    kind?: import("@repo/types").WhatsAppMessageTemplateKind,
+) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return { status: "success" as const, message: "WhatsApp message templates fetched successfully", data: { templates: await messageTemplate.listTemplates(organizationId, storeId, kind) }, code: STATUS_CODES.SUCCESS };
+};
+
+export const createMessageTemplate = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    data: import("@repo/types").WhatsAppCreateMessageTemplateJSON,
+) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    try {
+        const template = await messageTemplate.createTemplate(organizationId, storeId, userId, data);
+        return { status: "success" as const, message: "WhatsApp message template created", data: { template }, code: STATUS_CODES.CREATED };
+    } catch (error) {
+        if (postgresCode(error) === "23505") return { status: "error" as const, message: "A template with this name already exists", data: null, code: STATUS_CODES.CONFLICT };
+        throw error;
+    }
+};
+
+export const updateMessageTemplate = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    templateId: string,
+    data: import("@repo/types").WhatsAppUpdateMessageTemplateJSON,
+) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    try {
+        const template = await messageTemplate.updateTemplate(organizationId, storeId, templateId, userId, data);
+        return template
+            ? { status: "success" as const, message: "WhatsApp message template updated", data: { template }, code: STATUS_CODES.SUCCESS }
+            : { status: "error" as const, message: "Template not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    } catch (error) {
+        if (postgresCode(error) === "23505") return { status: "error" as const, message: "A template with this name already exists", data: null, code: STATUS_CODES.CONFLICT };
+        throw error;
+    }
+};
+
+export const deleteMessageTemplate = async (userId: string, organizationId: string, storeId: string, templateId: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    const deleted = await messageTemplate.deleteTemplate(organizationId, storeId, templateId);
+    return deleted
+        ? { status: "success" as const, message: "WhatsApp message template deleted", data: null, code: STATUS_CODES.SUCCESS }
+        : { status: "error" as const, message: "Template not found", data: null, code: STATUS_CODES.NOT_FOUND };
+};
 
 const queueDueReminderForStore = async (
     organizationId: string,
