@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
     AddOnSalesRollupsResponseSchema,
+    CommitSaleSchema,
     CustomerListQuerySchema,
     CompleteSaleSchema,
     PaymentMethodSchema,
@@ -13,6 +14,24 @@ import {
 } from "./billing.schema";
 
 describe("Configured sale billing contracts", () => {
+    test("commit may carry the final draft items for atomic checkout", () => {
+        const result = CommitSaleSchema.safeParse({
+            items: [
+                {
+                    productId: "11111111-1111-4111-8111-111111111111",
+                    quantity: 2,
+                },
+            ],
+            payments: [],
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.items).toHaveLength(1);
+            expect(result.data.items?.[0]?.quantity).toBe(2);
+        }
+    });
+
     test("accepts an unassigned Due sale without adding an unpaid payment method", () => {
         const result = CompleteSaleSchema.safeParse({
             requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

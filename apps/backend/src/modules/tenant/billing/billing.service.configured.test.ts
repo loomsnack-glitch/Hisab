@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { DeviceSessionDTO } from "@repo/types";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const storeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -15,9 +16,24 @@ const comboChoiceOptionId = "15151515-1515-4151-8151-151515151515";
 
 const now = new Date("2026-07-11T12:00:00.000Z");
 const amendmentCustomerId = "abababab-abab-4aba-8aba-abababababab";
+const tableId = "16161616-1616-4161-8161-161616161616";
+const deviceId = "17171717-1717-4171-8171-171717171717";
 
 const organization = { id: organizationId, name: "Demo Org" };
 const store = { id: storeId, organizationId, name: "Main Store" };
+const deviceSession = {
+    device: {
+        id: deviceId,
+        organizationId,
+        storeId,
+        name: "Counter",
+        loginUsername: "counter",
+        status: "active",
+        lastSeenAt: null,
+    },
+    store: { ...store, address: null },
+    organization: { ...organization, username: "demo", tagline: null },
+} satisfies DeviceSessionDTO;
 
 const product = {
     id: productId,
@@ -305,6 +321,31 @@ const allocateSaleNumber = mock(async () => ({
     saleSequenceNumber: 1,
     salePeriodKey: "continuous",
 }));
+let serviceTableState: "engaged" | "ready_to_bill" | "payment_due" | "paid" = "engaged";
+const getServiceTableState = () => serviceTableState;
+const markReadyDraftAsEngaged = mock(async () => {
+    if (serviceTableState !== "ready_to_bill") return false;
+    serviceTableState = "engaged";
+    return true;
+});
+const setCommittedSaleTableState = mock(
+    async (
+        _organizationId: string,
+        _storeId: string,
+        _tableId: string,
+        _saleId: string,
+        state: "payment_due" | "paid",
+    ) => {
+        if (serviceTableState !== "ready_to_bill") return null;
+        serviceTableState = state;
+        return { id: tableId, state };
+    },
+);
+const lockServiceTableForSale = mock(async () => ({
+    id: tableId,
+    state: serviceTableState,
+    currentSaleId: createdSales[0]?.id,
+}));
 
 mock.module("@/config/db", () => ({
     pg: {
@@ -353,6 +394,12 @@ mock.module("./billing.repository", () => ({
     getAddOnScopedSalesRollups,
 }));
 
+mock.module("@/modules/tenant/table-service/table-service.repository", () => ({
+    lockServiceTableForSale,
+    markReadyDraftAsEngaged,
+    setCommittedSaleTableState,
+}));
+
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
 const billingService = await import("./billing.service");
 
@@ -399,6 +446,10 @@ describe("Configured product billing with trusted snapshots", () => {
         lockDraftSale.mockClear();
         lockDraftSale.mockResolvedValue(true);
         allocateSaleNumber.mockClear();
+        serviceTableState = "engaged";
+        markReadyDraftAsEngaged.mockClear();
+        setCommittedSaleTableState.mockClear();
+        lockServiceTableForSale.mockClear();
         getParentScopedAddOnSalesRollups.mockResolvedValue([]);
         getAddOnScopedSalesRollups.mockResolvedValue([]);
 
@@ -614,6 +665,63 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(response.code).toBe(409);
         expect(allocateSaleNumber).not.toHaveBeenCalled();
         expect(createdSales[0]?.status).toBe("draft");
+    });
+
+    test("requires a table to be marked ready again after an ordinary draft edit", async () => {
+        const created = await billingService.createDraftSaleForDevice(deviceSession, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const saleId = created.data?.sale.id;
+        expect(created.status).toBe("success");
+        expect(saleId).toBeTruthy();
+
+        createdSales[0]!.serviceTableId = tableId;
+        serviceTableState = "ready_to_bill";
+
+        const saved = await billingService.updateDraftSaleForDevice(deviceSession, saleId!, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        expect(saved.status).toBe("success");
+
+        const rejected = await billingService.commitSaleForDevice(deviceSession, saleId!, {
+            payments: [],
+        });
+
+        expect(rejected.status).toBe("error");
+        expect(rejected.code).toBe(409);
+        expect(rejected.message).toBe("Service table must be Ready to bill before placing sale");
+        expect(createdSales[0]?.status).toBe("draft");
+
+        serviceTableState = "ready_to_bill";
+        const committed = await billingService.commitSaleForDevice(deviceSession, saleId!, {
+            payments: [],
+        });
+
+        expect(committed.status).toBe("success");
+        expect(committed.data?.sale.status).toBe("completed");
+        expect(getServiceTableState()).toBe("payment_due");
+    });
+
+    test("atomically saves the final cart while committing a ready table order", async () => {
+        const created = await billingService.createDraftSaleForDevice(deviceSession, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const saleId = created.data?.sale.id;
+        expect(saleId).toBeTruthy();
+
+        createdSales[0]!.serviceTableId = tableId;
+        serviceTableState = "ready_to_bill";
+
+        const committed = await billingService.commitSaleForDevice(deviceSession, saleId!, {
+            items: [{ productId, quantity: 2, addOns: [] }],
+            payments: [],
+        });
+
+        expect(committed.status).toBe("success");
+        expect(committed.data?.sale.status).toBe("completed");
+        expect(committed.data?.sale.items[0]?.quantity).toBe(2);
+        expect(committed.data?.sale.grandTotal).toBe(180);
+        expect(getServiceTableState()).toBe("payment_due");
     });
 
     test("creates a configured product line with trusted add-on snapshots from the database", async () => {

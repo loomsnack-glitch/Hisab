@@ -45,6 +45,20 @@ export const formatCurrency = (value: number | string | null | undefined) => {
     }).format(Number.isFinite(numericValue) ? numericValue : 0);
 };
 
+export const getAverageBillPerOrder = (
+    salesTotal: number | string | null | undefined,
+    completedCount: number | string | null | undefined,
+) => {
+    const total = Number(salesTotal ?? 0);
+    const count = Number(completedCount ?? 0);
+
+    if (!Number.isFinite(total) || !Number.isFinite(count) || count <= 0) {
+        return 0;
+    }
+
+    return total / count;
+};
+
 export const getDiscountPercentage = (
     discount: number | string | null | undefined,
     base: number | string | null | undefined,

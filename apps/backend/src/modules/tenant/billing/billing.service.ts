@@ -1994,7 +1994,31 @@ const updateSaleInStore = async (
     return preparedItems.error;
   }
 
-  await pg.begin(async (tx) => {
+  const updated = await pg.begin(async (tx) => {
+    if (existingSale.serviceTableId) {
+      const table = await tableRepository.lockServiceTableForSale(
+        organizationId,
+        storeId,
+        saleId,
+        tx,
+      );
+      if (
+        !table ||
+        table.id !== existingSale.serviceTableId ||
+        table.currentSaleId !== saleId
+      ) {
+        return false;
+      }
+    }
+
+    const draftLocked = await billingRepository.lockDraftSale(
+      organizationId,
+      storeId,
+      saleId,
+      tx,
+    );
+    if (!draftLocked) return false;
+
     const updatedSale = await billingRepository.updateSale(
       {
         id: saleId,
@@ -2084,7 +2108,18 @@ const updateSaleInStore = async (
         }
       }
     }
+
+    return true;
   });
+
+  if (!updated) {
+    return {
+      status: "error",
+      message: "Draft sale changed before it could be saved",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
 
   const sale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!sale) {
@@ -2211,6 +2246,41 @@ const commitSaleInStore = async (
       };
     }
 
+    if (saleSnapshot.serviceTableId) {
+      const table = await tableRepository.lockServiceTableForSale(
+        organizationId,
+        storeId,
+        saleId,
+        tx,
+      );
+      if (
+        !table ||
+        table.id !== saleSnapshot.serviceTableId ||
+        table.currentSaleId !== saleId
+      ) {
+        return {
+          committed: false as const,
+          response: {
+            status: "error" as const,
+            message: "Sale is no longer the current order for its service table",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+          },
+        };
+      }
+      if (table.state !== "ready_to_bill") {
+        return {
+          committed: false as const,
+          response: {
+            status: "error" as const,
+            message: "Service table must be Ready to bill before placing sale",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+          },
+        };
+      }
+    }
+
     const draftLocked = await billingRepository.lockDraftSale(
       organizationId,
       storeId,
@@ -2239,22 +2309,6 @@ const commitSaleInStore = async (
       throw new Error("Failed to fetch locked draft sale");
     }
 
-    if (
-      existingSale.items.length === 0 ||
-      moneyFrom(existingSale.grandTotal) <= 0
-    ) {
-      return {
-        committed: false as const,
-        response: {
-          status: "error" as const,
-          message:
-            "A sale must have at least one billable item before it can be committed",
-          data: null,
-          code: STATUS_CODES.BAD_REQUEST,
-        },
-      };
-    }
-
     const customerId =
       commitData.customerId === undefined
         ? (existingSale.customerId ?? null)
@@ -2274,11 +2328,30 @@ const commitSaleInStore = async (
       commitData.orderDiscountAmount === undefined
         ? moneyFrom(existingSale.orderDiscountAmount)
         : moneyFrom(commitData.orderDiscountAmount);
-    const pricingTotals = buildSalePricingTotals(
-      existingSale.subtotal,
-      getSaleLineDiscountTotal(existingSale.items),
-      nextOrderDiscountAmount,
-    );
+    const preparedItems =
+      commitData.items === undefined
+        ? null
+        : await prepareSaleItems(
+            organizationId,
+            storeId,
+            saleId,
+            commitData.items,
+            nextOrderDiscountAmount,
+            existingSale.items,
+          );
+    if (preparedItems?.error) {
+      return {
+        committed: false as const,
+        response: preparedItems.error as ServiceResponse<SaleResponse | null>,
+      };
+    }
+    const pricingTotals = preparedItems
+      ? { totals: preparedItems.totals }
+      : buildSalePricingTotals(
+          existingSale.subtotal,
+          getSaleLineDiscountTotal(existingSale.items),
+          nextOrderDiscountAmount,
+        );
 
     if (pricingTotals.error || !pricingTotals.totals) {
       return {
@@ -2294,6 +2367,19 @@ const commitSaleInStore = async (
 
     const committedTotals = pricingTotals.totals;
     const grandTotal = committedTotals.grandTotal;
+    const itemCount = preparedItems?.lines.length ?? existingSale.items.length;
+    if (itemCount === 0 || grandTotal <= 0) {
+      return {
+        committed: false as const,
+        response: {
+          status: "error" as const,
+          message:
+            "A sale must have at least one billable item before it can be committed",
+          data: null,
+          code: STATUS_CODES.BAD_REQUEST,
+        },
+      };
+    }
     if (totalPayment > grandTotal) {
       return {
         committed: false as const,
@@ -2352,6 +2438,16 @@ const commitSaleInStore = async (
 
     if (!updatedSale) {
       throw new Error("Failed to commit sale");
+    }
+
+    if (preparedItems) {
+      await billingRepository.deleteSaleItemsBySaleId(
+        organizationId,
+        storeId,
+        saleId,
+        tx,
+      );
+      await persistPreparedSaleLines(tx, preparedItems.lines);
     }
 
     let customer = customerResult.customer;

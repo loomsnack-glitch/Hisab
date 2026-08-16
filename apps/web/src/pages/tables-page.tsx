@@ -19,12 +19,14 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Armchair, Grip, LayoutGrid, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 
+import UnderDevelopment from "@/components/under-development";
 import { normalizePointerPosition, tablePositionStyle, TABLE_BOX_SIZE } from "@/lib/service-table-layout";
+import { isTableServiceReady, tableServiceUnavailableMessage } from "@/lib/table-service-availability";
 import { organizationKeys, serviceTableKeys } from "@/lib/query-keys";
 
 type DragState = { tableId: string; pointerId: number } | null;
 
-const TablesPage = () => {
+const TablesWorkspace = () => {
   const { organizationId = "" } = useParams();
   const queryClient = useQueryClient();
   const floorRef = useRef<HTMLDivElement>(null);
@@ -209,6 +211,22 @@ const TablesPage = () => {
       )}
     </div>
   );
+};
+
+const TablesPage = () => {
+  if (!isTableServiceReady) {
+    return (
+      <div className="space-y-6" data-testid="tables-page">
+        <div>
+          <p className="text-sm font-medium text-primary">Service area setup</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">Tables</h1>
+        </div>
+        <UnderDevelopment title="Tables is under development" message={tableServiceUnavailableMessage} />
+      </div>
+    );
+  }
+
+  return <TablesWorkspace />;
 };
 
 export default TablesPage;

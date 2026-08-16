@@ -394,6 +394,10 @@ export const CommitSaleSchema = z.object({
     .optional(),
   orderDiscountAmount: moneySchema.optional(),
   notes: optionalNotesSchema,
+  items: z
+    .array(SaleItemInputSchema)
+    .min(1, "At least one item is required")
+    .optional(),
   payments: z.array(CreatePaymentSchema).optional().default([]),
 });
 

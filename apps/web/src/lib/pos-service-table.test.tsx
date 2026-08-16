@@ -10,7 +10,9 @@ import {
 } from "./pos-service-table";
 import { serviceTableKeys } from "./query-keys";
 import PosTablesPage from "@/pages/pos-tables-page";
+import PosTablesWorkspace from "@/pages/pos-tables-workspace";
 import type { PosRouteContext } from "@/pages/pos-route-context";
+import { tableServiceUnavailableMessage } from "@/lib/table-service-availability";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -50,7 +52,10 @@ const table = (state: ServiceTableDTO["state"]): ServiceTableDTO => ({
   updatedAt: now,
 });
 
-const renderTableFloor = (tables: ServiceTableDTO[]) => {
+const renderTablesPage = (
+  tables: ServiceTableDTO[],
+  Page: typeof PosTablesPage | typeof PosTablesWorkspace,
+) => {
   const queryClient = new QueryClient();
   queryClient.setQueryData(serviceTableKeys.pos(organizationId, storeId), {
     status: "success",
@@ -72,13 +77,15 @@ const renderTableFloor = (tables: ServiceTableDTO[]) => {
       <MemoryRouter initialEntries={["/pos/tables"]}>
         <Routes>
           <Route element={<Outlet context={context} />}>
-            <Route path="/pos/tables" element={<PosTablesPage />} />
+            <Route path="/pos/tables" element={<Page />} />
           </Route>
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
 };
+
+const renderTableFloor = (tables: ServiceTableDTO[]) => renderTablesPage(tables, PosTablesWorkspace);
 
 describe("POS Service Table behavior", () => {
   test("shows Allocate only for a Free table and Free only for an Allocated table", () => {
@@ -101,6 +108,15 @@ describe("POS Service Table behavior", () => {
     expect(serviceTableKeys.pos("org-a", "store-a")).not.toEqual(
       serviceTableKeys.pos("org-a", "store-b"),
     );
+  });
+
+  test("shows under development on the live POS Tables tab", () => {
+    const markup = renderTablesPage([table("free")], PosTablesPage);
+
+    expect(markup).toContain("under-development");
+    expect(markup).toContain("Tables is under development");
+    expect(markup).toContain(tableServiceUnavailableMessage);
+    expect(markup).not.toContain("Allocate table A1");
   });
 
   test("renders only the action valid for each pre-order table state", () => {

@@ -41,7 +41,7 @@ export const workerConfig = {
     reconnectBaseDelayMs: 2_000,
     reconnectMaxDelayMs: 60_000,
     qrTtlMs: 120_000,
-    dispatchPollIntervalMs: 2_000,
+    dispatchPollIntervalMs: integer("WHATSAPP_WORKER_DISPATCH_POLL_INTERVAL_MS", 5_000, 1_000),
     dispatchErrorDelayMs: 5_000,
     shutdownTimeoutMs: integer("WHATSAPP_WORKER_SHUTDOWN_TIMEOUT_MS", 30_000, 1_000),
     operationsRefreshIntervalMs: integer("WHATSAPP_WORKER_OPERATIONS_REFRESH_MS", 15_000, 1_000),

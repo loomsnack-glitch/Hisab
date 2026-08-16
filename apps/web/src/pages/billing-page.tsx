@@ -127,7 +127,7 @@ import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import type { PosComposerHandoff } from "@/pages/pos-route-context";
 import { billingKeys, catalogKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
-import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate, getAverageBillPerOrder } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
@@ -352,7 +352,7 @@ const SalesSummaryBar = ({ summary }: { summary: SalesListSummary | null }) => {
     if (!summary) return null;
 
     return (
-        <div className="mb-4 grid grid-cols-4 gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-3.5 text-xs sm:gap-4 sm:px-4">
+        <div className="mb-4 grid grid-cols-3 gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-3.5 text-xs sm:grid-cols-5 sm:gap-4 sm:px-4">
             <div className="min-w-0">
                 <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Sales</p>
                 <p className="whitespace-nowrap text-sm font-semibold sm:text-base">{summary.completedCount}</p>
@@ -373,6 +373,12 @@ const SalesSummaryBar = ({ summary }: { summary: SalesListSummary | null }) => {
                 <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Due</p>
                 <p className="whitespace-nowrap text-sm font-semibold text-amber-600 dark:text-amber-400 sm:text-base">
                     {formatCurrency(summary.dueTotal)}
+                </p>
+            </div>
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Avg bill</p>
+                <p className="whitespace-nowrap text-sm font-semibold sm:text-base">
+                    {formatCurrency(getAverageBillPerOrder(summary.salesTotal, summary.completedCount))}
                 </p>
             </div>
         </div>
@@ -1610,6 +1616,7 @@ const BillingPage = ({
         customerId: selectedCustomerId || null,
         orderDiscountAmount,
         notes: notes.trim() || null,
+        items: buildDraftPayload().items,
         payments:
             settlementMode === "due"
                 ? []
@@ -1726,7 +1733,19 @@ const BillingPage = ({
                 return response.data.sale;
             }
 
-            if (isDeviceMode && !activeDraftId) {
+            if (activeDraftId) {
+                const response = isDeviceMode
+                    ? await commitPosSale(activeDraftId, buildCommitPayload())
+                    : await commitSale(organizationId, selectedStoreId, activeDraftId, buildCommitPayload());
+
+                if (response.status !== "success" || !response.data?.sale) {
+                    throw new Error(response.message || "Failed to complete bill");
+                }
+
+                return response.data.sale;
+            }
+
+            if (isDeviceMode) {
                 const payload: CompleteSaleJSON = {
                     requestId,
                     ...buildDraftPayload(),
@@ -1742,18 +1761,7 @@ const BillingPage = ({
             }
 
             const draftPayload = buildDraftPayload();
-            const draftResponse = activeDraftId
-                ? isDeviceMode
-                    ? await updatePosDraftSale(activeDraftId, draftPayload as UpdateDraftSaleJSON)
-                    : await updateDraftSale(
-                          organizationId,
-                          selectedStoreId,
-                          activeDraftId,
-                          draftPayload as UpdateDraftSaleJSON,
-                      )
-                : isDeviceMode
-                  ? await createPosDraftSale(draftPayload)
-                  : await createDraftSale(organizationId, selectedStoreId, draftPayload);
+            const draftResponse = await createDraftSale(organizationId, selectedStoreId, draftPayload);
 
             if (draftResponse.status !== "success" || !draftResponse.data?.sale) {
                 throw new Error(draftResponse.message || "Failed to prepare bill");

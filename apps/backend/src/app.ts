@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
+import { accessLog } from './middlewares/access-log';
 import { deviceMiddleware } from './middlewares/device.middleware';
 import authRoutes from './modules/access-control/auth/auth.routes';
 import deviceAuthRoutes from './modules/access-control/device-auth/device-auth.routes';
@@ -36,7 +36,7 @@ app.use('*', cors({
 }));
 
 // Middleware
-app.use('*', logger());
+app.use('*', accessLog());
 app.use('*', deviceMiddleware)
 
 // Routes
