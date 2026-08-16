@@ -66,6 +66,17 @@ const postgresCode = (error: unknown): string | undefined => {
     return undefined;
 };
 
+const postgresConstraint = (error: unknown): string | undefined => {
+    if (typeof error !== "object" || error === null) return undefined;
+    if ("constraint" in error && typeof error.constraint === "string") return error.constraint;
+    if ("constraint_name" in error && typeof error.constraint_name === "string") return error.constraint_name;
+    if ("message" in error && typeof error.message === "string") {
+        return error.message.match(/constraint "([^"]+)"/)?.[1];
+    }
+    if ("cause" in error) return postgresConstraint(error.cause);
+    return undefined;
+};
+
 const workerUnavailable = (account: WhatsAppAccountDTO): ServiceResponse<WhatsAppAccountStatusResponseDTO> => ({
     status: "error",
     message: "WhatsApp worker is unavailable. The account was saved; retry linking when the worker is healthy.",
@@ -145,6 +156,15 @@ export const createAccount = async (
         };
     }
 
+    if (await repository.getAccountByPhoneNumber(phoneNumber)) {
+        return {
+            status: "error",
+            message: "This WhatsApp number is already linked to another account",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
     let account: WhatsAppAccountDTO;
     try {
         account = await repository.createAccount(organizationId, storeId, phoneNumber, userId);
@@ -152,7 +172,10 @@ export const createAccount = async (
         if (postgresCode(error) === "23505") {
             return {
                 status: "error",
-                message: "This store already has a WhatsApp account",
+                message:
+                    postgresConstraint(error) === "whatsapp_accounts_provider_phone_number_normalized_key"
+                        ? "This WhatsApp number is already linked to another account"
+                        : "This store already has a WhatsApp account",
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };

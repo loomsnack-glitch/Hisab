@@ -71,6 +71,10 @@ const WhatsAppAccountPage = () => {
                 toast.error(response.message);
             }
         },
+        onError: error => {
+            const message = (error as { message?: string })?.message ?? "Unable to link the WhatsApp number";
+            toast.error(message);
+        },
     });
     const connectMutation = useMutation({
         mutationFn: () => connectWhatsAppAccount(organizationId, storeId),
