@@ -812,10 +812,16 @@ CREATE TABLE public.stores (
     organization_id uuid NOT NULL,
     name character varying(255) NOT NULL,
     address text,
+    review_platform character varying(100),
+    review_link character varying(2048),
+    social_media_name character varying(100),
+    social_media_link character varying(2048),
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT stores_review_destination_check CHECK ((((review_platform IS NULL) AND (review_link IS NULL)) OR ((review_platform IS NOT NULL) AND (review_link IS NOT NULL) AND (length(btrim((review_platform)::text)) > 0) AND (length(btrim((review_link)::text)) > 0)))),
+    CONSTRAINT stores_social_destination_check CHECK ((((social_media_name IS NULL) AND (social_media_link IS NULL)) OR ((social_media_name IS NOT NULL) AND (social_media_link IS NOT NULL) AND (length(btrim((social_media_name)::text)) > 0) AND (length(btrim((social_media_link)::text)) > 0))))
 );
 
 

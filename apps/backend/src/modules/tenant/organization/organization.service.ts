@@ -490,6 +490,22 @@ export const updateStore = async (
     id: storeId,
     name: nextName,
     address: normalizeOptionalText(storeData.address),
+    reviewPlatform:
+      storeData.reviewPlatform === undefined
+        ? (store.reviewPlatform ?? null)
+        : normalizeOptionalText(storeData.reviewPlatform),
+    reviewLink:
+      storeData.reviewLink === undefined
+        ? (store.reviewLink ?? null)
+        : normalizeOptionalText(storeData.reviewLink),
+    socialMediaName:
+      storeData.socialMediaName === undefined
+        ? (store.socialMediaName ?? null)
+        : normalizeOptionalText(storeData.socialMediaName),
+    socialMediaLink:
+      storeData.socialMediaLink === undefined
+        ? (store.socialMediaLink ?? null)
+        : normalizeOptionalText(storeData.socialMediaLink),
     updatedBy: userId,
   });
 

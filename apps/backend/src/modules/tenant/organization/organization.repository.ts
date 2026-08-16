@@ -264,6 +264,10 @@ export const updateStore = async (
         UPDATE stores
         SET name = ${storeData.name},
             address = ${storeData.address},
+            review_platform = ${storeData.reviewPlatform},
+            review_link = ${storeData.reviewLink},
+            social_media_name = ${storeData.socialMediaName},
+            social_media_link = ${storeData.socialMediaLink},
             updated_by = ${storeData.updatedBy},
             updated_at = NOW()
         WHERE id = ${storeData.id}

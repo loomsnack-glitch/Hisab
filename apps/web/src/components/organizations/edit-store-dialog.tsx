@@ -10,13 +10,12 @@ import {
     DialogContent,
     DialogFooter,
     DialogHeader,
-    DialogTitle,
     DialogTrigger,
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
-import { Pencil, Store } from "lucide-react";
+import { Pencil, Share2, Star, Store } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
@@ -28,16 +27,22 @@ type EditStoreDialogProps = {
     trigger?: React.ReactElement;
 };
 
+const getDefaultValues = (store: StoreDTO): UpdateStoreJSON => ({
+    name: store.name,
+    address: store.address ?? "",
+    reviewPlatform: store.reviewPlatform ?? "",
+    reviewLink: store.reviewLink ?? "",
+    socialMediaName: store.socialMediaName ?? "",
+    socialMediaLink: store.socialMediaLink ?? "",
+});
+
 const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProps) => {
     const [open, setOpen] = useState(false);
     const queryClient = useQueryClient();
 
     const form = useForm<UpdateStoreJSON>({
         resolver: zodResolver(UpdateStoreSchema),
-        defaultValues: {
-            name: store.name,
-            address: store.address ?? "",
-        },
+        defaultValues: getDefaultValues(store),
     });
 
     const storeName = form.watch("name");
@@ -45,12 +50,9 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
 
     useEffect(() => {
         if (open) {
-            form.reset({
-                name: store.name,
-                address: store.address ?? "",
-            });
+            form.reset(getDefaultValues(store));
         }
-    }, [form, open, store.address, store.name]);
+    }, [form, open, store]);
 
     const updateMutation = useMutation({
         mutationFn: (values: UpdateStoreJSON) => updateStore(organizationId, store.id, values),
@@ -78,21 +80,22 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                     const response = await updateMutation.mutateAsync({
                         name: values.name.trim(),
                         address: values.address,
+                        reviewPlatform: values.reviewPlatform,
+                        reviewLink: values.reviewLink,
+                        socialMediaName: values.socialMediaName,
+                        socialMediaLink: values.socialMediaLink,
                     });
                     if (response.status === "success") {
                         result = true;
                     }
-                } catch (err) {
+                } catch {
                     result = false;
                 }
             })();
             return result;
         },
         onDiscard: () => {
-            form.reset({
-                name: store.name,
-                address: store.address ?? "",
-            });
+            form.reset(getDefaultValues(store));
         },
     });
 
@@ -100,10 +103,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
         if (!nextOpen) {
             interceptClose(() => {
                 setOpen(false);
-                form.reset({
-                    name: store.name,
-                    address: store.address ?? "",
-                });
+                form.reset(getDefaultValues(store));
             });
         } else {
             setOpen(true);
@@ -114,6 +114,10 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
         updateMutation.mutate({
             name: values.name.trim(),
             address: values.address,
+            reviewPlatform: values.reviewPlatform,
+            reviewLink: values.reviewLink,
+            socialMediaName: values.socialMediaName,
+            socialMediaLink: values.socialMediaLink,
         });
     };
 
@@ -128,13 +132,13 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                     )
                 }
             />
-            <DialogContent className="relative overflow-hidden sm:max-w-md border-border/80 shadow-2xl backdrop-blur-md">
+            <DialogContent className="relative overflow-hidden sm:max-w-lg border-border/80 shadow-2xl backdrop-blur-md">
                 <DialogHeader
                     icon={<Store className="size-5 transition-transform duration-300" />}
                     title="Edit store"
                 />
 
-                <form className="space-y-4 pt-3" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="max-h-[75vh] space-y-4 overflow-y-auto pt-3 pr-1" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
                         <div className="flex items-center justify-between">
                             <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80" required>
@@ -175,6 +179,88 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                             <FieldError errors={[form.formState.errors.address]} />
                         </FieldContent>
                     </Field>
+
+                    <section className="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-lg bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400">
+                                <Star className="size-4" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold">Customer reviews</p>
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                    Add both fields to include a feedback request in WhatsApp bills.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <Field data-invalid={!!form.formState.errors.reviewPlatform}>
+                                <FieldLabel className="text-xs font-semibold text-muted-foreground">
+                                    Review platform
+                                </FieldLabel>
+                                <FieldContent>
+                                    <Input maxLength={100} placeholder="e.g. Google" {...form.register("reviewPlatform")} />
+                                    <FieldError errors={[form.formState.errors.reviewPlatform]} />
+                                </FieldContent>
+                            </Field>
+
+                            <Field data-invalid={!!form.formState.errors.reviewLink}>
+                                <FieldLabel className="text-xs font-semibold text-muted-foreground">
+                                    Review link
+                                </FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        type="url"
+                                        maxLength={2048}
+                                        placeholder="https://g.page/..."
+                                        {...form.register("reviewLink")}
+                                    />
+                                    <FieldError errors={[form.formState.errors.reviewLink]} />
+                                </FieldContent>
+                            </Field>
+                        </div>
+                    </section>
+
+                    <section className="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-lg bg-sky-500/10 p-2 text-sky-600 dark:text-sky-400">
+                                <Share2 className="size-4" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold">Social media</p>
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                    Add both fields to invite customers to follow the Store.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <Field data-invalid={!!form.formState.errors.socialMediaName}>
+                                <FieldLabel className="text-xs font-semibold text-muted-foreground">
+                                    Social media name
+                                </FieldLabel>
+                                <FieldContent>
+                                    <Input maxLength={100} placeholder="e.g. Instagram" {...form.register("socialMediaName")} />
+                                    <FieldError errors={[form.formState.errors.socialMediaName]} />
+                                </FieldContent>
+                            </Field>
+
+                            <Field data-invalid={!!form.formState.errors.socialMediaLink}>
+                                <FieldLabel className="text-xs font-semibold text-muted-foreground">
+                                    Social media link
+                                </FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        type="url"
+                                        maxLength={2048}
+                                        placeholder="https://instagram.com/..."
+                                        {...form.register("socialMediaLink")}
+                                    />
+                                    <FieldError errors={[form.formState.errors.socialMediaLink]} />
+                                </FieldContent>
+                            </Field>
+                        </div>
+                    </section>
 
                     <DialogFooter className="mt-4 border-t border-border/30">
                         <Button

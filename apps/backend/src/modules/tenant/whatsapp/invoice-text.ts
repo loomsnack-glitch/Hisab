@@ -2,6 +2,10 @@ import type { SaleDetailDTO } from "@repo/types";
 
 export type InvoiceMessageContext = {
     organizationName?: string | null;
+    reviewPlatform?: string | null;
+    reviewLink?: string | null;
+    socialMediaName?: string | null;
+    socialMediaLink?: string | null;
 };
 
 const formatAmount = (amount: number | string | null | undefined): string => {
@@ -17,10 +21,16 @@ export const formatInvoiceText = (
     context: InvoiceMessageContext = {},
 ): string => {
     const businessName = clean(context.organizationName) || "Ganatri";
-    const customerName = clean(sale.customerNameSnapshot ?? sale.customer?.name) || "valued customer";
+    const customerName =
+        clean(sale.customerNameSnapshot ?? sale.customer?.name) ||
+        "valued customer";
     const invoiceNumber = sale.saleNumber ?? sale.id;
+    const reviewPlatform = clean(context.reviewPlatform);
+    const reviewLink = clean(context.reviewLink);
+    const socialMediaName = clean(context.socialMediaName);
+    const socialMediaLink = clean(context.socialMediaLink);
 
-    return [
+    const lines = [
         `Hello ${customerName},`,
         "",
         `Thank you for shopping with ${businessName}.`,
@@ -31,8 +41,26 @@ export const formatInvoiceText = (
         `Total amount: ${formatAmount(sale.grandTotal)}`,
         `Paid: ${formatAmount(sale.paidTotal)}`,
         `Balance due: ${formatAmount(sale.dueTotal)}`,
-        "",
-        "Thank you.",
-        `Regards,\n${businessName}`,
-    ].join("\n");
+    ];
+
+    if (reviewPlatform && reviewLink) {
+        lines.push(
+            "",
+            `Happy with your experience? Pls share your feedback with us on ${reviewPlatform}.`,
+            `Link: ${reviewLink}`,
+        );
+    }
+
+    if (socialMediaName && socialMediaLink) {
+        lines.push(
+            "",
+            `Follow us on ${socialMediaName}:`,
+            "New launches - Offers - Reel - Behind the scenes.",
+            `👉 ${socialMediaName} Link - ${socialMediaLink}`,
+        );
+    }
+
+    lines.push("", "Thank you.", `Regards,\n${businessName}`);
+
+    return lines.join("\n");
 };

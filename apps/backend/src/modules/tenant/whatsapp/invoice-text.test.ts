@@ -37,7 +37,9 @@ const sale = {
 
 describe("invoice text", () => {
     it("creates a professional invoice caption from sale snapshots", () => {
-        const text = formatInvoiceText(sale, { organizationName: "Dev VadaPav" });
+        const text = formatInvoiceText(sale, {
+            organizationName: "Dev VadaPav",
+        });
 
         expect(text).toContain("Hello Original customer,");
         expect(text).toContain("Thank you for shopping with Dev VadaPav.");
@@ -49,6 +51,35 @@ describe("invoice text", () => {
     });
 
     it("falls back to the product name when no organization name is provided", () => {
-        expect(formatInvoiceText(sale)).toContain("Thank you for shopping with Ganatri.");
+        expect(formatInvoiceText(sale)).toContain(
+            "Thank you for shopping with Ganatri.",
+        );
+    });
+
+    it("invites feedback when the Store has a review destination", () => {
+        const text = formatInvoiceText(sale, {
+            organizationName: "Panini House",
+            reviewPlatform: "Google",
+            reviewLink: "https://g.page/r/panini-house/review",
+        });
+
+        expect(text).toContain(
+            "Happy with your experience? Pls share your feedback with us on Google.\n" +
+                "Link: https://g.page/r/panini-house/review",
+        );
+    });
+
+    it("invites the customer to follow the configured social account", () => {
+        const text = formatInvoiceText(sale, {
+            organizationName: "Panini House",
+            socialMediaName: "Instagram",
+            socialMediaLink: "https://instagram.com/paninihouse",
+        });
+
+        expect(text).toContain(
+            "Follow us on Instagram:\n" +
+                "New launches - Offers - Reel - Behind the scenes.\n" +
+                "👉 Instagram Link - https://instagram.com/paninihouse",
+        );
     });
 });

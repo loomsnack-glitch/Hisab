@@ -32,6 +32,24 @@ const optionalAddressSchema = z
   ])
   .optional();
 
+const optionalEngagementNameSchema = z
+  .union([
+    z.literal(""),
+    z.string().trim().max(100, "Name must be at most 100 characters"),
+  ])
+  .optional();
+
+const optionalEngagementLinkSchema = z
+  .union([
+    z.literal(""),
+    z
+      .string()
+      .trim()
+      .max(2048, "Link must be at most 2048 characters")
+      .url("Enter a valid link"),
+  ])
+  .optional();
+
 const deviceSecretSchema = z
   .string()
   .trim()
@@ -80,6 +98,10 @@ export const StoreDTOSchema = z.object({
   organizationId: z.uuid("Invalid organization id"),
   name: nameSchema,
   address: z.string().nullable().optional(),
+  reviewPlatform: z.string().max(100).nullable().optional(),
+  reviewLink: z.string().max(2048).nullable().optional(),
+  socialMediaName: z.string().max(100).nullable().optional(),
+  socialMediaLink: z.string().max(2048).nullable().optional(),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,
@@ -120,10 +142,31 @@ export const CreateStoreSchema = z.object({
   address: optionalAddressSchema,
 });
 
-export const UpdateStoreSchema = z.object({
-  name: nameSchema,
-  address: optionalAddressSchema,
-});
+export const UpdateStoreSchema = z
+  .object({
+    name: nameSchema,
+    address: optionalAddressSchema,
+    reviewPlatform: optionalEngagementNameSchema,
+    reviewLink: optionalEngagementLinkSchema,
+    socialMediaName: optionalEngagementNameSchema,
+    socialMediaLink: optionalEngagementLinkSchema,
+  })
+  .superRefine((store, context) => {
+    if (Boolean(store.reviewPlatform) !== Boolean(store.reviewLink)) {
+      context.addIssue({
+        code: "custom",
+        path: [store.reviewPlatform ? "reviewLink" : "reviewPlatform"],
+        message: "Review platform and link must be provided together",
+      });
+    }
+    if (Boolean(store.socialMediaName) !== Boolean(store.socialMediaLink)) {
+      context.addIssue({
+        code: "custom",
+        path: [store.socialMediaName ? "socialMediaLink" : "socialMediaName"],
+        message: "Social media name and link must be provided together",
+      });
+    }
+  });
 
 export const CreateStoreDeviceSchema = z.object({
   name: nameSchema,

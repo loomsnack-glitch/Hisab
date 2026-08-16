@@ -189,7 +189,13 @@ export const queueInvoiceForStore = async (
       customerPhone: parsedPhone.data,
       customerName:
         sale.customerNameSnapshot ?? sale.customer?.name ?? "Customer",
-      caption: formatInvoiceText(sale, { organizationName: organization.name }),
+      caption: formatInvoiceText(sale, {
+        organizationName: organization.name,
+        reviewPlatform: store.reviewPlatform,
+        reviewLink: store.reviewLink,
+        socialMediaName: store.socialMediaName,
+        socialMediaLink: store.socialMediaLink,
+      }),
       attachmentStorageKey,
       attachmentFileName: `Sale_${sale.saleNumber ?? sale.id}.pdf`,
       attachmentMimeType: "application/pdf",

@@ -84,6 +84,10 @@ export type CreateStoreREPO = Pick<
 
 export type UpdateStoreREPO = Pick<StoreDTO, "id" | "name"> & {
   address: string | null;
+  reviewPlatform: string | null;
+  reviewLink: string | null;
+  socialMediaName: string | null;
+  socialMediaLink: string | null;
   updatedBy: string;
 };
 
