@@ -132,13 +132,16 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                     )
                 }
             />
-            <DialogContent className="relative overflow-hidden sm:max-w-lg border-border/80 shadow-2xl backdrop-blur-md">
+            <DialogContent className="relative min-w-0 overflow-hidden sm:max-w-lg border-border/80 shadow-2xl backdrop-blur-md">
                 <DialogHeader
                     icon={<Store className="size-5 transition-transform duration-300" />}
                     title="Edit store"
                 />
 
-                <form className="max-h-[75vh] space-y-4 overflow-y-auto pt-3 pr-1" onSubmit={form.handleSubmit(onSubmit)}>
+                <form
+                    className="min-w-0 max-h-[75vh] space-y-4 overflow-x-hidden overflow-y-auto pt-3 pr-1"
+                    onSubmit={form.handleSubmit(onSubmit)}
+                >
                     <Field data-invalid={!!form.formState.errors.name}>
                         <div className="flex items-center justify-between">
                             <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80" required>
@@ -180,7 +183,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                         </FieldContent>
                     </Field>
 
-                    <section className="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
+                    <section className="min-w-0 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
                         <div className="flex items-start gap-3">
                             <div className="mt-0.5 rounded-lg bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400">
                                 <Star className="size-4" />
@@ -193,8 +196,8 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                             </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <Field data-invalid={!!form.formState.errors.reviewPlatform}>
+                        <div className="grid min-w-0 gap-3 grid-cols-1 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                            <Field className="min-w-0" data-invalid={!!form.formState.errors.reviewPlatform}>
                                 <FieldLabel className="text-xs font-semibold text-muted-foreground">
                                     Review platform
                                 </FieldLabel>
@@ -204,7 +207,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                                 </FieldContent>
                             </Field>
 
-                            <Field data-invalid={!!form.formState.errors.reviewLink}>
+                            <Field className="min-w-0" data-invalid={!!form.formState.errors.reviewLink}>
                                 <FieldLabel className="text-xs font-semibold text-muted-foreground">
                                     Review link
                                 </FieldLabel>
@@ -221,7 +224,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                         </div>
                     </section>
 
-                    <section className="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
+                    <section className="min-w-0 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
                         <div className="flex items-start gap-3">
                             <div className="mt-0.5 rounded-lg bg-sky-500/10 p-2 text-sky-600 dark:text-sky-400">
                                 <Share2 className="size-4" />
@@ -234,8 +237,8 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                             </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <Field data-invalid={!!form.formState.errors.socialMediaName}>
+                        <div className="grid min-w-0 gap-3 grid-cols-1 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                            <Field className="min-w-0" data-invalid={!!form.formState.errors.socialMediaName}>
                                 <FieldLabel className="text-xs font-semibold text-muted-foreground">
                                     Social media name
                                 </FieldLabel>
@@ -245,7 +248,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                                 </FieldContent>
                             </Field>
 
-                            <Field data-invalid={!!form.formState.errors.socialMediaLink}>
+                            <Field className="min-w-0" data-invalid={!!form.formState.errors.socialMediaLink}>
                                 <FieldLabel className="text-xs font-semibold text-muted-foreground">
                                     Social media link
                                 </FieldLabel>
@@ -262,7 +265,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                         </div>
                     </section>
 
-                    <DialogFooter className="mt-4 border-t border-border/30">
+                    <DialogFooter className="mt-4 min-w-0 border-t border-border/30">
                         <Button
                             type="button"
                             variant="outline"
