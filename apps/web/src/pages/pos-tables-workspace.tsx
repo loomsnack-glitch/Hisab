@@ -300,7 +300,7 @@ const PosTablesWorkspace = () => {
 
   return (
     <div
-      className="flex min-h-full flex-col lg:flex-row"
+      className="flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] flex-col max-lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden lg:flex-row"
       data-testid="pos-tables-page"
     >
       <PosDeviceSidebar activePanelTab="tables" />
