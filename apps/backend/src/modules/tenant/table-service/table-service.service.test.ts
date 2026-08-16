@@ -128,6 +128,12 @@ const releaseDueTable = mock(async () => ({
   currentSaleId: null,
   currentSaleTotal: null,
 }));
+const releasePaidTableFromActiveState = mock(async () => ({
+  ...table,
+  state: "free" as const,
+  currentSaleId: null,
+  currentSaleTotal: null,
+}));
 const createSale = mock(async (data: Record<string, unknown>) => ({
   ...data,
   paidTotal: 0,
@@ -141,12 +147,20 @@ const createSale = mock(async (data: Record<string, unknown>) => ({
   createdAt: now,
   updatedAt: now,
 }));
-const getSaleById = mock(async () => ({
-  id: "sale-id",
-  status: "draft",
-  serviceTableId: tableId,
-  grandTotal: 0,
-}));
+const getSaleById = mock(
+  async (): Promise<{
+    id: string;
+    status: string;
+    serviceTableId: string;
+    grandTotal: number;
+    paymentStatus?: string;
+  } | null> => ({
+    id: "sale-id",
+    status: "draft",
+    serviceTableId: tableId,
+    grandTotal: 0,
+  }),
+);
 const lockDraftSale = mock(async () => true);
 const deleteDraftSale = mock(async () => true);
 const getSaleDetailsForDevice = mock(async () => ({
@@ -175,6 +189,7 @@ mock.module("./table-service.repository", () => ({
   attachDraftSale,
   clearDraftSale,
   markTableReadyToBill,
+  releasePaidTableFromActiveState,
   releasePaidTable,
   releaseDueTable,
 }));
@@ -211,6 +226,7 @@ describe("Service Table application service", () => {
     attachDraftSale.mockClear();
     clearDraftSale.mockClear();
     markTableReadyToBill.mockClear();
+    releasePaidTableFromActiveState.mockClear();
     releasePaidTable.mockClear();
     releaseDueTable.mockClear();
     createSale.mockClear();
@@ -534,6 +550,74 @@ describe("Service Table application service", () => {
 
     expect(response).toMatchObject({ status: "error", code: 409 });
     expect(clearDraftSale).not.toHaveBeenCalled();
+    expect(deleteDraftSale).not.toHaveBeenCalled();
+  });
+
+  test("clears a stale table link when its Draft Sale is already missing", async () => {
+    lockServiceTableForDevice.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentSaleTotal: 0,
+    });
+    lockDraftSale.mockResolvedValueOnce(false);
+    getSaleById.mockResolvedValueOnce(null);
+
+    const response = await tableService.cancelServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      message: "Stale table draft link cleared",
+      data: { table: { state: "free", currentSaleId: null } },
+    });
+    expect(clearDraftSale).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      tableId,
+      "sale-id",
+      deviceSession.device.id,
+      expect.anything(),
+    );
+    expect(deleteDraftSale).not.toHaveBeenCalled();
+  });
+
+  test("frees an engaged table linked to an already paid Sale without deleting the bill", async () => {
+    lockServiceTableForDevice.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentSaleTotal: 42,
+    });
+    lockDraftSale.mockResolvedValueOnce(false);
+    getSaleById.mockResolvedValueOnce({
+      id: "sale-id",
+      status: "completed",
+      serviceTableId: tableId,
+      paymentStatus: "paid",
+      grandTotal: 42,
+    });
+
+    const response = await tableService.cancelServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      message: "Paid table link cleared",
+      data: { table: { state: "free", currentSaleId: null } },
+    });
+    expect(releasePaidTableFromActiveState).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      tableId,
+      "sale-id",
+      deviceSession.device.id,
+      expect.anything(),
+    );
     expect(deleteDraftSale).not.toHaveBeenCalled();
   });
 

@@ -339,7 +339,6 @@ export const cancelServiceTableOrderForDevice = async (
       table.currentSaleId,
       tx,
     );
-    if (!saleIsDraft) return { kind: "conflict" as const };
 
     const sale = await billingRepository.getSaleById(
       session.organization.id,
@@ -347,7 +346,49 @@ export const cancelServiceTableOrderForDevice = async (
       table.currentSaleId,
       tx,
     );
-    if (!sale || sale.status !== "draft" || sale.serviceTableId !== tableId)
+    if (!sale) {
+      // A table can retain a stale pointer if an older deployment or a manual
+      // cleanup removed the draft without using the table cancellation flow.
+      // Clearing only the table pointer makes the floor usable again without
+      // ever treating a committed sale as cancellable.
+      const freeTable = await tableRepository.clearDraftSale(
+        session.organization.id,
+        session.store.id,
+        tableId,
+        table.currentSaleId,
+        session.device.id,
+        tx,
+      );
+      if (!freeTable) throw new Error("Failed to clear stale service table draft");
+
+      return {
+        kind: "recovered" as const,
+        table: { ...freeTable, currentSaleId: null, currentSaleTotal: null },
+      };
+    }
+
+    if (
+      sale.status === "completed" &&
+      sale.paymentStatus === "paid" &&
+      sale.serviceTableId === tableId
+    ) {
+      const freeTable = await tableRepository.releasePaidTableFromActiveState(
+        session.organization.id,
+        session.store.id,
+        tableId,
+        table.currentSaleId,
+        session.device.id,
+        tx,
+      );
+      if (!freeTable) throw new Error("Failed to release paid service table");
+
+      return {
+        kind: "recovered_paid" as const,
+        table: { ...freeTable, currentSaleId: null, currentSaleTotal: null },
+      };
+    }
+
+    if (!saleIsDraft || sale.status !== "draft" || sale.serviceTableId !== tableId)
       return { kind: "conflict" as const };
 
     const freeTable = await tableRepository.clearDraftSale(
@@ -387,6 +428,20 @@ export const cancelServiceTableOrderForDevice = async (
       message: "Only the current uncommitted table draft can be cancelled",
       data: null,
       code: STATUS_CODES.CONFLICT,
+    };
+  if (result.kind === "recovered")
+    return {
+      status: "success",
+      data: { table: result.table },
+      message: "Stale table draft link cleared",
+      code: STATUS_CODES.SUCCESS,
+    };
+  if (result.kind === "recovered_paid")
+    return {
+      status: "success",
+      data: { table: result.table },
+      message: "Paid table link cleared",
+      code: STATUS_CODES.SUCCESS,
     };
   return {
     status: "success",

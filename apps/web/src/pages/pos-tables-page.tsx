@@ -151,7 +151,7 @@ const PosTablesPage = () => {
           session.store.id,
         ),
       });
-      toast.success("Table order cancelled");
+      toast.success(response.message ?? "Table order cancelled");
     },
     onError: (error: { message?: string }) =>
       toast.error(error.message ?? "Table order could not be cancelled"),

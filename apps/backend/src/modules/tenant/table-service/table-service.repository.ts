@@ -268,6 +268,30 @@ export const clearDraftSale = async (
   return row ? mapRow(row) : null;
 };
 
+export const releasePaidTableFromActiveState = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  saleId: string,
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = 'free',
+        current_sale_id = NULL,
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND state IN ('engaged', 'ready_to_bill')
+      AND current_sale_id = ${saleId}
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
 export const markTableReadyToBill = async (
   organizationId: string,
   storeId: string,
