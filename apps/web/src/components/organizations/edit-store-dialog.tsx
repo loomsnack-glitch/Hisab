@@ -47,6 +47,10 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
 
     const storeName = form.watch("name");
     const address = form.watch("address");
+    const reviewPlatform = form.watch("reviewPlatform");
+    const reviewLink = form.watch("reviewLink");
+    const socialMediaName = form.watch("socialMediaName");
+    const socialMediaLink = form.watch("socialMediaLink");
 
     useEffect(() => {
         if (open) {
@@ -196,23 +200,41 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                             </div>
                         </div>
 
-                        <div className="grid min-w-0 gap-3 grid-cols-1 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                        <div className="min-w-0 space-y-4">
                             <Field className="min-w-0" data-invalid={!!form.formState.errors.reviewPlatform}>
-                                <FieldLabel className="text-xs font-semibold text-muted-foreground">
-                                    Review platform
-                                </FieldLabel>
+                                <div className="flex items-center justify-between">
+                                    <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+                                        Review platform
+                                    </FieldLabel>
+                                    <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
+                                        {(reviewPlatform ?? "").length}/100
+                                    </span>
+                                </div>
                                 <FieldContent>
-                                    <Input maxLength={100} placeholder="e.g. Google" {...form.register("reviewPlatform")} />
+                                    <Input
+                                        variant="ringShadow"
+                                        className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
+                                        maxLength={100}
+                                        placeholder="e.g. Google"
+                                        {...form.register("reviewPlatform")}
+                                    />
                                     <FieldError errors={[form.formState.errors.reviewPlatform]} />
                                 </FieldContent>
                             </Field>
 
                             <Field className="min-w-0" data-invalid={!!form.formState.errors.reviewLink}>
-                                <FieldLabel className="text-xs font-semibold text-muted-foreground">
-                                    Review link
-                                </FieldLabel>
+                                <div className="flex items-center justify-between">
+                                    <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+                                        Review link
+                                    </FieldLabel>
+                                    <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
+                                        {(reviewLink ?? "").length}/2048
+                                    </span>
+                                </div>
                                 <FieldContent>
                                     <Input
+                                        variant="ringShadow"
+                                        className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
                                         type="url"
                                         maxLength={2048}
                                         placeholder="https://g.page/..."
@@ -237,23 +259,41 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                             </div>
                         </div>
 
-                        <div className="grid min-w-0 gap-3 grid-cols-1 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                        <div className="min-w-0 space-y-4">
                             <Field className="min-w-0" data-invalid={!!form.formState.errors.socialMediaName}>
-                                <FieldLabel className="text-xs font-semibold text-muted-foreground">
-                                    Social media name
-                                </FieldLabel>
+                                <div className="flex items-center justify-between">
+                                    <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+                                        Social media name
+                                    </FieldLabel>
+                                    <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
+                                        {(socialMediaName ?? "").length}/100
+                                    </span>
+                                </div>
                                 <FieldContent>
-                                    <Input maxLength={100} placeholder="e.g. Instagram" {...form.register("socialMediaName")} />
+                                    <Input
+                                        variant="ringShadow"
+                                        className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
+                                        maxLength={100}
+                                        placeholder="e.g. Instagram"
+                                        {...form.register("socialMediaName")}
+                                    />
                                     <FieldError errors={[form.formState.errors.socialMediaName]} />
                                 </FieldContent>
                             </Field>
 
                             <Field className="min-w-0" data-invalid={!!form.formState.errors.socialMediaLink}>
-                                <FieldLabel className="text-xs font-semibold text-muted-foreground">
-                                    Social media link
-                                </FieldLabel>
+                                <div className="flex items-center justify-between">
+                                    <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+                                        Social media link
+                                    </FieldLabel>
+                                    <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
+                                        {(socialMediaLink ?? "").length}/2048
+                                    </span>
+                                </div>
                                 <FieldContent>
                                     <Input
+                                        variant="ringShadow"
+                                        className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
                                         type="url"
                                         maxLength={2048}
                                         placeholder="https://instagram.com/..."
