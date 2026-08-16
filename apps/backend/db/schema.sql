@@ -178,6 +178,20 @@ CREATE TYPE public.store_device_status_enum AS ENUM (
 
 
 --
+-- Name: service_table_state_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.service_table_state_enum AS ENUM (
+    'free',
+    'allocated',
+    'engaged',
+    'ready_to_bill',
+    'payment_due',
+    'paid'
+);
+
+
+--
 -- Name: ensure_payment_sale_is_completed(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -807,6 +821,31 @@ CREATE TABLE public.stores (
 
 
 --
+-- Name: service_tables; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.service_tables (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    store_id uuid NOT NULL,
+    table_label character varying(64) NOT NULL,
+    capacity integer,
+    position_x numeric(8,7) DEFAULT 0.05 NOT NULL,
+    position_y numeric(8,7) DEFAULT 0.05 NOT NULL,
+    state public.service_table_state_enum DEFAULT 'free'::public.service_table_state_enum NOT NULL,
+    current_sale_id uuid,
+    created_by uuid NOT NULL,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT service_tables_table_label_check CHECK ((length(TRIM(BOTH FROM table_label)) > 0)),
+    CONSTRAINT service_tables_capacity_check CHECK ((capacity IS NULL OR capacity > 0)),
+    CONSTRAINT service_tables_position_x_check CHECK (((position_x >= (0)::numeric) AND (position_x <= (1)::numeric))),
+    CONSTRAINT service_tables_position_y_check CHECK (((position_y >= (0)::numeric) AND (position_y <= (1)::numeric)))
+);
+
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1249,6 +1288,30 @@ ALTER TABLE ONLY public.stores
 
 
 --
+-- Name: service_tables service_tables_id_scope_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_tables
+    ADD CONSTRAINT service_tables_id_scope_key UNIQUE (id, organization_id, store_id);
+
+
+--
+-- Name: service_tables service_tables_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_tables
+    ADD CONSTRAINT service_tables_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: service_tables service_tables_store_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_tables
+    ADD CONSTRAINT service_tables_store_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
+
+
+--
 -- Name: users users_phone_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1269,6 +1332,20 @@ ALTER TABLE ONLY public.users
 --
 
 CREATE INDEX idx_add_ons_organization_id ON public.add_ons USING btree (organization_id);
+
+
+--
+-- Name: service_tables_store_table_label_lower_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX service_tables_store_table_label_lower_unique ON public.service_tables USING btree (store_id, lower(TRIM(BOTH FROM table_label)));
+
+
+--
+-- Name: idx_service_tables_store_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_service_tables_store_position ON public.service_tables USING btree (organization_id, store_id, position_y, position_x, id);
 
 
 --

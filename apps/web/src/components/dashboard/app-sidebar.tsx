@@ -14,6 +14,7 @@ import {
     Package2,
     ShoppingBag,
     Users,
+    Armchair,
 } from "lucide-react";
 import { getOrganizations } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
@@ -128,6 +129,12 @@ const AppSidebar = ({
                     label: "Customers",
                     icon: Users,
                     isActive: /\/organizations\/[^/]+\/customers/.test(location.pathname),
+                },
+                {
+                    to: `/organizations/${effectiveOrgId}/tables`,
+                    label: "Tables",
+                    icon: Armchair,
+                    isActive: /\/organizations\/[^/]+\/tables/.test(location.pathname),
                 },
                 {
                     to: `/organizations/${effectiveOrgId}/purchases`,

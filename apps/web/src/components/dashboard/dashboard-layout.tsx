@@ -288,6 +288,8 @@ const DashboardLayout = () => {
                                                             targetPath = `/organizations/${org.id}/products`;
                                                         } else if (location.pathname.includes("/reports")) {
                                                             targetPath = `/organizations/${org.id}/reports`;
+                                                        } else if (location.pathname.includes("/tables")) {
+                                                            targetPath = `/organizations/${org.id}/tables`;
                                                         }
                                                         navigate(targetPath);
                                                     }}

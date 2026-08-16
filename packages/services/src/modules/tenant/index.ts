@@ -3,3 +3,4 @@ export * from "./catalog.service";
 export * from "./billing.service";
 export * from "./purchase.service";
 export * from "./whatsapp.service";
+export * from "./table-service.service";

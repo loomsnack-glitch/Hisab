@@ -28,6 +28,7 @@ import ReportsPage from "@/pages/reports-page";
 import PosReportsPage from "@/pages/pos-reports-page";
 import PosSettingsPage from "@/pages/pos-settings-page";
 import SettingsPage from "@/pages/settings-page";
+import TablesPage from "@/pages/tables-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppInboxPage, { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
 import { authKeys } from "@/lib/query-keys";
@@ -137,6 +138,7 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/reports" element={<ReportsPage />} />
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                                 <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
+                                <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp" element={<WhatsAppAccountPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp/inbox" element={<WhatsAppInboxPage />} />
                             </Route>

@@ -10,6 +10,7 @@ import billingRoutes from './modules/tenant/billing/billing.routes';
 import catalogRoutes from './modules/tenant/catalog/catalog.routes';
 import organizationRoutes from './modules/tenant/organization/organization.routes';
 import purchaseRoutes from './modules/tenant/purchase/purchase.routes';
+import tableServiceRoutes from './modules/tenant/table-service/table-service.routes';
 import whatsappRoutes, { whatsappInternalRoutes } from './modules/tenant/whatsapp/whatsapp.routes';
 
 const BASE_PATH = process.env.BASE_PATH
@@ -51,6 +52,7 @@ app.route('/organizations', organizationRoutes);
 app.route('/organizations', catalogRoutes);
 app.route('/organizations', billingRoutes);
 app.route('/organizations', purchaseRoutes);
+app.route('/organizations', tableServiceRoutes);
 app.route('/organizations', whatsappRoutes);
 app.route('/internal/whatsapp', whatsappInternalRoutes);
 
