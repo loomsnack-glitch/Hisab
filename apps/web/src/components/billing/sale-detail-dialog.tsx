@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     collectPayment,
@@ -6,7 +6,6 @@ import {
     getPosSale,
     getPosWhatsAppDueReminderStatus,
     getPosWhatsAppInvoiceStatus,
-    getPosWhatsAppMessageTemplates,
     getSale,
     getWhatsAppDueReminderStatus,
     getWhatsAppInvoiceStatus,
@@ -14,13 +13,12 @@ import {
     queuePosWhatsAppDueReminder,
     queueWhatsAppInvoice,
     queueWhatsAppDueReminder,
-    getWhatsAppMessageTemplates,
     retryPosWhatsAppInvoice,
     retryWhatsAppInvoice,
     voidPosSale,
     voidSale,
 } from "@repo/services";
-import type { CreatePaymentJSON, PaymentMethod, SaleDetailDTO, VoidSaleJSON, WhatsAppMessageTemplateDTO } from "@repo/types";
+import type { CreatePaymentJSON, PaymentMethod, SaleDetailDTO, VoidSaleJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
@@ -29,7 +27,6 @@ import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Textarea } from "@repo/ui/components/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { cn } from "@repo/ui/lib/utils";
 import {
     AlertTriangle,
@@ -86,18 +83,6 @@ const paymentStatusStyles: Record<string, string> = {
     paid: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
 };
 
-const renderBillMessagePreview = (body: string, sale: SaleDetailDTO | null) => {
-    if (!body) return "Your message preview will appear here.";
-    const values: Record<string, string> = {
-        customer_name: sale?.customerNameSnapshot ?? sale?.customer?.name ?? "Customer",
-        bill_number: sale?.saleNumber ?? "INV-1042",
-        total: sale ? formatCurrency(sale.grandTotal) : "₹850.00",
-        paid: sale ? formatCurrency(sale.paidTotal) : "₹500.00",
-        balance_due: sale ? formatCurrency(sale.dueTotal) : "₹350.00",
-    };
-    return body.replace(/{{\s*([a-z_]+)\s*}}/gi, (_, token: string) => values[token.toLowerCase()] ?? `{{${token}}}`);
-};
-
 const SaleDetailDialog = ({
     open,
     onOpenChange,
@@ -112,9 +97,6 @@ const SaleDetailDialog = ({
     const canMutate = mode === "device";
     const [paymentDraft, setPaymentDraft] = useState<CreatePaymentJSON | null>(null);
     const [voidDraft, setVoidDraft] = useState<VoidSaleJSON>({ reason: "" });
-    const [customMessageOpen, setCustomMessageOpen] = useState(false);
-    const [customMessage, setCustomMessage] = useState("");
-    const [selectedTemplateId, setSelectedTemplateId] = useState("");
     const [formError, setFormError] = useState<string | null>(null);
     const posPrinter = useOptionalPosPrinter();
 
@@ -126,18 +108,6 @@ const SaleDetailDialog = ({
     });
 
     const sale = saleQuery.data?.status === "success" ? (saleQuery.data.data?.sale ?? null) : null;
-    const templateQuery = useQuery({
-        queryKey: mode === "device" ? whatsappKeys.posTemplates("bill") : whatsappKeys.templates(organizationId, storeId, "bill"),
-        queryFn: () => mode === "device" ? getPosWhatsAppMessageTemplates() : getWhatsAppMessageTemplates(organizationId, storeId, "bill"),
-        enabled: open && Boolean(saleId),
-    });
-    const billTemplates: WhatsAppMessageTemplateDTO[] = templateQuery.data?.status === "success"
-        ? templateQuery.data.data?.templates ?? []
-        : [];
-    const defaultTemplate = billTemplates.find(template => template.isDefault && template.isActive) ?? billTemplates.find(template => template.isActive);
-    useEffect(() => {
-        if (!selectedTemplateId && defaultTemplate) setSelectedTemplateId(defaultTemplate.id);
-    }, [defaultTemplate, selectedTemplateId]);
     const whatsappInvoiceQuery = useQuery({
         queryKey: saleId
             ? mode === "device"
@@ -247,11 +217,11 @@ const SaleDetailDialog = ({
         mutationFn: () => {
             const canRetry = whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter";
             if (mode === "device") {
-                return canRetry ? retryPosWhatsAppInvoice(saleId as string) : queuePosWhatsAppInvoice(saleId as string, customMessage.trim() || undefined, selectedTemplateId || undefined);
+                return canRetry ? retryPosWhatsAppInvoice(saleId as string) : queuePosWhatsAppInvoice(saleId as string);
             }
             return canRetry
                 ? retryWhatsAppInvoice(organizationId, storeId, saleId as string)
-                : queueWhatsAppInvoice(organizationId, storeId, saleId as string, customMessage.trim() || undefined, selectedTemplateId || undefined);
+                : queueWhatsAppInvoice(organizationId, storeId, saleId as string);
         },
         onSuccess: response => {
             if (response.status !== "success") {
@@ -361,8 +331,8 @@ const SaleDetailDialog = ({
                     <div className="space-y-0">
                         {/* Interactive screen header */}
                         <div className="border-b border-border/60 px-6 py-5 sm:px-8">
-                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                                <DialogHeader className="space-y-3">
+                            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                <DialogHeader className="min-w-0 flex-1 space-y-3">
                                     <div className="flex flex-wrap items-end gap-3">
                                         <div className="min-w-0">
                                             {sale.tokenNumber ? (
@@ -452,7 +422,7 @@ const SaleDetailDialog = ({
                                     </DialogDescription>
                                 </DialogHeader>
 
-                                <div className="flex items-center gap-2 self-start sm:self-auto mr-8 shrink-0">
+                                <div className="flex min-w-0 w-full flex-wrap items-center gap-2 pr-8 sm:w-auto sm:max-w-[52%] sm:justify-end">
                                     {canMutate && sale.status === "completed" && onEdit ? (
                                         <Button
                                             variant="default"
@@ -461,35 +431,34 @@ const SaleDetailDialog = ({
                                                 onEdit(sale);
                                                 onOpenChange(false);
                                             }}
-                                            className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
+                                            className="h-9 rounded-xl px-2.5 cursor-pointer"
+                                            title="Edit bill"
                                         >
                                             <Pencil className="size-4" />
-                                            <span>Edit bill</span>
+                                            <span className="hidden lg:inline">Edit bill</span>
                                         </Button>
                                     ) : null}
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={handlePrint}
-                                        className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
+                                        className="h-9 rounded-xl px-2.5 cursor-pointer"
+                                        title="Print bill"
                                     >
                                         <Printer className="size-4" />
-                                        <span>Print</span>
+                                        <span className="hidden lg:inline">Print</span>
                                     </Button>
                                     {sale.status === "completed" ? (
                                         <Button
                                             variant="outline"
                                             size="sm"
                                             disabled={whatsappInvoiceMutation.isPending || whatsappInvoiceQuery.isPending}
-                                            onClick={() => {
-                                                setCustomMessage("");
-                                                setSelectedTemplateId(defaultTemplate?.id ?? "");
-                                                setCustomMessageOpen(true);
-                                            }}
-                                            className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
+                                            onClick={() => whatsappInvoiceMutation.mutate()}
+                                            className="h-9 rounded-xl px-2.5 cursor-pointer"
+                                            title="Send bill on WhatsApp"
                                         >
                                             <Smartphone className="size-4 text-[#25D366]" />
-                                            <span>
+                                                <span className="hidden lg:inline">
                                                 {whatsappInvoiceMutation.isPending
                                                     ? "Queueing..."
                                                     : whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter"
@@ -506,20 +475,22 @@ const SaleDetailDialog = ({
                                             size="sm"
                                             disabled={dueReminderMutation.isPending || whatsappDueReminderQuery.isPending}
                                             onClick={() => dueReminderMutation.mutate()}
-                                            className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
+                                            className="h-9 rounded-xl px-2.5 cursor-pointer"
+                                            title="Send due reminder"
                                         >
                                             <Clock className="size-4 text-orange-500" />
-                                            <span>{dueReminderMutation.isPending ? "Queueing..." : whatsappDueReminder ? "Remind again" : "Remind due"}</span>
+                                            <span className="hidden lg:inline">{dueReminderMutation.isPending ? "Queueing..." : whatsappDueReminder ? "Remind again" : "Remind due"}</span>
                                         </Button>
                                     ) : null}
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={handleDownloadTxt}
-                                        className="rounded-xl flex items-center gap-1.5 h-9 cursor-pointer"
+                                        className="h-9 rounded-xl px-2.5 cursor-pointer"
+                                        title="Download bill text"
                                     >
                                         <Download className="size-4" />
-                                        <span>Download</span>
+                                        <span className="hidden lg:inline">Download</span>
                                     </Button>
                                 </div>
                             </div>
@@ -984,52 +955,6 @@ const SaleDetailDialog = ({
                         </div>
                     </div>
                 )}
-            </DialogContent>
-        </Dialog>
-        <Dialog open={customMessageOpen} onOpenChange={setCustomMessageOpen}>
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Message with bill</DialogTitle>
-                    <DialogDescription>
-                        Add a one-time message, or leave this empty to use the Store WhatsApp template.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2">
-                    <p className="text-sm font-medium">Bill template</p>
-                    <Select value={selectedTemplateId || "store-default"} onValueChange={value => setSelectedTemplateId(value === "store-default" ? "" : value)}>
-                        <SelectTrigger className="w-full rounded-xl"><SelectValue placeholder="Use Store default" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="store-default">Use Store default</SelectItem>
-                            {billTemplates.filter(template => template.isActive).map(template => (
-                                <SelectItem key={template.id} value={template.id}>{template.name}{template.isDefault ? " · Default" : ""}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <Textarea
-                    autoFocus
-                    value={customMessage}
-                    maxLength={4096}
-                    onChange={event => setCustomMessage(event.target.value)}
-                    placeholder="Hello {{customer_name}}, your bill is attached..."
-                    className="min-h-40 rounded-2xl"
-                />
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                    <p className="mb-1 text-xs font-semibold text-muted-foreground">Preview</p>
-                    <p className="whitespace-pre-wrap text-sm">{renderBillMessagePreview(customMessage || (billTemplates.find(template => template.id === selectedTemplateId)?.body ?? defaultTemplate?.body ?? ""), sale)}</p>
-                </div>
-                <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setCustomMessageOpen(false)}>Cancel</Button>
-                    <Button
-                        disabled={whatsappInvoiceMutation.isPending}
-                        onClick={() => {
-                            setCustomMessageOpen(false);
-                            whatsappInvoiceMutation.mutate();
-                        }}
-                    >
-                        {whatsappInvoiceMutation.isPending ? "Queueing..." : "Send bill"}
-                    </Button>
-                </div>
             </DialogContent>
         </Dialog>
         </>
