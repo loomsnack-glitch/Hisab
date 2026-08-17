@@ -25,7 +25,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { whatsappKeys } from "@/lib/query-keys";
 import WhatsAppTemplateManager from "@/components/organizations/whatsapp-template-manager";
 import WhatsAppLinkManager from "@/components/organizations/whatsapp-link-manager";
-import PromotionDialog from "@/components/customers/promotion-dialog";
+import WhatsAppPromotionDashboard from "@/components/organizations/whatsapp-promotion-dashboard";
 
 const ACCOUNT_STATUS_POLL_INTERVAL_MS = 2_000;
 const ACCOUNT_STATUS_POLL_WINDOW_MS = 60_000;
@@ -337,10 +337,7 @@ const WhatsAppOrganizationPage = () => {
                     ) : null}
 
                     {activeTab === "promotions" ? (
-                        <Card className="border-border/60 bg-card/80">
-                            <CardHeader><CardTitle className="flex items-center gap-2 font-display text-xl"><Megaphone className="size-5 text-primary" />Promotions</CardTitle><CardDescription>Send an image message to eligible customers at {selectedStore.name}.</CardDescription></CardHeader>
-                            <CardContent><PromotionDialog organizationId={organizationId} storeId={selectedStore.id} links={selectedStore.whatsappLinks} /></CardContent>
-                        </Card>
+                        <WhatsAppPromotionDashboard organizationId={organizationId} storeId={selectedStore.id} storeName={selectedStore.name} links={selectedStore.whatsappLinks} />
                     ) : null}
                 </section>
             ) : organizationQuery.data?.status === "success" ? (

@@ -459,6 +459,24 @@ userRouter.post(
     },
 );
 
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/promotions", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const days = Number(c.req.query("days") ?? 30);
+        const limit = Number(c.req.query("limit") ?? 20);
+        const page = Number(c.req.query("page") ?? 1);
+        if (!Number.isInteger(days) || days < 1 || days > 365 || !Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(page) || page < 1) {
+            return c.json({ status: "error", message: "Invalid promotion dashboard range" }, STATUS_CODES.BAD_REQUEST);
+        }
+        return handleServiceResponse(c, await service.getPromotionDashboard(c.get("authUser").id, organizationId, storeId, days, limit, page));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
 export const whatsappInternalRoutes = new Hono();
 whatsappInternalRoutes.use("*", whatsappWorkerMiddleware);
 

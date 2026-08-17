@@ -7,13 +7,101 @@ import {
   type ServiceResponse,
   type StoreMessageLink,
   type WhatsAppCreatePromotionJSON,
+  type WhatsAppPromotionCooldownDTO,
   type WhatsAppPromotionResponseDTO,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { redis } from "@/config/redis";
 import * as repository from "./whatsapp.repository";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_CAMPAIGN_RECIPIENTS = 1_000;
+const PROMOTION_COOLDOWN_SECONDS = 60 * 60;
+const PROMOTION_COOLDOWN_PREFIX = "whatsapp:promotion:cooldown:";
+const REDIS_STATUS_TIMEOUT_MS = 1_000;
+const promotionCooldownEnabled = () => {
+  const configured = process.env.WHATSAPP_PROMOTION_COOLDOWN_ENABLED?.trim().toLowerCase();
+  if (configured === "true") return true;
+  if (configured === "false") return false;
+  return process.env.NODE_ENV === "production";
+};
+
+const cooldownKey = (organizationId: string, storeId: string) =>
+  `${PROMOTION_COOLDOWN_PREFIX}${organizationId}:${storeId}`;
+
+const cooldownFromLatestCampaign = (createdAt: string | null): number => {
+  if (!createdAt) return 0;
+  const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
+  return Math.max(0, PROMOTION_COOLDOWN_SECONDS - elapsed);
+};
+
+export const getPromotionCooldown = async (
+  organizationId: string,
+  storeId: string,
+): Promise<WhatsAppPromotionCooldownDTO> => {
+  if (!promotionCooldownEnabled()) {
+    return { active: false, remainingSeconds: 0, nextAvailableAt: null };
+  }
+  const latestCampaign = await repository.getLatestPromotionCreatedAt(organizationId, storeId);
+  const databaseRemaining = cooldownFromLatestCampaign(latestCampaign);
+  let redisRemaining = 0;
+  try {
+    const ttl = await Promise.race([
+      redis.ttl(cooldownKey(organizationId, storeId)),
+      new Promise<number>((_, reject) => setTimeout(() => reject(new Error("Redis status timeout")), REDIS_STATUS_TIMEOUT_MS)),
+    ]);
+    redisRemaining = ttl > 0 ? ttl : 0;
+  } catch (error) {
+    console.warn("[whatsapp] promotion cooldown Redis read failed", error instanceof Error ? error.message : String(error));
+  }
+  const remainingSeconds = Math.max(databaseRemaining, redisRemaining);
+  return {
+    active: remainingSeconds > 0,
+    remainingSeconds,
+    nextAvailableAt: remainingSeconds > 0 ? new Date(Date.now() + remainingSeconds * 1000).toISOString() : null,
+  };
+};
+
+const reservePromotionCooldown = async (organizationId: string, storeId: string, campaignId: string) => {
+  if (!promotionCooldownEnabled()) return { acquired: true, remainingSeconds: 0 };
+  const current = await getPromotionCooldown(organizationId, storeId);
+  if (current.active) return { acquired: false, remainingSeconds: current.remainingSeconds };
+  const result = await redis.set(
+    cooldownKey(organizationId, storeId),
+    campaignId,
+    "EX",
+    String(PROMOTION_COOLDOWN_SECONDS),
+    "NX",
+  );
+  if (result === "OK") return { acquired: true, remainingSeconds: PROMOTION_COOLDOWN_SECONDS };
+  const afterRace = await getPromotionCooldown(organizationId, storeId);
+  return { acquired: false, remainingSeconds: afterRace.remainingSeconds || PROMOTION_COOLDOWN_SECONDS };
+};
+
+export const getPromotionDashboard = async (
+  organizationId: string,
+  storeId: string,
+  days = 30,
+  limit = 20,
+  page = 1,
+) => {
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  const safePage = Math.max(page, 1);
+  const [campaignData, cooldown] = await Promise.all([
+    repository.listPromotionCampaigns(organizationId, storeId, safeLimit, days, safePage),
+    getPromotionCooldown(organizationId, storeId),
+  ]);
+  return {
+    ...campaignData,
+    cooldown,
+    pagination: {
+      page: safePage,
+      limit: safeLimit,
+      totalItems: campaignData.stats.totalCampaigns,
+      totalPages: Math.ceil(campaignData.stats.totalCampaigns / safeLimit),
+    },
+  };
+};
 
 const promotionBody = (
   body: string,
@@ -64,8 +152,9 @@ export const createPromotion = async (
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
+  const hasImage = Boolean(data.imageBase64 && data.imageFileName && data.imageMimeType);
   const bucket = privateBucket();
-  if (!bucket)
+  if (hasImage && !bucket)
     return {
       status: "error",
       message: "Private media storage is not configured",
@@ -126,14 +215,39 @@ export const createPromotion = async (
   }
 
   const campaignId = crypto.randomUUID();
-  const objectKey = `whatsapp-campaigns/${organizationId}/${storeId}/${campaignId}/${data.imageFileName}`;
+  let cooldownReserved = false;
   try {
-    await storage.uploadBuffer(
-      bucket,
-      objectKey,
-      Buffer.from(data.imageBase64, "base64"),
-      data.imageMimeType,
-    );
+    const reservation = await reservePromotionCooldown(organizationId, storeId, campaignId);
+    if (!reservation.acquired) {
+      return {
+        status: "error",
+        message: `Promotion cooldown is active; try again in ${Math.ceil(reservation.remainingSeconds / 60)} minutes`,
+        data: null,
+        code: STATUS_CODES.TOO_MANY_REQUESTS,
+      };
+    }
+    cooldownReserved = true;
+  } catch (error) {
+    console.error("[whatsapp] promotion cooldown reservation failed", error instanceof Error ? error.message : String(error));
+    return {
+      status: "error",
+      message: "Promotion cooldown is temporarily unavailable; retry shortly",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+  const objectKey = hasImage
+    ? `whatsapp-campaigns/${organizationId}/${storeId}/${campaignId}/${data.imageFileName}`
+    : null;
+  try {
+    if (hasImage && objectKey) {
+      await storage.uploadBuffer(
+        bucket,
+        objectKey,
+        Buffer.from(data.imageBase64!, "base64"),
+        data.imageMimeType!,
+      );
+    }
     const result = await pg.begin(async (tx) => {
       const [campaign] = await tx`
         INSERT INTO whatsapp_campaigns (
@@ -142,7 +256,7 @@ export const createPromotion = async (
           total_recipients, created_by
         ) VALUES (
           ${campaignId}, ${organizationId}, ${storeId}, ${account.id}, ${data.title}, ${data.body},
-          ${objectKey}, ${data.imageFileName}, ${data.imageMimeType}, 'queued', ${rows.length}, ${userId}
+            ${objectKey}, ${hasImage ? data.imageFileName : null}, ${hasImage ? data.imageMimeType : null}, 'queued', ${rows.length}, ${userId}
         ) RETURNING id
       `;
       if (!campaign) throw new Error("Failed to create promotion campaign");
@@ -168,12 +282,12 @@ export const createPromotion = async (
         const [message] = await tx`
           INSERT INTO whatsapp_messages (
             id, organization_id, store_id, whatsapp_account_id, conversation_id,
-            direction, message_type, caption, attachment_storage_key,
+            direction, message_type, body, caption, attachment_storage_key,
             attachment_file_name, attachment_mime_type, status, idempotency_key
           ) VALUES (
             ${messageId}, ${organizationId}, ${storeId}, ${account.id}, ${conversation.id},
-            'outbound', 'image', ${promotionBody(data.body, String(row.name), store)},
-            ${objectKey}, ${data.imageFileName}, ${data.imageMimeType}, 'queued', ${`promotion:${campaignId}:${row.id}`}
+            'outbound', ${hasImage ? 'image' : 'text'}, ${hasImage ? null : promotionBody(data.body, String(row.name), store)}, ${hasImage ? promotionBody(data.body, String(row.name), store) : null},
+            ${objectKey}, ${hasImage ? data.imageFileName : null}, ${hasImage ? data.imageMimeType : null}, 'queued', ${`promotion:${campaignId}:${row.id}`}
           ) RETURNING id
         `;
         if (!message) throw new Error("Failed to create campaign message");
@@ -202,9 +316,18 @@ export const createPromotion = async (
     };
   } catch (error) {
     try {
-      await storage.deleteObject(bucket, objectKey);
+      if (bucket && objectKey) await storage.deleteObject(bucket, objectKey);
     } catch {
       /* keep original error */
+    }
+    if (cooldownReserved) {
+      try {
+        if ((await redis.get(cooldownKey(organizationId, storeId))) === campaignId) {
+          await redis.del(cooldownKey(organizationId, storeId));
+        }
+      } catch {
+        /* the database campaign remains the cooldown fallback */
+      }
     }
     if (error instanceof repository.WhatsAppOutboxLimitError)
       return {

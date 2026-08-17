@@ -823,6 +823,16 @@ export const getDueReminderStatus = async (userId: string, organizationId: strin
 export const getDueReminderStatusForDevice = (session: DeviceSessionDTO, saleId: string) =>
     getDueReminderStatusForStore(session.organization.id, session.store.id, saleId);
 export const createPromotion = promotionService.createPromotion;
+export const getPromotionDashboard = async (userId: string, organizationId: string, storeId: string, days = 30, limit = 20, page = 1) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return {
+        status: "success" as const,
+        message: "Promotion dashboard fetched successfully",
+        data: await promotionService.getPromotionDashboard(organizationId, storeId, days, limit, page),
+        code: STATUS_CODES.SUCCESS,
+    };
+};
 export const getInvoiceStatusForDevice = invoiceService.getInvoiceStatusForDevice;
 export const retryInvoiceForDevice = invoiceService.retryInvoiceForDevice;
 export const getInvoiceStatus = invoiceService.getInvoiceStatus;

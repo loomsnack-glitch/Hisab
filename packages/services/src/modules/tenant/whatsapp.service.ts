@@ -20,6 +20,7 @@ import type {
     WhatsAppSendConversationTextJSON,
     WhatsAppAttachConversationCustomerJSON,
     WhatsAppCreatePromotionJSON,
+    WhatsAppPromotionDashboardResponseDTO,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -27,6 +28,7 @@ type WhatsAppResponse = ServiceResponse<WhatsAppAccountStatusResponseDTO | null>
 type WhatsAppAccountsResponse = ServiceResponse<WhatsAppAccountsResponseDTO | null>;
 type WhatsAppInvoiceResponse = ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
 type WhatsAppReminderResponse = ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
+type WhatsAppPromotionDashboardResponse = ServiceResponse<WhatsAppPromotionDashboardResponseDTO | null>;
 type WhatsAppConversationListResponseType = ServiceResponse<WhatsAppConversationListResponse | null>;
 type WhatsAppConversationResponse = ServiceResponse<WhatsAppConversationMessagesResponse | null>;
 const accountPath = (organizationId: string, storeId: string) =>
@@ -317,6 +319,21 @@ export const createWhatsAppPromotion = async (
 ) => {
     try {
         const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/promotions`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppPromotionDashboard = async (
+    organizationId: string,
+    storeId: string,
+    days = 30,
+    limit = 20,
+    page = 1,
+): Promise<WhatsAppPromotionDashboardResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/whatsapp/promotions`, { params: { days, limit, page } });
         return response.data;
     } catch (error) {
         return handleApiError(error);

@@ -8,6 +8,8 @@ import type {
     WhatsAppWorkerAccountDTO,
     WhatsAppWorkerStatusUpdateJSON,
     WhatsAppWorkerMessageEventJSON,
+    WhatsAppPromotionCampaignDTO,
+    WhatsAppPromotionStatsDTO,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
@@ -1145,6 +1147,18 @@ export const claimNextInvoiceOutbox = async (
             WHERE id = ${claimed.message_id}
               AND status IN ('queued', 'failed')
         `;
+        await tx`
+            UPDATE whatsapp_campaigns
+            SET status = 'sending', updated_at = NOW()
+            WHERE status = 'queued'
+              AND id = (
+                  SELECT campaign_id
+                  FROM whatsapp_campaign_recipients
+                  WHERE outbox_id = ${claimed.id}
+                    AND status IN ('pending', 'processing')
+                  LIMIT 1
+              )
+        `;
 
         const [job] = await tx`
             SELECT
@@ -1302,6 +1316,129 @@ export const completeInvoiceOutbox = async (
         }
         return true;
     });
+};
+
+const promotionNumber = (row: Record<string, unknown>, key: string): number => Number(row[key] ?? 0);
+
+const mapPromotionCampaign = (row: Record<string, unknown>): WhatsAppPromotionCampaignDTO => ({
+    id: String(row.id),
+    title: String(row.title),
+    body: String(row.body),
+    imageFileName: (row.image_file_name as string | null | undefined) ?? null,
+    imageMimeType: (row.image_mime_type as string | null | undefined) ?? null,
+    status: row.status as WhatsAppPromotionCampaignDTO["status"],
+    totalRecipients: promotionNumber(row, "total_recipients"),
+    queuedRecipients: promotionNumber(row, "queued_recipients"),
+    sendingRecipients: promotionNumber(row, "sending_recipients"),
+    sentRecipients: promotionNumber(row, "sent_recipients"),
+    deliveredRecipients: promotionNumber(row, "delivered_recipients"),
+    readRecipients: promotionNumber(row, "read_recipients"),
+    retryingRecipients: promotionNumber(row, "retrying_recipients"),
+    failedRecipients: promotionNumber(row, "failed_recipients"),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+});
+
+export const listPromotionCampaigns = async (
+    organizationId: string,
+    storeId: string,
+    limit = 20,
+    days = 30,
+    page = 1,
+): Promise<{ campaigns: WhatsAppPromotionCampaignDTO[]; stats: WhatsAppPromotionStatsDTO }> => {
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safeDays = Math.min(Math.max(days, 1), 365);
+    const safePage = Math.max(page, 1);
+    const offset = (safePage - 1) * safeLimit;
+    const [campaignRows, statsRows] = await Promise.all([
+        pg`
+            WITH recipient_stats AS (
+                SELECT
+                    r.campaign_id,
+                    COUNT(*) FILTER (WHERE r.status = 'pending') AS queued_recipients,
+                    COUNT(*) FILTER (WHERE r.status = 'processing') AS sending_recipients,
+                    COUNT(*) FILTER (WHERE r.status = 'sent') AS sent_recipients,
+                    COUNT(*) FILTER (WHERE r.status = 'retryable') AS retrying_recipients,
+                    COUNT(*) FILTER (WHERE r.status IN ('dead_letter', 'cancelled')) AS failed_recipients,
+                    COUNT(*) FILTER (WHERE m.status IN ('delivered', 'read')) AS delivered_recipients,
+                    COUNT(*) FILTER (WHERE m.status = 'read') AS read_recipients
+                FROM whatsapp_campaign_recipients r
+                LEFT JOIN whatsapp_messages m ON m.id = r.message_id
+                GROUP BY r.campaign_id
+            )
+            SELECT
+                c.id, c.title, c.body, c.image_file_name, c.image_mime_type, c.status,
+                c.total_recipients, c.created_at, c.updated_at,
+                COALESCE(rs.queued_recipients, 0) AS queued_recipients,
+                COALESCE(rs.sending_recipients, 0) AS sending_recipients,
+                COALESCE(rs.sent_recipients, 0) AS sent_recipients,
+                COALESCE(rs.delivered_recipients, 0) AS delivered_recipients,
+                COALESCE(rs.read_recipients, 0) AS read_recipients,
+                COALESCE(rs.retrying_recipients, 0) AS retrying_recipients,
+                COALESCE(rs.failed_recipients, 0) AS failed_recipients
+            FROM whatsapp_campaigns c
+            LEFT JOIN recipient_stats rs ON rs.campaign_id = c.id
+            WHERE c.organization_id = ${organizationId}
+              AND c.store_id = ${storeId}
+              AND c.created_at >= NOW() - make_interval(days => ${safeDays})
+            ORDER BY c.created_at DESC
+            LIMIT ${safeLimit}
+            OFFSET ${offset}
+        `,
+        pg`
+            WITH campaign_scope AS (
+                SELECT id, total_recipients
+                FROM whatsapp_campaigns
+                WHERE organization_id = ${organizationId}
+                  AND store_id = ${storeId}
+                  AND created_at >= NOW() - make_interval(days => ${Math.min(Math.max(days, 1), 365)})
+            )
+            SELECT
+                (SELECT COUNT(*) FROM campaign_scope) AS total_campaigns,
+                COALESCE((SELECT SUM(total_recipients) FROM campaign_scope), 0) AS total_recipients,
+                COUNT(*) FILTER (WHERE r.status = 'pending') AS queued_recipients,
+                COUNT(*) FILTER (WHERE r.status = 'processing') AS sending_recipients,
+                COUNT(*) FILTER (WHERE r.status = 'sent') AS sent_recipients,
+                COUNT(*) FILTER (WHERE m.status IN ('delivered', 'read')) AS delivered_recipients,
+                COUNT(*) FILTER (WHERE m.status = 'read') AS read_recipients,
+                COUNT(*) FILTER (WHERE r.status = 'retryable') AS retrying_recipients,
+                COUNT(*) FILTER (WHERE r.status IN ('dead_letter', 'cancelled')) AS failed_recipients
+            FROM campaign_scope c
+            LEFT JOIN whatsapp_campaign_recipients r ON r.campaign_id = c.id
+            LEFT JOIN whatsapp_messages m ON m.id = r.message_id
+        `,
+    ]);
+    const statsRow = (statsRows[0] ?? {}) as Record<string, unknown>;
+    return {
+        campaigns: campaignRows.map(row => mapPromotionCampaign(row as Record<string, unknown>)),
+        stats: {
+            totalCampaigns: promotionNumber(statsRow, "total_campaigns"),
+            totalRecipients: promotionNumber(statsRow, "total_recipients"),
+            queuedRecipients: promotionNumber(statsRow, "queued_recipients"),
+            sendingRecipients: promotionNumber(statsRow, "sending_recipients"),
+            sentRecipients: promotionNumber(statsRow, "sent_recipients"),
+            deliveredRecipients: promotionNumber(statsRow, "delivered_recipients"),
+            readRecipients: promotionNumber(statsRow, "read_recipients"),
+            retryingRecipients: promotionNumber(statsRow, "retrying_recipients"),
+            failedRecipients: promotionNumber(statsRow, "failed_recipients"),
+        },
+    };
+};
+
+export const getLatestPromotionCreatedAt = async (
+    organizationId: string,
+    storeId: string,
+): Promise<string | null> => {
+    const [row] = await pg`
+        SELECT created_at
+        FROM whatsapp_campaigns
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND status <> 'cancelled'
+        ORDER BY created_at DESC
+        LIMIT 1
+    `;
+    return row?.created_at ? String(row.created_at) : null;
 };
 
 export const updateInvoiceMessageStatus = async (
