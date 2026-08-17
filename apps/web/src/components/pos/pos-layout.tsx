@@ -179,9 +179,10 @@ const PosLayout = ({
         : null;
     const printerIsBusy = printerButtonState === "connecting" || printerButtonState === "printing";
     const whatsappQueryError = whatsappAccountQuery.error as WhatsAppAccountQueryError | null;
-    const whatsappAccountData = whatsappAccountQuery.data?.data ?? whatsappQueryError?.data ?? null;
+    const whatsappAccountData = whatsappAccountQuery.isError ? whatsappQueryError?.data ?? null : whatsappAccountQuery.data?.data ?? null;
     const whatsappAccount = whatsappAccountData?.account ?? null;
     const whatsappStatus = whatsappAccount?.status ?? "disconnected";
+    const whatsappIsLinked = Boolean(whatsappAccount);
     const whatsappIsInitialLoading = whatsappAccountQuery.isPending && !whatsappAccountData;
     const whatsappButtonState: WhatsAppButtonVisualState = whatsappAccountQuery.isError
         ? "unavailable"
@@ -310,10 +311,20 @@ const PosLayout = ({
                                       ? "Connecting WhatsApp"
                                       : whatsappStatus === "connected"
                                         ? "WhatsApp connected"
-                                        : "Connect WhatsApp"
+                                      : whatsappIsLinked
+                                        ? "Connect WhatsApp"
+                                        : "Link WhatsApp from Store settings"
                         }
                         disabled={whatsappButtonDisabled}
                         onClick={() => {
+                            if (whatsappAccountQuery.isError) {
+                                toast.error((whatsappQueryError as { message?: string })?.message || "WhatsApp status is unavailable");
+                                return;
+                            }
+                            if (!whatsappIsLinked) {
+                                toast.error("Link a WhatsApp account to this Store from Store settings first");
+                                return;
+                            }
                             if (whatsappStatus === "connected") {
                                 return;
                             }

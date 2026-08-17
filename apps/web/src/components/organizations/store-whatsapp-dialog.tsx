@@ -36,7 +36,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
     const accountQuery = useQuery({ queryKey: accountKey, queryFn: () => getWhatsAppAccount(organizationId, storeId), enabled: open });
     const accountsQuery = useQuery({ queryKey: accountsKey, queryFn: () => getWhatsAppAccounts(organizationId), enabled: open });
     const accountError = accountQuery.error as QueryError | null;
-    const accountData = accountQuery.data?.data ?? accountError?.data ?? null;
+    const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
     const account = accountData?.account;
     const accounts = accountsQuery.data?.data?.accounts ?? [];
     const availableAccounts = accounts.filter(candidate => !candidate.assignedStoreIds.includes(storeId));
@@ -50,15 +50,28 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
             void queryClient.invalidateQueries({ queryKey: accountsKey });
             toast.success("WhatsApp account linked to this Store");
         },
+        onError: (error: { message?: string }) => {
+            toast.error(error.message ?? "WhatsApp account could not be linked");
+        },
     });
     const unlinkMutation = useMutation({
         mutationFn: () => removeWhatsAppAccount(organizationId, storeId),
         onSuccess: response => {
             if (response.status !== "success") return toast.error(response.message);
             setUnlinkOpen(false);
+            setSelectedAccountId("");
+            queryClient.setQueryData(accountKey, {
+                status: "success",
+                message: "WhatsApp account not linked",
+                data: null,
+                code: 200,
+            });
             void queryClient.invalidateQueries({ queryKey: accountKey });
             void queryClient.invalidateQueries({ queryKey: accountsKey });
             toast.success("WhatsApp account unlinked from this Store");
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error.message ?? "WhatsApp account could not be unlinked");
         },
     });
     const isBusy = assignMutation.isPending || unlinkMutation.isPending;
@@ -87,7 +100,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" className="rounded-full" onClick={() => setUnlinkOpen(true)} disabled={isBusy}><Trash2 className="size-4" />Unlink from Store</Button>
-                                <Button variant="outline" className="rounded-full" render={<Link to={`/organizations/${organizationId}/whatsapp`} />} onClick={() => setOpen(false)}><Settings2 className="size-4" />Manage account</Button>
+                                <Button variant="outline" className="rounded-full" render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />} onClick={() => setOpen(false)}><Settings2 className="size-4" />Manage account</Button>
                             </div>
                         </div>
                     ) : (
@@ -123,7 +136,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                             ) : null}
                             <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
                                 {availableAccounts.length > 0 ? "Need another number? Add it from the organization account manager." : "No organization WhatsApp account is available yet."}
-                                <Button variant="link" className="h-auto px-1 font-medium" render={<Link to={`/organizations/${organizationId}/whatsapp`} />} onClick={() => setOpen(false)}>Add or manage accounts</Button>
+                                <Button variant="link" className="h-auto px-1 font-medium" render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />} onClick={() => setOpen(false)}>Add or manage accounts</Button>
                             </div>
                         </div>
                     )}

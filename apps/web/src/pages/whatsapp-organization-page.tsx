@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@repo/ui/components/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
-import { ArrowLeft, Link2, LoaderCircle, LogOut, Pencil, RefreshCw } from "lucide-react";
+import { FileText, Link2, LoaderCircle, LogOut, Megaphone, Pencil, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhoneNumber, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import {
@@ -13,14 +13,19 @@ import {
     disconnectWhatsAppOrganizationAccount,
     getWhatsAppAccounts,
     getWhatsAppOrganizationAccount,
+    getOrganizationDetails,
 } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { PhoneInput } from "@repo/ui/components/phone-input";
 import { Spinner } from "@repo/ui/components/spinner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
+import { cn } from "@repo/ui/lib/utils";
 import { whatsappKeys } from "@/lib/query-keys";
-import WhatsAppIcon from "@/components/icons/whatsapp-icon";
+import WhatsAppTemplateManager from "@/components/organizations/whatsapp-template-manager";
+import WhatsAppLinkManager from "@/components/organizations/whatsapp-link-manager";
+import PromotionDialog from "@/components/customers/promotion-dialog";
 
 const ACCOUNT_STATUS_POLL_INTERVAL_MS = 2_000;
 const ACCOUNT_STATUS_POLL_WINDOW_MS = 60_000;
@@ -34,8 +39,18 @@ const statusLabel: Record<string, string> = {
     revoked: "Session revoked",
 };
 
+const workspaceTabs = [
+    { id: "accounts", label: "Accounts", icon: Settings2 },
+    { id: "templates", label: "Templates", icon: FileText },
+    { id: "promotions", label: "Promotions", icon: Megaphone },
+] as const;
+
+type WorkspaceTab = (typeof workspaceTabs)[number]["id"];
+
 const WhatsAppOrganizationPage = () => {
     const { organizationId = "" } = useParams();
+    const location = useLocation();
+    const [searchParams, setSearchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const [phoneNumber, setPhoneNumber] = useState("");
     const [addOpen, setAddOpen] = useState(false);
@@ -44,12 +59,27 @@ const WhatsAppOrganizationPage = () => {
     const [newPhoneNumber, setNewPhoneNumber] = useState("");
     const [statusPollUntilByAccountId, setStatusPollUntilByAccountId] = useState<Record<string, number>>({});
     const accountsKey = whatsappKeys.accounts(organizationId);
+    const organizationQuery = useQuery({
+        queryKey: ["whatsapp-workspace", organizationId, "organization"],
+        queryFn: () => getOrganizationDetails(organizationId),
+        enabled: Boolean(organizationId),
+    });
     const accountsQuery = useQuery({
         queryKey: accountsKey,
         queryFn: () => getWhatsAppAccounts(organizationId),
         enabled: Boolean(organizationId),
     });
     const accounts = accountsQuery.data?.data?.accounts ?? [];
+    const stores = organizationQuery.data?.status === "success"
+        ? organizationQuery.data.data?.organization.stores ?? []
+        : [];
+    const basePath = `/organizations/${organizationId}/whatsapp`;
+    const activeTab: WorkspaceTab = workspaceTabs.find(tab => location.pathname.startsWith(`${basePath}/${tab.id}`))?.id ?? "accounts";
+    const requestedStoreId = searchParams.get("storeId");
+    const selectedStoreId = stores.some(store => store.id === requestedStoreId)
+        ? requestedStoreId!
+        : stores[0]?.id ?? "";
+    const selectedStore = stores.find(store => store.id === selectedStoreId);
     const statusQueries = useQueries({
         queries: accounts.map(account => ({
             queryKey: whatsappKeys.organizationAccount(organizationId, account.id),
@@ -146,46 +176,91 @@ const WhatsAppOrganizationPage = () => {
     const newPhoneError = newPhoneNumber.length > 0 && !normalizePhoneNumber(newPhoneNumber);
     const isBusy = createMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeMutation.isPending;
     const liveAccounts = accounts.map((account, index) => statusQueries[index]?.data?.data?.account ?? account);
-    const connectedCount = liveAccounts.filter(account => account.status === "connected").length;
-    const assignedStoreCount = accounts.reduce((total, account) => total + account.assignedStoreIds.length, 0);
+    const selectStore = (storeId: string) => {
+        setSearchParams({ storeId });
+    };
+
+    const workspaceLink = (tab: WorkspaceTab) => {
+        const params = new URLSearchParams();
+        if (selectedStoreId) params.set("storeId", selectedStoreId);
+        const query = params.toString();
+        return `${basePath}/${tab}${query ? `?${query}` : ""}`;
+    };
 
     if (accountsQuery.isPending) {
         return <div className="flex min-h-[40vh] items-center justify-center"><Spinner className="size-6 text-primary" /></div>;
     }
 
     return (
-        <div className="mx-auto max-w-4xl space-y-6">
-            <Button variant="ghost" className="rounded-full" render={<Link to={`/organizations/${organizationId}/stores`} />}>
-                <ArrowLeft className="size-4" />
-                Back to stores
-            </Button>
-
-            <div>
-                <div className="flex items-center gap-3">
-                    <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <WhatsAppIcon className="size-5" />
+        <div className="mx-auto max-w-5xl space-y-5">
+            <div className="space-y-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h1 className="font-display text-2xl font-semibold sm:text-3xl">WhatsApp</h1>
+                        <p className="mt-1 text-sm text-muted-foreground">Manage accounts, templates, and promotions.</p>
                     </div>
-                    <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                        <h1 className="font-display text-2xl font-semibold sm:text-3xl">Organization WhatsApp</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">Add WhatsApp accounts here, then assign them from each Store.</p>
-                        </div>
-                        <Button className="w-full rounded-full sm:w-auto" onClick={() => setAddOpen(true)}><Link2 className="size-4" />Add account</Button>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+                        {activeTab !== "accounts" && organizationQuery.data?.status === "success" ? (
+                            <div className="flex w-full items-center gap-2 sm:w-auto">
+                                <span className="text-sm font-medium">Store</span>
+                                <Select value={selectedStoreId} onValueChange={selectStore}>
+                                    <SelectTrigger className="w-full rounded-xl sm:w-64" aria-label="Select Store for WhatsApp settings">
+                                    <SelectValue placeholder="Select Store">
+                                        {selectedStore?.name ? <span className="truncate">{selectedStore.name}</span> : null}
+                                    </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {stores.map(store => <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        ) : null}
+                        {activeTab === "accounts" ? (
+                            <Button className="w-full rounded-full sm:w-auto" onClick={() => setAddOpen(true)}><Link2 className="size-4" />Add account</Button>
+                        ) : null}
                     </div>
                 </div>
+
+                <nav aria-label="WhatsApp workspace tabs" className="border-b border-border/60">
+                    <div className="grid grid-cols-3 gap-1 sm:flex sm:w-fit">
+                        {workspaceTabs.map(tab => {
+                            const Icon = tab.icon;
+                            const active = activeTab === tab.id;
+                            return (
+                                <Link
+                                    key={tab.id}
+                                    to={workspaceLink(tab.id)}
+                                    aria-current={active ? "page" : undefined}
+                                    className={cn(
+                                        "relative flex items-center justify-center gap-1.5 whitespace-nowrap rounded-t-lg px-2 py-2.5 text-center text-xs font-medium transition-colors duration-200 sm:gap-2 sm:px-4 sm:text-sm",
+                                        active
+                                            ? "font-semibold text-primary"
+                                            : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+                                    )}
+                                >
+                                    <Icon className="size-4" />
+                                    <span>{tab.label}</span>
+                                    {active ? <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary" /> : null}
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </nav>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-                <Card className="border-border/60 bg-card/70"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Accounts</p><p className="mt-1 text-2xl font-semibold">{accounts.length}</p></CardContent></Card>
-                <Card className="border-border/60 bg-card/70"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Connected</p><p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{connectedCount}</p></CardContent></Card>
-                <Card className="border-border/60 bg-card/70"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Store links</p><p className="mt-1 text-2xl font-semibold">{assignedStoreCount}</p></CardContent></Card>
-            </div>
+            {activeTab !== "accounts" && organizationQuery.isPending ? (
+                <Card className="border-border/60 bg-card/70"><CardContent className="flex min-h-24 items-center justify-center"><Spinner className="size-5 text-primary" /></CardContent></Card>
+            ) : null}
 
-            <section className="space-y-3">
+            {activeTab !== "accounts" && (organizationQuery.isError || organizationQuery.data?.status === "error") ? (
+                <Card className="border-destructive/30 bg-destructive/5"><CardContent className="flex flex-col gap-3 p-5"><p className="font-medium">Unable to load Store WhatsApp settings</p><p className="text-sm text-muted-foreground">{(organizationQuery.error as { message?: string })?.message ?? organizationQuery.data?.message ?? "Refresh the page and try again."}</p><Button variant="outline" className="w-fit rounded-full" onClick={() => organizationQuery.refetch()}><RefreshCw className="size-4" />Retry</Button></CardContent></Card>
+            ) : null}
+
+            {activeTab === "accounts" ? <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <h2 className="font-display text-xl font-semibold">Account pool</h2>
-                        <p className="text-sm text-muted-foreground">Manage sessions here. Stores only select which account they use.</p>
+                        <h2 className="font-display text-xl font-semibold">Accounts</h2>
+                        <p className="text-sm text-muted-foreground">Add and manage shared WhatsApp numbers.</p>
                     </div>
                     <Badge variant="outline" className="rounded-full">{accounts.length} account{accounts.length === 1 ? "" : "s"}</Badge>
                 </div>
@@ -244,7 +319,33 @@ const WhatsAppOrganizationPage = () => {
                         </Card>
                     );
                 })}
-            </section>
+            </section> : organizationQuery.data?.status === "success" && selectedStore ? (
+                <section className="space-y-4">
+                    {activeTab === "templates" ? (
+                        <Card className="border-border/60 bg-card/80">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 font-display text-xl"><FileText className="size-5 text-primary" />Templates and links</CardTitle>
+                                <CardDescription>Reusable messages for {selectedStore.name}. Links are inserted only where you choose.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <WhatsAppLinkManager organizationId={organizationId} store={selectedStore} />
+                                <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="bill" links={selectedStore.whatsappLinks} />
+                                <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="due_reminder" links={selectedStore.whatsappLinks} />
+                                <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="promotion" links={selectedStore.whatsappLinks} />
+                            </CardContent>
+                        </Card>
+                    ) : null}
+
+                    {activeTab === "promotions" ? (
+                        <Card className="border-border/60 bg-card/80">
+                            <CardHeader><CardTitle className="flex items-center gap-2 font-display text-xl"><Megaphone className="size-5 text-primary" />Promotions</CardTitle><CardDescription>Send an image message to eligible customers at {selectedStore.name}.</CardDescription></CardHeader>
+                            <CardContent><PromotionDialog organizationId={organizationId} storeId={selectedStore.id} links={selectedStore.whatsappLinks} /></CardContent>
+                        </Card>
+                    ) : null}
+                </section>
+            ) : organizationQuery.data?.status === "success" ? (
+                <Card className="border-dashed border-border/70 bg-muted/10"><CardContent className="flex flex-col items-center gap-3 py-12 text-center"><Settings2 className="size-7 text-muted-foreground" /><p className="font-medium">Add a Store to configure WhatsApp settings</p><p className="max-w-md text-sm text-muted-foreground">Templates and promotions become available after a Store is created.</p></CardContent></Card>
+            ) : null}
 
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
                 <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">

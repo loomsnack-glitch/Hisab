@@ -46,7 +46,7 @@ const WhatsAppAccountPage = () => {
         enabled: Boolean(organizationId),
     });
     const accountError = accountQuery.error as WhatsAppAccountQueryError | null;
-    const accountData = accountQuery.data?.data ?? accountError?.data ?? null;
+    const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
     const account = accountData?.account;
     const accounts = accountsQuery.data?.data?.accounts ?? [];
     const availableAccounts = accounts.filter(candidate => !candidate.assignedStoreIds.includes(storeId));
@@ -63,6 +63,9 @@ const WhatsAppAccountPage = () => {
             void queryClient.invalidateQueries({ queryKey: accountsKey });
             toast.success("WhatsApp account linked to this Store");
         },
+        onError: (error: { message?: string }) => {
+            toast.error(error.message ?? "WhatsApp account could not be linked");
+        },
     });
     const unassignMutation = useMutation({
         mutationFn: () => removeWhatsAppAccount(organizationId, storeId),
@@ -71,10 +74,20 @@ const WhatsAppAccountPage = () => {
                 toast.error(response.message);
                 return;
             }
+            setSelectedAccountId("");
+            queryClient.setQueryData(accountKey, {
+                status: "success",
+                message: "WhatsApp account not linked",
+                data: null,
+                code: 200,
+            });
             setRemoveOpen(false);
             void queryClient.invalidateQueries({ queryKey: accountKey });
             void queryClient.invalidateQueries({ queryKey: accountsKey });
             toast.success("WhatsApp account unlinked from this Store");
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error.message ?? "WhatsApp account could not be unlinked");
         },
     });
     const isBusy = assignMutation.isPending || unassignMutation.isPending;
@@ -157,7 +170,7 @@ const WhatsAppAccountPage = () => {
                             ) : null}
                             <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
                                 {availableAccounts.length > 0 ? "Need another number? Add it from the organization WhatsApp manager." : "No organization WhatsApp account is available yet. Add one from the organization WhatsApp manager."}
-                                <Button variant="link" className="h-auto px-1 font-medium" render={<Link to={`/organizations/${organizationId}/whatsapp`} />}>
+                                <Button variant="link" className="h-auto px-1 font-medium" render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />}>
                                     <Settings2 className="size-3.5" />
                                     Manage organization accounts
                                 </Button>

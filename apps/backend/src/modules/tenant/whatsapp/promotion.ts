@@ -1,23 +1,31 @@
 import { pg } from "@/config/db";
 import * as storage from "@/services/storage";
-import { normalizePhoneNumber, STATUS_CODES, type ServiceResponse, type WhatsAppCreatePromotionJSON, type WhatsAppPromotionResponseDTO } from "@repo/types";
+import {
+  normalizePhoneNumber,
+  renderWhatsAppMessage,
+  STATUS_CODES,
+  type ServiceResponse,
+  type StoreMessageLink,
+  type WhatsAppCreatePromotionJSON,
+  type WhatsAppPromotionResponseDTO,
+} from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as repository from "./whatsapp.repository";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_CAMPAIGN_RECIPIENTS = 1_000;
 
-const replaceTokens = (body: string, customerName: string, storeName: string) =>
-  body.replace(/{{\s*(customer_name|store_name)\s*}}/gi, (_, token: string) =>
-    token.toLowerCase() === "customer_name" ? customerName : storeName,
-  );
-
-const promotionBody = (body: string, customerName: string, store: { name: string; whatsappLinks: Array<{ label: string; url: string; includeInPromotion: boolean }> }) => {
-  const configuredLinks = store.whatsappLinks
-    .filter(link => link.includeInPromotion)
-    .flatMap(link => ["", `${link.label}: ${link.url}`])
-    .join("\n");
-  return [replaceTokens(body, customerName, store.name), configuredLinks].filter(Boolean).join("\n").trim();
+const promotionBody = (
+  body: string,
+  customerName: string,
+  store: { name: string; whatsappLinks: StoreMessageLink[] },
+) => {
+  return renderWhatsAppMessage({
+    kind: "promotion",
+    template: body,
+    values: { customer_name: customerName, store_name: store.name },
+    links: store.whatsappLinks,
+  });
 };
 
 export const createPromotion = async (
@@ -26,14 +34,44 @@ export const createPromotion = async (
   storeId: string,
   data: WhatsAppCreatePromotionJSON,
 ): Promise<ServiceResponse<WhatsAppPromotionResponseDTO | null>> => {
-  const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
-  const store = await organizationRepository.getStoreById(organizationId, storeId);
-  if (!organization || !store) return { status: "error", message: "Organization or Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const organization = await organizationRepository.getOrganizationByIdForUser(
+    organizationId,
+    userId,
+  );
+  const store = await organizationRepository.getStoreById(
+    organizationId,
+    storeId,
+  );
+  if (!organization || !store)
+    return {
+      status: "error",
+      message: "Organization or Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
   const account = await repository.getAccount(organizationId, storeId);
-  if (!account) return { status: "error", message: "Link the Store WhatsApp account before sending promotions", data: null, code: STATUS_CODES.CONFLICT };
-  if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending promotions", data: null, code: STATUS_CODES.CONFLICT };
+  if (!account)
+    return {
+      status: "error",
+      message: "Link the Store WhatsApp account before sending promotions",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  if (account.status !== "connected")
+    return {
+      status: "error",
+      message: "Connect the Store WhatsApp account before sending promotions",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
   const bucket = privateBucket();
-  if (!bucket) return { status: "error", message: "Private media storage is not configured", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+  if (!bucket)
+    return {
+      status: "error",
+      message: "Private media storage is not configured",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
 
   const rows = await pg`
     SELECT id, name, phone
@@ -46,24 +84,57 @@ export const createPromotion = async (
     ORDER BY created_at ASC
     LIMIT ${MAX_CAMPAIGN_RECIPIENTS}
   `;
-  if (rows.length === 0) return { status: "error", message: "No eligible customers with promotional consent and a phone number", data: null, code: STATUS_CODES.CONFLICT };
-  const pendingLimit = Number(process.env.WHATSAPP_MAX_PENDING_OUTBOX_PER_ACCOUNT ?? 1_000);
+  if (rows.length === 0)
+    return {
+      status: "error",
+      message:
+        "No eligible customers with promotional consent and a phone number",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  const pendingLimit = Number(
+    process.env.WHATSAPP_MAX_PENDING_OUTBOX_PER_ACCOUNT ?? 1_000,
+  );
   const [pending] = await pg`
     SELECT COUNT(*) AS count FROM whatsapp_outbox
     WHERE whatsapp_account_id = ${account.id} AND status IN ('pending', 'processing', 'retryable')
   `;
-  if (Number(pending?.count ?? 0) + rows.length > (Number.isInteger(pendingLimit) && pendingLimit > 0 ? pendingLimit : 1_000)) {
-    return { status: "error", message: "WhatsApp account queue is full; send the promotion after pending messages are processed", data: null, code: STATUS_CODES.TOO_MANY_REQUESTS };
+  if (
+    Number(pending?.count ?? 0) + rows.length >
+    (Number.isInteger(pendingLimit) && pendingLimit > 0 ? pendingLimit : 1_000)
+  ) {
+    return {
+      status: "error",
+      message:
+        "WhatsApp account queue is full; send the promotion after pending messages are processed",
+      data: null,
+      code: STATUS_CODES.TOO_MANY_REQUESTS,
+    };
   }
-  if (rows.some(row => promotionBody(data.body, String(row.name), store).length > 4096)) {
-    return { status: "error", message: "Promotion message plus Store links must be 4096 characters or less", data: null, code: STATUS_CODES.BAD_REQUEST };
+  if (
+    rows.some(
+      (row) => promotionBody(data.body, String(row.name), store).length > 4096,
+    )
+  ) {
+    return {
+      status: "error",
+      message:
+        "Promotion message plus Store links must be 4096 characters or less",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
   }
 
   const campaignId = crypto.randomUUID();
   const objectKey = `whatsapp-campaigns/${organizationId}/${storeId}/${campaignId}/${data.imageFileName}`;
   try {
-    await storage.uploadBuffer(bucket, objectKey, Buffer.from(data.imageBase64, "base64"), data.imageMimeType);
-    const result = await pg.begin(async tx => {
+    await storage.uploadBuffer(
+      bucket,
+      objectKey,
+      Buffer.from(data.imageBase64, "base64"),
+      data.imageMimeType,
+    );
+    const result = await pg.begin(async (tx) => {
       const [campaign] = await tx`
         INSERT INTO whatsapp_campaigns (
           id, organization_id, store_id, whatsapp_account_id, title, body,
@@ -91,7 +162,8 @@ export const createPromotion = async (
             display_name = EXCLUDED.display_name, updated_at = NOW()
           RETURNING id
         `;
-        if (!conversation) throw new Error("Failed to create campaign conversation");
+        if (!conversation)
+          throw new Error("Failed to create campaign conversation");
         const messageId = crypto.randomUUID();
         const [message] = await tx`
           INSERT INTO whatsapp_messages (
@@ -118,10 +190,29 @@ export const createPromotion = async (
       }
       return { recipientCount: rows.length };
     });
-    return { status: "success", message: "Promotion queued for eligible customers", data: { campaignId, recipientCount: result.recipientCount, queuedCount: result.recipientCount }, code: STATUS_CODES.CREATED };
+    return {
+      status: "success",
+      message: "Promotion queued for eligible customers",
+      data: {
+        campaignId,
+        recipientCount: result.recipientCount,
+        queuedCount: result.recipientCount,
+      },
+      code: STATUS_CODES.CREATED,
+    };
   } catch (error) {
-    try { await storage.deleteObject(bucket, objectKey); } catch { /* keep original error */ }
-    if (error instanceof repository.WhatsAppOutboxLimitError) return { status: "error", message: "WhatsApp account queue is full; retry shortly", data: null, code: STATUS_CODES.TOO_MANY_REQUESTS };
+    try {
+      await storage.deleteObject(bucket, objectKey);
+    } catch {
+      /* keep original error */
+    }
+    if (error instanceof repository.WhatsAppOutboxLimitError)
+      return {
+        status: "error",
+        message: "WhatsApp account queue is full; retry shortly",
+        data: null,
+        code: STATUS_CODES.TOO_MANY_REQUESTS,
+      };
     throw error;
   }
 };

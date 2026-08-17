@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import type { LucideIcon } from "lucide-react";
 import {
     Bell,
     BarChart3,
@@ -24,6 +25,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
+import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
@@ -93,7 +95,7 @@ const AppSidebar = ({
         const items: Array<{
             to: string;
             label: string;
-            icon: typeof Building2;
+            icon: LucideIcon | typeof WhatsAppIcon;
             isActive: boolean;
         }> = [
             {
@@ -117,6 +119,12 @@ const AppSidebar = ({
                     label: "Product",
                     icon: Package2,
                     isActive: /\/organizations\/[^/]+\/products(\/|$)/.test(location.pathname),
+                },
+                {
+                    to: `/organizations/${effectiveOrgId}/whatsapp/accounts`,
+                    label: "WhatsApp",
+                    icon: WhatsAppIcon,
+                    isActive: /\/organizations\/[^/]+\/whatsapp(\/|$)/.test(location.pathname),
                 },
                 {
                     to: `/organizations/${effectiveOrgId}/billing`,

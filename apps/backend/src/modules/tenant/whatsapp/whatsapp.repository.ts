@@ -1476,7 +1476,7 @@ export const claimProviderEvent = async (
             VALUES (
                 ${accountId},
                 ${providerEventId},
-                ${JSON.stringify(payload)}::jsonb,
+                ${payload}::jsonb,
                 'processing',
                 1,
                 ${leaseOwner},

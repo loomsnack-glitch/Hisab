@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { updateStore } from "@repo/services";
-import { UpdateStoreSchema, type StoreDTO, type StoreMessageLink, type UpdateStoreJSON } from "@repo/types";
+import { UpdateStoreSchema, type StoreDTO, type UpdateStoreJSON } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
@@ -20,7 +20,6 @@ import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
-import BillTemplateManager from "@/components/organizations/bill-template-manager";
 
 type EditStoreDialogProps = {
     organizationId: string;
@@ -35,16 +34,10 @@ const getDefaultValues = (store: StoreDTO): UpdateStoreJSON => ({
     reviewLink: store.reviewLink ?? "",
     socialMediaName: store.socialMediaName ?? "",
     socialMediaLink: store.socialMediaLink ?? "",
-    whatsappLinks: store.whatsappLinks,
-    whatsappMessageTemplates: store.whatsappMessageTemplates,
 });
-
-const getExtraLinks = (store: StoreDTO): StoreMessageLink[] =>
-    store.whatsappLinks.filter(link => link.type !== "google_review" && link.type !== "social");
 
 const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProps) => {
     const [open, setOpen] = useState(false);
-    const [extraLinks, setExtraLinks] = useState<StoreMessageLink[]>(() => getExtraLinks(store));
     const queryClient = useQueryClient();
 
     const form = useForm<UpdateStoreJSON>({
@@ -62,7 +55,6 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
     useEffect(() => {
         if (open) {
             form.reset(getDefaultValues(store));
-            setExtraLinks(getExtraLinks(store));
         }
     }, [form, open, store]);
 
@@ -84,7 +76,9 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
     });
 
     const { AlertDialogComponent, interceptClose } = useUnsavedChanges({
-        isDirty: form.formState.isDirty,
+        // The form remains mounted behind the trigger, but it should only
+        // block workspace navigation while the dialog is actually open.
+        isDirty: open && form.formState.isDirty,
         onSave: async () => {
             let result = false;
             await form.handleSubmit(async (values) => {
@@ -96,15 +90,6 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                         reviewLink: values.reviewLink,
                         socialMediaName: values.socialMediaName,
                         socialMediaLink: values.socialMediaLink,
-                        whatsappLinks: [
-                            ...(values.reviewPlatform && values.reviewLink ? [{ type: "google_review" as const, label: values.reviewPlatform, url: values.reviewLink, includeInBill: true, includeInReminder: false, includeInPromotion: false }] : []),
-                            ...(values.socialMediaName && values.socialMediaLink ? [{ type: "social" as const, label: values.socialMediaName, url: values.socialMediaLink, includeInBill: true, includeInReminder: false, includeInPromotion: true }] : []),
-                            ...extraLinks.filter(link => link.label.trim() && link.url.trim()),
-                        ],
-                        whatsappMessageTemplates: {
-                            dueReminder: values.whatsappMessageTemplates.dueReminder,
-                            promotion: values.whatsappMessageTemplates.promotion,
-                        },
                     });
                     if (response.status === "success") {
                         result = true;
@@ -139,15 +124,6 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
             reviewLink: values.reviewLink,
             socialMediaName: values.socialMediaName,
             socialMediaLink: values.socialMediaLink,
-            whatsappLinks: [
-                ...(values.reviewPlatform && values.reviewLink ? [{ type: "google_review" as const, label: values.reviewPlatform, url: values.reviewLink, includeInBill: true, includeInReminder: false, includeInPromotion: false }] : []),
-                ...(values.socialMediaName && values.socialMediaLink ? [{ type: "social" as const, label: values.socialMediaName, url: values.socialMediaLink, includeInBill: true, includeInReminder: false, includeInPromotion: true }] : []),
-                ...extraLinks.filter(link => link.label.trim() && link.url.trim()),
-            ],
-            whatsappMessageTemplates: {
-                dueReminder: values.whatsappMessageTemplates.dueReminder,
-                promotion: values.whatsappMessageTemplates.promotion,
-            },
         });
     };
 
@@ -270,30 +246,6 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                                 </FieldContent>
                             </Field>
                         </div>
-                    </section>
-
-                    <section className="min-w-0 space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4">
-                        <div>
-                            <p className="text-sm font-semibold">WhatsApp links and templates</p>
-                            <p className="text-xs leading-relaxed text-muted-foreground">Choose which links are appended to bills and reminders. Use tokens like {"{{customer_name}}"}, {"{{bill_number}}"}, {"{{total}}"}, {"{{paid}}"}, and {"{{balance_due}}"} in templates.</p>
-                        </div>
-                        {extraLinks.map((link, index) => (
-                            <div key={`${link.type}-${index}`} className="space-y-2 rounded-xl border border-border/60 bg-background/50 p-3">
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                    <Input value={link.label} placeholder="Link label" onChange={event => setExtraLinks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} />
-                                    <Input value={link.url} type="url" placeholder="https://..." onChange={event => setExtraLinks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} />
-                                </div>
-                                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                                    {(["includeInBill", "includeInReminder", "includeInPromotion"] as const).map(field => (
-                                        <label key={field} className="flex items-center gap-1.5"><input type="checkbox" checked={link[field]} onChange={event => setExtraLinks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.checked } : item))} /> {field.replace("includeIn", "In ")}</label>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                        <Button type="button" variant="outline" size="sm" onClick={() => setExtraLinks(current => [...current, { type: "custom", label: "", url: "", includeInBill: true, includeInReminder: false, includeInPromotion: true }])}>Add link</Button>
-                        <BillTemplateManager organizationId={organizationId} storeId={store.id} />
-                        <Textarea className="min-h-24 rounded-xl" placeholder="Due reminder message (optional)" {...form.register("whatsappMessageTemplates.dueReminder")} />
-                        <Textarea className="min-h-24 rounded-xl" placeholder="Promotion message template (optional)" {...form.register("whatsappMessageTemplates.promotion")} />
                     </section>
 
                     <section className="min-w-0 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">

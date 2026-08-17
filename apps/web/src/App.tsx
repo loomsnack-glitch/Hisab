@@ -144,7 +144,13 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                                 <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                                 <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
-                                <Route path="/organizations/:organizationId/whatsapp" element={<WhatsAppOrganizationPage />} />
+                                <Route path="/organizations/:organizationId/whatsapp" element={<Navigate to="accounts" replace />} />
+                                <Route path="/organizations/:organizationId/whatsapp/accounts" element={<WhatsAppOrganizationPage />} />
+                                <Route path="/organizations/:organizationId/whatsapp/templates" element={<WhatsAppOrganizationPage />} />
+                                <Route path="/organizations/:organizationId/whatsapp/links" element={<Navigate to="../templates" replace />} />
+                                <Route path="/organizations/:organizationId/whatsapp/delivery" element={<Navigate to="../accounts" replace />} />
+                                <Route path="/organizations/:organizationId/whatsapp/promotions" element={<WhatsAppOrganizationPage />} />
+                                <Route path="/organizations/:organizationId/whatsapp/inbox" element={<Navigate to="../accounts" replace />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp" element={<WhatsAppAccountPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp/inbox" element={<WhatsAppInboxPage />} />
                             </Route>

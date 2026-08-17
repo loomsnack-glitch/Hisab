@@ -1,6 +1,7 @@
 import {
     STATUS_CODES,
     normalizePhoneNumber,
+    validateWhatsAppTemplate,
     type ServiceResponse,
     type WhatsAppAccountDTO,
     type WhatsAppAccountStatusResponseDTO,
@@ -695,6 +696,8 @@ export const createMessageTemplate = async (
 ) => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    const validation = validateWhatsAppTemplate(data.kind, data.body, scope.store?.whatsappLinks ?? []);
+    if (validation.unknownTokens.length > 0) return { status: "error" as const, message: `Unknown template tokens: ${validation.unknownTokens.join(", ")}`, data: null, code: STATUS_CODES.BAD_REQUEST };
     try {
         const template = await messageTemplate.createTemplate(organizationId, storeId, userId, data);
         return { status: "success" as const, message: "WhatsApp message template created", data: { template }, code: STATUS_CODES.CREATED };
@@ -713,6 +716,12 @@ export const updateMessageTemplate = async (
 ) => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    if (data.body !== undefined) {
+        const existing = await messageTemplate.getTemplate(organizationId, storeId, templateId);
+        if (!existing) return { status: "error" as const, message: "Template not found", data: null, code: STATUS_CODES.NOT_FOUND };
+        const validation = validateWhatsAppTemplate(existing.kind, data.body, scope.store?.whatsappLinks ?? []);
+        if (validation.unknownTokens.length > 0) return { status: "error" as const, message: `Unknown template tokens: ${validation.unknownTokens.join(", ")}`, data: null, code: STATUS_CODES.BAD_REQUEST };
+    }
     try {
         const template = await messageTemplate.updateTemplate(organizationId, storeId, templateId, userId, data);
         return template
@@ -752,6 +761,7 @@ const queueDueReminderForStore = async (
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) return { status: "error", message: "Link the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
+    const defaultTemplate = await messageTemplate.getDefaultTemplate(organizationId, storeId, "due_reminder");
     try {
         const queued = await repository.createCustomerTextOutbox({
             organizationId,
@@ -761,7 +771,7 @@ const queueDueReminderForStore = async (
             saleId: saleId ?? null,
             customerPhone: phone,
             customerName: customer.name,
-            body: formatDueReminderText(customer, reminderSales, store.name, customMessage ?? store.whatsappMessageTemplates.dueReminder, store.whatsappLinks),
+            body: formatDueReminderText(customer, reminderSales, store.name, customMessage ?? defaultTemplate?.body, store.whatsappLinks),
         });
         return {
             status: "success",
