@@ -336,7 +336,9 @@ const setCommittedSaleTableState = mock(
         _saleId: string,
         state: "payment_due" | "paid",
     ) => {
-        if (serviceTableState !== "ready_to_bill") return null;
+        if (serviceTableState !== "engaged" && serviceTableState !== "ready_to_bill") {
+            return null;
+        }
         serviceTableState = state;
         return { id: tableId, state };
     },
@@ -667,7 +669,7 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(createdSales[0]?.status).toBe("draft");
     });
 
-    test("requires a table to be marked ready again after an ordinary draft edit", async () => {
+    test("places an engaged table order after an ordinary draft edit", async () => {
         const created = await billingService.createDraftSaleForDevice(deviceSession, {
             items: [{ productId, quantity: 1, addOns: [] }],
         });
@@ -676,23 +678,13 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(saleId).toBeTruthy();
 
         createdSales[0]!.serviceTableId = tableId;
-        serviceTableState = "ready_to_bill";
+        serviceTableState = "engaged";
 
         const saved = await billingService.updateDraftSaleForDevice(deviceSession, saleId!, {
             items: [{ productId, quantity: 1, addOns: [] }],
         });
         expect(saved.status).toBe("success");
 
-        const rejected = await billingService.commitSaleForDevice(deviceSession, saleId!, {
-            payments: [],
-        });
-
-        expect(rejected.status).toBe("error");
-        expect(rejected.code).toBe(409);
-        expect(rejected.message).toBe("Service table must be Ready to bill before placing sale");
-        expect(createdSales[0]?.status).toBe("draft");
-
-        serviceTableState = "ready_to_bill";
         const committed = await billingService.commitSaleForDevice(deviceSession, saleId!, {
             payments: [],
         });
@@ -702,7 +694,7 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(getServiceTableState()).toBe("payment_due");
     });
 
-    test("atomically saves the final cart while committing a ready table order", async () => {
+    test("atomically saves the final cart while committing an engaged table order", async () => {
         const created = await billingService.createDraftSaleForDevice(deviceSession, {
             items: [{ productId, quantity: 1, addOns: [] }],
         });
@@ -710,7 +702,7 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(saleId).toBeTruthy();
 
         createdSales[0]!.serviceTableId = tableId;
-        serviceTableState = "ready_to_bill";
+        serviceTableState = "engaged";
 
         const committed = await billingService.commitSaleForDevice(deviceSession, saleId!, {
             items: [{ productId, quantity: 2, addOns: [] }],
@@ -721,6 +713,25 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(committed.data?.sale.status).toBe("completed");
         expect(committed.data?.sale.items[0]?.quantity).toBe(2);
         expect(committed.data?.sale.grandTotal).toBe(180);
+        expect(getServiceTableState()).toBe("payment_due");
+    });
+
+    test("still places a leftover Ready to bill table order", async () => {
+        const created = await billingService.createDraftSaleForDevice(deviceSession, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const saleId = created.data?.sale.id;
+        expect(saleId).toBeTruthy();
+
+        createdSales[0]!.serviceTableId = tableId;
+        serviceTableState = "ready_to_bill";
+
+        const committed = await billingService.commitSaleForDevice(deviceSession, saleId!, {
+            payments: [],
+        });
+
+        expect(committed.status).toBe("success");
+        expect(committed.data?.sale.status).toBe("completed");
         expect(getServiceTableState()).toBe("payment_due");
     });
 

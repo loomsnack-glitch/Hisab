@@ -311,27 +311,6 @@ export const releasePaidTableFromActiveState = async (
   return row ? mapRow(row) : null;
 };
 
-export const markTableReadyToBill = async (
-  organizationId: string,
-  storeId: string,
-  tableId: string,
-  saleId: string,
-  updatedBy: string,
-  tx: Bun.TransactionSQL,
-): Promise<ServiceTableDTO | null> => {
-  const [row] = await tx`
-    UPDATE service_tables
-    SET state = 'ready_to_bill', updated_by = ${updatedBy}, updated_at = NOW()
-    WHERE id = ${tableId}
-      AND organization_id = ${organizationId}
-      AND store_id = ${storeId}
-      AND state = 'engaged'
-      AND current_sale_id = ${saleId}
-    RETURNING ${tx.unsafe(selectColumns)}
-  `;
-  return row ? mapRow(row) : null;
-};
-
 export const markReadyDraftAsEngaged = async (
   organizationId: string,
   storeId: string,
@@ -367,7 +346,7 @@ export const setCommittedSaleTableState = async (
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
       AND current_sale_id = ${saleId}
-      AND state = 'ready_to_bill'
+      AND state IN ('engaged', 'ready_to_bill')
     RETURNING ${tx.unsafe(selectColumns)}
   `;
   return row ? mapRow(row) : null;

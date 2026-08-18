@@ -177,23 +177,6 @@ router.delete("/tables/:tableId/order", async (c) => {
   }
 });
 
-router.post("/tables/:tableId/ready", async (c) => {
-  try {
-    const tableId = c.req.param("tableId");
-    const invalidTableId = validateUuidParam(tableId, "Invalid table id");
-    if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
-    return handleServiceResponse(
-      c,
-      await tableService.markServiceTableReadyToBillForDevice(
-        c.get("authDevice"),
-        tableId,
-      ),
-    );
-  } catch (error) {
-    return handleError(FILE_NAME, "markServiceTableReadyToBillForDevice", c, error);
-  }
-});
-
 router.post("/tables/:tableId/free-paid", async (c) => {
   try {
     const tableId = c.req.param("tableId");

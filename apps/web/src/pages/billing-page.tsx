@@ -125,7 +125,7 @@ import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
-import type { PosComposerHandoff } from "@/pages/pos-route-context";
+import type { PosComposerHandoff, PosPanelTab } from "@/pages/pos-route-context";
 import { billingKeys, catalogKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate, getAverageBillPerOrder } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
@@ -136,6 +136,7 @@ import {
     getProductCardActionLabel,
     type ProductCardAction,
 } from "@/lib/product-card-interaction";
+import { shouldReturnToPosTablesAfterSale } from "@/lib/pos-service-table";
 import {
     appendScanDiagnostic,
     consumeDirectBarcodeScanKey,
@@ -420,7 +421,7 @@ type BillingPageProps = {
     purchaseSearch?: string;
     customerSearch?: string;
     onPanelTabChange?: (
-        tab: "products" | "bills" | "reports" | "customers" | "purchases",
+        tab: PosPanelTab,
         composerHandoff?: PosComposerHandoff,
     ) => void;
     onProductSearchChange?: (value: string) => void;
@@ -1695,6 +1696,9 @@ const BillingPage = ({
             invalidateBillingQueries();
             resetComposer();
             toast.success(sale.status === "draft" ? "Draft saved" : "Bill updated");
+            if (isDeviceMode && shouldReturnToPosTablesAfterSale(sale)) {
+                onPanelTabChange?.("tables");
+            }
         },
         onError: (error: { message?: string }) => {
             toast.error(error?.message || "Failed to save draft");
@@ -1834,6 +1838,9 @@ const BillingPage = ({
                     ? `Bill ${sale.saleNumber ?? ""} edited`
                     : `Bill ${sale.saleNumber ?? ""} completed`,
             );
+            if (!wasReplacing && isDeviceMode && shouldReturnToPosTablesAfterSale(sale)) {
+                onPanelTabChange?.("tables");
+            }
         },
         onError: (error: { message?: string }) => {
             toast.error(error?.message || "Failed to complete bill");

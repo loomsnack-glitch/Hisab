@@ -2269,12 +2269,12 @@ const commitSaleInStore = async (
           },
         };
       }
-      if (table.state !== "ready_to_bill") {
+      if (table.state !== "engaged" && table.state !== "ready_to_bill") {
         return {
           committed: false as const,
           response: {
             status: "error" as const,
-            message: "Service table must be Ready to bill before placing sale",
+            message: "Service table must have an active draft order before placing sale",
             data: null,
             code: STATUS_CODES.CONFLICT,
           },

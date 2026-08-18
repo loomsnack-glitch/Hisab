@@ -22,6 +22,9 @@ import * as tableRepository from "./table-service.repository";
 
 const defaultPosition = { x: 0.05, y: 0.05 } as const;
 
+const isActiveDraftTableState = (state: ServiceTableDTO["state"]) =>
+  state === "engaged" || state === "ready_to_bill";
+
 type StoreScopeResult =
   | { ok: true }
   | { ok: false; error: string; code: typeof STATUS_CODES.NOT_FOUND };
@@ -309,10 +312,7 @@ export const getServiceTableOrderForDevice = async (
       data: null,
       code: STATUS_CODES.NOT_FOUND,
     };
-  if (
-    !table.currentSaleId ||
-    (table.state !== "engaged" && table.state !== "ready_to_bill")
-  ) {
+  if (!table.currentSaleId || !isActiveDraftTableState(table.state)) {
     return {
       status: "error",
       message: "Service table has no active draft order",
@@ -359,10 +359,7 @@ export const cancelServiceTableOrderForDevice = async (
       tx,
     );
     if (!table) return { kind: "not_found" as const };
-    if (
-      (table.state !== "engaged" && table.state !== "ready_to_bill") ||
-      !table.currentSaleId
-    )
+    if (!isActiveDraftTableState(table.state) || !table.currentSaleId)
       return { kind: "conflict" as const };
 
     const saleIsDraft = await billingRepository.lockDraftSale(
@@ -479,64 +476,6 @@ export const cancelServiceTableOrderForDevice = async (
     status: "success",
     data: { table: result.table },
     message: "Table order cancelled",
-    code: STATUS_CODES.SUCCESS,
-  };
-};
-
-export const markServiceTableReadyToBillForDevice = async (
-  session: DeviceSessionDTO,
-  tableId: string,
-): Promise<ServiceResponse<ServiceTableResponse | null>> => {
-  const result = await pg.begin(async (tx) => {
-    const table = await tableRepository.lockServiceTableForDevice(
-      session.organization.id,
-      session.store.id,
-      tableId,
-      tx,
-    );
-    if (!table) return { kind: "not_found" as const };
-    if (table.state !== "engaged" || !table.currentSaleId)
-      return { kind: "conflict" as const };
-
-    const sale = await billingRepository.getSaleById(
-      session.organization.id,
-      session.store.id,
-      table.currentSaleId,
-      tx,
-    );
-    if (!sale || sale.status !== "draft" || sale.serviceTableId !== tableId)
-      return { kind: "conflict" as const };
-
-    const readyTable = await tableRepository.markTableReadyToBill(
-      session.organization.id,
-      session.store.id,
-      tableId,
-      table.currentSaleId,
-      session.device.id,
-      tx,
-    );
-    if (!readyTable) return { kind: "conflict" as const };
-    return { kind: "ready" as const, table: readyTable };
-  });
-
-  if (result.kind === "not_found")
-    return {
-      status: "error",
-      message: "Service table not found",
-      data: null,
-      code: STATUS_CODES.NOT_FOUND,
-    };
-  if (result.kind === "conflict")
-    return {
-      status: "error",
-      message: "Only an engaged table with its current Draft Sale can be marked Ready to bill",
-      data: null,
-      code: STATUS_CODES.CONFLICT,
-    };
-  return {
-    status: "success",
-    data: { table: result.table },
-    message: "Service table marked Ready to bill",
     code: STATUS_CODES.SUCCESS,
   };
 };

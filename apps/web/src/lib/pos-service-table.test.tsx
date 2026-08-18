@@ -7,6 +7,7 @@ import type { DeviceSessionDTO, ServiceAreaDTO, ServiceTableDTO } from "@repo/ty
 import {
   getPosServiceTableAction,
   getPosServiceTableStateLabel,
+  shouldReturnToPosTablesAfterSale,
 } from "./pos-service-table";
 import { serviceAreaKeys, serviceTableKeys } from "./query-keys";
 import PosTablesPage from "@/pages/pos-tables-page";
@@ -122,8 +123,17 @@ describe("POS Service Table behavior", () => {
   test("uses the operator-facing state labels", () => {
     expect(getPosServiceTableStateLabel("free")).toBe("Free");
     expect(getPosServiceTableStateLabel("allocated")).toBe("Allocated");
-    expect(getPosServiceTableStateLabel("ready_to_bill")).toBe("Ready to bill");
+    expect(getPosServiceTableStateLabel("engaged")).toBe("Engaged");
+    expect(getPosServiceTableStateLabel("ready_to_bill")).toBe("Engaged");
     expect(getPosServiceTableStateLabel("payment_due")).toBe("Payment due");
+  });
+
+  test("returns cashiers to Tables after a table-linked draft save or place", () => {
+    expect(shouldReturnToPosTablesAfterSale({ serviceTableId: table("engaged").id })).toBe(
+      true,
+    );
+    expect(shouldReturnToPosTablesAfterSale({ serviceTableId: null })).toBe(false);
+    expect(shouldReturnToPosTablesAfterSale({})).toBe(false);
   });
 
   test("keeps POS table cache entries isolated by Store", () => {
@@ -146,6 +156,10 @@ describe("POS Service Table behavior", () => {
     expect(markup).toContain("Simple view");
     expect(markup).toContain("Floor layout");
     expect(markup).not.toContain("floor-canvas");
+    expect(markup).not.toContain("Live service area");
+    expect(markup).not.toContain("Manage the current floor");
+    expect(markup).not.toContain("Grouped by area.");
+    expect(markup).not.toContain("Main Store floor");
   });
 
   test("groups POS simple-view tables under their Service Area", () => {
@@ -194,6 +208,34 @@ describe("POS Service Table behavior", () => {
     expect(markup).toContain("Current total");
     expect(markup).toContain("Open order");
     expect(markup).toContain("Cancel order");
+    expect(markup).not.toContain("Ready to bill");
+    expect(markup).not.toContain("Mark table A1 Ready to bill");
+  });
+
+  test("treats leftover Ready to bill tables as Engaged draft orders", () => {
+    const markup = renderTableFloor([
+      {
+        ...table("ready_to_bill"),
+        currentSaleId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        currentSaleTotal: 90,
+      },
+    ]);
+
+    expect(markup).toContain("Engaged");
+    expect(markup).toContain("Open order");
+    expect(markup).toContain("Cancel order");
+    expect(markup).not.toContain("Ready to bill");
+  });
+
+  test("shows a color legend for simple-view table states", () => {
+    const markup = renderTableFloor([table("free")]);
+
+    expect(markup).toContain("pos-table-state-legend");
+    expect(markup).toContain("Available to seat");
+    expect(markup).toContain("Seated, no order yet");
+    expect(markup).toContain("Order in progress");
+    expect(markup).toContain("Bill still outstanding");
+    expect(markup).toContain("Paid, waiting to clear");
   });
 
   test("renders billing, collection, and release actions for committed table states", () => {

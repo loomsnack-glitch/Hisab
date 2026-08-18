@@ -168,12 +168,6 @@ const clearDraftSale = mock(async () => ({
   currentSaleId: null,
   currentSaleTotal: null,
 }));
-const markTableReadyToBill = mock(async () => ({
-  ...allocatedTable,
-  state: "ready_to_bill" as const,
-  currentSaleId: "sale-id",
-  currentSaleTotal: 42,
-}));
 const releasePaidTable = mock(async () => ({
   ...table,
   state: "free" as const,
@@ -255,7 +249,6 @@ mock.module("./table-service.repository", () => ({
   lockServiceTableForDevice,
   attachDraftSale,
   clearDraftSale,
-  markTableReadyToBill,
   releasePaidTableFromActiveState,
   releasePaidTable,
   releaseDueTable,
@@ -315,7 +308,6 @@ describe("Service Table application service", () => {
     lockServiceTableForDevice.mockResolvedValue(allocatedTable);
     attachDraftSale.mockClear();
     clearDraftSale.mockClear();
-    markTableReadyToBill.mockClear();
     releasePaidTableFromActiveState.mockClear();
     releasePaidTable.mockClear();
     releaseDueTable.mockClear();
@@ -718,38 +710,6 @@ describe("Service Table application service", () => {
       expect.anything(),
     );
     expect(deleteDraftSale).not.toHaveBeenCalled();
-  });
-
-  test("marks only the current engaged Draft Sale Ready to bill", async () => {
-    lockServiceTableForDevice.mockResolvedValue({
-      ...allocatedTable,
-      state: "engaged",
-      currentSaleId: "sale-id",
-      currentSaleTotal: 42,
-    });
-    getSaleById.mockResolvedValue({
-      id: "sale-id",
-      status: "draft",
-      serviceTableId: tableId,
-      grandTotal: 42,
-    });
-    const response = await tableService.markServiceTableReadyToBillForDevice(
-      deviceSession,
-      tableId,
-    );
-
-    expect(response).toMatchObject({
-      status: "success",
-      data: { table: { state: "ready_to_bill", currentSaleId: "sale-id" } },
-    });
-    expect(markTableReadyToBill).toHaveBeenCalledWith(
-      organizationId,
-      storeId,
-      tableId,
-      "sale-id",
-      deviceSession.device.id,
-      expect.anything(),
-    );
   });
 
   test("releases a Paid table without changing its historical Sale", async () => {

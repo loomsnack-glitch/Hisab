@@ -11,17 +11,9 @@ import {
   getPosServiceTableOrder,
   getPosServiceTables,
   getPosServiceAreas,
-  markPosServiceTableReadyToBill,
   startPosServiceTableOrder,
 } from "@repo/services";
 import type { CreatePaymentJSON, PaymentMethod, ServiceTableDTO } from "@repo/types";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
 import {
   Empty,
   EmptyDescription,
@@ -35,6 +27,7 @@ import { toast } from "sonner";
 
 import PosDeviceSidebar from "@/components/pos/pos-device-sidebar";
 import PosServiceTableCard from "@/components/table-service/pos-service-table-card";
+import PosServiceTableLegend from "@/components/table-service/pos-service-table-legend";
 import ServiceTableAreaSections from "@/components/table-service/service-table-area-sections";
 import ServiceTableViewToggle from "@/components/table-service/service-table-view-toggle";
 import { groupServiceTablesByArea } from "@/lib/service-area-tables";
@@ -165,22 +158,6 @@ const PosTablesWorkspace = () => {
       toast.error(error.message ?? "Table order could not be cancelled"),
   });
 
-  const readyMutation = useMutation({
-    mutationFn: (tableId: string) => markPosServiceTableReadyToBill(tableId),
-    onSuccess: async (response) => {
-      if (response.status !== "success") {
-        toast.error(response.message);
-        return;
-      }
-      await queryClient.invalidateQueries({
-        queryKey: serviceTableKeys.pos(session.organization.id, session.store.id),
-      });
-      toast.success("Table marked Ready to bill");
-    },
-    onError: (error: { message?: string }) =>
-      toast.error(error.message ?? "Table could not be marked Ready to bill"),
-  });
-
   const releaseMutation = useMutation({
     mutationFn: ({ tableId, state }: { tableId: string; state: "paid" | "due" }) =>
       state === "paid"
@@ -260,8 +237,6 @@ const PosTablesWorkspace = () => {
           orderMutation.variables?.tableId === table.id,
         cancelling:
           cancelMutation.isPending && cancelMutation.variables === table.id,
-        markingReady:
-          readyMutation.isPending && readyMutation.variables === table.id,
         releasing:
           releaseMutation.isPending &&
           releaseMutation.variables?.tableId === table.id,
@@ -281,7 +256,6 @@ const PosTablesWorkspace = () => {
         orderMutation.mutate({ tableId, mode: "resume" })
       }
       onCancelOrder={(tableId) => cancelMutation.mutate(tableId)}
-      onMarkReady={(tableId) => readyMutation.mutate(tableId)}
       onBeginCollect={(current) => {
         setPaymentTableId(current.id);
         setPaymentAmount(String(current.currentSaleTotal ?? ""));
@@ -304,115 +278,83 @@ const PosTablesWorkspace = () => {
       data-testid="pos-tables-page"
     >
       <PosDeviceSidebar activePanelTab="tables" />
-      <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pb-8 lg:p-6">
-        <div className="mx-auto max-w-7xl space-y-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-primary">
-                {tablesQuery.data?.status === "success"
-                  ? "Live service area"
-                  : "Service area"}
-              </p>
-              <h1 className="font-display text-3xl font-semibold tracking-tight">
-                Tables
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {tablesQuery.data?.status === "success"
-                  ? `Manage the current floor for ${session.store.name}.`
-                  : "Loading your Store floor..."}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ServiceTableViewToggle
-                value={viewMode}
-                onChange={handleViewModeChange}
-              />
-              <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-sm text-muted-foreground">
-                <LayoutGrid className="size-4 text-primary" />
-                <span>
-                  {tables.length} {tables.length === 1 ? "table" : "tables"}
-                </span>
-              </div>
+      <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pb-8 sm:p-4 lg:p-6">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="sr-only">Tables</h1>
+            <ServiceTableViewToggle
+              value={viewMode}
+              onChange={handleViewModeChange}
+            />
+            <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card/70 px-2.5 py-1.5 text-xs text-muted-foreground sm:text-sm">
+              <LayoutGrid className="size-3.5 text-primary sm:size-4" />
+              <span>
+                {tables.length} {tables.length === 1 ? "table" : "tables"}
+              </span>
             </div>
           </div>
 
-          <Card className="overflow-hidden border-border/60 bg-card/80 shadow-sm">
-            <CardHeader className="border-b border-border/50 bg-muted/10">
-              <div className="flex items-center gap-3">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Armchair className="size-5" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">
-                    {session.store.name} floor
-                  </CardTitle>
-                  <CardDescription>
-                    {viewMode === "simple"
-                      ? "Tables are grouped by area. Color shows whether a table is free, seated, or billed."
-                      : "Free and Allocated tables can be changed before an order exists."}
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 sm:p-5">
-              {tablesQuery.isPending || simpleViewAreasPending ? (
-                <div className="flex min-h-80 items-center justify-center">
-                  <Spinner className="size-6 text-primary" />
-                </div>
-              ) : tablesQuery.data?.status === "error" ? (
-                <p
-                  role="alert"
-                  className="p-8 text-center text-sm text-destructive"
-                >
-                  {tablesQuery.data.message}
-                </p>
-              ) : simpleViewAreasError ? (
-                <p
-                  role="alert"
-                  className="p-8 text-center text-sm text-destructive"
-                >
-                  {simpleViewAreasError}
-                </p>
-              ) : tables.length === 0 ? (
-                <Empty className="min-h-80 rounded-2xl border border-dashed">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <Armchair />
-                    </EmptyMedia>
-                    <EmptyTitle>No tables configured</EmptyTitle>
-                    <EmptyDescription>
-                      Ask an administrator to configure Service Tables for this
-                      Store.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : viewMode === "simple" ? (
-                <ServiceTableAreaSections
-                  groups={tableGroups}
-                  gridClassName="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-                  renderTable={(table) => renderTableCard(table, "simple")}
-                />
-              ) : (
+          {viewMode === "simple" && tables.length > 0 ? (
+            <PosServiceTableLegend />
+          ) : null}
+
+          {tablesQuery.isPending || simpleViewAreasPending ? (
+            <div className="flex min-h-64 items-center justify-center sm:min-h-80">
+              <Spinner className="size-6 text-primary" />
+            </div>
+          ) : tablesQuery.data?.status === "error" ? (
+            <p
+              role="alert"
+              className="p-6 text-center text-sm text-destructive sm:p-8"
+            >
+              {tablesQuery.data.message}
+            </p>
+          ) : simpleViewAreasError ? (
+            <p
+              role="alert"
+              className="p-6 text-center text-sm text-destructive sm:p-8"
+            >
+              {simpleViewAreasError}
+            </p>
+          ) : tables.length === 0 ? (
+            <Empty className="min-h-64 rounded-2xl border border-dashed sm:min-h-80">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Armchair />
+                </EmptyMedia>
+                <EmptyTitle>No tables configured</EmptyTitle>
+                <EmptyDescription>
+                  Ask an administrator to configure Service Tables for this
+                  Store.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : viewMode === "simple" ? (
+            <ServiceTableAreaSections
+              groups={tableGroups}
+              compact
+              gridClassName="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-2 sm:gap-2.5"
+              renderTable={(table) => renderTableCard(table, "simple")}
+            />
+          ) : (
+            <div
+              data-testid="floor-canvas"
+              className="relative min-h-[20rem] overflow-hidden rounded-2xl border border-dashed border-border/70 bg-[radial-gradient(circle,_var(--color-border)_1px,_transparent_1px)] [background-size:24px_24px] sm:min-h-[28rem] lg:min-h-[32rem]"
+            >
+              {tables.map((table) => (
                 <div
-                  data-testid="floor-canvas"
-                  className="relative min-h-[32rem] overflow-hidden rounded-2xl border border-dashed border-border/70 bg-[radial-gradient(circle,_var(--color-border)_1px,_transparent_1px)] [background-size:24px_24px]"
+                  key={table.id}
+                  className="absolute flex flex-col items-center"
+                  style={{
+                    ...tablePositionStyle(table.position),
+                    width: TABLE_BOX_SIZE.width + 24,
+                  }}
                 >
-                  {tables.map((table) => (
-                    <div
-                      key={table.id}
-                      className="absolute flex flex-col items-center"
-                      style={{
-                        ...tablePositionStyle(table.position),
-                        width: TABLE_BOX_SIZE.width + 24,
-                      }}
-                    >
-                      {renderTableCard(table, "floor")}
-                    </div>
-                  ))}
+                  {renderTableCard(table, "floor")}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>

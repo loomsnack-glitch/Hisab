@@ -158,17 +158,6 @@ export const cancelPosServiceTableOrder = async (
   }
 };
 
-export const markPosServiceTableReadyToBill = async (
-  tableId: string,
-): Promise<ServiceResponse<ServiceTableResponse | null>> => {
-  try {
-    const response = await api.post(`/pos/tables/${tableId}/ready`);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-};
-
 export const freePaidPosServiceTable = async (
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
