@@ -59,25 +59,15 @@ export const StoreMessageLinkTypeSchema = z.enum([
 ]);
 
 export const StoreMessageLinkSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/, "Use letters, numbers, and underscores"),
   type: StoreMessageLinkTypeSchema,
   label: z.string().trim().min(1).max(100),
   url: z.string().trim().max(2048).url("Enter a valid link"),
-  includeInBill: z.boolean(),
-  includeInReminder: z.boolean(),
-  includeInPromotion: z.boolean(),
-});
-
-const optionalMessageTemplateSchema = z
-  .union([
-    z.literal(""),
-    z.string().trim().max(4096, "Message template must be at most 4096 characters"),
-  ])
-  .optional();
-
-export const StoreMessageTemplatesSchema = z.object({
-  bill: optionalMessageTemplateSchema,
-  dueReminder: optionalMessageTemplateSchema,
-  promotion: optionalMessageTemplateSchema,
+  isActive: z.boolean().default(true),
 });
 
 const deviceSecretSchema = z
@@ -133,7 +123,6 @@ export const StoreDTOSchema = z.object({
   socialMediaName: z.string().max(100).nullable().optional(),
   socialMediaLink: z.string().max(2048).nullable().optional(),
   whatsappLinks: z.array(StoreMessageLinkSchema).default([]),
-  whatsappMessageTemplates: StoreMessageTemplatesSchema.default({}),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,
@@ -183,7 +172,6 @@ export const UpdateStoreSchema = z
     socialMediaName: optionalEngagementNameSchema,
     socialMediaLink: optionalEngagementLinkSchema,
     whatsappLinks: z.array(StoreMessageLinkSchema).max(20).optional(),
-    whatsappMessageTemplates: StoreMessageTemplatesSchema.optional(),
   })
   .superRefine((store, context) => {
     if (Boolean(store.reviewPlatform) !== Boolean(store.reviewLink)) {

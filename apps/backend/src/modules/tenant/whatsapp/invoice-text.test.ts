@@ -56,51 +56,23 @@ describe("invoice text", () => {
         );
     });
 
-    it("invites feedback when the Store has a review destination", () => {
-        const text = formatInvoiceText(sale, {
-            organizationName: "Panini House",
-            reviewPlatform: "Google",
-            reviewLink: "https://g.page/r/panini-house/review",
-        });
-
-        expect(text).toContain(
-            "Happy with your experience? Pls share your feedback with us on Google.\n" +
-                "Link: https://g.page/r/panini-house/review",
-        );
-    });
-
-    it("invites the customer to follow the configured social account", () => {
-        const text = formatInvoiceText(sale, {
-            organizationName: "Panini House",
-            socialMediaName: "Instagram",
-            socialMediaLink: "https://instagram.com/paninihouse",
-        });
-
-        expect(text).toContain(
-            "Follow us on Instagram:\n" +
-                "New launches - Offers - Reel - Behind the scenes.\n" +
-                "👉 Instagram Link - https://instagram.com/paninihouse",
-        );
-    });
-
-    it("renders a Store template and configured bill links", () => {
+    it("renders a Store template and explicitly referenced links", () => {
         const text = formatInvoiceText(sale, {
             organizationName: "Panini House",
             storeName: "Central Store",
-            template: "Hi {{customer_name}}, bill {{bill_number}} total {{total}}, due {{balance_due}}.",
+            template: "Hi {{customer_name}}, bill {{bill_number}} total {{total}}, due {{balance_due}}.\nInstall: {{link_app_install}}",
             links: [
                 {
+                    key: "app_install",
                     type: "app_install",
                     label: "Install our app",
                     url: "https://example.com/app",
-                    includeInBill: true,
-                    includeInReminder: false,
-                    includeInPromotion: false,
+                    isActive: true,
                 },
             ],
         });
 
         expect(text).toContain("Hi Original customer, bill INV-42 total ₹90.00, due ₹40.00.");
-        expect(text).toContain("Install our app: https://example.com/app");
+        expect(text).toContain("Install: https://example.com/app");
     });
 });

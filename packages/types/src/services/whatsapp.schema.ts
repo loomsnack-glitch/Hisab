@@ -170,15 +170,72 @@ export const WhatsAppDueReminderRequestSchema = z.object({
 export const WhatsAppCreatePromotionSchema = z.object({
     title: z.string().trim().min(1).max(120),
     body: z.string().trim().min(1).max(4096),
-    imageBase64: z.string().min(1).max(14_000_000),
-    imageFileName: z.string().trim().min(1).max(255),
-    imageMimeType: z.string().regex(/^image\/[a-z0-9.+-]+$/i).max(255),
+    imageBase64: z.string().min(1).max(14_000_000).optional(),
+    imageFileName: z.string().trim().min(1).max(255).optional(),
+    imageMimeType: z.string().regex(/^image\/[a-z0-9.+-]+$/i).max(255).optional(),
+}).superRefine((data, context) => {
+    const imageFields = [data.imageBase64, data.imageFileName, data.imageMimeType];
+    const hasAnyImageField = imageFields.some(Boolean);
+    if (hasAnyImageField && imageFields.some(value => !value)) {
+        context.addIssue({ code: "custom", path: ["imageBase64"], message: "Provide all image fields or omit the image" });
+    }
 });
 
 export const WhatsAppPromotionResponseSchema = z.object({
     campaignId: z.uuid("Invalid campaign id"),
     recipientCount: z.number().int().min(0),
     queuedCount: z.number().int().min(0),
+});
+
+export const WhatsAppPromotionCampaignStatusSchema = z.enum(["draft", "queued", "sending", "completed", "failed", "cancelled"]);
+
+export const WhatsAppPromotionCooldownSchema = z.object({
+    active: z.boolean(),
+    remainingSeconds: z.number().int().min(0),
+    nextAvailableAt: dtoDateSchema.nullable(),
+});
+
+export const WhatsAppPromotionStatsSchema = z.object({
+    totalCampaigns: z.number().int().min(0),
+    totalRecipients: z.number().int().min(0),
+    queuedRecipients: z.number().int().min(0),
+    sendingRecipients: z.number().int().min(0),
+    sentRecipients: z.number().int().min(0),
+    deliveredRecipients: z.number().int().min(0),
+    readRecipients: z.number().int().min(0),
+    retryingRecipients: z.number().int().min(0),
+    failedRecipients: z.number().int().min(0),
+});
+
+export const WhatsAppPromotionCampaignDTOSchema = z.object({
+    id: z.uuid("Invalid campaign id"),
+    title: z.string().trim().min(1).max(255),
+    body: z.string().trim().min(1).max(4096),
+    imageFileName: z.string().trim().min(1).max(255).nullable(),
+    imageMimeType: z.string().trim().min(1).max(255).nullable(),
+    status: WhatsAppPromotionCampaignStatusSchema,
+    totalRecipients: z.number().int().min(0),
+    queuedRecipients: z.number().int().min(0),
+    sendingRecipients: z.number().int().min(0),
+    sentRecipients: z.number().int().min(0),
+    deliveredRecipients: z.number().int().min(0),
+    readRecipients: z.number().int().min(0),
+    retryingRecipients: z.number().int().min(0),
+    failedRecipients: z.number().int().min(0),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const WhatsAppPromotionDashboardResponseSchema = z.object({
+    campaigns: z.array(WhatsAppPromotionCampaignDTOSchema),
+    stats: WhatsAppPromotionStatsSchema,
+    cooldown: WhatsAppPromotionCooldownSchema,
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1),
+        totalItems: z.number().int().min(0),
+        totalPages: z.number().int().min(0),
+    }),
 });
 
 export const WhatsAppInvoiceQueueResponseSchema = z.object({

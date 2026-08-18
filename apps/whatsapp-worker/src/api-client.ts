@@ -130,17 +130,15 @@ export const reportMessageStatus = async (
     providerMessageId: string,
     status: "delivered" | "read",
 ): Promise<boolean> => {
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-        const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/messages/status", {
-            method: "POST",
-            body: JSON.stringify({ providerMessageId, status }),
-        });
-        await assertOk(response);
-        const data = await response.json() as { status?: string };
-        if (data.status !== "ignored") return true;
-        await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
-    }
-    return false;
+    const response = await request("/internal/whatsapp/accounts/" + encodeURIComponent(accountId) + "/messages/status", {
+        method: "POST",
+        body: JSON.stringify({ providerMessageId, status }),
+    });
+    await assertOk(response);
+    // `ignored` is a successful no-op for messages that are not invoice
+    // outbox messages (for example, normal chat messages). Retrying it makes
+    // every provider receipt look like a request loop in the backend logs.
+    return true;
 };
 
 export const reportMessageEvent = async (

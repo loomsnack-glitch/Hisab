@@ -206,12 +206,8 @@ export const queueInvoiceForStore = async (
       caption: formatInvoiceText(sale, {
         organizationName: organization.name,
         storeName: store.name,
-        template: customMessage ?? selectedTemplate?.body ?? store.whatsappMessageTemplates.bill,
+        template: customMessage ?? selectedTemplate?.body,
         links: store.whatsappLinks,
-        reviewPlatform: store.reviewPlatform,
-        reviewLink: store.reviewLink,
-        socialMediaName: store.socialMediaName,
-        socialMediaLink: store.socialMediaLink,
       }),
       attachmentStorageKey,
       attachmentFileName: `Sale_${sale.saleNumber ?? sale.id}.pdf`,

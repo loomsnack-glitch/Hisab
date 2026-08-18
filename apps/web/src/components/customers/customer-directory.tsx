@@ -48,7 +48,6 @@ import {
 import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
-import PromotionDialog from "@/components/customers/promotion-dialog";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { billingKeys } from "@/lib/query-keys";
@@ -357,9 +356,6 @@ const CustomerDirectory = ({
                             </Button>
                         }
                     />
-                    {mode === "admin" && storeId ? (
-                        <PromotionDialog organizationId={organizationId} storeId={storeId} className="min-w-0 flex-1 sm:flex-none" />
-                    ) : null}
                 </div>
             </div>
 

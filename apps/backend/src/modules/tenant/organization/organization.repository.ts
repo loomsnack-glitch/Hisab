@@ -9,6 +9,7 @@ import type {
   OrganizationDTO,
   StoreDevicePosSettingsDTO,
   StoreDeviceDTO,
+  StoreMessageLink,
   StoreDTO,
   UpdateOrganizationREPO,
   UpdateStoreDeviceREPO,
@@ -28,12 +29,44 @@ const parseStoreConfig = <T>(value: unknown, fallback: T): T => {
   return value as T;
 };
 
+const linkKey = (value: unknown, fallback: string): string => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return (normalized || fallback).slice(0, 64);
+};
+
+const normalizeStoreLinks = (value: unknown): StoreMessageLink[] => {
+  const rawLinks = parseStoreConfig<unknown[]>(value, []);
+  const used = new Set<string>();
+  return rawLinks.flatMap((raw, index) => {
+    if (!raw || typeof raw !== "object") return [];
+    const link = raw as Record<string, unknown>;
+    const label = String(link.label ?? "").trim();
+    const url = String(link.url ?? "").trim();
+    if (!label || !url) return [];
+    const base = linkKey(link.key ?? link.type ?? label, `link_${index + 1}`);
+    let key = base;
+    let suffix = 2;
+    while (used.has(key)) key = `${base.slice(0, 60)}_${suffix++}`;
+    used.add(key);
+    return [{
+      key,
+      type: (link.type ?? "custom") as StoreMessageLink["type"],
+      label,
+      url,
+      isActive: link.isActive !== false,
+    }];
+  });
+};
+
 const mapStore = (row: Record<string, unknown>): StoreDTO => {
   const store = mapRow<StoreDTO>(row);
   return {
     ...store,
-    whatsappLinks: parseStoreConfig(store.whatsappLinks, []),
-    whatsappMessageTemplates: parseStoreConfig(store.whatsappMessageTemplates, {}),
+    whatsappLinks: normalizeStoreLinks(store.whatsappLinks),
   };
 };
 type StoreDeviceSecretRow = { deviceSecretEncrypted: string };
@@ -286,8 +319,7 @@ export const updateStore = async (
             review_link = ${storeData.reviewLink},
             social_media_name = ${storeData.socialMediaName},
             social_media_link = ${storeData.socialMediaLink},
-            whatsapp_links = ${JSON.stringify(storeData.whatsappLinks)}::jsonb,
-            whatsapp_message_templates = ${JSON.stringify(storeData.whatsappMessageTemplates)}::jsonb,
+            whatsapp_links = ${storeData.whatsappLinks}::jsonb,
             updated_by = ${storeData.updatedBy},
             updated_at = NOW()
         WHERE id = ${storeData.id}

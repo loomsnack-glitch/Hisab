@@ -48,7 +48,7 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                             </EmptyDescription>
                         </EmptyHeader>
                         <EmptyContent className="flex flex-wrap justify-center gap-2">
-                            <Button variant="outline" className="rounded-full" render={<Link to={`/organizations/${organizationId}/whatsapp`} />}>
+                            <Button variant="outline" className="rounded-full" render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />}>
                                 <Settings2 className="size-4" />
                                 WhatsApp accounts
                             </Button>
@@ -86,7 +86,7 @@ const StoresSection = ({ organizationId, organizationUsername, stores }: StoresS
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" className="rounded-full h-11 px-5" render={<Link to={`/organizations/${organizationId}/whatsapp`} />}>
+                    <Button variant="outline" className="rounded-full h-11 px-5" render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />}>
                         <Settings2 className="size-4" />
                         WhatsApp accounts
                     </Button>

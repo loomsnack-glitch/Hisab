@@ -286,6 +286,8 @@ const DashboardLayout = () => {
                                                             targetPath = `/organizations/${org.id}/billing`;
                                                         } else if (location.pathname.includes("/products")) {
                                                             targetPath = `/organizations/${org.id}/products`;
+                                                        } else if (location.pathname.includes("/whatsapp")) {
+                                                            targetPath = `/organizations/${org.id}/whatsapp/accounts`;
                                                         } else if (location.pathname.includes("/reports")) {
                                                             targetPath = `/organizations/${org.id}/reports`;
                                                         } else if (location.pathname.includes("/tables")) {
