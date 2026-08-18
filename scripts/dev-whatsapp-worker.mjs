@@ -3,6 +3,7 @@ import { open, readFile, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
+import { createDevChildSpawnOptions, stopDevChildTree } from "./dev-whatsapp-worker-process.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workerDirectory = resolve(repositoryRoot, "apps/whatsapp-worker");
@@ -60,16 +61,12 @@ if (initialBuild.status !== 0) {
     process.exit(initialBuild.status ?? 1);
 }
 
-const builder = spawn("bun", [...buildArguments, "--watch"], {
+const childSpawnOptions = {
     cwd: workerDirectory,
-    stdio: "inherit",
-    detached: true,
-});
-const worker = spawn(process.execPath, ["--env-file=.env", "--watch", "dist/index.js"], {
-    cwd: workerDirectory,
-    stdio: "inherit",
-    detached: true,
-});
+    ...createDevChildSpawnOptions(),
+};
+const builder = spawn("bun", [...buildArguments, "--watch"], childSpawnOptions);
+const worker = spawn(process.execPath, ["--env-file=.env", "--watch", "dist/index.js"], childSpawnOptions);
 
 let shuttingDown = false;
 let shutdownPromise = null;
@@ -78,11 +75,7 @@ const waitForExit = (child, timeoutMs = 30_000) => {
     if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
     return new Promise(resolve => {
         const timeout = setTimeout(() => {
-            try {
-                process.kill(-child.pid, "SIGKILL");
-            } catch {
-                child.kill("SIGKILL");
-            }
+            stopDevChildTree(child, "SIGKILL");
             resolve();
         }, timeoutMs);
         child.once("exit", () => {
@@ -93,13 +86,7 @@ const waitForExit = (child, timeoutMs = 30_000) => {
 };
 
 const stopChild = async child => {
-    if (child.exitCode === null && child.signalCode === null) {
-        try {
-            process.kill(-child.pid, "SIGTERM");
-        } catch {
-            child.kill("SIGTERM");
-        }
-    }
+    stopDevChildTree(child, "SIGTERM");
     await waitForExit(child);
 };
 
@@ -115,8 +102,14 @@ const shutdown = async (code = 0) => {
     return shutdownPromise;
 };
 
-builder.on("error", () => { void shutdown(1); });
-worker.on("error", () => { void shutdown(1); });
+builder.on("error", error => {
+    console.error("WhatsApp worker watcher failed to start:", error.message);
+    void shutdown(1);
+});
+worker.on("error", error => {
+    console.error("WhatsApp worker failed to start:", error.message);
+    void shutdown(1);
+});
 worker.on("exit", (code, signal) => {
     if (!shuttingDown) void shutdown(code ?? (signal ? 1 : 0));
 });
