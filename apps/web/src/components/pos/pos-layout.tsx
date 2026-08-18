@@ -51,6 +51,8 @@ type WhatsAppAccountQueryError = {
     data?: WhatsAppAccountStatusResponseDTO | null;
 };
 
+const WHATSAPP_STATUS_RETRY_ATTEMPTS = 7;
+
 const getWhatsAppButtonClassName = (state: WhatsAppButtonVisualState) => {
     switch (state) {
         case "connected":
@@ -141,6 +143,8 @@ const PosLayout = ({
         refetchInterval: query => {
             const error = query.state.error as WhatsAppAccountQueryError | null;
             const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
+            const retryBudgetAvailable = query.state.fetchFailureCount < WHATSAPP_STATUS_RETRY_ATTEMPTS;
+            if (!retryBudgetAvailable) return false;
             if (error?.code === STATUS_CODES.SERVICE_UNAVAILABLE || (whatsappQrOpen && status !== "connected")) {
                 return 2_000;
             }
@@ -320,6 +324,7 @@ const PosLayout = ({
                         onClick={() => {
                             if (whatsappAccountQuery.isError) {
                                 toast.error((whatsappQueryError as { message?: string })?.message || "WhatsApp status is unavailable");
+                                void whatsappAccountQuery.refetch();
                                 return;
                             }
                             if (!whatsappIsLinked) {

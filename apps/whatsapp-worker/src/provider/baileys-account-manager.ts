@@ -276,6 +276,10 @@ export class BaileysAccountManager {
     public async disconnect(accountId: string): Promise<AccountStatusSnapshot> {
         const account = this.accounts.get(accountId);
         if (!account) {
+            // The account may still be restoring when an operator disconnects it.
+            // Clear its persisted session as well, otherwise a later reconciliation
+            // can restore the old WhatsApp session and make disconnect appear to fail.
+            await clearEncryptedAuthState(accountDirectory(accountId));
             return this.getStatus(accountId);
         }
 

@@ -23,6 +23,8 @@ const statusLabel: Record<string, string> = {
     revoked: "Session revoked",
 };
 
+const ACCOUNT_STATUS_RETRY_ATTEMPTS = 7;
+
 type Props = { organizationId: string; storeId: string; storeName: string };
 type QueryError = { message?: string; code?: number; data?: WhatsAppAccountStatusResponseDTO | null };
 
@@ -40,13 +42,16 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
         refetchInterval: query => {
             const error = query.state.error as QueryError | null;
             const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
-            return error?.code === STATUS_CODES.SERVICE_UNAVAILABLE || status === "pending_qr" || status === "connecting" ? 2_000 : false;
+            const retryBudgetAvailable = query.state.fetchFailureCount < ACCOUNT_STATUS_RETRY_ATTEMPTS;
+            return retryBudgetAvailable && (error?.code === STATUS_CODES.SERVICE_UNAVAILABLE || status === "pending_qr" || status === "connecting") ? 2_000 : false;
         },
     });
     const accountsQuery = useQuery({ queryKey: accountsKey, queryFn: () => getWhatsAppAccounts(organizationId), enabled: open });
     const accountError = accountQuery.error as QueryError | null;
     const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
     const account = accountData?.account;
+    const statusRetryExhausted = accountQuery.isError
+        && (accountError?.code !== STATUS_CODES.SERVICE_UNAVAILABLE || accountQuery.failureCount >= ACCOUNT_STATUS_RETRY_ATTEMPTS);
     const accounts = accountsQuery.data?.data?.accounts ?? [];
     const availableAccounts = accounts.filter(candidate => !candidate.assignedStoreIds.includes(storeId));
     const selectedAccount = availableAccounts.find(candidate => candidate.id === selectedAccountId);
@@ -108,7 +113,14 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                                     </Badge>
                                 </div>
                                 <p className="mt-3 text-xs text-muted-foreground">Linked to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"} in this organization.</p>
-                                {accountQuery.isError ? <p className="mt-2 text-xs text-muted-foreground">WhatsApp status is temporarily unavailable. Retrying automatically.</p> : null}
+                                {accountQuery.isError ? (
+                                    statusRetryExhausted ? (
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                            <p className="text-xs text-muted-foreground">WhatsApp status could not be loaded.</p>
+                                            <Button variant="link" className="h-auto p-0 text-xs" disabled={accountQuery.isFetching} onClick={() => void accountQuery.refetch()}>Retry status</Button>
+                                        </div>
+                                    ) : <p className="mt-2 text-xs text-muted-foreground">WhatsApp status is temporarily unavailable. Retrying automatically.</p>
+                                ) : null}
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" className="rounded-full" onClick={() => setUnlinkOpen(true)} disabled={isBusy}><Trash2 className="size-4" />Unlink from Store</Button>

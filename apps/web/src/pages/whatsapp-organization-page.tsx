@@ -29,6 +29,7 @@ import WhatsAppPromotionDashboard from "@/components/organizations/whatsapp-prom
 
 const ACCOUNT_STATUS_POLL_INTERVAL_MS = 2_000;
 const ACCOUNT_STATUS_POLL_WINDOW_MS = 60_000;
+const ACCOUNT_STATUS_RETRY_ATTEMPTS = 7;
 
 const statusLabel: Record<string, string> = {
     pending_qr: "Scan the QR code",
@@ -103,8 +104,9 @@ const WhatsAppOrganizationPage = () => {
                 const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
                 const pollUntil = statusPollUntilByAccountId[account.id] ?? 0;
                 const pollRequested = pollUntil > Date.now() && status !== "connected" && status !== "failed" && status !== "revoked";
-                const retryableError = error?.code === STATUS_CODES.SERVICE_UNAVAILABLE;
-                return (retryableError || pollRequested || status === "pending_qr" || status === "connecting")
+                const retryBudgetAvailable = query.state.fetchFailureCount < ACCOUNT_STATUS_RETRY_ATTEMPTS;
+                const retryableError = error?.code === STATUS_CODES.SERVICE_UNAVAILABLE && retryBudgetAvailable;
+                return retryBudgetAvailable && (retryableError || pollRequested || status === "pending_qr" || status === "connecting")
                     ? ACCOUNT_STATUS_POLL_INTERVAL_MS
                     : false;
             },
@@ -316,6 +318,8 @@ const WhatsAppOrganizationPage = () => {
                     const statusError = statusQuery?.error as WhatsAppQueryError | null;
                     const liveAccount = liveResponse?.account ?? statusError?.data?.account ?? account;
                     const statusUnavailable = Boolean(statusQuery?.isError);
+                    const statusRetryExhausted = statusUnavailable
+                        && (statusError?.code !== STATUS_CODES.SERVICE_UNAVAILABLE || (statusQuery?.failureCount ?? 0) >= ACCOUNT_STATUS_RETRY_ATTEMPTS);
                     const qrImageDataUrl = liveResponse?.qrImageDataUrl ?? ((liveAccount.status === "pending_qr" || liveAccount.status === "connecting") ? qrByAccountId[account.id] : null);
                     const connecting = connectMutation.isPending && connectMutation.variables === account.id;
                     const disconnecting = disconnectMutation.isPending && disconnectMutation.variables === account.id;
@@ -329,7 +333,14 @@ const WhatsAppOrganizationPage = () => {
                                             {statusUnavailable ? "Status unavailable" : statusLabel[liveAccount.status] ?? liveAccount.status}
                                         </Badge>
                                     </div>
-                                    {statusUnavailable ? <p className="mt-2 text-xs text-muted-foreground">WhatsApp status is temporarily unavailable. Retrying automatically.</p> : null}
+                                    {statusUnavailable ? (
+                                        statusRetryExhausted ? (
+                                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                <p className="text-xs text-muted-foreground">WhatsApp status could not be loaded.</p>
+                                                <Button variant="link" className="h-auto p-0 text-xs" disabled={statusQuery?.isFetching} onClick={() => void statusQuery?.refetch()}>Retry status</Button>
+                                            </div>
+                                        ) : <p className="mt-2 text-xs text-muted-foreground">WhatsApp status is temporarily unavailable. Retrying automatically.</p>
+                                    ) : null}
                                     <p className="mt-2 text-sm text-muted-foreground">
                                         Assigned to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"}
                                     </p>
@@ -346,10 +357,18 @@ const WhatsAppOrganizationPage = () => {
                                         Change number
                                     </Button>
                                     {statusUnavailable ? (
-                                        <Button variant="outline" className="rounded-full" disabled>
-                                            <LoaderCircle className="size-4 animate-spin" />
-                                            Checking status
-                                        </Button>
+                                        <>
+                                            {liveAccount.status === "connected" ? (
+                                                <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => disconnectMutation.mutate(account.id)}>
+                                                    {disconnecting ? <LoaderCircle className="size-4 animate-spin" /> : <LogOut className="size-4" />}
+                                                    Disconnect
+                                                </Button>
+                                            ) : null}
+                                            <Button variant="outline" className="rounded-full" disabled={statusQuery?.isFetching} onClick={() => void statusQuery?.refetch()}>
+                                                {statusQuery?.isFetching ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                                                Retry status
+                                            </Button>
+                                        </>
                                     ) : liveAccount.status === "connected" ? (
                                         <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => disconnectMutation.mutate(account.id)}>
                                             {disconnecting ? <LoaderCircle className="size-4 animate-spin" /> : <LogOut className="size-4" />}
