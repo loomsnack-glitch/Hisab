@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { connectPosWhatsAppAccount, deviceLogout, getPosWhatsAppAccount } from "@repo/services";
-import type { DeviceSessionDTO, WhatsAppAccountStatusResponseDTO } from "@repo/types";
+import { STATUS_CODES, type DeviceSessionDTO, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import {
@@ -47,6 +47,7 @@ type WhatsAppButtonVisualState = "connected" | "connecting" | "pending_qr" | "fa
 
 type WhatsAppAccountQueryError = {
     message?: string;
+    code?: number;
     data?: WhatsAppAccountStatusResponseDTO | null;
 };
 
@@ -140,7 +141,7 @@ const PosLayout = ({
         refetchInterval: query => {
             const error = query.state.error as WhatsAppAccountQueryError | null;
             const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
-            if (whatsappQrOpen && status !== "connected") {
+            if (error?.code === STATUS_CODES.SERVICE_UNAVAILABLE || (whatsappQrOpen && status !== "connected")) {
                 return 2_000;
             }
             return status === "pending_qr" || status === "connecting" ? 2_000 : false;

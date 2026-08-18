@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Link2, LoaderCircle, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getWhatsAppAccount, getWhatsAppAccounts, assignWhatsAppAccount, removeWhatsAppAccount } from "@repo/services";
-import type { WhatsAppAccountStatusResponseDTO } from "@repo/types";
+import { STATUS_CODES, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
@@ -24,7 +24,7 @@ const statusLabel: Record<string, string> = {
 };
 
 type Props = { organizationId: string; storeId: string; storeName: string };
-type QueryError = { message?: string; data?: WhatsAppAccountStatusResponseDTO | null };
+type QueryError = { message?: string; code?: number; data?: WhatsAppAccountStatusResponseDTO | null };
 
 const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
     const queryClient = useQueryClient();
@@ -33,7 +33,16 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
     const [unlinkOpen, setUnlinkOpen] = useState(false);
     const accountKey = whatsappKeys.account(organizationId, storeId);
     const accountsKey = whatsappKeys.accounts(organizationId);
-    const accountQuery = useQuery({ queryKey: accountKey, queryFn: () => getWhatsAppAccount(organizationId, storeId), enabled: open });
+    const accountQuery = useQuery({
+        queryKey: accountKey,
+        queryFn: () => getWhatsAppAccount(organizationId, storeId),
+        enabled: open,
+        refetchInterval: query => {
+            const error = query.state.error as QueryError | null;
+            const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
+            return error?.code === STATUS_CODES.SERVICE_UNAVAILABLE || status === "pending_qr" || status === "connecting" ? 2_000 : false;
+        },
+    });
     const accountsQuery = useQuery({ queryKey: accountsKey, queryFn: () => getWhatsAppAccounts(organizationId), enabled: open });
     const accountError = accountQuery.error as QueryError | null;
     const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
@@ -94,9 +103,12 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div><p className="text-xs text-muted-foreground">Linked mobile</p><p className="mt-1 text-lg font-semibold tracking-tight">{account.phoneNumber}</p></div>
-                                    <Badge variant="outline" className="rounded-full">{statusLabel[account.status] ?? account.status}</Badge>
+                                    <Badge variant={accountQuery.isError ? "secondary" : "outline"} className="rounded-full">
+                                        {accountQuery.isError ? "Status unavailable" : statusLabel[account.status] ?? account.status}
+                                    </Badge>
                                 </div>
                                 <p className="mt-3 text-xs text-muted-foreground">Linked to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"} in this organization.</p>
+                                {accountQuery.isError ? <p className="mt-2 text-xs text-muted-foreground">WhatsApp status is temporarily unavailable. Retrying automatically.</p> : null}
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" className="rounded-full" onClick={() => setUnlinkOpen(true)} disabled={isBusy}><Trash2 className="size-4" />Unlink from Store</Button>
@@ -105,6 +117,12 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                         </div>
                     ) : (
                         <div className="space-y-4">
+                            {accountsQuery.isError ? (
+                                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                                    <p>{(accountsQuery.error as { message?: string })?.message ?? "Unable to load organization WhatsApp accounts."}</p>
+                                    <Button variant="link" className="h-auto px-0 text-destructive" onClick={() => accountsQuery.refetch()}>Retry</Button>
+                                </div>
+                            ) : null}
                             {accountQuery.isError && !accountError?.data ? <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{accountError?.message ?? "Unable to load this Store account."}</p> : null}
                             {availableAccounts.length > 0 ? (
                                 <div className="space-y-3">

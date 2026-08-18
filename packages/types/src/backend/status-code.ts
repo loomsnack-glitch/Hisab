@@ -41,5 +41,6 @@ export const STATUS_CODES = {
     CONFLICT: 409,
     TOO_MANY_REQUESTS: 429,
     GONE: 410,
+    SERVICE_UNAVAILABLE: 503,
     INTERNAL_SERVER_ERROR: 500,
 } satisfies Record<string, StatusCode>;

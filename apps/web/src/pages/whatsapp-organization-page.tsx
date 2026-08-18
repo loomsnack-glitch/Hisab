@@ -5,7 +5,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
 import { FileText, Link2, LoaderCircle, LogOut, Megaphone, Pencil, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
-import { normalizePhoneNumber, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
+import { normalizePhoneNumber, STATUS_CODES, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import {
     connectWhatsAppOrganizationAccount,
     changeWhatsAppOrganizationAccountNumber,
@@ -47,6 +47,19 @@ const workspaceTabs = [
 
 type WorkspaceTab = (typeof workspaceTabs)[number]["id"];
 
+type WhatsAppQueryError = {
+    message?: string;
+    code?: number;
+    data?: WhatsAppAccountStatusResponseDTO | null;
+};
+
+const mutationErrorMessage = (error: unknown, fallback: string): string => {
+    if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
+        return error.message;
+    }
+    return fallback;
+};
+
 const WhatsAppOrganizationPage = () => {
     const { organizationId = "" } = useParams();
     const location = useLocation();
@@ -86,10 +99,14 @@ const WhatsAppOrganizationPage = () => {
             queryFn: () => getWhatsAppOrganizationAccount(organizationId, account.id),
             enabled: Boolean(organizationId),
             refetchInterval: query => {
-                const status = query.state.data?.data?.account.status;
+                const error = query.state.error as WhatsAppQueryError | null;
+                const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
                 const pollUntil = statusPollUntilByAccountId[account.id] ?? 0;
                 const pollRequested = pollUntil > Date.now() && status !== "connected" && status !== "failed" && status !== "revoked";
-                return (pollRequested || status === "pending_qr" || status === "connecting") ? ACCOUNT_STATUS_POLL_INTERVAL_MS : false;
+                const retryableError = error?.code === STATUS_CODES.SERVICE_UNAVAILABLE;
+                return (retryableError || pollRequested || status === "pending_qr" || status === "connecting")
+                    ? ACCOUNT_STATUS_POLL_INTERVAL_MS
+                    : false;
             },
         })),
     });
@@ -125,6 +142,7 @@ const WhatsAppOrganizationPage = () => {
             toast.success("WhatsApp account added to the organization");
             refresh();
         },
+        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp account could not be added")),
     });
     const connectMutation = useMutation({
         mutationFn: (accountId: string) => connectWhatsAppOrganizationAccount(organizationId, accountId),
@@ -146,6 +164,10 @@ const WhatsAppOrganizationPage = () => {
             toast.success("WhatsApp account linking started");
             refresh(accountId);
         },
+        onError: (error, accountId) => {
+            pollAccountStatus(accountId);
+            toast.error(mutationErrorMessage(error, "WhatsApp account could not be linked"));
+        },
     });
     const disconnectMutation = useMutation({
         mutationFn: (accountId: string) => disconnectWhatsAppOrganizationAccount(organizationId, accountId),
@@ -157,6 +179,7 @@ const WhatsAppOrganizationPage = () => {
             toast.success("WhatsApp account disconnected");
             refresh(disconnectMutation.variables);
         },
+        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp account could not be disconnected")),
     });
     const changeMutation = useMutation({
         mutationFn: () => changeWhatsAppOrganizationAccountNumber(organizationId, changeAccountId, { phoneNumber: newPhoneNumber.trim() }),
@@ -172,6 +195,7 @@ const WhatsAppOrganizationPage = () => {
             toast.success("WhatsApp number changed. Scan the new QR code.");
             refresh(accountId);
         },
+        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp number could not be changed")),
     });
     const newPhoneError = newPhoneNumber.length > 0 && !normalizePhoneNumber(newPhoneNumber);
     const isBusy = createMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeMutation.isPending;
@@ -189,6 +213,23 @@ const WhatsAppOrganizationPage = () => {
 
     if (accountsQuery.isPending) {
         return <div className="flex min-h-[40vh] items-center justify-center"><Spinner className="size-6 text-primary" /></div>;
+    }
+
+    if (accountsQuery.isError) {
+        const error = accountsQuery.error as { message?: string };
+        return (
+            <div className="mx-auto max-w-5xl">
+                <Card className="border-destructive/30 bg-destructive/5">
+                    <CardContent className="flex flex-col gap-3 p-5">
+                        <p className="font-medium">Unable to load WhatsApp accounts</p>
+                        <p className="text-sm text-muted-foreground">{error.message ?? "Refresh the page and try again."}</p>
+                        <Button variant="outline" className="w-fit rounded-full" onClick={() => accountsQuery.refetch()}>
+                            <RefreshCw className="size-4" />Retry
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
     }
 
     return (
@@ -271,7 +312,10 @@ const WhatsAppOrganizationPage = () => {
                     </Card>
                 ) : accounts.map((account, index) => {
                     const liveResponse = statusQueries[index]?.data?.data;
-                    const liveAccount = liveResponse?.account ?? account;
+                    const statusQuery = statusQueries[index];
+                    const statusError = statusQuery?.error as WhatsAppQueryError | null;
+                    const liveAccount = liveResponse?.account ?? statusError?.data?.account ?? account;
+                    const statusUnavailable = Boolean(statusQuery?.isError);
                     const qrImageDataUrl = liveResponse?.qrImageDataUrl ?? ((liveAccount.status === "pending_qr" || liveAccount.status === "connecting") ? qrByAccountId[account.id] : null);
                     const connecting = connectMutation.isPending && connectMutation.variables === account.id;
                     const disconnecting = disconnectMutation.isPending && disconnectMutation.variables === account.id;
@@ -281,8 +325,11 @@ const WhatsAppOrganizationPage = () => {
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <p className="font-medium">{liveAccount.phoneNumber}</p>
-                                        <Badge variant="outline" className="rounded-full">{statusLabel[liveAccount.status] ?? liveAccount.status}</Badge>
+                                        <Badge variant={statusUnavailable ? "secondary" : "outline"} className="rounded-full">
+                                            {statusUnavailable ? "Status unavailable" : statusLabel[liveAccount.status] ?? liveAccount.status}
+                                        </Badge>
                                     </div>
+                                    {statusUnavailable ? <p className="mt-2 text-xs text-muted-foreground">WhatsApp status is temporarily unavailable. Retrying automatically.</p> : null}
                                     <p className="mt-2 text-sm text-muted-foreground">
                                         Assigned to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"}
                                     </p>
@@ -294,11 +341,16 @@ const WhatsAppOrganizationPage = () => {
                                     ) : null}
                                 </div>
                                 <div className="flex shrink-0 flex-wrap gap-2">
-                                    <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => { setChangeAccountId(account.id); setNewPhoneNumber(""); }}>
+                                    <Button variant="outline" className="rounded-full" disabled={isBusy || statusUnavailable} onClick={() => { setChangeAccountId(account.id); setNewPhoneNumber(""); }}>
                                         <Pencil className="size-4" />
                                         Change number
                                     </Button>
-                                    {liveAccount.status === "connected" ? (
+                                    {statusUnavailable ? (
+                                        <Button variant="outline" className="rounded-full" disabled>
+                                            <LoaderCircle className="size-4 animate-spin" />
+                                            Checking status
+                                        </Button>
+                                    ) : liveAccount.status === "connected" ? (
                                         <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => disconnectMutation.mutate(account.id)}>
                                             {disconnecting ? <LoaderCircle className="size-4 animate-spin" /> : <LogOut className="size-4" />}
                                             Disconnect

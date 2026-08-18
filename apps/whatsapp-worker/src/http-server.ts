@@ -92,6 +92,10 @@ export const createHttpServer = (manager: BaileysAccountManager, metrics: Worker
             }
 
             if (method === "GET" && path.endsWith("/status")) {
+                if (!manager.hasAccount(accountId)) {
+                    json(response, 503, { status: "error", message: "WhatsApp account is still being restored" });
+                    return;
+                }
                 json(response, 200, manager.getStatus(accountId));
                 return;
             }

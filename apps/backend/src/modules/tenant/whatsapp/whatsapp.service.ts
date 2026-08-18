@@ -47,11 +47,17 @@ const scopeStore = async (userId: string, organizationId: string, storeId: strin
 
 const saveWorkerStatus = async (accountId: string, update: WhatsAppWorkerStatusUpdateJSON) => {
     const account = await repository.updateAccountStatus(accountId, update);
-    if (update.qrImageDataUrl) {
-        await redis.set(QR_KEY_PREFIX + accountId, update.qrImageDataUrl);
-        await redis.expire(QR_KEY_PREFIX + accountId, QR_TTL_SECONDS);
-    } else {
-        await redis.del(QR_KEY_PREFIX + accountId);
+    if (!account) return null;
+
+    try {
+        if (update.qrImageDataUrl) {
+            await redis.set(QR_KEY_PREFIX + accountId, update.qrImageDataUrl);
+            await redis.expire(QR_KEY_PREFIX + accountId, QR_TTL_SECONDS);
+        } else {
+            await redis.del(QR_KEY_PREFIX + accountId);
+        }
+    } catch (error) {
+        console.warn("[whatsapp] QR cache update failed after account status was saved", error instanceof Error ? error.message : error);
     }
     return account;
 };
@@ -87,7 +93,7 @@ const workerUnavailable = (account: WhatsAppAccountDTO): ServiceResponse<WhatsAp
     status: "error",
     message: "WhatsApp worker is unavailable. The account was saved; retry linking when the worker is healthy.",
     data: accountResponse(account, null),
-    code: 503,
+    code: STATUS_CODES.SERVICE_UNAVAILABLE,
 });
 
 const markAccountWorkerUnavailable = async (accountId: string) => {

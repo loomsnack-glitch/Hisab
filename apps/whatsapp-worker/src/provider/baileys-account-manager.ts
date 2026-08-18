@@ -132,6 +132,10 @@ export class BaileysAccountManager {
         return this.snapshot(account);
     }
 
+    public hasAccount(accountId: string): boolean {
+        return this.accounts.has(accountId);
+    }
+
     public async connect(input: AccountConnectionInput): Promise<AccountStatusSnapshot> {
         const existing = this.accounts.get(input.accountId);
         if (existing?.status === "connected" || existing?.status === "connecting" || existing?.status === "pending_qr") {
