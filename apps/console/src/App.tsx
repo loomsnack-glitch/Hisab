@@ -64,13 +64,12 @@ const App = () => {
     const onLogout = async () => {
         await ownerLogout();
         localStorage.removeItem(sessionMarker);
-        queryClient.removeQueries({ queryKey: ownerEntryKey });
-        await queryClient.invalidateQueries({ queryKey: ownerEntryKey });
+        await queryClient.resetQueries({ queryKey: ownerEntryKey });
     };
 
     const onUnauthorized = async () => {
         localStorage.removeItem(sessionMarker);
-        await entryQuery.refetch();
+        await queryClient.resetQueries({ queryKey: ownerEntryKey });
     };
 
     if (entryQuery.isPending) {
