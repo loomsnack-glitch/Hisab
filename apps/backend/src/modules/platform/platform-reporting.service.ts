@@ -4,13 +4,20 @@ import {
     resolvePlatformReportingPeriod,
     type PlatformDashboardQuerySVC,
     type PlatformDashboardResponse,
+    type PlatformOrganizationDetailQuerySVC,
+    type PlatformOrganizationDetailResponse,
+    type PlatformOrganizationListItemDTO,
     type PlatformOrganizationListQuerySVC,
     type PlatformOrganizationListResponse,
     type ServiceResponse,
 } from "@repo/types";
 import * as platformReportingRepository from "./platform-reporting.repository";
+import type { PlatformOrganizationListMetricsRow } from "./platform-reporting.repository";
 
-type PlatformReportingRepository = Pick<typeof platformReportingRepository, "getDashboardMetrics" | "listOrganizations">;
+type PlatformReportingRepository = Pick<
+    typeof platformReportingRepository,
+    "getDashboardMetrics" | "listOrganizations" | "getOrganizationDetail"
+>;
 
 type PlatformReportingDependencies = {
     repository: PlatformReportingRepository;
@@ -24,6 +31,26 @@ const reportingPeriodError = (message: string) => ({
     message,
     data: null,
     code: STATUS_CODES.BAD_REQUEST,
+});
+
+const toOrganizationListItem = (
+    organization: PlatformOrganizationListMetricsRow,
+): PlatformOrganizationListItemDTO => ({
+    id: organization.id,
+    name: organization.name,
+    username: organization.username,
+    isActive: organization.isActive,
+    creator: {
+        firstName: organization.creatorFirstName,
+        lastName: organization.creatorLastName,
+        phone: organization.creatorPhone,
+    },
+    storeCount: organization.storeCount,
+    activeStoreCount: organization.activeStoreCount,
+    customerCount: organization.customerCount,
+    completedSaleCount: organization.completedSaleCount,
+    completedSalesValue: organization.completedSalesValue,
+    lastCompletedSaleAt: organization.lastCompletedSaleAt,
 });
 
 export const createPlatformReportingService = (dependencies: PlatformReportingDependencies) => ({
@@ -103,27 +130,65 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                     startDate: resolved.period.startDate,
                     endDate: resolved.period.endDate,
                 },
-                organizations: metrics.organizations.map((organization) => ({
-                    id: organization.id,
-                    name: organization.name,
-                    username: organization.username,
-                    isActive: organization.isActive,
-                    creator: {
-                        firstName: organization.creatorFirstName,
-                        lastName: organization.creatorLastName,
-                        phone: organization.creatorPhone,
-                    },
-                    storeCount: organization.storeCount,
-                    activeStoreCount: organization.activeStoreCount,
-                    customerCount: organization.customerCount,
-                    completedSaleCount: organization.completedSaleCount,
-                    completedSalesValue: organization.completedSalesValue,
-                    lastCompletedSaleAt: organization.lastCompletedSaleAt,
-                })),
+                organizations: metrics.organizations.map(toOrganizationListItem),
                 pagination: {
                     page: query.page,
                     limit: query.limit,
                     totalCount: metrics.totalCount,
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganization: async (
+        organizationId: string,
+        query: PlatformOrganizationDetailQuerySVC,
+    ): Promise<ServiceResponse<PlatformOrganizationDetailResponse | null>> => {
+        const now = dependencies.now();
+        const resolved = resolvePlatformReportingPeriod(query, now);
+        if (!resolved.ok) {
+            return reportingPeriodError(resolved.message);
+        }
+
+        const activityWindow = resolveActiveStoreWindow(now);
+        const organization = await dependencies.repository.getOrganizationDetail({
+            organizationId,
+            activityStartAt: activityWindow.startAt,
+            activityEndAt: activityWindow.endAt,
+            periodStartAt: resolved.period.startAt,
+            periodEndAt: resolved.period.endAt,
+        });
+
+        if (!organization) {
+            return {
+                status: "error",
+                message: "Organization not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization retrieved successfully",
+            data: {
+                reportingPeriod: {
+                    selection: resolved.period.selection,
+                    startDate: resolved.period.startDate,
+                    endDate: resolved.period.endDate,
+                },
+                organization: {
+                    ...toOrganizationListItem(organization),
+                    stores: organization.stores.map((store) => ({
+                        id: store.id,
+                        name: store.name,
+                        isActive: store.isActive,
+                        customerCount: store.customerCount,
+                        completedSaleCount: store.completedSaleCount,
+                        completedSalesValue: store.completedSalesValue,
+                        lastCompletedSaleAt: store.lastCompletedSaleAt,
+                    })),
                 },
             },
             code: STATUS_CODES.SUCCESS,

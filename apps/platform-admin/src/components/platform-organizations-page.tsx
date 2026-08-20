@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
-import { getPlatformOrganizations as getPlatformOrganizationsRequest } from "@repo/services";
+import {
+    getPlatformOrganization as getPlatformOrganizationRequest,
+    getPlatformOrganizations as getPlatformOrganizationsRequest,
+} from "@repo/services";
 import {
     PLATFORM_REPORTING_TIMEZONE,
     formatPhoneDisplay,
@@ -15,6 +18,8 @@ import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui/components/table";
 
+import PlatformOrganizationDetailPage from "@/components/platform-organization-detail-page";
+
 const organizationsQueryKey = ["platform-owner", "organizations"] as const;
 
 type ActivityFilter = PlatformOrganizationActivityFilter;
@@ -23,6 +28,7 @@ type PlatformOrganizationsPageProps = {
     onBack: () => void;
     reportingQuery?: PlatformDashboardQueryJSON;
     getPlatformOrganizations?: typeof getPlatformOrganizationsRequest;
+    getPlatformOrganization?: typeof getPlatformOrganizationRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
 };
@@ -78,6 +84,7 @@ const PlatformOrganizationsPage = ({
     onBack,
     reportingQuery = { period: "all-time" },
     getPlatformOrganizations = getPlatformOrganizationsRequest,
+    getPlatformOrganization = getPlatformOrganizationRequest,
     initialSearch = "",
     initialActivity = "all",
 }: PlatformOrganizationsPageProps) => {
@@ -85,6 +92,7 @@ const PlatformOrganizationsPage = ({
     const [appliedSearch, setAppliedSearch] = useState(initialSearch.trim());
     const [activity, setActivity] = useState<ActivityFilter>(initialActivity);
     const [page, setPage] = useState(1);
+    const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | null>(null);
     const listQuery = toListQuery(reportingQuery, appliedSearch, activity, page);
 
     const organizationsQuery = useQuery({
@@ -110,6 +118,17 @@ const PlatformOrganizationsPage = ({
         setActivity(next);
         setPage(1);
     };
+
+    if (selectedOrganizationId) {
+        return (
+            <PlatformOrganizationDetailPage
+                organizationId={selectedOrganizationId}
+                reportingQuery={reportingQuery}
+                onBack={() => setSelectedOrganizationId(null)}
+                getPlatformOrganization={getPlatformOrganization}
+            />
+        );
+    }
 
     return (
         <section className="space-y-6">
@@ -195,7 +214,14 @@ const PlatformOrganizationsPage = ({
                             {organizations.map((organization) => (
                                 <TableRow key={organization.id}>
                                     <TableCell>
-                                        <div className="font-medium">{organization.name}</div>
+                                        <Button
+                                            type="button"
+                                            variant="link"
+                                            className="h-auto p-0 text-left font-medium"
+                                            onClick={() => setSelectedOrganizationId(organization.id)}
+                                        >
+                                            {organization.name}
+                                        </Button>
                                         <div className="text-slate-500">{organization.username}</div>
                                     </TableCell>
                                     <TableCell>

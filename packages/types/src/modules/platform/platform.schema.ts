@@ -194,6 +194,25 @@ export const PlatformOrganizationListDTOSchema = z.object({
     }),
 });
 
+export const PlatformOrganizationDetailQuerySchema = PlatformDashboardQuerySchema;
+
+export const PlatformStoreActivityDTOSchema = z.object({
+    id: z.uuid("Invalid store id"),
+    name: z.string().trim().min(1),
+    isActive: z.boolean(),
+    customerCount: nonNegativeIntSchema,
+    completedSaleCount: nonNegativeIntSchema,
+    completedSalesValue: nonNegativeMoneySchema,
+    lastCompletedSaleAt: dtoDateSchema.nullable(),
+});
+
+export const PlatformOrganizationDetailDTOSchema = z.object({
+    reportingPeriod: PlatformReportingPeriodDTOSchema,
+    organization: PlatformOrganizationListItemDTOSchema.extend({
+        stores: z.array(PlatformStoreActivityDTOSchema),
+    }),
+});
+
 export const kolkataCalendarDate = (now: Date): string =>
     new Intl.DateTimeFormat("en-CA", { timeZone: PLATFORM_REPORTING_TIMEZONE }).format(now);
 

@@ -7,9 +7,12 @@ import type {
     OwnerUserSeedSchema,
     PlatformDashboardDTOSchema,
     PlatformDashboardQuerySchema,
+    PlatformOrganizationDetailDTOSchema,
+    PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListDTOSchema,
     PlatformOrganizationListItemDTOSchema,
     PlatformOrganizationListQuerySchema,
+    PlatformStoreActivityDTOSchema,
 } from "./platform.schema";
 
 export type OwnerUserDTO = z.infer<typeof OwnerUserDTOSchema>;
@@ -57,3 +60,9 @@ export type PlatformOrganizationActivityFilter = PlatformOrganizationListQuerySV
 export type PlatformOrganizationListItemDTO = z.infer<typeof PlatformOrganizationListItemDTOSchema>;
 export type PlatformOrganizationListDTO = z.infer<typeof PlatformOrganizationListDTOSchema>;
 export type PlatformOrganizationListResponse = PlatformOrganizationListDTO;
+
+export type PlatformOrganizationDetailQueryJSON = z.input<typeof PlatformOrganizationDetailQuerySchema>;
+export type PlatformOrganizationDetailQuerySVC = z.output<typeof PlatformOrganizationDetailQuerySchema>;
+export type PlatformStoreActivityDTO = z.infer<typeof PlatformStoreActivityDTOSchema>;
+export type PlatformOrganizationDetailDTO = z.infer<typeof PlatformOrganizationDetailDTOSchema>;
+export type PlatformOrganizationDetailResponse = PlatformOrganizationDetailDTO;

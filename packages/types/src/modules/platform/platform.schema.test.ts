@@ -6,6 +6,7 @@ import {
     OwnerUserActiveStateSchema,
     OwnerUserSeedSchema,
     PlatformDashboardQuerySchema,
+    PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListQuerySchema,
     FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
     kolkataCalendarDate,
@@ -211,6 +212,30 @@ describe("Platform Organization list contracts", () => {
         expect(PlatformOrganizationListQuerySchema.safeParse({ limit: "101" }).success).toBe(false);
         expect(
             PlatformOrganizationListQuerySchema.safeParse({
+                period: "custom",
+                startDate: "2026-08-21",
+                endDate: "2026-08-01",
+            }).success,
+        ).toBe(false);
+    });
+});
+
+describe("Platform Organization detail contracts", () => {
+    test("reuses the dashboard Platform Reporting Period query contract", () => {
+        expect(PlatformOrganizationDetailQuerySchema.parse({})).toEqual({ period: "all-time" });
+        expect(
+            PlatformOrganizationDetailQuerySchema.parse({
+                period: "custom",
+                startDate: "2026-08-01",
+                endDate: "2026-08-21",
+            }),
+        ).toEqual({
+            period: "custom",
+            startDate: "2026-08-01",
+            endDate: "2026-08-21",
+        });
+        expect(
+            PlatformOrganizationDetailQuerySchema.safeParse({
                 period: "custom",
                 startDate: "2026-08-21",
                 endDate: "2026-08-01",

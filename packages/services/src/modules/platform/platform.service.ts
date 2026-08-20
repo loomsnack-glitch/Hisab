@@ -10,6 +10,8 @@ import type {
     PlatformDashboardQueryJSON,
     PlatformDashboardResponse,
     PlatformEntryResponse,
+    PlatformOrganizationDetailQueryJSON,
+    PlatformOrganizationDetailResponse,
     PlatformOrganizationListQueryJSON,
     PlatformOrganizationListResponse,
     ServiceResponse,
@@ -97,6 +99,18 @@ export const getPlatformOrganizations = async (
 ): Promise<ServiceResponse<PlatformOrganizationListResponse | null>> => {
     try {
         const response = await api.get("/platform/organizations", { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganization = async (
+    organizationId: string,
+    query: PlatformOrganizationDetailQueryJSON = {},
+): Promise<ServiceResponse<PlatformOrganizationDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}`, { params: query });
         return response.data;
     } catch (error) {
         return handleApiError(error);

@@ -6,6 +6,7 @@ import {
     OwnerLoginSchema,
     OwnerUserActiveStateSchema,
     PlatformDashboardQuerySchema,
+    PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListQuerySchema,
     STATUS_CODES,
     type PlatformEntryResponse,
@@ -101,6 +102,31 @@ export const createPlatformRoutes = (
             return handleError("platform.routes", "listPlatformOrganizations", c, error);
         }
     });
+
+    router.get(
+        "/organizations/:organizationId",
+        validateSchema("query", PlatformOrganizationDetailQuerySchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await reportingService.getOrganization(organizationId.data, c.req.valid("query")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "getPlatformOrganization", c, error);
+            }
+        },
+    );
 
     router.get("/owner-users", async (c) => {
         try {

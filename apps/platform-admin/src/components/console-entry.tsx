@@ -20,7 +20,10 @@ type ConsoleEntryProps = {
     onLogout: () => Promise<void>;
     ownerUsersPageProps?: Pick<OwnerUsersPageProps, "listOwnerUsers" | "createOwnerUser" | "setOwnerUserActiveState">;
     dashboardPageProps?: Pick<PlatformDashboardPageProps, "getPlatformDashboard" | "initialQuery" | "initialCustomValues">;
-    organizationsPageProps?: Pick<PlatformOrganizationsPageProps, "getPlatformOrganizations" | "initialSearch" | "initialActivity">;
+    organizationsPageProps?: Pick<
+        PlatformOrganizationsPageProps,
+        "getPlatformOrganizations" | "getPlatformOrganization" | "initialSearch" | "initialActivity"
+    >;
 };
 
 const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageProps, organizationsPageProps }: ConsoleEntryProps) => {

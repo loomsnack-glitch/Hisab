@@ -221,6 +221,7 @@ const createHarness = async () => {
                 facts.payments,
             ),
             listOrganizations: async () => ({ organizations: [], totalCount: 0 }),
+            getOrganizationDetail: async () => null,
         },
         now: () => now,
     });
