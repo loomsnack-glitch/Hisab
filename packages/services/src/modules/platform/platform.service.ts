@@ -1,7 +1,12 @@
 import type {
+    CreateOwnerUserJSON,
+    CreateOwnerUserSVC,
     OwnerAuthResponse,
     OwnerLoginJSON,
     OwnerLoginSVC,
+    OwnerUserActiveStateJSON,
+    OwnerUserListResponse,
+    OwnerUserResponse,
     PlatformEntryResponse,
     ServiceResponse,
 } from "@repo/types";
@@ -36,6 +41,36 @@ export const getPlatformEntry = async (): Promise<ServiceResponse<PlatformEntryR
 export const ownerLogout = async (): Promise<ServiceResponse<null>> => {
     try {
         const response = await api.post("/platform/auth/logout");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const listOwnerUsers = async (): Promise<ServiceResponse<OwnerUserListResponse | null>> => {
+    try {
+        const response = await api.get("/platform/owner-users");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createOwnerUser = async (data: CreateOwnerUserJSON): Promise<ServiceResponse<OwnerUserResponse | null>> => {
+    try {
+        const response = await api.post("/platform/owner-users", data as CreateOwnerUserSVC);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const setOwnerUserActiveState = async (
+    ownerUserId: string,
+    data: OwnerUserActiveStateJSON,
+): Promise<ServiceResponse<OwnerUserResponse | null>> => {
+    try {
+        const response = await api.patch(`/platform/owner-users/${ownerUserId}/active-state`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

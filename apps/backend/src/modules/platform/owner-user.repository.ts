@@ -1,10 +1,16 @@
-import type { CreateOwnerUserREPO, OwnerUserRecord } from "@repo/types";
+import type { CreateOwnerUserREPO, OwnerUserDTO, OwnerUserRecord } from "@repo/types";
 import { pg } from "@/config/db";
 import { camelToSnakeSql } from "@/utils/case-sql";
 import { snakeToCamel } from "@/utils/case";
 
-// Stable app-specific namespace: serializes only first Owner User seed attempts.
-const SEED_OWNER_USER_ADVISORY_LOCK_ID = 726384920;
+// Serializes seed, create, and active-state writes so the last-active Owner User cannot be dropped.
+const OWNER_USERS_WRITE_LOCK_ID = 726384920;
+
+const toOwnerUserRecord = (row: unknown): OwnerUserRecord => snakeToCamel(row) as OwnerUserRecord;
+const toOwnerUserDTO = (row: unknown): OwnerUserDTO => {
+    const { passwordHash: _passwordHash, ...ownerUser } = toOwnerUserRecord(row);
+    return ownerUser;
+};
 
 export type SeedOwnerUserResult =
     | { status: "created"; ownerUser: OwnerUserRecord }
@@ -12,7 +18,7 @@ export type SeedOwnerUserResult =
 
 export const createSeedOwnerUser = async (data: CreateOwnerUserREPO): Promise<SeedOwnerUserResult> =>
     pg.begin(async (tx) => {
-        await tx`SELECT pg_advisory_xact_lock(${SEED_OWNER_USER_ADVISORY_LOCK_ID})`;
+        await tx`SELECT pg_advisory_xact_lock(${OWNER_USERS_WRITE_LOCK_ID})`;
 
         const [existingPhone] = await tx`
             SELECT id
@@ -37,7 +43,7 @@ export const createSeedOwnerUser = async (data: CreateOwnerUserREPO): Promise<Se
             RETURNING *
         `;
         return created
-            ? { status: "created", ownerUser: snakeToCamel(created) as OwnerUserRecord }
+            ? { status: "created", ownerUser: toOwnerUserRecord(created) }
             : { status: "persistence-failed" };
     });
 
@@ -48,7 +54,7 @@ export const getOwnerUserById = async (id: string): Promise<OwnerUserRecord | nu
         WHERE id = ${id}
     `;
 
-    return result ? (snakeToCamel(result) as OwnerUserRecord) : null;
+    return result ? toOwnerUserRecord(result) : null;
 };
 
 export const getOwnerUserByPhone = async (phone: string): Promise<OwnerUserRecord | null> => {
@@ -58,5 +64,93 @@ export const getOwnerUserByPhone = async (phone: string): Promise<OwnerUserRecor
         WHERE phone = ${phone}
     `;
 
-    return result ? (snakeToCamel(result) as OwnerUserRecord) : null;
+    return result ? toOwnerUserRecord(result) : null;
 };
+
+export const listOwnerUsers = async (): Promise<OwnerUserDTO[]> => {
+    const results = await pg`
+        SELECT id, first_name, last_name, phone, is_active, created_at, updated_at
+        FROM owner_users
+        ORDER BY created_at ASC, first_name ASC, last_name ASC, id ASC
+    `;
+
+    return results.map(toOwnerUserDTO);
+};
+
+export const countActiveOwnerUsers = async (tx: typeof pg | Bun.TransactionSQL = pg): Promise<number> => {
+    const [row] = await tx`
+        SELECT COUNT(*)::int AS active_count
+        FROM owner_users
+        WHERE is_active
+    `;
+
+    return Number(row?.active_count ?? 0);
+};
+
+export type CreateConsoleOwnerUserResult =
+    | { status: "created"; ownerUser: OwnerUserRecord }
+    | { status: "duplicate-phone" | "persistence-failed" };
+
+export const createOwnerUser = async (data: CreateOwnerUserREPO): Promise<CreateConsoleOwnerUserResult> =>
+    pg.begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(${OWNER_USERS_WRITE_LOCK_ID})`;
+
+        const [existingPhone] = await tx`
+            SELECT id
+            FROM owner_users
+            WHERE phone = ${data.phone}
+        `;
+        if (existingPhone) {
+            return { status: "duplicate-phone" };
+        }
+
+        const [created] = await tx`
+            INSERT INTO owner_users ${camelToSnakeSql(data)}
+            RETURNING *
+        `;
+        return created
+            ? { status: "created", ownerUser: toOwnerUserRecord(created) }
+            : { status: "persistence-failed" };
+    });
+
+export type UpdateOwnerUserActiveStateResult =
+    | { status: "updated" | "unchanged"; ownerUser: OwnerUserRecord }
+    | { status: "not-found" }
+    | { status: "last-active" };
+
+export const updateOwnerUserActiveState = async (
+    ownerUserId: string,
+    isActive: boolean,
+): Promise<UpdateOwnerUserActiveStateResult> =>
+    pg.begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(${OWNER_USERS_WRITE_LOCK_ID})`;
+
+        const [existing] = await tx`
+            SELECT *
+            FROM owner_users
+            WHERE id = ${ownerUserId}
+            FOR UPDATE
+        `;
+        if (!existing) {
+            return { status: "not-found" };
+        }
+
+        const current = toOwnerUserRecord(existing);
+        if (current.isActive === isActive) {
+            return { status: "unchanged", ownerUser: current };
+        }
+
+        if (!isActive && current.isActive && (await countActiveOwnerUsers(tx)) <= 1) {
+            return { status: "last-active" };
+        }
+
+        const [updated] = await tx`
+            UPDATE owner_users
+            SET is_active = ${isActive}, updated_at = NOW()
+            WHERE id = ${ownerUserId}
+            RETURNING *
+        `;
+        return updated
+            ? { status: "updated", ownerUser: toOwnerUserRecord(updated) }
+            : { status: "not-found" };
+    });

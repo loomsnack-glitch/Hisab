@@ -35,6 +35,12 @@ export const OwnerUserSeedSchema = z.object({
     password: OwnerPasswordSchema,
 });
 
+export const CreateOwnerUserSchema = OwnerUserSeedSchema;
+
+export const OwnerUserActiveStateSchema = z.object({
+    isActive: z.boolean(),
+});
+
 export const OwnerLoginSchema = z.discriminatedUnion("requestType", [
     z.object({
         requestType: z.literal("user-info"),

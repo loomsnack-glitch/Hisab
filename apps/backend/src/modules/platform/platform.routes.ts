@@ -1,11 +1,19 @@
 import { Hono } from "hono";
 import { deleteCookie, setCookie } from "hono/cookie";
-import { OwnerLoginSchema, STATUS_CODES, type PlatformEntryResponse } from "@repo/types";
+import { z } from "zod";
+import {
+    CreateOwnerUserSchema,
+    OwnerLoginSchema,
+    OwnerUserActiveStateSchema,
+    STATUS_CODES,
+    type PlatformEntryResponse,
+} from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { createOwnerAuthMiddleware, OWNER_AUTH_COOKIE } from "@/middlewares/owner-auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import { getOwnerAuthService, OWNER_SESSION_SECONDS, type OwnerAuthService } from "./owner-auth.service";
+import { getOwnerUserService, type OwnerUserService } from "./owner-user.service";
 
 const setOwnerCookie = (c: Parameters<typeof setCookie>[0], token: string) => {
     setCookie(c, OWNER_AUTH_COOKIE, token, {
@@ -17,9 +25,13 @@ const setOwnerCookie = (c: Parameters<typeof setCookie>[0], token: string) => {
     });
 };
 
-export const createPlatformRoutes = (authService: OwnerAuthService = getOwnerAuthService()) => {
+export const createPlatformRoutes = (
+    authService: OwnerAuthService = getOwnerAuthService(),
+    ownerUserService: OwnerUserService = getOwnerUserService(),
+) => {
     const router = new Hono<{ Variables: AppVariables }>();
     const ownerAuthMiddleware = createOwnerAuthMiddleware(authService);
+    const ownerUserIdSchema = z.uuid("Invalid Owner User id");
 
     router.post("/auth/login", validateSchema("json", OwnerLoginSchema), async (c) => {
         try {
@@ -68,6 +80,51 @@ export const createPlatformRoutes = (authService: OwnerAuthService = getOwnerAut
             data: { ownerUser: c.get("authOwner") },
             code: STATUS_CODES.SUCCESS,
         }),
+    );
+
+    router.get("/owner-users", async (c) => {
+        try {
+            return handleServiceResponse(c, await ownerUserService.list());
+        } catch (error) {
+            return handleError("platform.routes", "listOwnerUsers", c, error);
+        }
+    });
+
+    router.post("/owner-users", validateSchema("json", CreateOwnerUserSchema), async (c) => {
+        try {
+            return handleServiceResponse(c, await ownerUserService.create(c.req.valid("json")));
+        } catch (error) {
+            return handleError("platform.routes", "createOwnerUser", c, error);
+        }
+    });
+
+    router.patch(
+        "/owner-users/:ownerUserId/active-state",
+        validateSchema("json", OwnerUserActiveStateSchema),
+        async (c) => {
+            try {
+                const ownerUserId = ownerUserIdSchema.safeParse(c.req.param("ownerUserId"));
+                if (!ownerUserId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Owner User id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await ownerUserService.setActiveState(
+                        c.get("authOwner").id,
+                        ownerUserId.data,
+                        c.req.valid("json"),
+                    ),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "setOwnerUserActiveState", c, error);
+            }
+        },
     );
 
     return router;
