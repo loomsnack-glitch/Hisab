@@ -307,6 +307,15 @@ const processMessageEvent = async (
     }
 };
 
+/**
+ * Cloud receipts already have their own durable inbox. They must enter the
+ * shared Store-scoped writer without creating a legacy Baileys inbox row.
+ */
+export const ingestNormalizedMessageEvent = async (
+    accountId: string,
+    data: WhatsAppWorkerMessageEventJSON,
+): Promise<{ stored: boolean }> => processMessageEvent(accountId, data);
+
 export const ingestMessageEvent = async (
     accountId: string,
     data: WhatsAppWorkerMessageEventJSON,

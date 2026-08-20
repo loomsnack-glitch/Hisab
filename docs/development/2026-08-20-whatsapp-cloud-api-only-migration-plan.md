@@ -266,7 +266,43 @@ Non-goals for Phase 2B:
 
 Exit gate: every supported payload produces a typed normalized event, unsupported
 payloads produce an explicit deferred outcome, status transitions are monotonic,
-and the focused/full test suites pass. Changes remain uncommitted until
+and the focused/full test suites pass. This normalization slice was reviewed
+and committed before the receipt processor was started.
+
+#### Phase 2C: Durable Cloud receipt processing
+
+Research: `docs/research/2026-08-21-whatsapp-cloud-api-phase-2c-processing-research.md`.
+
+This slice consumes the durable receipt contract without adding Cloud runtime
+scheduling. It closes the database-processing boundary while preserving the
+existing Baileys replay path.
+
+Deliverables:
+
+- lease and claim pending, retryable, and expired Cloud receipt rows with
+  `FOR UPDATE SKIP LOCKED` and bounded attempt/backoff handling;
+- re-resolve the account from `(waba_id, phone_number_id)` before processing,
+  including receipts accepted before account provisioning finished;
+- apply normalized inbound text through the existing Store-scoped conversation
+  writer without creating legacy Baileys provider-event rows;
+- apply timestamp-aware, monotonic outbound Cloud status updates;
+- classify malformed, media, and unsupported events as ignored, while unknown
+  accounts and temporarily missing outbound messages retry and eventually
+  dead-letter with safe bounded diagnostics;
+- fixture tests for leases, idempotency, status ordering, deferred outcomes,
+  retries, and dead letters.
+
+Non-goals for Phase 2C:
+
+- no startup interval or worker reconciliation wiring;
+- no Graph API calls, media retrieval, template synchronization, or Embedded
+  Signup;
+- no migration execution against a target database;
+- no changes to the existing Baileys provider-event replay path.
+
+Exit gate: a claimed receipt is processed exactly once from the application's
+perspective, retries are bounded and observable, Store/account scoping is
+preserved, focused/full tests pass, and changes remain uncommitted until
 explicitly approved.
 
 ### Phase 3: Embedded Signup and account operations

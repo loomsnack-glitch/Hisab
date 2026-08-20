@@ -1465,6 +1465,63 @@ export const updateInvoiceMessageStatus = async (
     return Boolean(row);
 };
 
+export const updateCloudMessageStatus = async (
+    accountId: string,
+    providerMessageId: string,
+    status: "sent" | "delivered" | "read" | "failed",
+    occurredAt: string,
+    failureCode: string | null,
+    failureMessage: string | null,
+): Promise<"updated" | "stale" | "missing"> => {
+    const [existing] = await pg`
+        SELECT id
+        FROM whatsapp_messages
+        WHERE whatsapp_account_id = ${accountId}
+          AND provider_message_id = ${providerMessageId}
+          AND direction = 'outbound'
+    `;
+    if (!existing) return "missing";
+    const [row] = await pg`
+        UPDATE whatsapp_messages
+        SET status = CASE
+                WHEN ${status} = 'read' THEN 'read'::whatsapp_message_status_enum
+                WHEN status IN ('read', 'delivered', 'failed') THEN status
+                WHEN ${status} = 'delivered' THEN 'delivered'::whatsapp_message_status_enum
+                WHEN ${status} = 'failed' THEN 'failed'::whatsapp_message_status_enum
+                ELSE 'sent'::whatsapp_message_status_enum
+            END,
+            cloud_status_at = ${occurredAt}::timestamptz,
+            sent_at = CASE
+                WHEN ${status} IN ('sent', 'delivered', 'read') THEN COALESCE(sent_at, ${occurredAt}::timestamptz)
+                ELSE sent_at
+            END,
+            delivered_at = CASE
+                WHEN ${status} IN ('delivered', 'read') THEN COALESCE(delivered_at, ${occurredAt}::timestamptz)
+                ELSE delivered_at
+            END,
+            read_at = CASE
+                WHEN ${status} = 'read' THEN COALESCE(read_at, ${occurredAt}::timestamptz)
+                ELSE read_at
+            END,
+            failure_code = CASE
+                WHEN ${status} = 'read' OR status IN ('delivered', 'read') THEN NULL
+                WHEN ${status} = 'failed' THEN ${failureCode}
+                ELSE failure_code
+            END,
+            failure_message = CASE
+                WHEN ${status} = 'read' OR status IN ('delivered', 'read') THEN NULL
+                WHEN ${status} = 'failed' THEN ${failureMessage}
+                ELSE failure_message
+            END
+        WHERE whatsapp_account_id = ${accountId}
+          AND provider_message_id = ${providerMessageId}
+          AND direction = 'outbound'
+          AND (cloud_status_at IS NULL OR cloud_status_at <= ${occurredAt}::timestamptz)
+        RETURNING id
+    `;
+    return row ? "updated" : "stale";
+};
+
 export const retryInvoiceOutbox = async (
     organizationId: string,
     storeId: string,
