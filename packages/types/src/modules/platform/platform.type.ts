@@ -7,6 +7,9 @@ import type {
     OwnerUserSeedSchema,
     PlatformDashboardDTOSchema,
     PlatformDashboardQuerySchema,
+    PlatformOrganizationListDTOSchema,
+    PlatformOrganizationListItemDTOSchema,
+    PlatformOrganizationListQuerySchema,
 } from "./platform.schema";
 
 export type OwnerUserDTO = z.infer<typeof OwnerUserDTOSchema>;
@@ -47,3 +50,10 @@ export type PlatformDashboardQueryJSON = z.input<typeof PlatformDashboardQuerySc
 export type PlatformDashboardQuerySVC = z.output<typeof PlatformDashboardQuerySchema>;
 export type PlatformDashboardDTO = z.infer<typeof PlatformDashboardDTOSchema>;
 export type PlatformDashboardResponse = PlatformDashboardDTO;
+
+export type PlatformOrganizationListQueryJSON = z.input<typeof PlatformOrganizationListQuerySchema>;
+export type PlatformOrganizationListQuerySVC = z.output<typeof PlatformOrganizationListQuerySchema>;
+export type PlatformOrganizationActivityFilter = PlatformOrganizationListQuerySVC["activity"];
+export type PlatformOrganizationListItemDTO = z.infer<typeof PlatformOrganizationListItemDTOSchema>;
+export type PlatformOrganizationListDTO = z.infer<typeof PlatformOrganizationListDTOSchema>;
+export type PlatformOrganizationListResponse = PlatformOrganizationListDTO;

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { BarChart3, Building2, LogOut, ShieldCheck, Users } from "lucide-react";
-import type { OwnerUserDTO } from "@repo/types";
+import type { OwnerUserDTO, PlatformDashboardQueryJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 
 import OwnerUsersPage, { type OwnerUsersPageProps } from "@/components/owner-users-page";
 import PlatformDashboardPage, { type PlatformDashboardPageProps } from "@/components/platform-dashboard-page";
+import PlatformOrganizationsPage, { type PlatformOrganizationsPageProps } from "@/components/platform-organizations-page";
 
 const destinations = [
     { title: "Dashboard", description: "Platform adoption totals and reporting periods", icon: BarChart3 },
@@ -19,10 +20,17 @@ type ConsoleEntryProps = {
     onLogout: () => Promise<void>;
     ownerUsersPageProps?: Pick<OwnerUsersPageProps, "listOwnerUsers" | "createOwnerUser" | "setOwnerUserActiveState">;
     dashboardPageProps?: Pick<PlatformDashboardPageProps, "getPlatformDashboard" | "initialQuery" | "initialCustomValues">;
+    organizationsPageProps?: Pick<PlatformOrganizationsPageProps, "getPlatformOrganizations" | "initialSearch" | "initialActivity">;
 };
 
-const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageProps }: ConsoleEntryProps) => {
-    const [destination, setDestination] = useState<"home" | "owner-users" | "dashboard">("home");
+const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageProps, organizationsPageProps }: ConsoleEntryProps) => {
+    const [destination, setDestination] = useState<"home" | "owner-users" | "dashboard" | "organizations">("home");
+    const [reportingQuery, setReportingQuery] = useState<PlatformDashboardQueryJSON>(
+        dashboardPageProps?.initialQuery ?? { period: "all-time" },
+    );
+    const [customValues, setCustomValues] = useState(
+        dashboardPageProps?.initialCustomValues ?? { startDate: "", endDate: "" },
+    );
 
     return (
         <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -41,17 +49,32 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageP
                 {destination === "owner-users" ? (
                     <OwnerUsersPage currentOwnerUser={ownerUser} onBack={() => setDestination("home")} {...ownerUsersPageProps} />
                 ) : destination === "dashboard" ? (
-                    <PlatformDashboardPage onBack={() => setDestination("home")} {...dashboardPageProps} />
+                    <PlatformDashboardPage
+                        onBack={() => setDestination("home")}
+                        {...dashboardPageProps}
+                        initialQuery={reportingQuery}
+                        initialCustomValues={customValues}
+                        onReportingPeriodChange={(query, nextCustomValues) => {
+                            setReportingQuery(query);
+                            setCustomValues(nextCustomValues);
+                        }}
+                    />
+                ) : destination === "organizations" ? (
+                    <PlatformOrganizationsPage
+                        onBack={() => setDestination("home")}
+                        reportingQuery={reportingQuery}
+                        {...organizationsPageProps}
+                    />
                 ) : (
                     <>
                         <section className="space-y-2">
                             <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100"><ShieldCheck className="size-3" /> Active Owner User</Badge>
                             <h1 className="text-3xl font-semibold tracking-tight">Welcome, {ownerUser.firstName}</h1>
-                            <p className="text-slate-600">Your isolated owner session is active. Choose a console area when its ticket is delivered.</p>
+                            <p className="text-slate-600">Your isolated owner session is active. Choose a console destination.</p>
                         </section>
                         <section className="grid gap-4 md:grid-cols-3" aria-label="Console destinations">
                             {destinations.map(({ title, description, icon: Icon }) => (
-                                <Card key={title} className={title === "Organizations" ? "opacity-80" : undefined}>
+                                <Card key={title}>
                                     <CardHeader>
                                         <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><Icon className="size-5" /></div>
                                         <CardTitle>{title}</CardTitle>
@@ -63,7 +86,7 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageP
                                         ) : title === "Dashboard" ? (
                                             <Button type="button" onClick={() => setDestination("dashboard")}>Open Dashboard</Button>
                                         ) : (
-                                            <Badge variant="outline">Later ticket</Badge>
+                                            <Button type="button" onClick={() => setDestination("organizations")}>Open Organizations</Button>
                                         )}
                                     </CardContent>
                                 </Card>

@@ -65,46 +65,76 @@ export const PlatformReportingPeriodSelectionSchema = z.enum(["all-time", "7d", 
 
 const calendarDateSchema = z.string().date("Enter a valid calendar date");
 
-export const PlatformDashboardQuerySchema = z
-    .object({
-        period: PlatformReportingPeriodSelectionSchema.default("all-time"),
-        startDate: calendarDateSchema.optional(),
-        endDate: calendarDateSchema.optional(),
-    })
-    .superRefine((value, ctx) => {
-        if (value.period === "custom") {
-            if (!value.startDate) {
-                ctx.addIssue({
-                    code: "custom",
-                    path: ["startDate"],
-                    message: "Start date is required for a custom Platform Reporting Period",
-                });
-            }
-            if (!value.endDate) {
-                ctx.addIssue({
-                    code: "custom",
-                    path: ["endDate"],
-                    message: "End date is required for a custom Platform Reporting Period",
-                });
-            }
-            if (value.startDate && value.endDate && value.startDate > value.endDate) {
-                ctx.addIssue({
-                    code: "custom",
-                    path: ["startDate"],
-                    message: "Start date must be before or equal to end date",
-                });
-            }
-            return;
-        }
+const platformReportingPeriodQueryFields = {
+    period: PlatformReportingPeriodSelectionSchema.default("all-time"),
+    startDate: calendarDateSchema.optional(),
+    endDate: calendarDateSchema.optional(),
+};
 
-        if (value.startDate || value.endDate) {
+const refinePlatformReportingPeriodQuery = (
+    value: { period: z.infer<typeof PlatformReportingPeriodSelectionSchema>; startDate?: string; endDate?: string },
+    ctx: z.RefinementCtx,
+) => {
+    if (value.period === "custom") {
+        if (!value.startDate) {
             ctx.addIssue({
                 code: "custom",
                 path: ["startDate"],
-                message: "Custom dates are only valid for a custom Platform Reporting Period",
+                message: "Start date is required for a custom Platform Reporting Period",
             });
         }
-    });
+        if (!value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["endDate"],
+                message: "End date is required for a custom Platform Reporting Period",
+            });
+        }
+        if (value.startDate && value.endDate && value.startDate > value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Start date must be before or equal to end date",
+            });
+        }
+        return;
+    }
+
+    if (value.startDate || value.endDate) {
+        ctx.addIssue({
+            code: "custom",
+            path: ["startDate"],
+            message: "Custom dates are only valid for a custom Platform Reporting Period",
+        });
+    }
+};
+
+export const PlatformDashboardQuerySchema = z
+    .object(platformReportingPeriodQueryFields)
+    .superRefine(refinePlatformReportingPeriodQuery);
+
+const positivePageSchema = z.coerce
+    .number({ error: "Page must be a number" })
+    .int("Page must be a whole number")
+    .min(1, "Page must be at least 1");
+
+const organizationListLimitSchema = z.coerce
+    .number({ error: "Limit must be a number" })
+    .int("Limit must be a whole number")
+    .min(1, "Limit must be at least 1")
+    .max(100, "Limit must be at most 100");
+
+export const PlatformOrganizationActivityFilterSchema = z.enum(["all", "active", "inactive"]);
+
+export const PlatformOrganizationListQuerySchema = z
+    .object({
+        ...platformReportingPeriodQueryFields,
+        search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+        activity: PlatformOrganizationActivityFilterSchema.default("all"),
+        page: positivePageSchema.default(1),
+        limit: organizationListLimitSchema.default(20),
+    })
+    .superRefine(refinePlatformReportingPeriodQuery);
 
 const nonNegativeIntSchema = z.number().int().min(0);
 const nonNegativeMoneySchema = z.number().min(0);
@@ -131,6 +161,36 @@ export const PlatformDashboardDTOSchema = z.object({
         completedSaleCount: nonNegativeIntSchema,
         completedSalesValue: nonNegativeMoneySchema,
         customerCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformOrganizationCreatorDTOSchema = z.object({
+    firstName: z.string().trim().min(1),
+    lastName: z.string().trim().min(1),
+    phone: phoneSchema,
+});
+
+export const PlatformOrganizationListItemDTOSchema = z.object({
+    id: z.uuid("Invalid organization id"),
+    name: z.string().trim().min(1),
+    username: z.string().trim().min(1),
+    isActive: z.boolean(),
+    creator: PlatformOrganizationCreatorDTOSchema,
+    storeCount: nonNegativeIntSchema,
+    activeStoreCount: nonNegativeIntSchema,
+    customerCount: nonNegativeIntSchema,
+    completedSaleCount: nonNegativeIntSchema,
+    completedSalesValue: nonNegativeMoneySchema,
+    lastCompletedSaleAt: dtoDateSchema.nullable(),
+});
+
+export const PlatformOrganizationListDTOSchema = z.object({
+    reportingPeriod: PlatformReportingPeriodDTOSchema,
+    organizations: z.array(PlatformOrganizationListItemDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
     }),
 });
 
@@ -180,7 +240,7 @@ const boundedPeriod = (
 });
 
 export const resolvePlatformReportingPeriod = (
-    query: z.output<typeof PlatformDashboardQuerySchema>,
+    query: Pick<z.output<typeof PlatformDashboardQuerySchema>, "period" | "startDate" | "endDate">,
     now: Date,
 ): { ok: true; period: ResolvedPlatformReportingPeriod } | { ok: false; message: string } => {
     if (query.period === "all-time") {

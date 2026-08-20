@@ -6,6 +6,7 @@ import {
     OwnerUserActiveStateSchema,
     OwnerUserSeedSchema,
     PlatformDashboardQuerySchema,
+    PlatformOrganizationListQuerySchema,
     FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
     kolkataCalendarDate,
     kolkataDayStartUtc,
@@ -174,5 +175,46 @@ describe("Platform Reporting Period contracts", () => {
             ok: false,
             message: FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
         });
+    });
+});
+
+describe("Platform Organization list contracts", () => {
+    test("defaults missing list filters to all Organizations on page 1", () => {
+        expect(PlatformOrganizationListQuerySchema.parse({})).toEqual({
+            period: "all-time",
+            activity: "all",
+            page: 1,
+            limit: 20,
+        });
+    });
+
+    test("accepts search, activity, and pagination alongside a Platform Reporting Period", () => {
+        expect(
+            PlatformOrganizationListQuerySchema.parse({
+                period: "7d",
+                search: "  cafe ",
+                activity: "inactive",
+                page: "2",
+                limit: "10",
+            }),
+        ).toEqual({
+            period: "7d",
+            search: "cafe",
+            activity: "inactive",
+            page: 2,
+            limit: 10,
+        });
+    });
+
+    test("rejects invalid pagination and inverted custom Platform Reporting Periods", () => {
+        expect(PlatformOrganizationListQuerySchema.safeParse({ page: "0" }).success).toBe(false);
+        expect(PlatformOrganizationListQuerySchema.safeParse({ limit: "101" }).success).toBe(false);
+        expect(
+            PlatformOrganizationListQuerySchema.safeParse({
+                period: "custom",
+                startDate: "2026-08-21",
+                endDate: "2026-08-01",
+            }).success,
+        ).toBe(false);
     });
 });

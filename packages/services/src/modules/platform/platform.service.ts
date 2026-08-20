@@ -10,6 +10,8 @@ import type {
     PlatformDashboardQueryJSON,
     PlatformDashboardResponse,
     PlatformEntryResponse,
+    PlatformOrganizationListQueryJSON,
+    PlatformOrganizationListResponse,
     ServiceResponse,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
@@ -84,6 +86,17 @@ export const getPlatformDashboard = async (
 ): Promise<ServiceResponse<PlatformDashboardResponse | null>> => {
     try {
         const response = await api.get("/platform/dashboard", { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizations = async (
+    query: PlatformOrganizationListQueryJSON = {},
+): Promise<ServiceResponse<PlatformOrganizationListResponse | null>> => {
+    try {
+        const response = await api.get("/platform/organizations", { params: query });
         return response.data;
     } catch (error) {
         return handleApiError(error);

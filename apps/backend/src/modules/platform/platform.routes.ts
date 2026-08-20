@@ -6,6 +6,7 @@ import {
     OwnerLoginSchema,
     OwnerUserActiveStateSchema,
     PlatformDashboardQuerySchema,
+    PlatformOrganizationListQuerySchema,
     STATUS_CODES,
     type PlatformEntryResponse,
 } from "@repo/types";
@@ -90,6 +91,14 @@ export const createPlatformRoutes = (
             return handleServiceResponse(c, await reportingService.getDashboard(c.req.valid("query")));
         } catch (error) {
             return handleError("platform.routes", "getPlatformDashboard", c, error);
+        }
+    });
+
+    router.get("/organizations", validateSchema("query", PlatformOrganizationListQuerySchema), async (c) => {
+        try {
+            return handleServiceResponse(c, await reportingService.listOrganizations(c.req.valid("query")));
+        } catch (error) {
+            return handleError("platform.routes", "listPlatformOrganizations", c, error);
         }
     });
 

@@ -19,6 +19,7 @@ type PlatformDashboardPageProps = {
     getPlatformDashboard?: typeof getPlatformDashboardRequest;
     initialQuery?: PlatformDashboardQueryJSON;
     initialCustomValues?: { startDate: string; endDate: string };
+    onReportingPeriodChange?: (query: PlatformDashboardQueryJSON, customValues: { startDate: string; endDate: string }) => void;
 };
 
 const periodOptions = [
@@ -53,6 +54,7 @@ const PlatformDashboardPage = ({
     getPlatformDashboard = getPlatformDashboardRequest,
     initialQuery,
     initialCustomValues,
+    onReportingPeriodChange,
 }: PlatformDashboardPageProps) => {
     const [selection, setSelection] = useState<PlatformDashboardQuerySVC["period"]>(initialQuery?.period ?? "all-time");
     const [startDate, setStartDate] = useState(initialCustomValues?.startDate ?? initialQuery?.startDate ?? "");
@@ -76,7 +78,9 @@ const PlatformDashboardPage = ({
             return;
         }
         setPeriodError(null);
-        setAppliedQuery(toAppliedQuery(parsed.data));
+        const applied = toAppliedQuery(parsed.data);
+        setAppliedQuery(applied);
+        onReportingPeriodChange?.(applied, { startDate, endDate });
     };
 
     const selectQuickPeriod = (nextSelection: Exclude<PlatformDashboardQuerySVC["period"], "custom">) => {
