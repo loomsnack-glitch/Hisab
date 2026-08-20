@@ -31,7 +31,7 @@ const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
 const secondaryNavItems = [
     { label: "Notifications", icon: Bell, disabled: true },
-    { label: "Settings", icon: Settings2, to: "/settings" },
+    { label: "Appearance", icon: Settings2, to: "/appearance" },
     { label: "Help", icon: HelpCircle, disabled: true },
 ] as const;
 

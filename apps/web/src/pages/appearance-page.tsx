@@ -3,7 +3,7 @@ import { Card, CardContent } from "@repo/ui/components/card";
 
 import AppearanceSettingsSection from "@/components/settings/appearance-settings-section";
 
-const SettingsPage = () => {
+const AppearancePage = () => {
     return (
         <div className="space-y-6">
             <Card className="overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
@@ -14,7 +14,7 @@ const SettingsPage = () => {
                             Preferences
                         </Badge>
                         <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                            Settings
+                            Appearance
                         </h2>
                         <p className="text-sm leading-relaxed text-muted-foreground">
                             Customize how Ganatri Admin looks and feels on this device.
@@ -28,4 +28,4 @@ const SettingsPage = () => {
     );
 };
 
-export default SettingsPage;
+export default AppearancePage;

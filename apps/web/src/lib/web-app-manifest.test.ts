@@ -19,7 +19,7 @@ describe("web app manifest", () => {
         expect(getWebAppWorkspace("/pos")).toBe("pos");
         expect(getWebAppWorkspace("/pos/bills")).toBe("pos");
         expect(getWebAppWorkspace("/organizations/abc/stores")).toBe("admin");
-        expect(getWebAppWorkspace("/settings")).toBe("admin");
+        expect(getWebAppWorkspace("/appearance")).toBe("admin");
     });
 
     test("installs admin and POS as standalone apps over the whole origin", () => {
@@ -39,7 +39,7 @@ describe("web app manifest", () => {
     test("keeps admin sibling routes inside the installed app scope", () => {
         expect(isPathInWebAppScope("/organizations/abc/stores")).toBe(true);
         expect(isPathInWebAppScope("/organizations/abc/billing")).toBe(true);
-        expect(isPathInWebAppScope("/settings")).toBe(true);
+        expect(isPathInWebAppScope("/appearance")).toBe(true);
         expect(isPathInWebAppScope("/pos/bills")).toBe(true);
     });
 
@@ -47,7 +47,7 @@ describe("web app manifest", () => {
         expect(isWithinStartUrlPrefix("/pos", "/pos/bills")).toBe(true);
         expect(isWithinStartUrlPrefix("/pos", "/pos/settings")).toBe(true);
         expect(isWithinStartUrlPrefix("/organizations/abc/stores", "/organizations/abc/billing")).toBe(false);
-        expect(isWithinStartUrlPrefix("/organizations/abc/stores", "/settings")).toBe(false);
+        expect(isWithinStartUrlPrefix("/organizations/abc/stores", "/appearance")).toBe(false);
     });
 
     test("static manifest files match the in-app contract", () => {
