@@ -1,14 +1,25 @@
 import path from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, loadEnv } from "vite";
 
 const useSyncExternalStoreShimDir = path.resolve(__dirname, "./src/shims/use-sync-external-store-shim");
+const rootPackagePath = path.resolve(__dirname, "../../package.json");
+const generatedVersionPath = path.resolve(__dirname, "./public/version.json");
+
+const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8")) as { version?: string };
+const generatedVersion = existsSync(generatedVersionPath)
+    ? (JSON.parse(readFileSync(generatedVersionPath, "utf8")) as { version?: string; build?: string; builtAt?: string })
+    : {};
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, __dirname, "");
     return {
         define: {
+            "import.meta.env.VITE_APP_VERSION": JSON.stringify(generatedVersion.version || rootPackage.version || "development"),
+            "import.meta.env.VITE_BUILD_ID": JSON.stringify(generatedVersion.build || "development"),
+            "import.meta.env.VITE_BUILD_TIME": JSON.stringify(generatedVersion.builtAt || ""),
             "process.env.EXPO_PUBLIC_BASE_API_URL": JSON.stringify(env.EXPO_PUBLIC_BASE_API_URL),
             "process.env.NEXT_PUBLIC_BASE_API_URL": JSON.stringify(env.NEXT_PUBLIC_BASE_API_URL),
             "process.env.API_BASE_URL": JSON.stringify(env.API_BASE_URL),

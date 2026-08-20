@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { ArrowRight, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
-import logo from "@repo/assets/logo.png";
 import { Badge } from "@repo/ui/components/badge";
 
+import ConsoleBrand from "@/components/console-brand";
 import ThemeToggle from "@/components/theme-toggle";
 
 type ConsoleAuthShellProps = {
@@ -42,13 +42,7 @@ const ConsoleAuthShell = ({ title, subtitle, children }: ConsoleAuthShellProps) 
 
                     <div className="relative z-10 flex items-center justify-between">
                         <div className="flex animate-in fade-in slide-in-from-left-4 items-center gap-3 duration-700">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
-                                <img src={logo} alt="Ganatri" className="h-7 w-7 object-contain brightness-0 invert" />
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Ganatri internal</p>
-                                <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-50">Ganatri Console</h1>
-                            </div>
+                            <ConsoleBrand size="hero" tone="inverse" />
                         </div>
                         <ThemeToggle />
                     </div>
@@ -96,13 +90,7 @@ const ConsoleAuthShell = ({ title, subtitle, children }: ConsoleAuthShellProps) 
                     <div className="w-full max-w-md mx-auto py-2">
                         <div className="flex items-center justify-between lg:hidden mb-4">
                             <div className="inline-flex items-center gap-2.5">
-                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                                    <img src={logo} alt="Ganatri" className="h-5.5 w-5.5 object-contain brightness-0 invert" />
-                                </div>
-                                <div>
-                                    <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-primary">Ganatri internal</p>
-                                    <p className="font-display text-lg font-bold tracking-tight text-foreground">Ganatri Console</p>
-                                </div>
+                                <ConsoleBrand />
                             </div>
                             <ThemeToggle />
                         </div>
