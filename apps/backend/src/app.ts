@@ -6,6 +6,7 @@ import authRoutes from './modules/access-control/auth/auth.routes';
 import deviceAuthRoutes from './modules/access-control/device-auth/device-auth.routes';
 import commonRoutes from './modules/common/common.routes';
 import posRoutes from './modules/pos/pos.routes';
+import { createPlatformRoutes } from './modules/platform/platform.routes';
 import billingRoutes from './modules/tenant/billing/billing.routes';
 import catalogRoutes from './modules/tenant/catalog/catalog.routes';
 import organizationRoutes from './modules/tenant/organization/organization.routes';
@@ -16,11 +17,13 @@ import whatsappRoutes, { whatsappInternalRoutes } from './modules/tenant/whatsap
 const BASE_PATH = process.env.BASE_PATH
 const app = BASE_PATH ? new Hono().basePath(BASE_PATH) : new Hono();
 
+const platformAdminOrigin = process.env.PLATFORM_ADMIN_ORIGIN?.trim() || "https://platform.ganatri.loomsnack.com";
 const allowedOrigins = process.env.NODE_ENV === "production"
-    ? ["https://ganatri.loomsnack.com"]
+    ? ["https://ganatri.loomsnack.com", platformAdminOrigin]
     : [
         "http://localhost:5173",
         "http://localhost:5174",
+        "http://localhost:5175",
         "https://ganatri.loomsnack.com",
         "https://ganatri.loomsanck.in",
     ];
@@ -48,6 +51,7 @@ app.route('/auth', authRoutes);
 app.route('/device-auth', deviceAuthRoutes);
 app.route('/common', commonRoutes);
 app.route('/pos', posRoutes);
+app.route('/platform', createPlatformRoutes());
 app.route('/organizations', organizationRoutes);
 app.route('/organizations', catalogRoutes);
 app.route('/organizations', billingRoutes);

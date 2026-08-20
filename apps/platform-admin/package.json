@@ -1,0 +1,36 @@
+{
+  "name": "platform-admin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bunx --bun vite",
+    "build": "bunx --bun vite build",
+    "check-types": "tsc --noEmit --pretty false -p tsconfig.json",
+    "test": "bun test src"
+  },
+  "dependencies": {
+    "@repo/assets": "workspace:*",
+    "@repo/services": "workspace:*",
+    "@repo/types": "workspace:*",
+    "@repo/ui": "workspace:*",
+    "@tailwindcss/vite": "^4.1.17",
+    "@tanstack/react-query": "^5.90.16",
+    "lucide-react": "^0.562.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-phone-number-input": "^3.4.14",
+    "sonner": "^2.0.7",
+    "tailwindcss": "^4.1.18",
+    "vite": "^7.2.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@testing-library/react": "^16.3.2",
+    "@vitejs/plugin-react": "^5.1.1",
+    "happy-dom": "^20.0.11",
+    "typescript": "~5.9.3"
+  }
+}

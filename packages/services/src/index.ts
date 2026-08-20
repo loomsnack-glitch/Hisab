@@ -4,6 +4,7 @@ export * from "./device-id";
 export * from "./modules/common";
 export * from "./modules/access-control";
 export * from "./modules/pos";
+export * from "./modules/platform";
 export {
   collectPosPayment,
   commitPosSale,

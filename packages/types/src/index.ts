@@ -15,6 +15,7 @@ export * from "./modules/table-service";
 export * from "./modules/auth";
 export * from "./modules/device-auth";
 export * from "./modules/organization";
+export * from "./modules/platform";
 export * from "./modules/user";
 export * from "./services/whatsapp.type";
 export * from "./services/whatsapp.schema";
