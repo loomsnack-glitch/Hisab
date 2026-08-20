@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import { BarChart3, Building2, LayoutDashboard, Users } from "lucide-react";
 
+import { isOrganizationsPath } from "@/lib/organization-inspection-url";
+
 export type ConsoleDestination = "home" | "dashboard" | "organizations" | "owner-users";
 
 export const consoleDestinationPaths: Record<ConsoleDestination, string> = {
@@ -11,6 +13,9 @@ export const consoleDestinationPaths: Record<ConsoleDestination, string> = {
 };
 
 export const destinationFromPath = (pathname: string): ConsoleDestination => {
+    if (isOrganizationsPath(pathname)) {
+        return "organizations";
+    }
     const matched = (Object.entries(consoleDestinationPaths) as [ConsoleDestination, string][])
         .find(([, path]) => path === pathname);
     return matched?.[0] ?? "home";

@@ -6,6 +6,7 @@ import {
     OwnerUserActiveStateSchema,
     OwnerUserSeedSchema,
     PlatformDashboardQuerySchema,
+    PlatformOrganizationDetailDTOSchema,
     PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListQuerySchema,
     FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
@@ -241,5 +242,65 @@ describe("Platform Organization detail contracts", () => {
                 endDate: "2026-08-01",
             }).success,
         ).toBe(false);
+    });
+
+    test("accepts a read-only overview with Store-attributed recent Sales and no credential fields", () => {
+        const parsed = PlatformOrganizationDetailDTOSchema.parse({
+            reportingPeriod: { selection: "all-time", startDate: null, endDate: null },
+            organization: {
+                id: "33333333-3333-4333-8333-333333333333",
+                name: "Mixed Bistro",
+                username: "mixed-bistro",
+                isActive: true,
+                creator: { firstName: "Omar", lastName: "Khan", phone: "+919800000003" },
+                storeCount: 2,
+                activeStoreCount: 1,
+                customerCount: 0,
+                completedSaleCount: 1,
+                completedSalesValue: 50.5,
+                lastCompletedSaleAt: "2026-08-19T10:00:00.000Z",
+                stores: [
+                    {
+                        id: "77777777-7777-4777-8777-777777777777",
+                        name: "Front Hall",
+                        isActive: true,
+                        customerCount: 0,
+                        completedSaleCount: 1,
+                        completedSalesValue: 50.5,
+                        lastCompletedSaleAt: "2026-08-19T10:00:00.000Z",
+                    },
+                ],
+                recentSales: [
+                    {
+                        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+                        saleNumber: "12",
+                        status: "completed",
+                        grandTotal: 50.5,
+                        occurredAt: "2026-08-19T10:00:00.000Z",
+                        store: {
+                            id: "77777777-7777-4777-8777-777777777777",
+                            name: "Front Hall",
+                        },
+                    },
+                ],
+            },
+        });
+
+        expect(parsed.organization.recentSales).toEqual([
+            {
+                id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+                saleNumber: "12",
+                status: "completed",
+                grandTotal: 50.5,
+                occurredAt: "2026-08-19T10:00:00.000Z",
+                store: {
+                    id: "77777777-7777-4777-8777-777777777777",
+                    name: "Front Hall",
+                },
+            },
+        ]);
+        expect(JSON.stringify(parsed)).not.toContain("deviceSecret");
+        expect(JSON.stringify(parsed)).not.toContain("password");
+        expect(JSON.stringify(parsed)).not.toContain("token");
     });
 });

@@ -53,6 +53,7 @@ const ConsoleEntry = ({
         const path = consoleDestinationPaths[nextDestination];
         if (window.location.pathname !== path) {
             window.history.pushState(null, "", path);
+            window.dispatchEvent(new Event("popstate"));
         }
         setDestination(nextDestination);
     };

@@ -36,6 +36,11 @@ const storeQuiet = "66666666-6666-4666-8666-666666666666";
 const storeMixedActive = "77777777-7777-4777-8777-777777777777";
 const storeMixedQuiet = "88888888-8888-4888-8888-888888888888";
 const missingOrganizationId = "99999999-9999-4999-8999-999999999999";
+const saleMixedCompleted = "b1111111-1111-4111-8111-b11111111111";
+const saleQuietOld = "b2222222-2222-4222-8222-b22222222222";
+const saleQuietRecent = "b3333333-3333-4333-8333-b33333333333";
+const saleQuietVoided = "b4444444-4444-4444-8444-b44444444444";
+const saleCafeDraft = "b5555555-5555-4555-8555-b55555555555";
 const customerCafeActive = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaa1";
 const customerCafeInactive = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaa2";
 
@@ -49,12 +54,15 @@ type ReportingOrganization = {
 };
 
 type ReportingSale = {
+    id: string;
     organizationId: string;
     storeId: string;
     status: SaleStatus;
     grandTotal: number;
     committedAt: Date | null;
     customerId?: string | null;
+    saleNumber?: string | null;
+    updatedAt?: Date;
 };
 
 type ReportingCustomer = {
@@ -157,6 +165,25 @@ const createReportingMetrics = (
             .filter((store) => store.organizationId === organization.id)
             .slice()
             .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+        const recentSales = sales
+            .filter((sale) => sale.organizationId === organization.id)
+            .map((sale) => {
+                const store = stores.find((item) => item.id === sale.storeId);
+                const occurredAt = sale.committedAt ?? sale.updatedAt ?? new Date(0);
+                return {
+                    id: sale.id,
+                    saleNumber: sale.saleNumber ?? null,
+                    status: sale.status,
+                    grandTotal: sale.grandTotal,
+                    occurredAt: occurredAt.toISOString(),
+                    storeId: sale.storeId,
+                    storeName: store?.name ?? "",
+                    sortAt: occurredAt.getTime(),
+                };
+            })
+            .sort((left, right) => right.sortAt - left.sortAt || right.id.localeCompare(left.id))
+            .slice(0, 10)
+            .map(({ sortAt: _sortAt, ...sale }) => sale);
 
         return {
             ...organizationRow(query, organization),
@@ -185,6 +212,7 @@ const createReportingMetrics = (
                     lastCompletedSaleAt: lastCompletedSale?.toISOString() ?? null,
                 };
             }),
+            recentSales,
         };
     };
 
@@ -251,78 +279,99 @@ const platformFacts = () => {
     ];
     const sales: ReportingSale[] = [
         {
+            id: "c1111111-1111-4111-8111-c11111111111",
             organizationId: orgActive,
             storeId: storeActive,
             status: "completed",
+            saleNumber: "1",
             grandTotal: 10,
             committedAt: new Date("2026-08-14T18:30:00.000Z"),
             customerId: customerCafeActive,
         },
         {
+            id: saleQuietRecent,
             organizationId: orgInactive,
             storeId: storeQuiet,
             status: "completed",
+            saleNumber: "1",
             grandTotal: 12,
             committedAt: new Date("2026-08-14T18:29:59.000Z"),
         },
         {
+            id: "c2222222-2222-4222-8222-c22222222222",
             organizationId: orgActive,
             storeId: storeActive,
             status: "completed",
+            saleNumber: "2",
             grandTotal: 11,
             committedAt: new Date("2026-08-21T18:30:00.000Z"),
             customerId: customerCafeActive,
         },
         {
+            id: "c3333333-3333-4333-8333-c33333333333",
             organizationId: orgActive,
             storeId: storeActive,
             status: "completed",
+            saleNumber: "3",
             grandTotal: 15,
             committedAt: new Date("2026-08-21T18:29:59.000Z"),
             customerId: customerCafeInactive,
         },
         {
+            id: "c4444444-4444-4444-8444-c44444444444",
             organizationId: orgActive,
             storeId: storeActive,
             status: "completed",
+            saleNumber: "4",
             grandTotal: 100,
             committedAt: new Date("2026-08-18T10:00:00.000Z"),
             customerId: customerCafeActive,
         },
         {
+            id: saleMixedCompleted,
             organizationId: orgMixed,
             storeId: storeMixedActive,
             status: "completed",
+            saleNumber: "12",
             grandTotal: 50.5,
             committedAt: new Date("2026-08-19T10:00:00.000Z"),
         },
         {
+            id: "c5555555-5555-4555-8555-c55555555555",
             organizationId: orgActive,
             storeId: storeActive,
             status: "completed",
+            saleNumber: "5",
             grandTotal: 25.25,
             committedAt: new Date("2026-08-20T10:00:00.000Z"),
             customerId: customerCafeInactive,
         },
         {
+            id: saleQuietOld,
             organizationId: orgInactive,
             storeId: storeQuiet,
             status: "completed",
+            saleNumber: "2",
             grandTotal: 40,
             committedAt: new Date("2026-08-01T10:00:00.000Z"),
         },
         {
+            id: saleCafeDraft,
             organizationId: orgActive,
             storeId: storeActive,
             status: "draft",
+            saleNumber: null,
             grandTotal: 999,
             committedAt: null,
+            updatedAt: new Date("2026-08-21T19:00:00.000Z"),
             customerId: customerCafeActive,
         },
         {
+            id: saleQuietVoided,
             organizationId: orgInactive,
             storeId: storeQuiet,
             status: "voided",
+            saleNumber: "3",
             grandTotal: 888,
             committedAt: new Date("2026-08-20T10:00:00.000Z"),
             customerId: customerCafeInactive,
@@ -658,8 +707,9 @@ describe("Platform Organization drill-down API", () => {
         expect(stores.filter((store) => store.isActive).length).toBe(organization.activeStoreCount);
         expect(stores.reduce((sum, store) => sum + store.completedSaleCount, 0)).toBe(organization.completedSaleCount);
         expect(stores.reduce((sum, store) => sum + store.completedSalesValue, 0)).toBe(organization.completedSalesValue);
-        expect(JSON.stringify(detailBody.data)).not.toContain("999");
+        expect(organization.completedSaleCount).not.toBeGreaterThan(1);
         expect(JSON.stringify(detailBody.data)).not.toContain("deviceSecret");
+        expect(JSON.stringify(detailBody.data)).not.toContain("password");
         expect(JSON.stringify(detailBody.data)).not.toContain("Kiran Patel");
     });
 
@@ -733,5 +783,69 @@ describe("Platform Organization drill-down API", () => {
         expect(invalid.status).toBe(400);
         expect(future.status).toBe(400);
         expect(futureBody.message).toBe(FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE);
+    });
+
+    test("returns Store-attributed recent Sales without mixing other Organizations or reusable secrets", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const mixed = await organizationDetail(app, cookie, orgMixed);
+        const empty = await organizationDetail(app, cookie, orgNoStores);
+        const mixedBody = await mixed.json() as ServiceResponse<PlatformOrganizationDetailResponse>;
+        const emptyBody = await empty.json() as ServiceResponse<PlatformOrganizationDetailResponse>;
+
+        expect(mixedBody.data?.organization.recentSales).toEqual([
+            {
+                id: saleMixedCompleted,
+                saleNumber: "12",
+                status: "completed",
+                grandTotal: 50.5,
+                occurredAt: "2026-08-19T10:00:00.000Z",
+                store: { id: storeMixedActive, name: "Front Hall" },
+            },
+        ]);
+        expect(emptyBody.data?.organization.recentSales).toEqual([]);
+        expect(JSON.stringify(mixedBody.data)).not.toContain("Cafe Counter");
+        expect(JSON.stringify(mixedBody.data)).not.toContain("deviceSecret");
+        expect(JSON.stringify(mixedBody.data)).not.toContain("password");
+        expect(JSON.stringify(mixedBody.data)).not.toContain("token");
+    });
+
+    test("keeps recent Sales independent of the selected Platform Reporting Period", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const sevenDay = await organizationDetail(app, cookie, orgInactive, "?period=7d");
+        const body = await sevenDay.json() as ServiceResponse<PlatformOrganizationDetailResponse>;
+        const recentSales = body.data?.organization.recentSales ?? [];
+
+        expect(body.data?.reportingPeriod.selection).toBe("7d");
+        expect(body.data?.organization.completedSaleCount).toBe(0);
+        expect(recentSales.map((sale) => sale.id)).toEqual([saleQuietVoided, saleQuietRecent, saleQuietOld]);
+        expect(recentSales).toEqual([
+            {
+                id: saleQuietVoided,
+                saleNumber: "3",
+                status: "voided",
+                grandTotal: 888,
+                occurredAt: "2026-08-20T10:00:00.000Z",
+                store: { id: storeQuiet, name: "Quiet Aisle" },
+            },
+            {
+                id: saleQuietRecent,
+                saleNumber: "1",
+                status: "completed",
+                grandTotal: 12,
+                occurredAt: "2026-08-14T18:29:59.000Z",
+                store: { id: storeQuiet, name: "Quiet Aisle" },
+            },
+            {
+                id: saleQuietOld,
+                saleNumber: "2",
+                status: "completed",
+                grandTotal: 40,
+                occurredAt: "2026-08-01T10:00:00.000Z",
+                store: { id: storeQuiet, name: "Quiet Aisle" },
+            },
+        ]);
+        expect(recentSales.every((sale) => sale.store.name === "Quiet Aisle")).toBe(true);
     });
 });

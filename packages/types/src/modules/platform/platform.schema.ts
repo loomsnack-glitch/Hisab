@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dtoDateSchema, normalizePhoneNumber, phoneSchema } from "../../common";
+import { SaleStatusSchema } from "../billing/billing.schema";
 
 const ownerPhoneSchema = z
     .string()
@@ -206,10 +207,25 @@ export const PlatformStoreActivityDTOSchema = z.object({
     lastCompletedSaleAt: dtoDateSchema.nullable(),
 });
 
+export const PLATFORM_OVERVIEW_RECENT_SALE_LIMIT = 10;
+
+export const PlatformRecentSaleDTOSchema = z.object({
+    id: z.uuid("Invalid sale id"),
+    saleNumber: z.string().nullable(),
+    status: SaleStatusSchema,
+    grandTotal: nonNegativeMoneySchema,
+    occurredAt: dtoDateSchema,
+    store: z.object({
+        id: z.uuid("Invalid store id"),
+        name: z.string().trim().min(1),
+    }),
+});
+
 export const PlatformOrganizationDetailDTOSchema = z.object({
     reportingPeriod: PlatformReportingPeriodDTOSchema,
     organization: PlatformOrganizationListItemDTOSchema.extend({
         stores: z.array(PlatformStoreActivityDTOSchema),
+        recentSales: z.array(PlatformRecentSaleDTOSchema),
     }),
 });
 

@@ -150,13 +150,13 @@ describe("Platform Organization outreach list", () => {
         expect(view.getByText("Kiran Patel")).toBeTruthy();
         expect(view.getByText("Quiet Mart")).toBeTruthy();
         expect(view.getByText("Leela Nair")).toBeTruthy();
-        expect(view.getAllByText("Active Organization").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
         expect(view.getAllByText("Inactive").length).toBeGreaterThan(0);
-        expect(view.getByText("Customer Count")).toBeTruthy();
-        expect(view.getByText("Completed Sales Value")).toBeTruthy();
+        expect(view.getByText("Customers")).toBeTruthy();
+        expect(view.getByText("Sales value")).toBeTruthy();
         expect(view.getByText("161.25", { exact: false })).toBeTruthy();
-        expect(view.getByText("No completed Sale")).toBeTruthy();
-        expect(view.getByText(/does not follow the selected Platform Reporting Period/)).toBeTruthy();
+        expect(view.getAllByText("—").length).toBeGreaterThan(0);
+        expect(view.getByText(/Activity uses last 7 days in Asia\/Kolkata/)).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
     });
 
@@ -176,7 +176,7 @@ describe("Platform Organization outreach list", () => {
         });
         expect(view.getByText("New Stand")).toBeTruthy();
         expect(view.getByText("Quiet Mart")).toBeTruthy();
-        expect(view.getByText(/does not follow the selected Platform Reporting Period/)).toBeTruthy();
+        expect(view.getByText(/Activity uses last 7 days in Asia\/Kolkata/)).toBeTruthy();
         expect(view.queryByText("Create Sale") === null).toBe(true);
     });
 
@@ -187,7 +187,7 @@ describe("Platform Organization outreach list", () => {
             return successList([]);
         }, { initialSearch: "zzzz", initialActivity: "inactive" });
 
-        expect(await view.findByText("No Organizations match this search or filter.")).toBeTruthy();
+        expect(await view.findByText("No matches")).toBeTruthy();
         await waitFor(() => {
             expect(requested.some((query) => query.search === "zzzz" && query.activity === "inactive")).toBe(true);
         });
@@ -205,8 +205,8 @@ describe("Platform Organization outreach list", () => {
         }, { reportingQuery: { period: "7d" } });
 
         await view.findByText("Active Cafe");
-        expect(view.getByText(/7-day Platform Reporting Period/)).toBeTruthy();
-        fireEvent.click(view.getByRole("button", { name: "Next page" }));
+        expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
+        fireEvent.click(view.getByRole("button", { name: "Next" }));
         await waitFor(() => {
             expect(requested.some((query) => query.page === 2 && query.period === "7d")).toBe(true);
             expect(view.getByText("Quiet Mart")).toBeTruthy();
@@ -259,7 +259,7 @@ describe("Platform Organization outreach list", () => {
         await waitFor(() => {
             expect(requested.some((query) => query.period === "7d")).toBe(true);
         });
-        expect(view.getByText(/7-day Platform Reporting Period/)).toBeTruthy();
+        expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
     });
 
@@ -270,6 +270,6 @@ describe("Platform Organization outreach list", () => {
 
         expect(await view.findByText("Organizations could not be loaded")).toBeTruthy();
         expect(view.getByText("Cannot reach the API")).toBeTruthy();
-        expect(view.queryByText("No Organizations match this search or filter.")).toBeNull();
+        expect(view.queryByText("No matches")).toBeNull();
     });
 });

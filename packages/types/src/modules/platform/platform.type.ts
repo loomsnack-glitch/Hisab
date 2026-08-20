@@ -12,6 +12,7 @@ import type {
     PlatformOrganizationListDTOSchema,
     PlatformOrganizationListItemDTOSchema,
     PlatformOrganizationListQuerySchema,
+    PlatformRecentSaleDTOSchema,
     PlatformStoreActivityDTOSchema,
 } from "./platform.schema";
 
@@ -64,5 +65,6 @@ export type PlatformOrganizationListResponse = PlatformOrganizationListDTO;
 export type PlatformOrganizationDetailQueryJSON = z.input<typeof PlatformOrganizationDetailQuerySchema>;
 export type PlatformOrganizationDetailQuerySVC = z.output<typeof PlatformOrganizationDetailQuerySchema>;
 export type PlatformStoreActivityDTO = z.infer<typeof PlatformStoreActivityDTOSchema>;
+export type PlatformRecentSaleDTO = z.infer<typeof PlatformRecentSaleDTOSchema>;
 export type PlatformOrganizationDetailDTO = z.infer<typeof PlatformOrganizationDetailDTOSchema>;
 export type PlatformOrganizationDetailResponse = PlatformOrganizationDetailDTO;

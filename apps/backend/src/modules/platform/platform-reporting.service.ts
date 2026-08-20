@@ -189,6 +189,17 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                         completedSalesValue: store.completedSalesValue,
                         lastCompletedSaleAt: store.lastCompletedSaleAt,
                     })),
+                    recentSales: organization.recentSales.map((sale) => ({
+                        id: sale.id,
+                        saleNumber: sale.saleNumber,
+                        status: sale.status,
+                        grandTotal: sale.grandTotal,
+                        occurredAt: sale.occurredAt,
+                        store: {
+                            id: sale.storeId,
+                            name: sale.storeName,
+                        },
+                    })),
                 },
             },
             code: STATUS_CODES.SUCCESS,

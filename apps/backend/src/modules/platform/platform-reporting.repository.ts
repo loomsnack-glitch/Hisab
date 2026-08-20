@@ -1,4 +1,5 @@
 import { sql } from "bun";
+import { PLATFORM_OVERVIEW_RECENT_SALE_LIMIT } from "@repo/types";
 import { pg } from "@/config/db";
 
 export type PlatformDashboardMetricsQuery = {
@@ -58,8 +59,19 @@ export type PlatformStoreActivityMetricsRow = {
     lastCompletedSaleAt: string | null;
 };
 
+export type PlatformRecentSaleMetricsRow = {
+    id: string;
+    saleNumber: string | null;
+    status: "draft" | "completed" | "voided";
+    grandTotal: number;
+    occurredAt: string;
+    storeId: string;
+    storeName: string;
+};
+
 export type PlatformOrganizationDetailMetrics = PlatformOrganizationListMetricsRow & {
     stores: PlatformStoreActivityMetricsRow[];
+    recentSales: PlatformRecentSaleMetricsRow[];
 };
 
 export type PlatformOrganizationDetailMetricsQuery = PlatformDashboardMetricsQuery & {
@@ -67,6 +79,10 @@ export type PlatformOrganizationDetailMetricsQuery = PlatformDashboardMetricsQue
 };
 
 const asCount = (value: unknown) => Number(value ?? 0);
+const asSaleStatus = (value: unknown): "draft" | "completed" | "voided" | null => {
+    if (value === "draft" || value === "completed" || value === "voided") return value;
+    return null;
+};
 const asMoney = (value: unknown) => Number(value ?? 0);
 
 export const getDashboardMetrics = async (
@@ -424,6 +440,24 @@ export const getOrganizationDetail = async (
         ORDER BY store.name ASC, store.id ASC
     `;
 
+    const recentSaleRows = await pg`
+        SELECT
+            sale.id,
+            sale.sale_number,
+            sale.status::text AS status,
+            sale.grand_total,
+            COALESCE(sale.committed_at, sale.updated_at, sale.created_at) AS occurred_at,
+            store.id AS store_id,
+            store.name AS store_name
+        FROM sales sale
+        INNER JOIN stores store
+          ON store.id = sale.store_id
+         AND store.organization_id = sale.organization_id
+        WHERE sale.organization_id = ${query.organizationId}
+        ORDER BY COALESCE(sale.committed_at, sale.updated_at, sale.created_at) DESC, sale.id DESC
+        LIMIT ${PLATFORM_OVERVIEW_RECENT_SALE_LIMIT}
+    `;
+
     return {
         ...toOrganizationMetricsRow(organization),
         stores: storeRows.map((row: Record<string, unknown>) => ({
@@ -435,5 +469,19 @@ export const getOrganizationDetail = async (
             completedSalesValue: asMoney(row.completed_sales_value),
             lastCompletedSaleAt: asTimestamp(row.last_completed_sale_at),
         })),
+        recentSales: recentSaleRows.flatMap((row: Record<string, unknown>) => {
+            const status = asSaleStatus(row.status);
+            const occurredAt = asTimestamp(row.occurred_at);
+            if (!status || !occurredAt) return [];
+            return [{
+                id: String(row.id),
+                saleNumber: row.sale_number == null ? null : String(row.sale_number),
+                status,
+                grandTotal: asMoney(row.grand_total),
+                occurredAt,
+                storeId: String(row.store_id),
+                storeName: String(row.store_name),
+            }];
+        }),
     };
 };

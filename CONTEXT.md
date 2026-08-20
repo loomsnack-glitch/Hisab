@@ -24,6 +24,26 @@ _Avoid_: Public owner signup, organization registration
 The read-only internal Ganatri application at `console.ganatri.in` used by Platform Administrators to analyze Organization adoption and operational activity across the platform.
 _Avoid_: Organization admin, customer dashboard, POS back office
 
+**Organization Inspection Workspace**:
+The read-only Ganatri Console workspace selected from the Organization list, providing Platform Administrators a consistent, Admin-like way to inspect that Organization's Stores, Catalog, Billing, Customers, Reports, Tables, Purchases, and WhatsApp information without allowing mutations.
+_Avoid_: Console edit mode, tenant administration workspace, organization impersonation
+
+**Inspection URL**:
+An authorization-protected Ganatri Console route that identifies an Organization Inspection Workspace state, including its selected Organization, section, resource detail, and supported filters. It survives refresh and participates in ordinary browser navigation.
+_Avoid_: in-memory-only drill-down, unauthenticated shared link, modal-only inspection state
+
+**Store-Filtered Billing Inspection**:
+The Billing view in an Organization Inspection Workspace. It shows that Organization's bills across all Stores by default and can be limited to one Store; every bill retains its Store attribution.
+_Avoid_: Organization-wide billing ownership, storeless bill list, tenant billing mutation
+
+**Read-Only Sale Inspection**:
+The Console presentation of a Sale's full lifecycle and historical record, including draft, completed, and voided Sales; line items; discounts; payments; Customer; Store; Store Device attribution; and receipt data. It never offers commands that create, change, settle, void, print, or message a Sale.
+_Avoid_: Console checkout, payment collection, billing administration
+
+**Console-Safe Operational Metadata**:
+Non-secret configuration and operational state that a Platform Administrator may inspect in Ganatri Console, such as Store Device name, status, and last seen time or WhatsApp connection status. Reusable credentials—including Store Device Secrets, WhatsApp/API credentials, passwords, and authentication tokens—are never Console data.
+_Avoid_: Console-visible secret, credential inspection, token export
+
 **Active Store**:
 A Store with at least one completed Sale in the preceding seven calendar days. This metric measures actual POS usage for Ganatri Console adoption analysis.
 _Avoid_: Logged-in store, registered store, enabled store
@@ -36,9 +56,17 @@ _Avoid_: Registered organization, enabled organization, active user account
 The bounded time interval used to calculate Ganatri Console activity and completed-Sale metrics. The console supports both all-time totals and operator-selected reporting periods, and its calendar-day boundaries use Asia/Kolkata time.
 _Avoid_: Dashboard refresh time, organization lifetime
 
+**Inspection Page Filter**:
+A filter owned by one Organization Inspection Workspace page, such as Billing's Store, Sale status, payment, and date filters or a Report's date range. It defaults to that page's available Organization data and is independent of the Platform Reporting Period, which affects only Console adoption metrics.
+_Avoid_: Dashboard-period detail filter, hidden drill-down restriction
+
 **Organization Adoption Health**:
 The set of platform-level usage signals used to prioritize outreach to an Organization, including its Store count, Active Store count, completed-Sale activity, customer count, and most recent completed Sale. It is visible in Ganatri Console's Organization list and detail view.
 _Avoid_: Subscription status, account enabled state, customer health score
+
+**Organization Directory**:
+The responsive Ganatri Console list used to find and open an Organization Inspection Workspace. It presents each Organization's identity, creator, adoption health, and selected-period completed-sales value; supports organization-or-creator search, active/inactive filtering, and sorting; and defaults to most recently active Organizations.
+_Avoid_: static tenant table, organization editor, unsorted account registry
 
 **Completed Sales Value**:
 The sum of `grand_total` across completed Sales in a Platform Reporting Period. It measures the value of bills generated through Hisab and is distinct from money collected through Payments.

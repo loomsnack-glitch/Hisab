@@ -1,6 +1,6 @@
 import "../test-setup";
 import { afterEach, describe, expect, test } from "bun:test";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import type {
@@ -11,6 +11,7 @@ import type {
     PlatformOrganizationListItemDTO,
     PlatformOrganizationListQueryJSON,
     PlatformOrganizationListResponse,
+    PlatformRecentSaleDTO,
     ServiceResponse,
 } from "@repo/types";
 
@@ -19,6 +20,7 @@ import PlatformOrganizationDetailPage, {
     type PlatformOrganizationDetailPageProps,
 } from "./platform-organization-detail-page";
 import PlatformOrganizationsPage from "./platform-organizations-page";
+import { organizationInspectionPath } from "@/lib/organization-inspection-url";
 
 afterEach(() => {
     cleanup();
@@ -84,11 +86,12 @@ const successDetail = (
         startDate: null,
         endDate: null,
     },
+    recentSales: PlatformRecentSaleDTO[] = [],
 ): ServiceResponse<PlatformOrganizationDetailResponse> => ({
     status: "success",
     data: {
         reportingPeriod: period,
-        organization: { ...organization, stores },
+        organization: { ...organization, stores, recentSales },
     },
     message: "Platform Organization retrieved successfully",
     code: 200,
@@ -112,6 +115,20 @@ const mixedStores: PlatformOrganizationDetailResponse["organization"]["stores"] 
         completedSaleCount: 0,
         completedSalesValue: 0,
         lastCompletedSaleAt: null,
+    },
+];
+
+const mixedRecentSales: PlatformRecentSaleDTO[] = [
+    {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+        saleNumber: "12",
+        status: "completed",
+        grandTotal: 50.5,
+        occurredAt: "2026-08-19T10:00:00.000Z",
+        store: {
+            id: mixedStores[0]!.id,
+            name: "Front Hall",
+        },
     },
 ];
 
@@ -157,15 +174,15 @@ describe("Platform Organization drill-down", () => {
             </QueryClientProvider>,
         );
 
-        fireEvent.click(await view.findByRole("button", { name: "Mixed Bistro" }));
+        fireEvent.click(await view.findByRole("link", { name: "Mixed Bistro" }));
 
         expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
-        expect(view.getByText(/7-day Platform Reporting Period/)).toBeTruthy();
-        expect(view.getByText("mixed-bistro")).toBeTruthy();
+        expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
+        expect(view.getByText(/@mixed-bistro/)).toBeTruthy();
         expect(view.getByText("Omar Khan")).toBeTruthy();
         expect(view.getByText("Front Hall")).toBeTruthy();
         expect(view.getByText("Garden Patio")).toBeTruthy();
-        expect(view.getByText("Active Store")).toBeTruthy();
+        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
         expect(view.getAllByText("Inactive").length).toBeGreaterThan(0);
         expect(view.getAllByText("50.50", { exact: false }).length).toBeGreaterThan(0);
         expect(view.queryByText("Create Sale")).toBeNull();
@@ -175,10 +192,10 @@ describe("Platform Organization drill-down", () => {
             expect(requested.some((query) => query.period === "7d")).toBe(true);
         });
 
-        fireEvent.click(view.getByRole("button", { name: "Back to Organizations" }));
+        fireEvent.click(view.getByRole("button", { name: "Back to organizations" }));
         expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
-        expect(view.getByText(/7-day Platform Reporting Period/)).toBeTruthy();
-        expect(view.getByRole("button", { name: "Mixed Bistro" })).toBeTruthy();
+        expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
+        expect(view.getByRole("link", { name: "Mixed Bistro" })).toBeTruthy();
     });
 
     test("keeps the Dashboard Platform Reporting Period through list and detail navigation", async () => {
@@ -229,32 +246,32 @@ describe("Platform Organization drill-down", () => {
         await view.findByRole("heading", { name: "Dashboard" });
         fireEvent.click(view.getByRole("button", { name: "30-day" }));
         fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
-        await view.findByRole("button", { name: "Mixed Bistro" });
-        fireEvent.click(view.getByRole("button", { name: "Mixed Bistro" }));
+        await view.findByRole("link", { name: "Mixed Bistro" });
+        fireEvent.click(view.getByRole("link", { name: "Mixed Bistro" }));
 
         await waitFor(() => {
             expect(requested.some((item) => item.kind === "list" && item.query.period === "30d")).toBe(true);
             expect(requested.some((item) => item.kind === "detail" && item.query.period === "30d")).toBe(true);
         });
         expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
-        expect(view.getByText(/30-day Platform Reporting Period/)).toBeTruthy();
+        expect(view.getByText(/30-day metrics from Dashboard/)).toBeTruthy();
         expect(view.queryByText("Create Organization")).toBeNull();
     });
 
     test("shows Organization identity, adoption aggregates, and mixed Store activity", async () => {
-        const view = renderDetail(async () => successDetail(mixedBistro, mixedStores));
+        const view = renderDetail(async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales));
 
         expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
-        expect(view.getByText("mixed-bistro")).toBeTruthy();
+        expect(view.getByText(/@mixed-bistro/)).toBeTruthy();
         expect(view.getByText("Omar Khan")).toBeTruthy();
-        expect(view.getAllByText("Customer Count").length).toBeGreaterThan(0);
-        expect(view.getAllByText("Completed Sales Value").length).toBeGreaterThan(0);
-        expect(view.getByText("1 Active Store / 2")).toBeTruthy();
-        expect(view.getByText("Front Hall")).toBeTruthy();
+        expect(view.getAllByText("Customers").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Sales value").length).toBeGreaterThan(0);
+        expect(view.getByText(/1\/2 active stores/)).toBeTruthy();
+        expect(view.getAllByText("Front Hall").length).toBeGreaterThan(0);
         expect(view.getByText("Garden Patio")).toBeTruthy();
-        expect(view.getByText("Active Store")).toBeTruthy();
-        expect(view.getByText("No completed Sale")).toBeTruthy();
-        expect(view.getByText(/does not follow the selected Platform Reporting Period/)).toBeTruthy();
+        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
+        expect(view.getAllByText("—").length).toBeGreaterThan(0);
+        expect(view.getAllByText(/Activity uses last 7 days/).length).toBeGreaterThan(0);
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.queryByText("Payments")).toBeNull();
     });
@@ -263,7 +280,8 @@ describe("Platform Organization drill-down", () => {
         const view = renderDetail(async () => successDetail(newStand, []), { organizationId: newStand.id });
 
         expect(await view.findByRole("heading", { name: "New Stand" })).toBeTruthy();
-        expect(view.getByText("This Organization has no Stores.")).toBeTruthy();
+        expect(view.getByText("No stores yet")).toBeTruthy();
+        expect(view.getByText("No recent sales")).toBeTruthy();
         expect(view.getByText("Inactive")).toBeTruthy();
         expect(view.queryByText("Create Store")).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();
@@ -290,6 +308,146 @@ describe("Platform Organization drill-down", () => {
         expect(view.queryByText("Mixed Bistro")).toBeNull();
         expect(view.queryByText("Omar Khan")).toBeNull();
         expect(view.queryByText("Front Hall")).toBeNull();
-        expect(view.getByRole("button", { name: "Back to Organizations" })).toBeTruthy();
+        expect(view.getByRole("button", { name: "Back to organizations" })).toBeTruthy();
+    });
+
+    test("shows a loading overview and a distinct unavailable state", async () => {
+        const loadingView = renderDetail(() => new Promise(() => {}));
+        expect(await loadingView.findByLabelText("Loading organization")).toBeTruthy();
+        expect(loadingView.queryByText("Create Sale")).toBeNull();
+
+        const unavailableView = renderDetail(async () => {
+            throw { message: "Cannot reach the API" };
+        });
+        expect(await unavailableView.findByText("Organization could not be loaded")).toBeTruthy();
+        expect(unavailableView.getByText("Cannot reach the API")).toBeTruthy();
+        expect(unavailableView.queryByText("Omar Khan")).toBeNull();
+        expect(unavailableView.queryByText("Create Sale")).toBeNull();
+    });
+});
+
+describe("Organization Inspection Workspace", () => {
+    const renderConsole = (
+        path: string,
+        options: {
+            getPlatformOrganizations?: NonNullable<Parameters<typeof PlatformOrganizationsPage>[0]["getPlatformOrganizations"]>;
+            getPlatformOrganization?: LoadOrganization;
+        } = {},
+    ) => {
+        window.history.replaceState(null, "", path);
+        return render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+                <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+                    <ConsoleEntry
+                        ownerUser={asha}
+                        onLogout={async () => {}}
+                        organizationsPageProps={{
+                            getPlatformOrganizations: options.getPlatformOrganizations ?? (async () => successList([mixedBistro])),
+                            getPlatformOrganization: options.getPlatformOrganization
+                                ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales)),
+                        }}
+                    />
+                </ThemeProvider>
+            </QueryClientProvider>,
+        );
+    };
+
+    test("opens, refreshes, and restores an Inspection URL without replacing the Console sidebar", async () => {
+        const view = renderConsole("/organizations");
+
+        fireEvent.click(await view.findByRole("link", { name: "Mixed Bistro" }));
+        expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
+        expect(window.location.pathname).toBe(organizationInspectionPath(mixedBistro.id));
+        expect(view.getByRole("navigation", { name: "Organization inspection sections" })).toBeTruthy();
+        expect(view.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
+        expect(view.getAllByRole("button", { name: "Organizations" }).length).toBeGreaterThan(0);
+        expect(view.getAllByRole("button", { name: "Dashboard" }).length).toBeGreaterThan(0);
+        expect(view.getAllByRole("button", { name: "Console Users" }).length).toBeGreaterThan(0);
+        expect(view.queryByText("Create Sale")).toBeNull();
+        expect(view.queryByText("Collect Payment")).toBeNull();
+        expect(view.queryByText("Void")).toBeNull();
+        expect(view.queryByText("device secret")).toBeNull();
+
+        act(() => {
+            window.history.back();
+            window.dispatchEvent(new Event("popstate"));
+        });
+        expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
+        expect(window.location.pathname).toBe("/organizations");
+
+        act(() => {
+            window.history.forward();
+            window.dispatchEvent(new Event("popstate"));
+        });
+        expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
+        expect(window.location.pathname).toBe(organizationInspectionPath(mixedBistro.id));
+    });
+
+    test("returns to the Organization directory from the existing Console sidebar", async () => {
+        const view = renderConsole(organizationInspectionPath(mixedBistro.id));
+        expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
+
+        fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
+        expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
+        expect(window.location.pathname).toBe("/organizations");
+        expect(await view.findByRole("link", { name: "Mixed Bistro" })).toBeTruthy();
+        expect(view.queryByText("Create Organization")).toBeNull();
+    });
+
+    test("loads an Inspection URL directly and keeps sidebar destinations unchanged", async () => {
+        const view = renderConsole(organizationInspectionPath(mixedBistro.id));
+
+        expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
+        expect(view.getByText("Omar Khan")).toBeTruthy();
+        expect(view.getByText("Inspection")).toBeTruthy();
+        expect(view.getByRole("link", { name: "Overview" })).toBeTruthy();
+        expect(view.getByRole("link", { name: "Stores" })).toBeTruthy();
+        expect(view.getByRole("link", { name: "Billing" })).toBeTruthy();
+        expect(view.getAllByRole("button", { name: "Overview" }).length).toBeGreaterThan(0);
+        expect(view.getAllByRole("button", { name: "Organizations" })[0]?.getAttribute("aria-current")).toBe("page");
+    });
+
+    test("shows labeled adoption metrics, Store performance, and recent Sales with Store attribution", async () => {
+        const view = renderConsole(organizationInspectionPath(mixedBistro.id));
+
+        expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
+        expect(view.getByText(/All-time metrics from Dashboard/)).toBeTruthy();
+        expect(view.getAllByText("Stores").length).toBeGreaterThan(0);
+        expect(view.getByText("Active stores")).toBeTruthy();
+        expect(view.getByText("12")).toBeTruthy();
+        expect(view.getByText("Completed")).toBeTruthy();
+        expect(view.getAllByText("Front Hall").length).toBeGreaterThan(1);
+        expect(view.queryByText("Create Sale")).toBeNull();
+        expect(view.queryByText("Edit Organization")).toBeNull();
+        expect(view.queryByText("Print")).toBeNull();
+    });
+
+    test("links Store performance and recent Sales into workspace sections", async () => {
+        const view = renderConsole(organizationInspectionPath(mixedBistro.id));
+        await view.findByRole("heading", { name: "Mixed Bistro" });
+
+        fireEvent.click(view.getAllByRole("link", { name: "Front Hall" })[0]!);
+        expect(window.location.pathname).toBe(organizationInspectionPath(mixedBistro.id, "stores", mixedStores[0]!.id));
+        expect(await view.findByRole("heading", { name: "Stores" })).toBeTruthy();
+        expect(view.getByRole("link", { name: "Stores" }).getAttribute("aria-current")).toBe("page");
+        expect(view.getByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
+        expect(view.queryByText("Create Store")).toBeNull();
+
+        fireEvent.click(view.getByRole("link", { name: "Overview" }));
+        expect(await view.findByRole("heading", { name: "Store performance" })).toBeTruthy();
+        fireEvent.click(view.getByRole("link", { name: "12" }));
+        expect(window.location.pathname).toBe(organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id));
+        expect(await view.findByRole("heading", { name: "Billing" })).toBeTruthy();
+        expect(view.queryByText("Collect Payment")).toBeNull();
+    });
+
+    test("handles invalid Inspection URLs without exposing Organization data", async () => {
+        const view = renderConsole("/organizations/not-an-organization");
+
+        expect(await view.findByText("Organization was not found")).toBeTruthy();
+        expect(view.queryByText("Omar Khan")).toBeNull();
+        expect(view.queryByText("Front Hall")).toBeNull();
+        expect(view.queryByText("Create Sale")).toBeNull();
+        expect(view.getAllByRole("button", { name: "Organizations" }).length).toBeGreaterThan(0);
     });
 });
