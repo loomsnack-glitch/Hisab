@@ -1,5 +1,5 @@
 {
-  "name": "ganatri-web",
+  "name": "admin",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,6 +7,8 @@
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
     "lint": "eslint .",
+    "check-types": "tsc --noEmit --pretty false -p tsconfig.app.json",
+    "test": "bun test src",
     "preview": "bunx --bun vite preview"
   },
   "dependencies": {

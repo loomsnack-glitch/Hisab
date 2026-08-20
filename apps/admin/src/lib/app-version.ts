@@ -1,8 +1,15 @@
+import { ADMIN_APP_NAME } from "./app-identity";
+
 export type AppVersionInfo = {
     version: string;
     build: string;
     builtAt: string;
 };
+
+export const buildAdminVersionMetadata = (info: AppVersionInfo) => ({
+    name: ADMIN_APP_NAME,
+    ...info,
+});
 
 const FALLBACK_VERSION = "development";
 
@@ -38,12 +45,12 @@ export const fetchAppVersion = async (signal?: AbortSignal): Promise<AppVersionI
     });
 
     if (!response.ok) {
-        throw new Error(`Could not load frontend version (${response.status})`);
+        throw new Error(`Could not load Ganatri Admin version (${response.status})`);
     }
 
     const parsedVersion = parseAppVersionInfo(await response.json());
     if (!parsedVersion) {
-        throw new Error("Frontend version response is invalid");
+        throw new Error("Ganatri Admin version response is invalid");
     }
 
     return parsedVersion;

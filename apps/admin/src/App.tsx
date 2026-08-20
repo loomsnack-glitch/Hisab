@@ -44,6 +44,7 @@ import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import type { DisplayScaleScope } from "@/lib/display-scale";
+import { getDocumentTitle } from "@/lib/app-identity";
 
 const SPLASH_DURATION_MS = 2200;
 
@@ -56,8 +57,8 @@ const App = () => {
     const isPosRoute = location.pathname.startsWith("/pos");
 
     useEffect(() => {
-        document.title = isPosRoute ? "Ganatri POS" : location.pathname === "/" ? "Ganatri" : "Ganatri Admin";
-    }, [isPosRoute, location.pathname]);
+        document.title = getDocumentTitle(location.pathname);
+    }, [location.pathname]);
 
     const authQuery = useQuery({
         queryKey: authKeys.me,

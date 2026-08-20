@@ -2,13 +2,15 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { buildAdminVersionMetadata } from "../src/lib/app-version";
+
 type PackageJson = {
     version?: string;
 };
 
-const webDirectory = path.resolve(import.meta.dir, "..");
-const rootDirectory = path.resolve(webDirectory, "../..");
-const outputDirectory = path.join(webDirectory, "public");
+const adminDirectory = path.resolve(import.meta.dir, "..");
+const rootDirectory = path.resolve(adminDirectory, "../..");
+const outputDirectory = path.join(adminDirectory, "public");
 const outputPath = path.join(outputDirectory, "version.json");
 
 const packageJson = JSON.parse(
@@ -35,11 +37,13 @@ const version = process.env.APP_VERSION?.trim() || packageJson.version || "devel
 const build = getBuildId();
 const builtAt = new Date().toISOString();
 
+const metadata = buildAdminVersionMetadata({ version, build, builtAt });
+
 await mkdir(outputDirectory, { recursive: true });
 await writeFile(
     outputPath,
-    `${JSON.stringify({ version, build, builtAt }, null, 2)}\n`,
+    `${JSON.stringify(metadata, null, 2)}\n`,
     "utf8",
 );
 
-console.log(`Generated frontend version ${version} (${build})`);
+console.log(`Generated ${metadata.name} version ${version} (${build})`);

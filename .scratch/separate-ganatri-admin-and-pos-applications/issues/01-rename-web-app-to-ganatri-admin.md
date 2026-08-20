@@ -4,10 +4,18 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] Ganatri Admin is a first-class Turbo application with independent development, build, lint, type-check, and test commands.
-- [ ] Existing Organization User authentication, Organization-management workflows, and read-only billing inspection continue to work unchanged.
-- [ ] Existing embedded POS behavior remains available only as a temporary migration state, so this refactor lands with a green application.
-- [ ] Application identity and version metadata identify the application as Ganatri Admin without changing Ganatri Console.
+- [x] Ganatri Admin is a first-class Turbo application with independent development, build, lint, type-check, and test commands.
+- [x] Existing Organization User authentication, Organization-management workflows, and read-only billing inspection continue to work unchanged.
+- [x] Existing embedded POS behavior remains available only as a temporary migration state, so this refactor lands with a green application.
+- [x] Application identity and version metadata identify the application as Ganatri Admin without changing Ganatri Console.
+
+## Comments
+
+The customer app now lives at `apps/admin` with package name `admin`. Identity, version metadata, and Turbo commands (`dev`, `build`, `lint`, `check-types`, `test`) are in place. Embedded `/pos` routes remain for later tickets. Ganatri Console was not changed.
+
+A leftover `apps/web` directory remains on disk because a running Vite process had that folder as its working directory, so the original path could not be deleted. It is not a workspace package (`package.json` was renamed). After stopping `bun run dev`, delete `apps/web`.
+
+`bun run lint` and `bun run check-types` currently fail on pre-existing Admin source issues; they were not introduced by this rename. Tests and production build pass.
 
