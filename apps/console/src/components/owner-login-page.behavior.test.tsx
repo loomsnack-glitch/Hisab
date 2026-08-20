@@ -2,6 +2,7 @@ import "../test-setup";
 import { afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import type { OwnerAuthResponse, OwnerLoginJSON, ServiceResponse } from "@repo/types";
 
 import OwnerLoginPage from "./owner-login-page";
@@ -15,14 +16,16 @@ const renderLogin = (
     initialOtp = "",
 ) => render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}>
-        <OwnerLoginPage
-            sessionExpired={false}
-            login={login}
-            onAuthenticated={onAuthenticated}
-            initialPhone="+919876543210"
-            initialPassword={initialPassword}
-            initialOtp={initialOtp}
-        />
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+            <OwnerLoginPage
+                sessionExpired={false}
+                login={login}
+                onAuthenticated={onAuthenticated}
+                initialPhone="+919876543210"
+                initialPassword={initialPassword}
+                initialOtp={initialOtp}
+            />
+        </ThemeProvider>
     </QueryClientProvider>,
 );
 
@@ -89,10 +92,10 @@ describe("Owner User login behavior", () => {
             };
         });
 
-        fireEvent.click(view.getByRole("button", { name: "WhatsApp OTP" }));
+        fireEvent.click(view.getByRole("button", { name: "OTP" }));
         fireEvent.click(view.getByRole("button", { name: "Send OTP on WhatsApp" }));
 
-        expect(await view.findByText(/Code sent to/)).toBeTruthy();
+        expect(await view.findByText("OTP verification")).toBeTruthy();
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 60)); });
         expect(view.getByRole("button", { name: "Verify and enter" })).toBeTruthy();
         expect(submitted as unknown).toEqual({ requestType: "otp-info", phone: "+919876543210" });
@@ -118,9 +121,9 @@ describe("Owner User login behavior", () => {
             "123456",
         );
 
-        fireEvent.click(view.getByRole("button", { name: "WhatsApp OTP" }));
+        fireEvent.click(view.getByRole("button", { name: "OTP" }));
         fireEvent.click(view.getByRole("button", { name: "Send OTP on WhatsApp" }));
-        await view.findByText(/Code sent to/);
+        await view.findByText("OTP verification");
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 60)); });
         fireEvent.click(view.getByRole("button", { name: "Verify and enter" }));
 

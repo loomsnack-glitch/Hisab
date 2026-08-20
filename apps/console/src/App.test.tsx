@@ -43,9 +43,9 @@ describe("Ganatri Console entry", () => {
 
     test("shows password and WhatsApp OTP owner login choices", () => {
         const markup = render(<PlatformAppView state="unauthenticated" sessionExpired={false} onAuthenticated={async () => {}} />);
-        expect(markup).toContain("Owner User sign in");
+        expect(markup).toContain("Welcome back");
         expect(markup).toContain("Password");
-        expect(markup).toContain("WhatsApp OTP");
+        expect(markup).toContain("OTP");
         expect(markup).not.toContain("Your owner session expired");
     });
 
