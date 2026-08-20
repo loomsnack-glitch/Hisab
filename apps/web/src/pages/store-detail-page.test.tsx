@@ -40,6 +40,8 @@ const store: StoreWithDevicesDTO = {
     socialMediaName: null,
     socialMediaLink: null,
     whatsappLinks: [],
+    kotSystemEnabled: false,
+    tableManagementEnabled: false,
     devices: [device],
     createdBy: "11111111-1111-4111-8111-111111111111",
     updatedBy: null,
@@ -169,6 +171,9 @@ describe("Store detail page", () => {
         const markup = renderStoreDetail(`/organizations/${organizationId}/stores/${storeId}/settings`);
 
         expect(markup).toContain("Bill numbering");
+        expect(markup).toContain("Store features");
+        expect(markup).toContain("KOT system");
+        expect(markup).toContain("Table management");
         expect(markup).toContain("Reset period");
         expect(markup).toContain("Token numbering");
         expect(markup).toContain("Save settings");

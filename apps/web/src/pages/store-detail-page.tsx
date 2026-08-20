@@ -10,6 +10,7 @@ import { ArrowLeft, MonitorSmartphone, Pencil, Settings2, Store } from "lucide-r
 
 import EditStoreDialog from "@/components/organizations/edit-store-dialog";
 import SaleNumberSettingsForm from "@/components/organizations/sale-number-settings-form";
+import StoreFeatureSettingsForm from "@/components/organizations/store-feature-settings-form";
 import StoreDevicesSection from "@/components/organizations/store-devices-section";
 import { formatDateTime } from "@/lib/format";
 import { organizationKeys } from "@/lib/query-keys";
@@ -209,7 +210,12 @@ const StoreSettingsPage = () => {
         return null;
     }
 
-    return <SaleNumberSettingsForm organizationId={organizationId} store={store} />;
+    return (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+            <StoreFeatureSettingsForm organizationId={organizationId} store={store} />
+            <SaleNumberSettingsForm organizationId={organizationId} store={store} />
+        </div>
+    );
 };
 
 const StoreDetailIndexRedirect = () => {

@@ -84,7 +84,10 @@ export type CreateStoreREPO = Pick<
   updatedBy?: string | null;
 };
 
-export type UpdateStoreREPO = Pick<StoreDTO, "id" | "name"> & {
+export type UpdateStoreREPO = Pick<
+  StoreDTO,
+  "id" | "name" | "kotSystemEnabled" | "tableManagementEnabled"
+> & {
   address: string | null;
   reviewPlatform: string | null;
   reviewLink: string | null;
