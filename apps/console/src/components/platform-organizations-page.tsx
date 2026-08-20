@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import {
@@ -31,6 +31,7 @@ type PlatformOrganizationsPageProps = {
     getPlatformOrganization?: typeof getPlatformOrganizationRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
+    onUnauthorized?: () => Promise<void>;
 };
 
 const activityOptions = [
@@ -87,6 +88,7 @@ const PlatformOrganizationsPage = ({
     getPlatformOrganization = getPlatformOrganizationRequest,
     initialSearch = "",
     initialActivity = "all",
+    onUnauthorized,
 }: PlatformOrganizationsPageProps) => {
     const [searchInput, setSearchInput] = useState(initialSearch);
     const [appliedSearch, setAppliedSearch] = useState(initialSearch.trim());
@@ -107,6 +109,12 @@ const PlatformOrganizationsPage = ({
     const limit = list?.pagination.limit ?? 20;
     const totalPages = Math.max(1, Math.ceil(totalCount / limit));
     const hasFilter = Boolean(appliedSearch) || activity !== "all";
+    const errorCode = (organizationsQuery.error as { code?: number } | null)?.code
+        ?? (organizationsQuery.data?.status === "error" ? organizationsQuery.data.code : undefined);
+
+    useEffect(() => {
+        if (errorCode === 401) void onUnauthorized?.();
+    }, [errorCode, onUnauthorized]);
 
     const applySearch = (event: FormEvent) => {
         event.preventDefault();
@@ -125,6 +133,7 @@ const PlatformOrganizationsPage = ({
                 organizationId={selectedOrganizationId}
                 reportingQuery={reportingQuery}
                 onBack={() => setSelectedOrganizationId(null)}
+                onUnauthorized={onUnauthorized}
                 getPlatformOrganization={getPlatformOrganization}
             />
         );

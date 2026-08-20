@@ -4,7 +4,7 @@ import { STATUS_CODES } from "@repo/types";
 import { handleError } from "@/helpers/service.helper";
 import type { OwnerAuthService } from "@/modules/platform/owner-auth.service";
 
-export const OWNER_AUTH_COOKIE = "owner_token";
+export const OWNER_AUTH_COOKIE = "ganatri_console_token";
 
 export const createOwnerAuthMiddleware = (authService: OwnerAuthService) => async (c: Context, next: Next) => {
     try {

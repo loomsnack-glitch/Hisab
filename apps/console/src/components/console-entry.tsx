@@ -12,12 +12,13 @@ import PlatformOrganizationsPage, { type PlatformOrganizationsPageProps } from "
 const destinations = [
     { title: "Dashboard", description: "Platform adoption totals and reporting periods", icon: BarChart3 },
     { title: "Organizations", description: "Cross-organization adoption health", icon: Building2 },
-    { title: "Owner Users", description: "Internal access administration", icon: Users },
+    { title: "Console Users", description: "Internal access administration", icon: Users },
 ] as const;
 
 type ConsoleEntryProps = {
     ownerUser: OwnerUserDTO;
     onLogout: () => Promise<void>;
+    onUnauthorized?: () => Promise<void>;
     ownerUsersPageProps?: Pick<OwnerUsersPageProps, "listOwnerUsers" | "createOwnerUser" | "setOwnerUserActiveState">;
     dashboardPageProps?: Pick<PlatformDashboardPageProps, "getPlatformDashboard" | "initialQuery" | "initialCustomValues">;
     organizationsPageProps?: Pick<
@@ -26,7 +27,7 @@ type ConsoleEntryProps = {
     >;
 };
 
-const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageProps, organizationsPageProps }: ConsoleEntryProps) => {
+const ConsoleEntry = ({ ownerUser, onLogout, onUnauthorized, ownerUsersPageProps, dashboardPageProps, organizationsPageProps }: ConsoleEntryProps) => {
     const [destination, setDestination] = useState<"home" | "owner-users" | "dashboard" | "organizations">("home");
     const [reportingQuery, setReportingQuery] = useState<PlatformDashboardQueryJSON>(
         dashboardPageProps?.initialQuery ?? { period: "all-time" },
@@ -41,7 +42,7 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageP
                 <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">Ganatri internal</p>
-                        <p className="text-lg font-semibold">Platform Operations Console</p>
+                        <p className="text-lg font-semibold">Ganatri Console</p>
                     </div>
                     <Button variant="outline" className="border-slate-600 bg-transparent text-white hover:bg-slate-800 hover:text-white" onClick={() => void onLogout()}>
                         <LogOut className="size-4" /> Sign out
@@ -50,10 +51,16 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageP
             </header>
             <div className="mx-auto max-w-6xl space-y-8 px-6 py-10">
                 {destination === "owner-users" ? (
-                    <OwnerUsersPage currentOwnerUser={ownerUser} onBack={() => setDestination("home")} {...ownerUsersPageProps} />
+                    <OwnerUsersPage
+                        currentOwnerUser={ownerUser}
+                        onBack={() => setDestination("home")}
+                        onUnauthorized={onUnauthorized}
+                        {...ownerUsersPageProps}
+                    />
                 ) : destination === "dashboard" ? (
                     <PlatformDashboardPage
                         onBack={() => setDestination("home")}
+                        onUnauthorized={onUnauthorized}
                         {...dashboardPageProps}
                         initialQuery={reportingQuery}
                         initialCustomValues={customValues}
@@ -66,6 +73,7 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageP
                     <PlatformOrganizationsPage
                         onBack={() => setDestination("home")}
                         reportingQuery={reportingQuery}
+                        onUnauthorized={onUnauthorized}
                         {...organizationsPageProps}
                     />
                 ) : (
@@ -84,8 +92,8 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageP
                                         <CardDescription>{description}</CardDescription>
                                     </CardHeader>
                                     <CardContent>
-                                        {title === "Owner Users" ? (
-                                            <Button type="button" onClick={() => setDestination("owner-users")}>Open Owner Users</Button>
+                                        {title === "Console Users" ? (
+                                            <Button type="button" onClick={() => setDestination("owner-users")}>Open Console Users</Button>
                                         ) : title === "Dashboard" ? (
                                             <Button type="button" onClick={() => setDestination("dashboard")}>Open Dashboard</Button>
                                         ) : (

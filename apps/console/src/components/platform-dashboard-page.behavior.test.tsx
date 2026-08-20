@@ -60,7 +60,11 @@ type LoadDashboard = NonNullable<PlatformDashboardPageProps["getPlatformDashboar
 
 const renderDashboard = (
     loadDashboard: LoadDashboard = async (query = {}) => successDashboard(query),
-    options: { initialQuery?: PlatformDashboardQueryJSON; initialCustomValues?: { startDate: string; endDate: string } } = {},
+    options: {
+        initialQuery?: PlatformDashboardQueryJSON;
+        initialCustomValues?: { startDate: string; endDate: string };
+        onUnauthorized?: () => Promise<void>;
+    } = {},
 ) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     return render(
@@ -70,6 +74,7 @@ const renderDashboard = (
                 getPlatformDashboard={loadDashboard}
                 initialQuery={options.initialQuery}
                 initialCustomValues={options.initialCustomValues}
+                onUnauthorized={options.onUnauthorized}
             />
         </QueryClientProvider>,
     );
@@ -193,5 +198,15 @@ describe("Platform dashboard console destination", () => {
         expect(await view.findByText("Dashboard could not be loaded")).toBeTruthy();
         expect(view.getByText("Cannot reach the API")).toBeTruthy();
         expect(view.queryByRole("region", { name: "All-time totals" })).toBeNull();
+    });
+
+    test("returns the operator to sign-in when the Console session is unauthorized", async () => {
+        let unauthorized = false;
+        renderDashboard(
+            async () => ({ status: "error", data: null, message: "Owner session is no longer active", code: 401 }),
+            { onUnauthorized: async () => { unauthorized = true; } },
+        );
+
+        await waitFor(() => expect(unauthorized).toBe(true));
     });
 });

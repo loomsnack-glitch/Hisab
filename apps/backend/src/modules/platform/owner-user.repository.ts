@@ -22,7 +22,7 @@ export const createSeedOwnerUser = async (data: CreateOwnerUserREPO): Promise<Se
 
         const [existingPhone] = await tx`
             SELECT id
-            FROM owner_users
+            FROM console_users
             WHERE phone = ${data.phone}
         `;
         if (existingPhone) {
@@ -31,7 +31,7 @@ export const createSeedOwnerUser = async (data: CreateOwnerUserREPO): Promise<Se
 
         const [existingOwner] = await tx`
             SELECT id
-            FROM owner_users
+            FROM console_users
             LIMIT 1
         `;
         if (existingOwner) {
@@ -39,7 +39,7 @@ export const createSeedOwnerUser = async (data: CreateOwnerUserREPO): Promise<Se
         }
 
         const [created] = await tx`
-            INSERT INTO owner_users ${camelToSnakeSql(data)}
+            INSERT INTO console_users ${camelToSnakeSql(data)}
             RETURNING *
         `;
         return created
@@ -50,7 +50,7 @@ export const createSeedOwnerUser = async (data: CreateOwnerUserREPO): Promise<Se
 export const getOwnerUserById = async (id: string): Promise<OwnerUserRecord | null> => {
     const [result] = await pg`
         SELECT *
-        FROM owner_users
+        FROM console_users
         WHERE id = ${id}
     `;
 
@@ -60,7 +60,7 @@ export const getOwnerUserById = async (id: string): Promise<OwnerUserRecord | nu
 export const getOwnerUserByPhone = async (phone: string): Promise<OwnerUserRecord | null> => {
     const [result] = await pg`
         SELECT *
-        FROM owner_users
+        FROM console_users
         WHERE phone = ${phone}
     `;
 
@@ -70,7 +70,7 @@ export const getOwnerUserByPhone = async (phone: string): Promise<OwnerUserRecor
 export const listOwnerUsers = async (): Promise<OwnerUserDTO[]> => {
     const results = await pg`
         SELECT id, first_name, last_name, phone, is_active, created_at, updated_at
-        FROM owner_users
+        FROM console_users
         ORDER BY created_at ASC, first_name ASC, last_name ASC, id ASC
     `;
 
@@ -80,7 +80,7 @@ export const listOwnerUsers = async (): Promise<OwnerUserDTO[]> => {
 export const countActiveOwnerUsers = async (tx: typeof pg | Bun.TransactionSQL = pg): Promise<number> => {
     const [row] = await tx`
         SELECT COUNT(*)::int AS active_count
-        FROM owner_users
+        FROM console_users
         WHERE is_active
     `;
 
@@ -97,7 +97,7 @@ export const createOwnerUser = async (data: CreateOwnerUserREPO): Promise<Create
 
         const [existingPhone] = await tx`
             SELECT id
-            FROM owner_users
+            FROM console_users
             WHERE phone = ${data.phone}
         `;
         if (existingPhone) {
@@ -105,7 +105,7 @@ export const createOwnerUser = async (data: CreateOwnerUserREPO): Promise<Create
         }
 
         const [created] = await tx`
-            INSERT INTO owner_users ${camelToSnakeSql(data)}
+            INSERT INTO console_users ${camelToSnakeSql(data)}
             RETURNING *
         `;
         return created
@@ -127,7 +127,7 @@ export const updateOwnerUserActiveState = async (
 
         const [existing] = await tx`
             SELECT *
-            FROM owner_users
+            FROM console_users
             WHERE id = ${ownerUserId}
             FOR UPDATE
         `;
@@ -145,7 +145,7 @@ export const updateOwnerUserActiveState = async (
         }
 
         const [updated] = await tx`
-            UPDATE owner_users
+            UPDATE console_users
             SET is_active = ${isActive}, updated_at = NOW()
             WHERE id = ${ownerUserId}
             RETURNING *

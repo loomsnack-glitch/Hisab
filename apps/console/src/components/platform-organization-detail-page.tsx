@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { getPlatformOrganization as getPlatformOrganizationRequest } from "@repo/services";
@@ -20,6 +21,7 @@ type PlatformOrganizationDetailPageProps = {
     onBack: () => void;
     reportingQuery?: PlatformDashboardQueryJSON;
     getPlatformOrganization?: typeof getPlatformOrganizationRequest;
+    onUnauthorized?: () => Promise<void>;
 };
 
 const formatCompletedSalesValue = (value: number) =>
@@ -66,6 +68,7 @@ const PlatformOrganizationDetailPage = ({
     onBack,
     reportingQuery = { period: "all-time" },
     getPlatformOrganization = getPlatformOrganizationRequest,
+    onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
     const detailQueryInput = toDetailQuery(reportingQuery);
     const detailQuery = useQuery({
@@ -80,6 +83,10 @@ const PlatformOrganizationDetailPage = ({
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
         ?? (response?.status === "error" ? response.message : undefined);
+
+    useEffect(() => {
+        if (errorCode === 401) void onUnauthorized?.();
+    }, [errorCode, onUnauthorized]);
 
     return (
         <section className="space-y-6">
@@ -107,7 +114,7 @@ const PlatformOrganizationDetailPage = ({
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Owner session is no longer valid</AlertTitle>
                     <AlertDescription>
-                        {errorMessage ?? "Sign in again to continue using the Platform Operations Console."}
+                        {errorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
             ) : errorCode === 404 || errorMessage === "Organization not found" ? (

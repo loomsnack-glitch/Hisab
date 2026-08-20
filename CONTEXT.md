@@ -5,39 +5,39 @@ Hisab is a multi-tenant retail/POS system for managing stores, products, sales, 
 ## Language
 
 **Platform Administrator**:
-A Ganatri owner or internal operator authorized to inspect cross-organization platform data. A Platform Administrator is represented by a separate Owner User, is distinct from an Organization's administrators, and has read-only access in the initial Platform Operations Console.
+A Ganatri owner or internal operator authorized to inspect cross-organization platform data. A Platform Administrator is represented by a separate Owner User, is distinct from an Organization's administrators, and has read-only access in Ganatri Console.
 _Avoid_: Organization admin, tenant admin, superuser
 
 **Owner User**:
-An internal Ganatri identity stored separately from customer Users and used to sign in to the Platform Operations Console with a WhatsApp-enabled phone number and password. An active Owner User may create additional Owner Users and activate or deactivate them.
+An internal Ganatri identity stored separately from customer Users and used to sign in to Ganatri Console with a WhatsApp-enabled phone number and password. An active Owner User may create additional Owner Users and activate or deactivate them.
 _Avoid_: Organization user, tenant user, customer administrator
 
 **Active Owner User**:
-An Owner User permitted to authenticate to the Platform Operations Console and use its read-only capabilities. An inactive Owner User is denied platform-console access, including from an already-open session on its next authenticated request. Owner Users cannot deactivate themselves, and the final active Owner User cannot be deactivated.
+An Owner User permitted to authenticate to Ganatri Console and use its read-only capabilities. An inactive Owner User is denied console access, including from an already-open session on its next authenticated request. Owner Users cannot deactivate themselves, and the final active Owner User cannot be deactivated.
 _Avoid_: Enabled Organization User, active store device
 
 **Seed Owner User**:
-The first Owner User, created through a secure operator-run CLI command rather than a public registration route. Seed Owner Users and later Owner Users are managed only by active Owner Users through the Platform Operations Console.
+The first Owner User, created through a secure operator-run CLI command rather than a public registration route. Seed Owner Users and later Owner Users are managed only by active Owner Users through Ganatri Console.
 _Avoid_: Public owner signup, organization registration
 
-**Platform Operations Console**:
-The read-only internal Ganatri application used by Platform Administrators to analyze Organization adoption and operational activity across the platform.
+**Ganatri Console**:
+The read-only internal Ganatri application at `console.ganatri.in` used by Platform Administrators to analyze Organization adoption and operational activity across the platform.
 _Avoid_: Organization admin, customer dashboard, POS back office
 
 **Active Store**:
-A Store with at least one completed Sale in the preceding seven calendar days. This metric measures actual POS usage for Platform Operations Console adoption analysis.
+A Store with at least one completed Sale in the preceding seven calendar days. This metric measures actual POS usage for Ganatri Console adoption analysis.
 _Avoid_: Logged-in store, registered store, enabled store
 
 **Active Organization**:
-An Organization with at least one Active Store. An Organization with no Stores or no completed Sale from any Store in the preceding seven calendar days is inactive for Platform Operations Console outreach analysis.
+An Organization with at least one Active Store. An Organization with no Stores or no completed Sale from any Store in the preceding seven calendar days is inactive for Ganatri Console outreach analysis.
 _Avoid_: Registered organization, enabled organization, active user account
 
 **Platform Reporting Period**:
-The bounded time interval used to calculate Platform Operations Console activity and completed-Sale metrics. The console supports both all-time totals and operator-selected reporting periods, and its calendar-day boundaries use Asia/Kolkata time.
+The bounded time interval used to calculate Ganatri Console activity and completed-Sale metrics. The console supports both all-time totals and operator-selected reporting periods, and its calendar-day boundaries use Asia/Kolkata time.
 _Avoid_: Dashboard refresh time, organization lifetime
 
 **Organization Adoption Health**:
-The set of platform-level usage signals used to prioritize outreach to an Organization, including its Store count, Active Store count, completed-Sale activity, customer count, and most recent completed Sale. It is visible in the Platform Operations Console's Organization list and detail view.
+The set of platform-level usage signals used to prioritize outreach to an Organization, including its Store count, Active Store count, completed-Sale activity, customer count, and most recent completed Sale. It is visible in Ganatri Console's Organization list and detail view.
 _Avoid_: Subscription status, account enabled state, customer health score
 
 **Completed Sales Value**:
@@ -45,7 +45,7 @@ The sum of `grand_total` across completed Sales in a Platform Reporting Period. 
 _Avoid_: Revenue, collected payment total, cash received
 
 **Customer Count**:
-The number of Customer records an Organization has created, regardless of each Customer's current active status. In the Platform Operations Console it measures customer-data adoption, not the number of currently trading customers.
+The number of Customer records an Organization has created, regardless of each Customer's current active status. In Ganatri Console it measures customer-data adoption, not the number of currently trading customers.
 _Avoid_: Active customer count, customer engagement rate, registered user count
 
 **Billing**:

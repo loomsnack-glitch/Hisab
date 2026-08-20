@@ -1,4 +1,4 @@
-# Platform Operations Console V1
+# Ganatri Console V1
 
 Status: ready-for-agent
 
@@ -10,7 +10,7 @@ The platform also has no identity boundary for Ganatri owners. Reusing customer 
 
 ## Solution
 
-Add a new `apps/platform-admin` web application: the read-only Platform Operations Console for Ganatri's internal Owner Users. It has its own Owner User authentication and a dedicated backend Platform Operations module; neither may be entered with a customer User session.
+Add a new `apps/console` web application: the read-only Ganatri Console at `console.ganatri.in` for Ganatri's internal Owner Users. It has its own Owner User authentication and a dedicated backend Platform Operations module; neither may be entered with a customer User session.
 
 The console provides a global dashboard, a searchable and filterable Organization adoption list, Organization drill-down pages with Store-level usage, and Owner User management. It shows all-time totals alongside an adjustable Platform Reporting Period. It uses the existing Billing model: bills are completed Sales, and the value of bills generated is Completed Sales Value. It does not call this amount revenue or money collected.
 
@@ -18,7 +18,7 @@ The primary outreach signal is fixed and independent of the selected reporting p
 
 ## User Stories
 
-1. As a Ganatri owner, I want a separate Platform Operations Console login, so that customer administration and platform access remain distinct.
+1. As a Ganatri owner, I want a separate Ganatri Console login, so that customer administration and platform access remain distinct.
 2. As a Ganatri owner, I want to log in with my Owner User phone number and password, so that the internal console uses familiar credentials without relying on a customer User account.
 3. As a Ganatri owner, I want to log in with WhatsApp OTP using the same authentication capability as ordinary users, so that I have a secure alternate sign-in method.
 4. As a Ganatri owner, I want an invalid phone number, password, or OTP to reveal no account details, so that failed sign-in does not leak internal account information.
@@ -64,12 +64,12 @@ The primary outreach signal is fixed and independent of the selected reporting p
 
 ## Implementation Decisions
 
-- Add a standalone Vite/React application named `platform-admin` under the Turborepo's `apps` workspace. It is a separate Platform Operations Console route tree and session context, not a new route inside the organization-facing web application.
+- Add a standalone Vite/React application named `console` under the Turborepo's `apps` workspace. It is a separate Ganatri Console route tree and session context, not a new route inside the organization-facing web application.
 - Build one dedicated Platform Operations backend module. It owns Owner User authentication, Owner User administration, global dashboard rollups, Organization adoption search, and Organization drill-down reporting. Expose this through a dedicated owner-authenticated `/platform` route tree rather than changing the tenant-scoped `/organizations` routes.
-- Add a separate `owner_users` persistence model with a UUID identity, display name fields, a unique normalized phone number, password hash, active state, and audit timestamps. It has no foreign key or role relationship to customer `users`.
+- Add a separate `console_users` persistence model with a UUID identity, display name fields, a unique normalized phone number, password hash, active state, and audit timestamps. It has no foreign key or role relationship to customer `users`.
 - Use a dedicated Owner User JWT, cookie name, Redis OTP namespace, authentication service, and middleware. Owner middleware must load the live Owner User record on every authenticated request and reject inactive accounts, so deactivation revokes an open session on its next request. Customer User and Store Device tokens must not satisfy this middleware.
 - Owner login offers the same two authentication modes as normal user login: password and WhatsApp OTP. Passwords are stored only as hashes. The owner authentication contract must not expose password hashes or distinguish unknown from inactive/incorrect credentials beyond the required access-denied outcome.
-- Provide no public Owner User registration endpoint. Add an operator-run `owner:create` CLI command that prompts for the first Owner User's required identity and password, hashes the password with the existing password facility, and inserts an active Seed Owner User. It must fail safely when a duplicate phone exists and must not print or accept the password through command-line arguments.
+- Provide no public Owner User registration endpoint. Add an operator-run `console:create-owner` CLI command that prompts for the first Owner User's required identity and password, hashes the password with the existing password facility, and inserts an active Seed Owner User. It must fail safely when a duplicate phone exists and must not print or accept the password through command-line arguments.
 - Owner management has narrowly scoped write commands only: list Owner Users, create an Owner User, and set another Owner User's active state. Platform reporting remains read-only. The service must reject self-deactivation and deactivation when it would leave zero active Owner Users; create/deactivate/reactivate operations retain audit history rather than deleting Owner Users.
 - Add typed Owner User, authentication, dashboard, Organization list, Organization detail, Store activity, query-filter, and pagination contracts in the shared types and service layers. Platform APIs return presentation-ready DTOs; the new web app does not directly compose cross-tenant database tables.
 - Dashboard all-time totals are: all Organizations, all Stores, Customer Count, and completed-Sale count. Dashboard activity totals are Active Organizations and Active Stores as of the request. Dashboard reporting-period totals are completed-Sale count, Completed Sales Value, and Customer records created during the selected Platform Reporting Period.
@@ -79,8 +79,8 @@ The primary outreach signal is fixed and independent of the selected reporting p
 - Determine Active Store from completed-Sale existence during the preceding seven Asia/Kolkata calendar days at the time of the request. Determine Active Organization from the existence of at least one Active Store. This fixed adoption rule is not recalculated from the UI's selected Platform Reporting Period.
 - The Organization list supports search by Organization name and username, active/inactive filtering, consistent server-side sort order, and cursor or page-based pagination. Each row returns identity, creator contact details, Store count, Active Store count, Customer Count, selected-period completed-Sale count, selected-period Completed Sales Value, activity status, and last completed Sale timestamp.
 - The Organization detail response returns the same Organization-level adoption data plus every Store's identity, activity status, Customer Count, selected-period completed-Sale count, selected-period Completed Sales Value, and last completed Sale timestamp. It does not return bill line items, Payments, device secrets, or customer-level data.
-- The UI has three authenticated destinations: Dashboard, Organizations, and Owner Users. Dashboard owns the Platform Reporting Period selector. Organizations retains the selected period through list and detail navigation. Owner Users is the only non-reporting write screen and requires explicit confirmation before activation-state changes.
-- Follow the existing response envelope, validation, shared-service, TanStack Query, table, loading, error, and empty-state conventions. Update production CORS configuration to allow the separately deployed Platform Operations Console origin while retaining credential restrictions.
+- The UI has three authenticated destinations: Dashboard, Organizations, and Console Users. Dashboard owns the Platform Reporting Period selector. Organizations retains the selected period through list and detail navigation. Console Users is the only non-reporting write screen and requires explicit confirmation before activation-state changes.
+- Follow the existing response envelope, validation, shared-service, TanStack Query, table, loading, error, and empty-state conventions. Update production CORS configuration to allow `https://console.ganatri.in` while retaining credential restrictions.
 - Record this boundary in ADR 0005: the separate Owner User identity is intentional because Ganatri platform access must remain independent of customer User identity and tenant authorization.
 
 ## Testing Decisions
@@ -98,7 +98,7 @@ The primary outreach signal is fixed and independent of the selected reporting p
 
 ## Out of Scope
 
-- Any ability to create, edit, disable, or delete Organizations, Stores, customers, Products, Sales, Payments, Store Devices, or other tenant data from the Platform Operations Console.
+- Any ability to create, edit, disable, or delete Organizations, Stores, customers, Products, Sales, Payments, Store Devices, or other tenant data from Ganatri Console.
 - Normal customer-User activity analytics, user-login tracking, or a multi-user Organization membership model. The current model only reliably identifies the Organization creator, which is shown as the outreach contact.
 - Payment-collection, cash-flow, revenue, tax, refund, profitability, inventory, or subscription analytics.
 - Customer-level lists, customer contact details, bill details, Sale Items, Payment details, device secrets, or any export of tenant operational data.
@@ -109,6 +109,6 @@ The primary outreach signal is fixed and independent of the selected reporting p
 
 ## Further Notes
 
-- The canonical vocabulary is in `CONTEXT.md`: Platform Administrator, Owner User, Active Owner User, Seed Owner User, Platform Operations Console, Active Store, Active Organization, Platform Reporting Period, Organization Adoption Health, Completed Sales Value, and Customer Count.
+- The canonical vocabulary is in `CONTEXT.md`: Platform Administrator, Owner User, Active Owner User, Seed Owner User, Ganatri Console, Active Store, Active Organization, Platform Reporting Period, Organization Adoption Health, Completed Sales Value, and Customer Count.
 - The billing ADRs remain authoritative: Sales and Payments are distinct. A pending or partial completed Sale contributes to Completed Sales Value, while cash actually received remains represented by Payments and is intentionally not a V1 platform metric.
 - “Inactive” is an outreach signal, not an account status: an Organization may be registered and valid yet inactive because it has no Active Store.

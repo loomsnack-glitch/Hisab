@@ -8,7 +8,7 @@
     "start": "bun dist/index.js",
     "build": "bun build src/index.ts --outdir dist --minify --production --target bun --external pdfkit",
     "test": "bun test src",
-    "owner:create": "bun run src/scripts/owner-create.ts",
+    "console:create-owner": "bun run src/scripts/console-create-owner.ts",
     "add-initial-data": "bun run src/scripts/add-initial-data.ts",
     "grant-all-permissions-in-admin-roles": "bun run src/scripts/admin-permissions.ts"
   },

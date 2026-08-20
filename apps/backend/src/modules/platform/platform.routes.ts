@@ -81,7 +81,7 @@ export const createPlatformRoutes = (
     router.get("/entry", async (c) =>
         handleServiceResponse<PlatformEntryResponse>(c, {
             status: "success",
-            message: "Platform Operations Console ready",
+            message: "Ganatri Console ready",
             data: { ownerUser: c.get("authOwner") },
             code: STATUS_CODES.SUCCESS,
         }),

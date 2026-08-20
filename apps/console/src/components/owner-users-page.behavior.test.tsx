@@ -67,13 +67,14 @@ const renderPage = (props: Partial<Parameters<typeof OwnerUsersPage>[0]> & { cur
                     code: 200,
                 }))}
                 initialCreateValues={props.initialCreateValues}
+                onUnauthorized={props.onUnauthorized}
             />
         </QueryClientProvider>,
     );
 };
 
-describe("Owner Users console destination", () => {
-    test("opens the Owner Users destination from the console home", async () => {
+describe("Console Users console destination", () => {
+    test("opens the Console Users destination from the console home", async () => {
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
                 <ConsoleEntry
@@ -86,8 +87,8 @@ describe("Owner Users console destination", () => {
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getByRole("button", { name: "Open Owner Users" }));
-        expect(await view.findByRole("heading", { name: "Owner Users" })).toBeTruthy();
+        fireEvent.click(view.getByRole("button", { name: "Open Console Users" }));
+        expect(await view.findByRole("heading", { name: "Console Users" })).toBeTruthy();
         expect(view.queryByText("Create Organization")).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.getByText(/cannot change Organizations, Stores, Sales/)).toBeTruthy();
@@ -202,5 +203,20 @@ describe("Owner Users console destination", () => {
         expect(view.getByRole("button", { name: "Reactivate Ravi Mehta" })).toBeTruthy();
         expect(view.queryByText("Create Store")).toBeNull();
         expect(view.queryByText("Void Sale")).toBeNull();
+    });
+
+    test("returns the operator to sign-in when the Console session is unauthorized", async () => {
+        let unauthorized = false;
+        renderPage({
+            listOwnerUsers: async () => ({
+                status: "error",
+                data: null,
+                message: "Owner session is no longer active",
+                code: 401,
+            }),
+            onUnauthorized: async () => { unauthorized = true; },
+        });
+
+        await waitFor(() => expect(unauthorized).toBe(true));
     });
 });

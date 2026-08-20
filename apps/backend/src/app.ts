@@ -17,9 +17,9 @@ import whatsappRoutes, { whatsappInternalRoutes } from './modules/tenant/whatsap
 const BASE_PATH = process.env.BASE_PATH
 const app = BASE_PATH ? new Hono().basePath(BASE_PATH) : new Hono();
 
-const platformAdminOrigin = process.env.PLATFORM_ADMIN_ORIGIN?.trim() || "https://platform.ganatri.loomsnack.com";
+const consoleOrigin = process.env.CONSOLE_ORIGIN?.trim() || "https://console.ganatri.in";
 const allowedOrigins = process.env.NODE_ENV === "production"
-    ? ["https://ganatri.loomsnack.com", platformAdminOrigin]
+    ? ["https://ganatri.loomsnack.com", consoleOrigin]
     : [
         "http://localhost:5173",
         "http://localhost:5174",

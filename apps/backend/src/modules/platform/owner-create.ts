@@ -38,7 +38,7 @@ const unexpectedErrorMessage = (error: unknown) => {
 
 export const assertNoOwnerCreateArguments = (args: string[]) => {
     if (args.length > 0) {
-        throw new Error("owner:create does not accept command-line arguments; all values are prompted securely");
+        throw new Error("console:create-owner does not accept command-line arguments; all values are prompted securely");
     }
 };
 

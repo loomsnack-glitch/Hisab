@@ -93,7 +93,7 @@ describe("Owner User authentication API", () => {
         };
 
         expect(loginResponse.status).toBe(200);
-        expect(loginResponse.headers.get("set-cookie")).toContain("owner_token=");
+        expect(loginResponse.headers.get("set-cookie")).toContain("ganatri_console_token=");
         expect(loginResponse.headers.get("set-cookie")).not.toContain("device_token=");
         expect(body.data.ownerUser).toMatchObject({ id: ownerId, phone: "+919876543210", isActive: true });
         expect(body.data.ownerUser.passwordHash).toBeUndefined();
@@ -117,7 +117,7 @@ describe("Owner User authentication API", () => {
         expect(otpRequestBody.data.nextRequestType).toBe("otp-verification");
         await Promise.resolve();
         expect(getSentOtp()).toBe("482951");
-        expect(getOtpKeys()).toEqual(["platform:owner-auth:login:browser-otp:+919876543210"]);
+        expect(getOtpKeys()).toEqual(["console:owner-auth:login:browser-otp:+919876543210"]);
 
         const verification = await app.request("/platform/auth/login", {
             method: "POST",
@@ -130,7 +130,7 @@ describe("Owner User authentication API", () => {
         });
 
         expect(verification.status).toBe(200);
-        expect(verification.headers.get("set-cookie")).toContain("owner_token=");
+        expect(verification.headers.get("set-cookie")).toContain("ganatri_console_token=");
     });
 
     test("OTP initiation does not reveal account or delivery status", async () => {
@@ -243,7 +243,7 @@ describe("Owner User authentication API", () => {
             {
                 ownerUserId: ownerId,
                 tokenType: "owner",
-                audience: "platform-admin",
+                audience: "ganatri-console",
                 exp: Math.floor(Date.now() / 1000) - 1,
             },
             ownerSecret,

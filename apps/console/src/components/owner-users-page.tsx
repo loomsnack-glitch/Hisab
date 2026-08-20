@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, UserPlus } from "lucide-react";
 import {
@@ -30,6 +30,7 @@ type OwnerUsersPageProps = {
     createOwnerUser?: typeof createOwnerUserRequest;
     setOwnerUserActiveState?: typeof setOwnerUserActiveStateRequest;
     initialCreateValues?: CreateOwnerUserJSON;
+    onUnauthorized?: () => Promise<void>;
 };
 
 type PendingAccessChange = {
@@ -46,6 +47,7 @@ const OwnerUsersPage = ({
     createOwnerUser = createOwnerUserRequest,
     setOwnerUserActiveState = setOwnerUserActiveStateRequest,
     initialCreateValues,
+    onUnauthorized,
 }: OwnerUsersPageProps) => {
     const queryClient = useQueryClient();
     const [showCreateForm, setShowCreateForm] = useState(false);
@@ -64,6 +66,12 @@ const OwnerUsersPage = ({
     });
     const ownerUsers = ownerUsersQuery.data?.status === "success" ? ownerUsersQuery.data.data?.ownerUsers ?? [] : [];
     const activeCount = ownerUsers.filter((ownerUser) => ownerUser.isActive).length;
+    const listErrorCode = (ownerUsersQuery.error as { code?: number } | null)?.code
+        ?? (ownerUsersQuery.data?.status === "error" ? ownerUsersQuery.data.code : undefined);
+
+    useEffect(() => {
+        if (listErrorCode === 401) void onUnauthorized?.();
+    }, [listErrorCode, onUnauthorized]);
 
     const resetCreateForm = () => {
         setFirstName(initialCreateValues?.firstName ?? "");
@@ -78,6 +86,7 @@ const OwnerUsersPage = ({
         onMutate: () => setFormError(null),
         onSuccess: async (response) => {
             if (response.status === "error") {
+                if (response.code === 401) await onUnauthorized?.();
                 setFormError(response.message);
                 return;
             }
@@ -85,7 +94,8 @@ const OwnerUsersPage = ({
             setShowCreateForm(false);
             await queryClient.invalidateQueries({ queryKey: ownerUsersQueryKey });
         },
-        onError: (error: { message?: string }) => {
+        onError: (error: { message?: string; code?: number }) => {
+            if (error.code === 401) void onUnauthorized?.();
             setFormError(error.message ?? "Owner User was not created");
         },
     });
@@ -95,13 +105,15 @@ const OwnerUsersPage = ({
         onMutate: () => setAccessError(null),
         onSuccess: async (response) => {
             if (response.status === "error") {
+                if (response.code === 401) await onUnauthorized?.();
                 setAccessError(response.message);
                 return;
             }
             setPendingChange(null);
             await queryClient.invalidateQueries({ queryKey: ownerUsersQueryKey });
         },
-        onError: (error: { message?: string }) => {
+        onError: (error: { message?: string; code?: number }) => {
+            if (error.code === 401) void onUnauthorized?.();
             setAccessError(error.message ?? "Owner User access was not updated");
         },
     });
@@ -145,7 +157,7 @@ const OwnerUsersPage = ({
                     <Button type="button" variant="ghost" className="-ml-3" onClick={onBack}>
                         <ArrowLeft className="size-4" /> Back to console
                     </Button>
-                    <h1 className="text-3xl font-semibold tracking-tight">Owner Users</h1>
+                    <h1 className="text-3xl font-semibold tracking-tight">Console Users</h1>
                     <p className="text-slate-600">Manage internal Ganatri access. This screen cannot change Organizations, Stores, Sales, or other tenant data.</p>
                 </div>
                 <Button type="button" onClick={() => { setShowCreateForm(true); setFormError(null); }}>
@@ -205,7 +217,7 @@ const OwnerUsersPage = ({
                     </h2>
                     <p className="mt-1 text-sm text-slate-600">
                         {pendingChange.isActive
-                            ? `${ownerDisplayName(pendingChange.ownerUser)} will regain Platform Operations Console access.`
+                            ? `${ownerDisplayName(pendingChange.ownerUser)} will regain Ganatri Console access.`
                             : `${ownerDisplayName(pendingChange.ownerUser)} will lose console access on their next request.`}
                     </p>
                     {accessError ? (
@@ -235,14 +247,14 @@ const OwnerUsersPage = ({
             ) : null}
 
             {ownerUsersQuery.isPending ? (
-                <p aria-busy="true">Loading Owner Users…</p>
+                <p aria-busy="true">Loading Console Users…</p>
             ) : ownerUsersQuery.isError || ownerUsersQuery.data?.status === "error" ? (
                 <Alert variant="destructive" role="alert">
-                    <AlertTitle>Owner Users could not be loaded</AlertTitle>
+                    <AlertTitle>Console Users could not be loaded</AlertTitle>
                     <AlertDescription>
                         {(ownerUsersQuery.error as { message?: string } | null)?.message
                             ?? ownerUsersQuery.data?.message
-                            ?? "The Owner Users list is unavailable."}
+                            ?? "The Console Users list is unavailable."}
                     </AlertDescription>
                 </Alert>
             ) : (
@@ -253,7 +265,7 @@ const OwnerUsersPage = ({
                     </CardHeader>
                     <CardContent>
                         {ownerUsers.length === 0 ? (
-                            <p>No Owner Users were found.</p>
+                            <p>No Console Users were found.</p>
                         ) : (
                             <Table>
                                 <TableHeader>

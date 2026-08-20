@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { getPlatformDashboard as getPlatformDashboardRequest } from "@repo/services";
@@ -20,6 +20,7 @@ type PlatformDashboardPageProps = {
     initialQuery?: PlatformDashboardQueryJSON;
     initialCustomValues?: { startDate: string; endDate: string };
     onReportingPeriodChange?: (query: PlatformDashboardQueryJSON, customValues: { startDate: string; endDate: string }) => void;
+    onUnauthorized?: () => Promise<void>;
 };
 
 const periodOptions = [
@@ -55,6 +56,7 @@ const PlatformDashboardPage = ({
     initialQuery,
     initialCustomValues,
     onReportingPeriodChange,
+    onUnauthorized,
 }: PlatformDashboardPageProps) => {
     const [selection, setSelection] = useState<PlatformDashboardQuerySVC["period"]>(initialQuery?.period ?? "all-time");
     const [startDate, setStartDate] = useState(initialCustomValues?.startDate ?? initialQuery?.startDate ?? "");
@@ -70,6 +72,12 @@ const PlatformDashboardPage = ({
         enabled: appliedQuery.period !== "custom" || Boolean(appliedQuery.startDate && appliedQuery.endDate),
     });
     const dashboard = dashboardQuery.data?.status === "success" ? dashboardQuery.data.data : undefined;
+    const errorCode = (dashboardQuery.error as { code?: number } | null)?.code
+        ?? (dashboardQuery.data?.status === "error" ? dashboardQuery.data.code : undefined);
+
+    useEffect(() => {
+        if (errorCode === 401) void onUnauthorized?.();
+    }, [errorCode, onUnauthorized]);
 
     const applyPeriod = (next: PlatformDashboardQueryJSON) => {
         const parsed = PlatformDashboardQuerySchema.safeParse(next);

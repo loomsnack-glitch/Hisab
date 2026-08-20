@@ -1,5 +1,5 @@
 {
-  "name": "platform-admin",
+  "name": "console",
   "private": true,
   "type": "module",
   "scripts": {

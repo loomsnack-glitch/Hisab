@@ -14,12 +14,12 @@ import { getRandomOTP } from "@/utils/helper";
 import * as ownerUserRepository from "./owner-user.repository";
 
 const OWNER_TOKEN_TYPE = "owner";
-const OWNER_TOKEN_AUDIENCE = "platform-admin";
+const OWNER_TOKEN_AUDIENCE = "ganatri-console";
 export const OWNER_SESSION_SECONDS = 60 * 60 * 24 * 30;
 const DUMMY_PASSWORD_HASH = "$2b$10$E6kLoVWPJo5RY6Eb6xliBeynK4VuP5Fmk7gb2u5xnJHgHUTA8jqoC";
 
 const extractToken = (token: string) => token.replace(/^Bearer\s+/i, "").trim();
-const ownerOtpKey = (deviceId: string, phone: string) => `platform:owner-auth:login:${deviceId}:${phone}`;
+const ownerOtpKey = (deviceId: string, phone: string) => `console:owner-auth:login:${deviceId}:${phone}`;
 
 const sanitizeOwnerUser = ({ passwordHash: _passwordHash, ...ownerUser }: OwnerUserRecord): OwnerUserDTO => ownerUser;
 

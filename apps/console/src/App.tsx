@@ -8,7 +8,7 @@ import ConsoleEntry from "@/components/console-entry";
 import OwnerLoginPage from "@/components/owner-login-page";
 
 const ownerEntryKey = ["platform-owner", "entry"] as const;
-const sessionMarker = "ganatri_platform_owner_session";
+const sessionMarker = "ganatri_console_owner_session";
 
 export const getCurrentOwnerUser = (
     isError: boolean,
@@ -22,7 +22,7 @@ type PlatformAppViewProps =
     | { state: "loading" }
     | { state: "error"; message: string; onRetry: () => Promise<void> }
     | { state: "unauthenticated"; sessionExpired: boolean; onAuthenticated: () => Promise<void> }
-    | { state: "authenticated"; ownerUser: OwnerUserDTO; onLogout: () => Promise<void> };
+    | { state: "authenticated"; ownerUser: OwnerUserDTO; onLogout: () => Promise<void>; onUnauthorized: () => Promise<void> };
 
 export const PlatformAppView = (props: PlatformAppViewProps) => {
     if (props.state === "loading") {
@@ -40,7 +40,7 @@ export const PlatformAppView = (props: PlatformAppViewProps) => {
         );
     }
     if (props.state === "authenticated") {
-        return <ConsoleEntry ownerUser={props.ownerUser} onLogout={props.onLogout} />;
+        return <ConsoleEntry ownerUser={props.ownerUser} onLogout={props.onLogout} onUnauthorized={props.onUnauthorized} />;
     }
     return <OwnerLoginPage sessionExpired={props.sessionExpired} onAuthenticated={props.onAuthenticated} />;
 };
@@ -68,6 +68,11 @@ const App = () => {
         await queryClient.invalidateQueries({ queryKey: ownerEntryKey });
     };
 
+    const onUnauthorized = async () => {
+        localStorage.removeItem(sessionMarker);
+        await entryQuery.refetch();
+    };
+
     if (entryQuery.isPending) {
         return <PlatformAppView state="loading" />;
     }
@@ -77,14 +82,14 @@ const App = () => {
         return (
             <PlatformAppView
                 state="error"
-                message={entryError?.message ?? "The Platform Operations API is unavailable."}
+                message={entryError?.message ?? "The Ganatri Console API is unavailable."}
                 onRetry={async () => { await entryQuery.refetch(); }}
             />
         );
     }
 
     if (ownerUser) {
-        return <PlatformAppView state="authenticated" ownerUser={ownerUser} onLogout={onLogout} />;
+        return <PlatformAppView state="authenticated" ownerUser={ownerUser} onLogout={onLogout} onUnauthorized={onUnauthorized} />;
     }
 
     const sessionExpired = entryError?.code === 401 && localStorage.getItem(sessionMarker) === "active";

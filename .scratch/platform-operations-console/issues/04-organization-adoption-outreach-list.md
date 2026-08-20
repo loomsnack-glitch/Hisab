@@ -1,6 +1,6 @@
 # 04 — Organization adoption outreach list
 
-**What to build:** Add an outreach-oriented Organization list to the Platform Operations Console. Owners can search and paginate across every Organization, filter it by the stable Active Organization signal, and see enough adoption data and creator contact information to decide whom to approach.
+**What to build:** Add an outreach-oriented Organization list to Ganatri Console. Owners can search and paginate across every Organization, filter it by the stable Active Organization signal, and see enough adoption data and creator contact information to decide whom to approach.
 
 **Blocked by:** 03 — Platform dashboard metrics.
 

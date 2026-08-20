@@ -96,7 +96,7 @@ const OwnerLoginPage = ({
                         </div>
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-300">Ganatri internal</p>
-                            <h1 className="text-2xl font-semibold">Platform Operations Console</h1>
+                            <h1 className="text-2xl font-semibold">Ganatri Console</h1>
                         </div>
                     </div>
                     <div className="max-w-xl space-y-3">
@@ -107,7 +107,7 @@ const OwnerLoginPage = ({
                     </div>
                     <div className="flex items-center gap-3 text-sm text-slate-300">
                         <ShieldCheck className="size-5 text-emerald-400" />
-                        Active status is verified on every Platform Operations request.
+                        Active status is verified on every Console request.
                     </div>
                 </section>
 

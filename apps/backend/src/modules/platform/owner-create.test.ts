@@ -88,7 +88,7 @@ describe("Seed Owner User command", () => {
             write: (message) => output.push(message),
             repository: {
                 createSeedOwnerUser: async () => {
-                    throw Object.assign(new Error('relation "owner_users" does not exist'), { code: "42P01" });
+                    throw Object.assign(new Error('relation "console_users" does not exist'), { code: "42P01" });
                 },
             },
             hashPassword: Bun.password.hash,
@@ -96,7 +96,7 @@ describe("Seed Owner User command", () => {
         });
 
         expect(exitCode).toBe(1);
-        expect(output.join(" ")).toContain('database error 42P01: relation "owner_users" does not exist');
+        expect(output.join(" ")).toContain('database error 42P01: relation "console_users" does not exist');
         expect(output.join(" ")).not.toContain(password);
     });
 });

@@ -20,7 +20,7 @@ const render = (node: React.ReactNode) => renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>{node}</QueryClientProvider>,
 );
 
-describe("Platform Operations Console entry", () => {
+describe("Ganatri Console entry", () => {
     test("shows a dedicated loading state while the owner session is checked", () => {
         expect(render(<PlatformAppView state="loading" />)).toContain("Checking owner session");
     });
@@ -57,16 +57,16 @@ describe("Platform Operations Console entry", () => {
         expect(invalidMarkup).toContain("Invalid credentials");
     });
 
-    test("enters the console with Dashboard, Organizations, and Owner Users available", () => {
-        const markup = render(<PlatformAppView state="authenticated" ownerUser={ownerUser} onLogout={async () => {}} />);
+    test("enters the console with Dashboard, Organizations, and Console Users available", () => {
+        const markup = render(<PlatformAppView state="authenticated" ownerUser={ownerUser} onLogout={async () => {}} onUnauthorized={async () => {}} />);
         expect(markup).toContain("Welcome, Asha");
         expect(markup).toContain("Active Owner User");
         expect(markup).toContain("Dashboard");
         expect(markup).toContain("Organizations");
-        expect(markup).toContain("Owner Users");
+        expect(markup).toContain("Console Users");
         expect(markup).toContain("Open Dashboard");
         expect(markup).toContain("Open Organizations");
-        expect(markup).toContain("Open Owner Users");
+        expect(markup).toContain("Open Console Users");
         expect(markup).not.toContain("Later ticket");
     });
 });
