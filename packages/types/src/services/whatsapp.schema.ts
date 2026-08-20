@@ -17,12 +17,71 @@ export const WhatsAppOutboxKindSchema = z.enum(["invoice", "text", "document", "
 export const WhatsAppOutboxStatusSchema = z.enum([
     "pending",
     "processing",
+    "reconciling",
     "sent",
     "retryable",
     "dead_letter",
     "cancelled",
 ]);
 export const WhatsAppMessageTemplateKindSchema = z.enum(["bill", "due_reminder", "promotion"]);
+
+export const WhatsAppCloudAccountStatusSchema = z.enum([
+    "pending_authorization",
+    "provisioning",
+    "connected",
+    "needs_action",
+    "disconnected",
+    "revoked",
+    "suspended",
+    "failed",
+]);
+
+export const WhatsAppCloudProvisioningStatusSchema = z.enum([
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+]);
+
+export const WhatsAppCloudProvisioningStepSchema = z.enum([
+    "authorization_received",
+    "waba_resolved",
+    "system_user_assigned",
+    "phone_registered",
+    "webhook_subscribed",
+    "templates_synced",
+    "completed",
+]);
+
+export const WhatsAppCloudAccountSnapshotSchema = z.object({
+    id: z.uuid("Invalid WhatsApp account id"),
+    organizationId: z.uuid("Invalid organization id"),
+    wabaId: z.string().trim().min(1).max(64).nullable(),
+    phoneNumberId: z.string().trim().min(1).max(64).nullable(),
+    verifiedName: z.string().trim().min(1).max(255).nullable(),
+    status: WhatsAppCloudAccountStatusSchema.nullable(),
+    qualityRating: z.string().trim().min(1).max(32).nullable(),
+    messagingLimit: z.number().int().min(0).nullable(),
+    lastLimitSyncedAt: dtoDateSchema.nullable(),
+    lastWebhookAt: dtoDateSchema.nullable(),
+    lastGraphApiAt: dtoDateSchema.nullable(),
+    lastErrorCode: z.string().trim().min(1).max(100).nullable(),
+});
+
+export const WhatsAppCloudProvisioningAttemptSchema = z.object({
+    id: z.uuid("Invalid provisioning attempt id"),
+    organizationId: z.uuid("Invalid organization id"),
+    whatsappAccountId: z.uuid("Invalid WhatsApp account id"),
+    whatsappBusinessAccountId: z.uuid("Invalid WABA id").nullable(),
+    idempotencyKey: z.string().trim().min(1).max(255),
+    status: WhatsAppCloudProvisioningStatusSchema,
+    currentStep: WhatsAppCloudProvisioningStepSchema,
+    completedSteps: z.array(WhatsAppCloudProvisioningStepSchema),
+    safeErrorCode: z.string().trim().min(1).max(100).nullable(),
+    safeErrorMessage: z.string().trim().min(1).max(1000).nullable(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
 
 export const WhatsAppAccountDTOSchema = z.object({
     id: z.uuid("Invalid WhatsApp account id"),

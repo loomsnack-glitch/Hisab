@@ -117,7 +117,7 @@ const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
 };
 
 type WhatsAppMessageStatus = "queued" | "sending" | "sent" | "delivered" | "read" | "failed";
-type WhatsAppOutboxStatus = "pending" | "processing" | "sent" | "retryable" | "dead_letter" | "cancelled";
+type WhatsAppOutboxStatus = "pending" | "processing" | "reconciling" | "sent" | "retryable" | "dead_letter" | "cancelled";
 
 export type WorkerPartition = {
     count: number;

@@ -9,6 +9,8 @@ import {
     WhatsAppWorkerMessageEventSchema,
     WhatsAppWorkerOutboundJobSchema,
     WhatsAppConversationListResponseSchema,
+    WhatsAppCloudAccountSnapshotSchema,
+    WhatsAppCloudProvisioningAttemptSchema,
 } from "./whatsapp.schema";
 
 const uuid = "11111111-1111-4111-8111-111111111111";
@@ -34,6 +36,53 @@ describe("WhatsApp schemas", () => {
         if (result.success) {
             expect("sessionReference" in result.data).toBe(false);
         }
+    });
+
+    test("validates Cloud API account and provisioning snapshots", () => {
+        expect(WhatsAppCloudAccountSnapshotSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            wabaId: "waba-1",
+            phoneNumberId: "phone-1",
+            verifiedName: "Ganatri",
+            status: "connected",
+            qualityRating: "GREEN",
+            messagingLimit: 1_000,
+            lastLimitSyncedAt: new Date(),
+            lastWebhookAt: null,
+            lastGraphApiAt: new Date(),
+            lastErrorCode: null,
+        }).success).toBe(true);
+
+        expect(WhatsAppCloudProvisioningAttemptSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            whatsappAccountId: uuid,
+            whatsappBusinessAccountId: null,
+            idempotencyKey: "signup-1",
+            status: "running",
+            currentStep: "authorization_received",
+            completedSteps: [],
+            safeErrorCode: null,
+            safeErrorMessage: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        }).success).toBe(true);
+
+        expect(WhatsAppCloudProvisioningAttemptSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            whatsappAccountId: uuid,
+            whatsappBusinessAccountId: null,
+            idempotencyKey: "signup-1",
+            status: "running",
+            currentStep: "authorization_received",
+            completedSteps: ["not-a-step"],
+            safeErrorCode: null,
+            safeErrorMessage: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        }).success).toBe(false);
     });
 
     test("rejects non-international customer phone numbers for WhatsApp sends", () => {

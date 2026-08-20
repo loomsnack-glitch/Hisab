@@ -46,6 +46,11 @@ import {
     WhatsAppAttachmentResponseSchema,
     WhatsAppWorkerStatusResponseSchema,
     WhatsAppWorkerStatusUpdateSchema,
+    WhatsAppCloudAccountStatusSchema,
+    WhatsAppCloudProvisioningStatusSchema,
+    WhatsAppCloudProvisioningStepSchema,
+    WhatsAppCloudAccountSnapshotSchema,
+    WhatsAppCloudProvisioningAttemptSchema,
 } from "./whatsapp.schema";
 
 export type OTPRequestData = {
@@ -71,6 +76,11 @@ export type WhatsAppMessageType = z.infer<typeof WhatsAppMessageTypeSchema>;
 export type WhatsAppMessageStatus = z.infer<typeof WhatsAppMessageStatusSchema>;
 export type WhatsAppOutboxKind = z.infer<typeof WhatsAppOutboxKindSchema>;
 export type WhatsAppOutboxStatus = z.infer<typeof WhatsAppOutboxStatusSchema>;
+export type WhatsAppCloudAccountStatus = z.infer<typeof WhatsAppCloudAccountStatusSchema>;
+export type WhatsAppCloudProvisioningStatus = z.infer<typeof WhatsAppCloudProvisioningStatusSchema>;
+export type WhatsAppCloudProvisioningStep = z.infer<typeof WhatsAppCloudProvisioningStepSchema>;
+export type WhatsAppCloudAccountSnapshot = z.infer<typeof WhatsAppCloudAccountSnapshotSchema>;
+export type WhatsAppCloudProvisioningAttempt = z.infer<typeof WhatsAppCloudProvisioningAttemptSchema>;
 export type WhatsAppMessageTemplateKind = z.infer<typeof WhatsAppMessageTemplateKindSchema>;
 export type WhatsAppMessageTemplateDTO = z.infer<typeof WhatsAppMessageTemplateDTOSchema>;
 export type WhatsAppCreateMessageTemplateJSON = z.infer<typeof WhatsAppCreateMessageTemplateSchema>;
