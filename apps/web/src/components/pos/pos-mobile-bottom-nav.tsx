@@ -19,7 +19,7 @@ const PosMobileBottomNav = ({ billsCount = 0 }: PosMobileBottomNavProps) => {
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
     const activeTab = getPosPanelTabFromPath(location.pathname);
-    const isSettingsRoute = location.pathname === "/pos/settings";
+    const isAppearanceRoute = location.pathname === "/pos/appearance";
     const isMoreActive = isPosMoreDestinationActive(location.pathname) || moreOpen;
 
     const navButtonClassName = (isActive: boolean) =>
@@ -37,7 +37,7 @@ const PosMobileBottomNav = ({ billsCount = 0 }: PosMobileBottomNavProps) => {
                 <div className="mx-auto flex max-w-lg items-stretch gap-0.5">
                     {posPrimaryMobileDestinations.map((destination) => {
                         const Icon = destination.icon;
-                        const isActive = !isSettingsRoute && destination.tab === activeTab;
+                        const isActive = !isAppearanceRoute && destination.tab === activeTab;
 
                         return (
                             <Link
@@ -80,8 +80,8 @@ const PosMobileBottomNav = ({ billsCount = 0 }: PosMobileBottomNavProps) => {
                         {posWorkspaceDestinations.map((destination) => {
                             const Icon = destination.icon;
                             const isActive =
-                                destination.path === "/pos/settings"
-                                    ? isSettingsRoute
+                                destination.path === "/pos/appearance"
+                                    ? isAppearanceRoute
                                     : destination.tab === activeTab;
 
                             return (

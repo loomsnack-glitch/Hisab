@@ -26,7 +26,7 @@ const PosPage = () => {
     const [headerSearch, setHeaderSearch] = useState("");
     const [pendingComposerHandoff, setPendingComposerHandoff] = useState<PosComposerHandoff | null>(null);
     const activePanelTab = getPosPanelTabFromPath(location.pathname);
-    const isSettingsRoute = location.pathname === "/pos/settings";
+    const isAppearanceRoute = location.pathname === "/pos/appearance";
     const legacyPanel = searchParams.get("panel");
 
     const handlePanelTabChange = useCallback(
@@ -94,9 +94,9 @@ const PosPage = () => {
                 <PosLayout
                     session={session}
                     searchValue={headerSearch}
-                    searchPlaceholder={isSettingsRoute ? "" : posPanelConfig[activePanelTab].searchPlaceholder}
+                    searchPlaceholder={isAppearanceRoute ? "" : posPanelConfig[activePanelTab].searchPlaceholder}
                     onSearchChange={setHeaderSearch}
-                    showSearch={!isSettingsRoute && activePanelTab !== "customers" && Boolean(posPanelConfig[activePanelTab].searchPlaceholder)}
+                    showSearch={!isAppearanceRoute && activePanelTab !== "customers" && Boolean(posPanelConfig[activePanelTab].searchPlaceholder)}
                 >
                     <Outlet context={context} />
                 </PosLayout>

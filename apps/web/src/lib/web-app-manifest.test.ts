@@ -45,7 +45,7 @@ describe("web app manifest", () => {
 
     test("explains why POS home-screen clips survived without a manifest and admin did not", () => {
         expect(isWithinStartUrlPrefix("/pos", "/pos/bills")).toBe(true);
-        expect(isWithinStartUrlPrefix("/pos", "/pos/settings")).toBe(true);
+        expect(isWithinStartUrlPrefix("/pos", "/pos/appearance")).toBe(true);
         expect(isWithinStartUrlPrefix("/organizations/abc/stores", "/organizations/abc/billing")).toBe(false);
         expect(isWithinStartUrlPrefix("/organizations/abc/stores", "/appearance")).toBe(false);
     });

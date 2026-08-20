@@ -28,7 +28,7 @@ import LandingPage from "@/pages/landing-page";
 import ReportsPage from "@/pages/reports-page";
 import PosReportsPage from "@/pages/pos-reports-page";
 import AppearancePage from "@/pages/appearance-page";
-import PosSettingsPage from "@/pages/pos-settings-page";
+import PosAppearancePage from "@/pages/pos-appearance-page";
 import TablesPage from "@/pages/tables-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
@@ -122,7 +122,8 @@ const App = () => {
                                 <Route path="customers" element={<PosCustomersPage />} />
                                 <Route path="purchases" element={<PosPurchasesPage />} />
                                 <Route path="whatsapp" element={<PosWhatsAppInboxPage />} />
-                                <Route path="settings" element={<PosSettingsPage />} />
+                                <Route path="appearance" element={<PosAppearancePage />} />
+                                <Route path="settings" element={<Navigate to="/pos/appearance" replace />} />
                             </Route>
                             <Route
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}

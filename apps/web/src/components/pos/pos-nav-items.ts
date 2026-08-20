@@ -27,7 +27,7 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "reports", label: "Reports", icon: BarChart3, path: getPosPanelPath("reports"), tab: "reports" },
     { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
     { id: "purchases", label: "Purchases", icon: ShoppingBag, path: getPosPanelPath("purchases"), tab: "purchases" },
-    { id: "settings", label: "Settings", icon: Settings2, path: "/pos/settings" },
+    { id: "appearance", label: "Appearance", icon: Settings2, path: "/pos/appearance" },
 ];
 
 export const posPrimaryMobileNavIds = ["products", "bills", "reports"] as const;
@@ -41,7 +41,7 @@ export const posSecondaryMobileDestinations = posWorkspaceDestinations.filter(
 );
 
 export const isPosMoreDestinationActive = (pathname: string) => {
-    if (pathname === "/pos/settings") {
+    if (pathname === "/pos/appearance") {
         return true;
     }
 
