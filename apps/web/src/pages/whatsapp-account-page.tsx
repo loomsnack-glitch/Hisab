@@ -98,9 +98,13 @@ const WhatsAppAccountPage = () => {
 
     return (
         <div className="mx-auto max-w-3xl space-y-6">
-            <Button variant="ghost" className="rounded-full" render={<Link to={`/organizations/${organizationId}/stores`} />}>
+            <Button
+                variant="ghost"
+                className="rounded-full"
+                render={<Link to={storeId ? `/organizations/${organizationId}/stores/${storeId}/devices` : `/organizations/${organizationId}/stores`} />}
+            >
                 <ArrowLeft className="size-4" />
-                Back to stores
+                Back to store
             </Button>
 
             <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">

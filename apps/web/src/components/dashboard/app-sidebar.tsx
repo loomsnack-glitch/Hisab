@@ -24,6 +24,7 @@ import { cn } from "@repo/ui/lib/utils";
 
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
+import { isStoresNavActive } from "@/lib/store-routes";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
@@ -112,7 +113,7 @@ const AppSidebar = ({
                     to: `/organizations/${effectiveOrgId}/stores`,
                     label: "Stores",
                     icon: Store,
-                    isActive: /\/organizations\/[^/]+\/stores\/?$/.test(location.pathname),
+                    isActive: isStoresNavActive(location.pathname),
                 },
                 {
                     to: `/organizations/${effectiveOrgId}/products`,

@@ -59,7 +59,7 @@ export const createClassNames = (classNames: any) => {
             cn(loadingMessageStyles, classNames?.loadingMessage?.(state)),
         menu: (state: any) => cn(menuStyles, classNames?.menu?.(state)),
         menuList: (state: any) => cn(classNames?.menuList?.(state)),
-        menuPortal: (state: any) => cn(classNames?.menuPortal?.(state)),
+        menuPortal: (state: any) => cn("z-[100]", classNames?.menuPortal?.(state)),
         multiValue: (state: any) =>
             cn(multiValueStyles, classNames?.multiValue?.(state)),
         multiValueLabel: (state: any) => cn(classNames?.multiValueLabel?.(state)),
@@ -100,6 +100,10 @@ export const defaultStyles = {
     control: (base: any) => ({
         ...base,
         transition: 'none'
+    }),
+    menuPortal: (base: any) => ({
+        ...base,
+        zIndex: 100,
     }),
     menuList: (base: any) => ({
         ...base,

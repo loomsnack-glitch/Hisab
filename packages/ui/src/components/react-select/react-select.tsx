@@ -24,6 +24,8 @@ type ReactSelectProps = {
     isLoading?: boolean;
     loadingMessage?: (obj: { inputValue: string }) => React.ReactNode;
     className?: string;
+    menuPortalTarget?: HTMLElement | null;
+    menuPosition?: "absolute" | "fixed";
     ref?: React.Ref<SelectInstance<any, boolean, GroupBase<any>>>;
 };
 
@@ -36,6 +38,8 @@ const ReactSelect = (props: ReactSelectProps) => {
         styles = defaultStyles,
         classNames = {},
         components = {},
+        menuPortalTarget = typeof document !== "undefined" ? document.body : null,
+        menuPosition = "fixed",
         ...rest
     } = props;
 
@@ -57,8 +61,9 @@ const ReactSelect = (props: ReactSelectProps) => {
             }}
             styles={styles}
             classNames={mergedClassNames}
+            menuPortalTarget={menuPortalTarget}
+            menuPosition={menuPosition}
             {...rest}
-            // menuPosition='fixed'
             menuPlacement='auto'
         />
     );

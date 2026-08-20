@@ -18,6 +18,12 @@ import PosProductsPage from "@/pages/pos-products-page";
 import PosPurchasesPage from "@/pages/pos-purchases-page";
 import RegisterPage from "@/pages/register-page";
 import StoresPage from "@/pages/stores-page";
+import {
+    StoreDetailIndexRedirect,
+    StoreDetailShell,
+    StoreDevicesPage,
+    StoreSettingsPage,
+} from "@/pages/store-detail-page";
 import ProductsPage from "@/pages/products-page";
 import ProductsListPage from "@/pages/products-list-page";
 import CategoriesPage from "@/pages/categories-page";
@@ -134,6 +140,11 @@ const App = () => {
                                 <Route path="/organizations" element={<OrganizationsPage />} />
                                 <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
                                 <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
+                                <Route path="/organizations/:organizationId/stores/:storeId" element={<StoreDetailShell />}>
+                                    <Route index element={<StoreDetailIndexRedirect />} />
+                                    <Route path="devices" element={<StoreDevicesPage />} />
+                                    <Route path="settings" element={<StoreSettingsPage />} />
+                                </Route>
                                 <Route path="/organizations/:organizationId/products" element={<ProductsPage />}>
                                     <Route index element={<Navigate to="list" replace />} />
                                     <Route path="list" element={<ProductsListPage />} />
