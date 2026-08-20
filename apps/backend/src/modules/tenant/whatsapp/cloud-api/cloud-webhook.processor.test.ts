@@ -58,7 +58,7 @@ const deps = () => {
       },
       updateStatus: async (...data: unknown[]) => {
         calls.statuses.push(data);
-        return "updated" as "updated" | "missing";
+        return "updated" as "updated" | "stale" | "missing";
       },
       resolveAccount: async (): Promise<string | null> => "account-1",
       complete: async () => {

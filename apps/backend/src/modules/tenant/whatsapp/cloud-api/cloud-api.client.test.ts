@@ -84,6 +84,26 @@ describe("WhatsAppCloudApiClient", () => {
     });
   });
 
+  test("recognizes a provider rate-limit code on a definitive error response", async () => {
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v23.0",
+      fetchImpl: async () =>
+        jsonResponse(
+          { error: { message: "Rate limit hit", code: 130429 } },
+          400,
+        ),
+    });
+
+    await expect(
+      client.sendMessage("phone-1", { type: "text" }),
+    ).rejects.toMatchObject({
+      status: 400,
+      providerCode: "130429",
+      retryable: true,
+    });
+  });
+
   test("converts network failures and timeouts into retryable errors", async () => {
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
@@ -101,5 +121,23 @@ describe("WhatsAppCloudApiClient", () => {
       message: "WhatsApp Cloud API request timed out",
       retryable: true,
     });
+  });
+
+  test("marks a timed-out message submission as uncertain", async () => {
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v23.0",
+      timeoutMs: 5,
+      fetchImpl: async (_url, init) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        if (init?.signal?.aborted)
+          throw new DOMException("Aborted", "AbortError");
+        return jsonResponse({});
+      },
+    });
+
+    await expect(
+      client.sendMessage("phone-1", { type: "text", body: "Hello" }),
+    ).rejects.toMatchObject({ uncertain: true, retryable: true });
   });
 });

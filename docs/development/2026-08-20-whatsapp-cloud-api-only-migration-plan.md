@@ -305,6 +305,38 @@ perspective, retries are bounded and observable, Store/account scoping is
 preserved, focused/full tests pass, and changes remain uncommitted until
 explicitly approved.
 
+#### Phase 2D: Cloud outbound transport boundary
+
+Research: `docs/research/2026-08-21-whatsapp-cloud-api-phase-2d-transport-research.md`.
+
+This slice defines the safe Graph message boundary before any existing outbox
+row can produce Cloud traffic. It keeps Meta payload construction and
+uncertain-send classification independently testable while the template,
+consent, quota, and credential-binding work is still pending.
+
+Deliverables:
+
+- typed payload builders for explicit text, approved-template, and provider
+  media-reference messages;
+- strict recipient/Phone Number ID validation and successful `wamid` response
+  validation;
+- provider error classification into accepted, retryable, permanent, and
+  reconciling outcomes;
+- transport-level protection against retrying a POST whose network result is
+  unknown;
+- fixture tests for payloads, validation, response parsing, and error classes.
+
+Non-goals for Phase 2D:
+
+- no database outbox claiming or completion;
+- no credential vault, template binding, consent, quota, or cost ledger;
+- no media upload/download orchestration or startup worker scheduling;
+- no production Cloud sends and no changes to the Baileys worker.
+
+Exit gate: the transport boundary is typed, redacted, deterministic, and
+fully fixture-tested; all existing tests pass; and changes remain uncommitted
+until explicitly approved.
+
 ### Phase 3: Embedded Signup and account operations
 
 Dependencies: Phases 0–2.

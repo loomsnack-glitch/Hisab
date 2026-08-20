@@ -32,6 +32,7 @@ export class WhatsAppCloudApiError extends Error {
   readonly providerType: string | null;
   readonly fbtraceId: string | null;
   readonly retryable: boolean;
+  readonly uncertain: boolean;
 
   constructor(input: {
     message: string;
@@ -41,6 +42,7 @@ export class WhatsAppCloudApiError extends Error {
     providerType?: string | null;
     fbtraceId?: string | null;
     retryable?: boolean;
+    uncertain?: boolean;
     cause?: unknown;
   }) {
     super(input.message, { cause: input.cause });
@@ -51,6 +53,7 @@ export class WhatsAppCloudApiError extends Error {
     this.providerType = input.providerType ?? null;
     this.fbtraceId = input.fbtraceId ?? null;
     this.retryable = input.retryable ?? false;
+    this.uncertain = input.uncertain ?? false;
   }
 }
 
@@ -60,8 +63,26 @@ const asString = (value: unknown): string | null => {
   return null;
 };
 
-const isRetryableStatus = (status: number): boolean =>
-  status === 408 || status === 425 || status === 429 || status >= 500;
+const retryableProviderCodes = new Set([
+  "4",
+  "80007",
+  "130429",
+  "131016",
+  "131048",
+  "131056",
+]);
+
+const isRetryableStatus = (
+  status: number,
+  providerCode?: string | null,
+): boolean =>
+  status === 408 ||
+  status === 425 ||
+  status === 429 ||
+  status >= 500 ||
+  (providerCode !== null &&
+    providerCode !== undefined &&
+    retryableProviderCodes.has(providerCode));
 
 const graphError = (status: number, body: unknown): WhatsAppCloudApiError => {
   const error = (body as GraphErrorBody | null)?.error;
@@ -77,7 +98,7 @@ const graphError = (status: number, body: unknown): WhatsAppCloudApiError => {
     providerSubcode,
     providerType: asString(error?.type),
     fbtraceId: asString(error?.fbtrace_id),
-    retryable: isRetryableStatus(status),
+    retryable: isRetryableStatus(status, providerCode),
   });
 };
 
@@ -153,6 +174,9 @@ export class WhatsAppCloudApiClient {
             ? "WhatsApp Cloud API request timed out"
             : "WhatsApp Cloud API request failed",
           retryable: true,
+          uncertain:
+            (options.method ?? "GET").toUpperCase() !== "GET" &&
+            (options.method ?? "GET").toUpperCase() !== "HEAD",
           cause: error,
         });
       }
