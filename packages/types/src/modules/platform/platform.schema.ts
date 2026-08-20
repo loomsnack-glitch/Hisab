@@ -57,3 +57,168 @@ export const OwnerLoginSchema = z.discriminatedUnion("requestType", [
         otp: z.string().regex(/^\d{6}$/, "OTP must be exactly 6 digits"),
     }),
 ]);
+
+export const PLATFORM_REPORTING_TIMEZONE = "Asia/Kolkata";
+export const ACTIVE_STORE_LOOKBACK_DAYS = 7;
+
+export const PlatformReportingPeriodSelectionSchema = z.enum(["all-time", "7d", "30d", "90d", "custom"]);
+
+const calendarDateSchema = z.string().date("Enter a valid calendar date");
+
+export const PlatformDashboardQuerySchema = z
+    .object({
+        period: PlatformReportingPeriodSelectionSchema.default("all-time"),
+        startDate: calendarDateSchema.optional(),
+        endDate: calendarDateSchema.optional(),
+    })
+    .superRefine((value, ctx) => {
+        if (value.period === "custom") {
+            if (!value.startDate) {
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["startDate"],
+                    message: "Start date is required for a custom Platform Reporting Period",
+                });
+            }
+            if (!value.endDate) {
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["endDate"],
+                    message: "End date is required for a custom Platform Reporting Period",
+                });
+            }
+            if (value.startDate && value.endDate && value.startDate > value.endDate) {
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["startDate"],
+                    message: "Start date must be before or equal to end date",
+                });
+            }
+            return;
+        }
+
+        if (value.startDate || value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Custom dates are only valid for a custom Platform Reporting Period",
+            });
+        }
+    });
+
+const nonNegativeIntSchema = z.number().int().min(0);
+const nonNegativeMoneySchema = z.number().min(0);
+
+export const PlatformReportingPeriodDTOSchema = z.object({
+    selection: PlatformReportingPeriodSelectionSchema,
+    startDate: z.string().date().nullable(),
+    endDate: z.string().date().nullable(),
+});
+
+export const PlatformDashboardDTOSchema = z.object({
+    reportingPeriod: PlatformReportingPeriodDTOSchema,
+    allTime: z.object({
+        organizationCount: nonNegativeIntSchema,
+        storeCount: nonNegativeIntSchema,
+        customerCount: nonNegativeIntSchema,
+        completedSaleCount: nonNegativeIntSchema,
+    }),
+    activity: z.object({
+        activeOrganizationCount: nonNegativeIntSchema,
+        activeStoreCount: nonNegativeIntSchema,
+    }),
+    reportingPeriodMetrics: z.object({
+        completedSaleCount: nonNegativeIntSchema,
+        completedSalesValue: nonNegativeMoneySchema,
+        customerCount: nonNegativeIntSchema,
+    }),
+});
+
+export const kolkataCalendarDate = (now: Date): string =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: PLATFORM_REPORTING_TIMEZONE }).format(now);
+
+export const kolkataDayStartUtc = (calendarDate: string): Date => new Date(`${calendarDate}T00:00:00+05:30`);
+
+export const addCalendarDays = (calendarDate: string, days: number): string => {
+    const [yearText, monthText, dayText] = calendarDate.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+        throw new Error(`Invalid calendar date: ${calendarDate}`);
+    }
+    return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+};
+
+export type ResolvedPlatformReportingPeriod = {
+    selection: z.infer<typeof PlatformReportingPeriodSelectionSchema>;
+    startDate: string | null;
+    endDate: string | null;
+    startAt: Date | null;
+    endAt: Date | null;
+};
+
+export type ResolvedActivityWindow = {
+    startDate: string;
+    endDate: string;
+    startAt: Date;
+    endAt: Date;
+};
+
+export const FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE = "Platform Reporting Period dates cannot be in the future";
+
+const boundedPeriod = (
+    selection: Exclude<z.infer<typeof PlatformReportingPeriodSelectionSchema>, "all-time">,
+    startDate: string,
+    endDate: string,
+): ResolvedPlatformReportingPeriod => ({
+    selection,
+    startDate,
+    endDate,
+    startAt: kolkataDayStartUtc(startDate),
+    endAt: kolkataDayStartUtc(addCalendarDays(endDate, 1)),
+});
+
+export const resolvePlatformReportingPeriod = (
+    query: z.output<typeof PlatformDashboardQuerySchema>,
+    now: Date,
+): { ok: true; period: ResolvedPlatformReportingPeriod } | { ok: false; message: string } => {
+    if (query.period === "all-time") {
+        return {
+            ok: true,
+            period: {
+                selection: "all-time",
+                startDate: null,
+                endDate: null,
+                startAt: null,
+                endAt: null,
+            },
+        };
+    }
+
+    const today = kolkataCalendarDate(now);
+
+    if (query.period === "custom") {
+        const startDate = query.startDate ?? "";
+        const endDate = query.endDate ?? "";
+        if (startDate > today || endDate > today) {
+            return { ok: false, message: FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE };
+        }
+        return { ok: true, period: boundedPeriod("custom", startDate, endDate) };
+    }
+
+    const dayCount = query.period === "7d" ? 7 : query.period === "30d" ? 30 : 90;
+    const startDate = addCalendarDays(today, -(dayCount - 1));
+    return { ok: true, period: boundedPeriod(query.period, startDate, today) };
+};
+
+export const resolveActiveStoreWindow = (now: Date): ResolvedActivityWindow => {
+    const today = kolkataCalendarDate(now);
+    const startDate = addCalendarDays(today, -(ACTIVE_STORE_LOOKBACK_DAYS - 1));
+    return {
+        startDate,
+        endDate: today,
+        startAt: kolkataDayStartUtc(startDate),
+        endAt: kolkataDayStartUtc(addCalendarDays(today, 1)),
+    };
+};

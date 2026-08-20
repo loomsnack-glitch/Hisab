@@ -6,6 +6,7 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 
 import OwnerUsersPage, { type OwnerUsersPageProps } from "@/components/owner-users-page";
+import PlatformDashboardPage, { type PlatformDashboardPageProps } from "@/components/platform-dashboard-page";
 
 const destinations = [
     { title: "Dashboard", description: "Platform adoption totals and reporting periods", icon: BarChart3 },
@@ -17,10 +18,11 @@ type ConsoleEntryProps = {
     ownerUser: OwnerUserDTO;
     onLogout: () => Promise<void>;
     ownerUsersPageProps?: Pick<OwnerUsersPageProps, "listOwnerUsers" | "createOwnerUser" | "setOwnerUserActiveState">;
+    dashboardPageProps?: Pick<PlatformDashboardPageProps, "getPlatformDashboard" | "initialQuery" | "initialCustomValues">;
 };
 
-const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps }: ConsoleEntryProps) => {
-    const [destination, setDestination] = useState<"home" | "owner-users">("home");
+const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps, dashboardPageProps }: ConsoleEntryProps) => {
+    const [destination, setDestination] = useState<"home" | "owner-users" | "dashboard">("home");
 
     return (
         <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -38,6 +40,8 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps }: ConsoleEntry
             <div className="mx-auto max-w-6xl space-y-8 px-6 py-10">
                 {destination === "owner-users" ? (
                     <OwnerUsersPage currentOwnerUser={ownerUser} onBack={() => setDestination("home")} {...ownerUsersPageProps} />
+                ) : destination === "dashboard" ? (
+                    <PlatformDashboardPage onBack={() => setDestination("home")} {...dashboardPageProps} />
                 ) : (
                     <>
                         <section className="space-y-2">
@@ -47,7 +51,7 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps }: ConsoleEntry
                         </section>
                         <section className="grid gap-4 md:grid-cols-3" aria-label="Console destinations">
                             {destinations.map(({ title, description, icon: Icon }) => (
-                                <Card key={title} className={title === "Owner Users" ? undefined : "opacity-80"}>
+                                <Card key={title} className={title === "Organizations" ? "opacity-80" : undefined}>
                                     <CardHeader>
                                         <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><Icon className="size-5" /></div>
                                         <CardTitle>{title}</CardTitle>
@@ -56,6 +60,8 @@ const ConsoleEntry = ({ ownerUser, onLogout, ownerUsersPageProps }: ConsoleEntry
                                     <CardContent>
                                         {title === "Owner Users" ? (
                                             <Button type="button" onClick={() => setDestination("owner-users")}>Open Owner Users</Button>
+                                        ) : title === "Dashboard" ? (
+                                            <Button type="button" onClick={() => setDestination("dashboard")}>Open Dashboard</Button>
                                         ) : (
                                             <Badge variant="outline">Later ticket</Badge>
                                         )}

@@ -7,6 +7,8 @@ import type {
     OwnerUserActiveStateJSON,
     OwnerUserListResponse,
     OwnerUserResponse,
+    PlatformDashboardQueryJSON,
+    PlatformDashboardResponse,
     PlatformEntryResponse,
     ServiceResponse,
 } from "@repo/types";
@@ -71,6 +73,17 @@ export const setOwnerUserActiveState = async (
 ): Promise<ServiceResponse<OwnerUserResponse | null>> => {
     try {
         const response = await api.patch(`/platform/owner-users/${ownerUserId}/active-state`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformDashboard = async (
+    query: PlatformDashboardQueryJSON = {},
+): Promise<ServiceResponse<PlatformDashboardResponse | null>> => {
+    try {
+        const response = await api.get("/platform/dashboard", { params: query });
         return response.data;
     } catch (error) {
         return handleApiError(error);

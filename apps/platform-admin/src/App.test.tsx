@@ -57,14 +57,15 @@ describe("Platform Operations Console entry", () => {
         expect(invalidMarkup).toContain("Invalid credentials");
     });
 
-    test("enters the console with Owner Users available and later-ticket destinations still pending", () => {
+    test("enters the console with Dashboard and Owner Users available and Organizations still pending", () => {
         const markup = render(<PlatformAppView state="authenticated" ownerUser={ownerUser} onLogout={async () => {}} />);
         expect(markup).toContain("Welcome, Asha");
         expect(markup).toContain("Active Owner User");
         expect(markup).toContain("Dashboard");
         expect(markup).toContain("Organizations");
         expect(markup).toContain("Owner Users");
+        expect(markup).toContain("Open Dashboard");
         expect(markup).toContain("Open Owner Users");
-        expect(markup.match(/Later ticket/g)).toHaveLength(2);
+        expect(markup.match(/Later ticket/g)).toHaveLength(1);
     });
 });

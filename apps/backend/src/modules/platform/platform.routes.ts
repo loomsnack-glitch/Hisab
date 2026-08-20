@@ -5,6 +5,7 @@ import {
     CreateOwnerUserSchema,
     OwnerLoginSchema,
     OwnerUserActiveStateSchema,
+    PlatformDashboardQuerySchema,
     STATUS_CODES,
     type PlatformEntryResponse,
 } from "@repo/types";
@@ -14,6 +15,7 @@ import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import { getOwnerAuthService, OWNER_SESSION_SECONDS, type OwnerAuthService } from "./owner-auth.service";
 import { getOwnerUserService, type OwnerUserService } from "./owner-user.service";
+import { getPlatformReportingService, type PlatformReportingService } from "./platform-reporting.service";
 
 const setOwnerCookie = (c: Parameters<typeof setCookie>[0], token: string) => {
     setCookie(c, OWNER_AUTH_COOKIE, token, {
@@ -28,6 +30,7 @@ const setOwnerCookie = (c: Parameters<typeof setCookie>[0], token: string) => {
 export const createPlatformRoutes = (
     authService: OwnerAuthService = getOwnerAuthService(),
     ownerUserService: OwnerUserService = getOwnerUserService(),
+    reportingService: PlatformReportingService = getPlatformReportingService(),
 ) => {
     const router = new Hono<{ Variables: AppVariables }>();
     const ownerAuthMiddleware = createOwnerAuthMiddleware(authService);
@@ -81,6 +84,14 @@ export const createPlatformRoutes = (
             code: STATUS_CODES.SUCCESS,
         }),
     );
+
+    router.get("/dashboard", validateSchema("query", PlatformDashboardQuerySchema), async (c) => {
+        try {
+            return handleServiceResponse(c, await reportingService.getDashboard(c.req.valid("query")));
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformDashboard", c, error);
+        }
+    });
 
     router.get("/owner-users", async (c) => {
         try {

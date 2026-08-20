@@ -5,6 +5,8 @@ import type {
     OwnerUserActiveStateSchema,
     OwnerUserDTOSchema,
     OwnerUserSeedSchema,
+    PlatformDashboardDTOSchema,
+    PlatformDashboardQuerySchema,
 } from "./platform.schema";
 
 export type OwnerUserDTO = z.infer<typeof OwnerUserDTOSchema>;
@@ -40,3 +42,8 @@ export type OwnerUserRecord = OwnerUserDTO & {
 };
 
 export type CreateOwnerUserREPO = Pick<OwnerUserRecord, "id" | "firstName" | "lastName" | "phone" | "passwordHash" | "isActive">;
+
+export type PlatformDashboardQueryJSON = z.input<typeof PlatformDashboardQuerySchema>;
+export type PlatformDashboardQuerySVC = z.output<typeof PlatformDashboardQuerySchema>;
+export type PlatformDashboardDTO = z.infer<typeof PlatformDashboardDTOSchema>;
+export type PlatformDashboardResponse = PlatformDashboardDTO;
