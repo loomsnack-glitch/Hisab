@@ -15,7 +15,17 @@
 
 The customer app now lives at `apps/admin` with package name `admin`. Identity, version metadata, and Turbo commands (`dev`, `build`, `lint`, `check-types`, `test`) are in place. Embedded `/pos` routes remain for later tickets. Ganatri Console was not changed.
 
-A leftover `apps/web` directory remains on disk because a running Vite process had that folder as its working directory, so the original path could not be deleted. It is not a workspace package (`package.json` was renamed). After stopping `bun run dev`, delete `apps/web`.
+Leftover `apps/web` was deleted after Vite released the folder. Root `bun run dev` now starts `admin#dev` at http://localhost:5173/.
 
 `bun run lint` and `bun run check-types` currently fail on pre-existing Admin source issues; they were not introduced by this rename. Tests and production build pass.
+
+## Review (before ticket 02)
+
+Ticket 01 rename/identity is enough to start 02. Do not wait on Admin lint/type-check cleanup.
+
+Actionable for 02:
+- Create `apps/pos` from the current Admin `/pos` routes; do not look for `apps/web`.
+- POS must independently pass lint and type-check. Failures already exist in files such as `pos-layout.tsx` and `pos-purchases-panel.tsx`; fix them in the POS app rather than copying a red quality gate.
+- Keep Admin `/pos` routes in place until ticket 08; 01 is supposed to leave them as a temporary migration state.
+- Reuse shared packages instead of copying Admin POS modules. `turbo.json` already has a `test` task.
 

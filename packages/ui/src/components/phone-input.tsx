@@ -114,7 +114,7 @@ const CountrySelect: React.FC<CountrySelectProps> = ({
             <PopoverContent
                 className="w-75 p-0"
                 align="start"
-                collisionBoundary="viewport"
+                collisionBoundary={"viewport" as "clipping-ancestors"}
                 positionMethod="fixed"
             >
                 <Command>

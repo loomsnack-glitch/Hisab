@@ -27,6 +27,7 @@ out/
 build
 dist
 apps/admin/public/version.json
+apps/pos/public/version.json
 
 # WhatsApp worker local encrypted auth state
 apps/whatsapp-worker/data/
