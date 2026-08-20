@@ -231,8 +231,43 @@ Non-goals for Phase 2A:
 
 Exit gate: the route authenticates the raw request, persists one durable receipt
 per delivery digest, acknowledges duplicates safely, does not expose secrets,
-and all fixture tests pass. The work remains uncommitted until explicitly
-approved.
+and all fixture tests pass. This slice was kept uncommitted until explicitly
+approved and is now the committed ingress baseline.
+
+#### Phase 2B: Cloud message and status normalization contract
+
+Research: `docs/research/2026-08-21-whatsapp-cloud-api-phase-2b-normalization-research.md`.
+
+This slice defines the safe translation boundary from a durable Cloud webhook
+receipt into the existing Hisab message/status model. It is intentionally pure
+and fixture-tested before database processing is wired, so provider payload
+drift cannot mutate conversations or messages without an explicit contract.
+
+Deliverables:
+
+- normalize supported inbound text messages using the WABA ID, Phone Number ID,
+  provider message ID, sender phone, profile name, body, and provider timestamp;
+- normalize `sent`, `delivered`, `read`, and `failed` outbound status events,
+  including safe failure metadata;
+- reject malformed identifiers, phones, timestamps, and message bodies;
+- preserve unknown and media message types as explicit deferred outcomes rather
+  than silently dropping them or writing incomplete message rows;
+- define monotonic status application rules so an older `sent`/`delivered`
+  notification cannot regress a message already marked `read`;
+- fixture tests for text, media deferral, unsupported types, duplicate items,
+  malformed fields, failed statuses, and out-of-order status sequences.
+
+Non-goals for Phase 2B:
+
+- claiming or completing database receipt rows;
+- creating conversations/messages or changing account state;
+- downloading media, marking inbound messages read, or calling Graph API;
+- Cloud outbox dispatch, template handling, and startup worker scheduling.
+
+Exit gate: every supported payload produces a typed normalized event, unsupported
+payloads produce an explicit deferred outcome, status transitions are monotonic,
+and the focused/full test suites pass. Changes remain uncommitted until
+explicitly approved.
 
 ### Phase 3: Embedded Signup and account operations
 
