@@ -7,7 +7,10 @@ import type { OwnerUserDTO, PlatformDashboardQueryJSON, PlatformDashboardRespons
 import ConsoleEntry from "./console-entry";
 import PlatformDashboardPage, { type PlatformDashboardPageProps } from "./platform-dashboard-page";
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    window.history.replaceState(null, "", "/");
+});
 
 const asha: OwnerUserDTO = {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -98,6 +101,21 @@ describe("Platform dashboard console destination", () => {
         expect(await view.findByRole("heading", { name: "Dashboard" })).toBeTruthy();
         expect(view.getByText(/not revenue or collected Payments/)).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
+    });
+
+    test("opens Dashboard from its Console route", async () => {
+        window.history.replaceState(null, "", "/dashboard");
+        const view = render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+                <ConsoleEntry
+                    ownerUser={asha}
+                    onLogout={async () => {}}
+                    dashboardPageProps={{ getPlatformDashboard: async (query = {}) => successDashboard(query) }}
+                />
+            </QueryClientProvider>,
+        );
+
+        expect(await view.findByRole("heading", { name: "Dashboard" })).toBeTruthy();
     });
 
     test("shows all-time totals, fixed activity totals, and period metrics", async () => {

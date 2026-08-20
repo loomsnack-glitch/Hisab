@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BarChart3, Building2, LogOut, ShieldCheck, Users } from "lucide-react";
 import type { OwnerUserDTO, PlatformDashboardQueryJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
@@ -15,6 +15,21 @@ const destinations = [
     { title: "Console Users", description: "Internal access administration", icon: Users },
 ] as const;
 
+type ConsoleDestination = "home" | "owner-users" | "dashboard" | "organizations";
+
+const destinationPaths: Record<ConsoleDestination, string> = {
+    home: "/",
+    dashboard: "/dashboard",
+    organizations: "/organizations",
+    "owner-users": "/console-users",
+};
+
+const destinationFromPath = (pathname: string): ConsoleDestination => {
+    const matched = (Object.entries(destinationPaths) as [ConsoleDestination, string][])
+        .find(([, path]) => path === pathname);
+    return matched?.[0] ?? "home";
+};
+
 type ConsoleEntryProps = {
     ownerUser: OwnerUserDTO;
     onLogout: () => Promise<void>;
@@ -28,13 +43,29 @@ type ConsoleEntryProps = {
 };
 
 const ConsoleEntry = ({ ownerUser, onLogout, onUnauthorized, ownerUsersPageProps, dashboardPageProps, organizationsPageProps }: ConsoleEntryProps) => {
-    const [destination, setDestination] = useState<"home" | "owner-users" | "dashboard" | "organizations">("home");
+    const [destination, setDestination] = useState<ConsoleDestination>(() =>
+        typeof window === "undefined" ? "home" : destinationFromPath(window.location.pathname),
+    );
     const [reportingQuery, setReportingQuery] = useState<PlatformDashboardQueryJSON>(
         dashboardPageProps?.initialQuery ?? { period: "all-time" },
     );
     const [customValues, setCustomValues] = useState(
         dashboardPageProps?.initialCustomValues ?? { startDate: "", endDate: "" },
     );
+
+    useEffect(() => {
+        const syncDestination = () => setDestination(destinationFromPath(window.location.pathname));
+        window.addEventListener("popstate", syncDestination);
+        return () => window.removeEventListener("popstate", syncDestination);
+    }, []);
+
+    const navigate = (nextDestination: ConsoleDestination) => {
+        const path = destinationPaths[nextDestination];
+        if (window.location.pathname !== path) {
+            window.history.pushState(null, "", path);
+        }
+        setDestination(nextDestination);
+    };
 
     return (
         <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -53,13 +84,13 @@ const ConsoleEntry = ({ ownerUser, onLogout, onUnauthorized, ownerUsersPageProps
                 {destination === "owner-users" ? (
                     <OwnerUsersPage
                         currentOwnerUser={ownerUser}
-                        onBack={() => setDestination("home")}
+                        onBack={() => navigate("home")}
                         onUnauthorized={onUnauthorized}
                         {...ownerUsersPageProps}
                     />
                 ) : destination === "dashboard" ? (
                     <PlatformDashboardPage
-                        onBack={() => setDestination("home")}
+                        onBack={() => navigate("home")}
                         onUnauthorized={onUnauthorized}
                         {...dashboardPageProps}
                         initialQuery={reportingQuery}
@@ -71,7 +102,7 @@ const ConsoleEntry = ({ ownerUser, onLogout, onUnauthorized, ownerUsersPageProps
                     />
                 ) : destination === "organizations" ? (
                     <PlatformOrganizationsPage
-                        onBack={() => setDestination("home")}
+                        onBack={() => navigate("home")}
                         reportingQuery={reportingQuery}
                         onUnauthorized={onUnauthorized}
                         {...organizationsPageProps}
@@ -93,11 +124,11 @@ const ConsoleEntry = ({ ownerUser, onLogout, onUnauthorized, ownerUsersPageProps
                                     </CardHeader>
                                     <CardContent>
                                         {title === "Console Users" ? (
-                                            <Button type="button" onClick={() => setDestination("owner-users")}>Open Console Users</Button>
+                                            <Button type="button" onClick={() => navigate("owner-users")}>Open Console Users</Button>
                                         ) : title === "Dashboard" ? (
-                                            <Button type="button" onClick={() => setDestination("dashboard")}>Open Dashboard</Button>
+                                            <Button type="button" onClick={() => navigate("dashboard")}>Open Dashboard</Button>
                                         ) : (
-                                            <Button type="button" onClick={() => setDestination("organizations")}>Open Organizations</Button>
+                                            <Button type="button" onClick={() => navigate("organizations")}>Open Organizations</Button>
                                         )}
                                     </CardContent>
                                 </Card>

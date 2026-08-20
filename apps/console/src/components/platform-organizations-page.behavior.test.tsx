@@ -14,7 +14,10 @@ import type {
 import ConsoleEntry from "./console-entry";
 import PlatformOrganizationsPage, { type PlatformOrganizationsPageProps } from "./platform-organizations-page";
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    window.history.replaceState(null, "", "/");
+});
 
 const asha: OwnerUserDTO = {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

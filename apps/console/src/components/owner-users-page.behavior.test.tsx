@@ -7,7 +7,10 @@ import type { CreateOwnerUserJSON, OwnerUserDTO, OwnerUserListResponse, OwnerUse
 import ConsoleEntry from "./console-entry";
 import OwnerUsersPage from "./owner-users-page";
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    window.history.replaceState(null, "", "/");
+});
 
 const asha: OwnerUserDTO = {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
