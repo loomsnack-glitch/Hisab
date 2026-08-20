@@ -439,6 +439,38 @@ Organization/user scoped, secrets and callback values are not logged or
 persisted, focused/full tests pass, and the slice remains uncommitted until
 explicitly approved.
 
+#### Phase 3D: Server-side exchange and replay orchestration
+
+Research: `docs/research/2026-08-21-whatsapp-cloud-api-phase-3d-exchange-replay-research.md`.
+
+This slice adds the backend seam between a validated Embedded Signup result and
+provider discovery. It keeps provider-specific HTTP details behind an injected
+exchange port and makes replay consumption conditional on a successful
+server-side handoff.
+
+Deliverables:
+
+- an exchange port for the authorization value and a bounded in-memory token
+  result;
+- an orchestration function that verifies the Phase 3C result, exchanges it,
+  and atomically consumes the onboarding state only after exchange succeeds;
+- fixture tests for successful exchange, exchange failure without consumption,
+  invalid provider tokens, and replay races.
+
+Non-goals for Phase 3D:
+
+- no live Meta Graph request or hard-coded token endpoint;
+- no WABA/phone discovery, provider ownership validation, or credential vault;
+- no WABA/sender/provisioning-attempt/account rows, Store assignment, or
+  connected status;
+- no migration execution, Embedded Signup UI, template synchronization, or
+  Baileys worker change.
+
+Exit gate: provider-specific exchange is isolated behind a testable port,
+state is consumed only after a valid exchange, sensitive values never enter
+logs or persistence, focused/full tests pass, and the slice remains uncommitted
+until explicitly approved.
+
 ### Phase 3: Embedded Signup and account operations
 
 Dependencies: Phases 0–2.
