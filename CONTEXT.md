@@ -24,6 +24,14 @@ _Avoid_: Public owner signup, organization registration
 The read-only internal Ganatri application at `console.ganatri.in` used by Platform Administrators to analyze Organization adoption and operational activity across the platform.
 _Avoid_: Organization admin, customer dashboard, POS back office
 
+**Ganatri Admin**:
+The user-authenticated Ganatri application used by an Organization's administrators to manage that Organization's settings and business data. It is separate from Ganatri Console and Ganatri POS.
+_Avoid_: Ganatri Console, POS, platform administration
+
+**Ganatri POS**:
+The device-authenticated Ganatri application used by a Store Device to perform its Store-Scoped POS Workflow. It is separate from Ganatri Admin and does not live under an Admin URL path.
+_Avoid_: Admin POS route, embedded admin billing page, Ganatri Console
+
 **Active Store**:
 A Store with at least one completed Sale in the preceding seven calendar days. This metric measures actual POS usage for Ganatri Console adoption analysis.
 _Avoid_: Logged-in store, registered store, enabled store
@@ -204,9 +212,9 @@ _Avoid_: Partial device checkout, mixed-auth billing flow
 A Device-Authenticated Billing Session that uses a separate auth channel from admin user auth so billing access cannot be unlocked by an admin session alone.
 _Avoid_: Shared admin/POS session, fallback user-auth billing
 
-**POS Route Tree**:
-A dedicated frontend route tree and layout for device-authenticated billing, separate from the admin dashboard routes and user-authenticated management workspace.
-_Avoid_: Embedded admin billing page, shared dashboard POS shell
+**POS Application Route Tree**:
+The root route tree of Ganatri POS, dedicated to device-authenticated billing and separate from Ganatri Admin's user-authenticated management routes.
+_Avoid_: Embedded admin billing page, Admin `/pos` route, shared dashboard POS shell
 
 **POS Device Login**:
 The billing login flow where a Store Device opens the POS route tree and authenticates by entering its device id and device secret directly.
@@ -228,16 +236,16 @@ _Avoid_: Waiter-only device, cashier-only device, table role authorization
 A user-authenticated management view that may inspect a Store's bills but cannot create or mutate billing data. Writing billing data requires a Device-Authenticated Billing Session.
 _Avoid_: Admin-created bill, fallback user-auth POS action
 
-**Dual-Mode Billing Workspace**:
-A single billing workspace that renders in admin read-only mode for user sessions and in full POS mode for device sessions. In admin mode, billing creation controls are hidden; in device mode, the full Store-Scoped POS Workflow is available.
-_Avoid_: Separate duplicated billing UIs, shared full-access admin POS
+**Separated Billing Views**:
+Ganatri Admin provides user-authenticated, read-only billing inspection, while Ganatri POS provides the full device-authenticated Store-Scoped POS Workflow. The two views are delivered by separate applications but retain their respective authorization boundaries.
+_Avoid_: Shared dual-mode workspace, shared full-access admin POS, admin-created bill
 
 **Read-Only Draft Inspection**:
 The rule that admin mode may view draft bills alongside committed and voided bills, but cannot create, edit, commit, collect payment for, or void any of them.
 _Avoid_: Draft mutation from admin mode, committed-only admin history
 
-**Mode-Scoped Store Selection**:
-In the Dual-Mode Billing Workspace, admin mode may switch between stores for inspection, while device mode is locked to the authenticated Store Device's single Store.
+**Application-Scoped Store Selection**:
+Ganatri Admin may switch between Stores for read-only inspection, while Ganatri POS is locked to the authenticated Store Device's single Store.
 _Avoid_: Admin-locked inspection store, switchable device POS store
 
 **Persistent POS Session**:
