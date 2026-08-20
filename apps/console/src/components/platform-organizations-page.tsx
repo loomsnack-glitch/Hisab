@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 import {
     getPlatformOrganization as getPlatformOrganizationRequest,
     getPlatformOrganizations as getPlatformOrganizationsRequest,
@@ -25,7 +24,6 @@ const organizationsQueryKey = ["platform-owner", "organizations"] as const;
 type ActivityFilter = PlatformOrganizationActivityFilter;
 
 type PlatformOrganizationsPageProps = {
-    onBack: () => void;
     reportingQuery?: PlatformDashboardQueryJSON;
     getPlatformOrganizations?: typeof getPlatformOrganizationsRequest;
     getPlatformOrganization?: typeof getPlatformOrganizationRequest;
@@ -82,7 +80,6 @@ const toListQuery = (
 };
 
 const PlatformOrganizationsPage = ({
-    onBack,
     reportingQuery = { period: "all-time" },
     getPlatformOrganizations = getPlatformOrganizationsRequest,
     getPlatformOrganization = getPlatformOrganizationRequest,
@@ -142,11 +139,8 @@ const PlatformOrganizationsPage = ({
     return (
         <section className="space-y-6">
             <div className="space-y-1">
-                <Button type="button" variant="ghost" className="-ml-3" onClick={onBack}>
-                    <ArrowLeft className="size-4" /> Back to console
-                </Button>
                 <h1 className="text-3xl font-semibold tracking-tight">Organizations</h1>
-                <p className="text-slate-600">
+                <p className="text-muted-foreground">
                     Read-only outreach list. Active Organization uses the preceding seven calendar days in Asia/Kolkata
                     and does not follow the selected Platform Reporting Period.
                 </p>

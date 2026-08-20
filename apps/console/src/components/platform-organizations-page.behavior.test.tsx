@@ -2,6 +2,7 @@ import "../test-setup";
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import type {
     OwnerUserDTO,
     PlatformDashboardQueryJSON,
@@ -108,7 +109,6 @@ const renderList = (
     return render(
         <QueryClientProvider client={client}>
             <PlatformOrganizationsPage
-                onBack={() => {}}
                 reportingQuery={options.reportingQuery}
                 getPlatformOrganizations={loadOrganizations}
                 initialSearch={options.initialSearch}
@@ -122,17 +122,19 @@ describe("Platform Organization outreach list", () => {
     test("opens Organizations from the console home", async () => {
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-                <ConsoleEntry
-                    ownerUser={asha}
-                    onLogout={async () => {}}
-                    organizationsPageProps={{
-                        getPlatformOrganizations: async () => successList([activeCafe]),
-                    }}
-                />
+                <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+                    <ConsoleEntry
+                        ownerUser={asha}
+                        onLogout={async () => {}}
+                        organizationsPageProps={{
+                            getPlatformOrganizations: async () => successList([activeCafe]),
+                        }}
+                    />
+                </ThemeProvider>
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getByRole("button", { name: "Open Organizations" }));
+        fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
         expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
         expect(await view.findByText("Active Cafe")).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
@@ -217,41 +219,42 @@ describe("Platform Organization outreach list", () => {
         const requested: PlatformOrganizationListQueryJSON[] = [];
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-                <ConsoleEntry
-                    ownerUser={asha}
-                    onLogout={async () => {}}
-                    dashboardPageProps={{
-                        getPlatformDashboard: async (query = {}) => ({
-                            status: "success",
-                            data: {
-                                reportingPeriod: {
-                                    selection: query.period ?? "all-time",
-                                    startDate: query.period === "7d" ? "2026-08-15" : null,
-                                    endDate: query.period === "7d" ? "2026-08-21" : null,
+                <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+                    <ConsoleEntry
+                        ownerUser={asha}
+                        onLogout={async () => {}}
+                        dashboardPageProps={{
+                            getPlatformDashboard: async (query = {}) => ({
+                                status: "success",
+                                data: {
+                                    reportingPeriod: {
+                                        selection: query.period ?? "all-time",
+                                        startDate: query.period === "7d" ? "2026-08-15" : null,
+                                        endDate: query.period === "7d" ? "2026-08-21" : null,
+                                    },
+                                    allTime: { organizationCount: 4, storeCount: 4, customerCount: 2, completedSaleCount: 8 },
+                                    activity: { activeOrganizationCount: 2, activeStoreCount: 2 },
+                                    reportingPeriodMetrics: { completedSaleCount: 5, completedSalesValue: 200.75, customerCount: 1 },
                                 },
-                                allTime: { organizationCount: 4, storeCount: 4, customerCount: 2, completedSaleCount: 8 },
-                                activity: { activeOrganizationCount: 2, activeStoreCount: 2 },
-                                reportingPeriodMetrics: { completedSaleCount: 5, completedSalesValue: 200.75, customerCount: 1 },
+                                message: "Platform dashboard retrieved successfully",
+                                code: 200,
+                            }),
+                        }}
+                        organizationsPageProps={{
+                            getPlatformOrganizations: async (query = {}) => {
+                                requested.push(query);
+                                return successList([activeCafe]);
                             },
-                            message: "Platform dashboard retrieved successfully",
-                            code: 200,
-                        }),
-                    }}
-                    organizationsPageProps={{
-                        getPlatformOrganizations: async (query = {}) => {
-                            requested.push(query);
-                            return successList([activeCafe]);
-                        },
-                    }}
-                />
+                        }}
+                    />
+                </ThemeProvider>
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getByRole("button", { name: "Open Dashboard" }));
+        fireEvent.click(view.getAllByRole("button", { name: "Dashboard" })[0]!);
         await view.findByRole("heading", { name: "Dashboard" });
         fireEvent.click(view.getByRole("button", { name: "7-day" }));
-        fireEvent.click(view.getByRole("button", { name: "Back to console" }));
-        fireEvent.click(view.getByRole("button", { name: "Open Organizations" }));
+        fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
 
         await waitFor(() => {
             expect(requested.some((query) => query.period === "7d")).toBe(true);

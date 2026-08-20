@@ -2,6 +2,7 @@ import "../test-setup";
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import type { CreateOwnerUserJSON, OwnerUserDTO, OwnerUserListResponse, OwnerUserResponse, ServiceResponse } from "@repo/types";
 
 import ConsoleEntry from "./console-entry";
@@ -55,7 +56,6 @@ const renderPage = (props: Partial<Parameters<typeof OwnerUsersPage>[0]> & { cur
         <QueryClientProvider client={client}>
             <OwnerUsersPage
                 currentOwnerUser={props.currentOwnerUser ?? asha}
-                onBack={props.onBack ?? (() => {})}
                 listOwnerUsers={props.listOwnerUsers ?? (async () => successList([asha, ravi]))}
                 createOwnerUser={props.createOwnerUser ?? (async () => ({
                     status: "success",
@@ -80,17 +80,19 @@ describe("Console Users console destination", () => {
     test("opens the Console Users destination from the console home", async () => {
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-                <ConsoleEntry
-                    ownerUser={asha}
-                    onLogout={async () => {}}
-                    ownerUsersPageProps={{
-                        listOwnerUsers: async () => successList([asha, ravi]),
-                    }}
-                />
+                <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+                    <ConsoleEntry
+                        ownerUser={asha}
+                        onLogout={async () => {}}
+                        ownerUsersPageProps={{
+                            listOwnerUsers: async () => successList([asha, ravi]),
+                        }}
+                    />
+                </ThemeProvider>
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getByRole("button", { name: "Open Console Users" }));
+        fireEvent.click(view.getAllByRole("button", { name: "Console Users" })[0]!);
         expect(await view.findByRole("heading", { name: "Console Users" })).toBeTruthy();
         expect(view.queryByText("Create Organization")).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();

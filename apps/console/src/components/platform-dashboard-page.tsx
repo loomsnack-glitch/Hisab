@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 import { getPlatformDashboard as getPlatformDashboardRequest } from "@repo/services";
 import {
     PlatformDashboardQuerySchema,
@@ -15,7 +14,6 @@ import { Input } from "@repo/ui/components/input";
 const dashboardQueryKey = ["platform-owner", "dashboard"] as const;
 
 type PlatformDashboardPageProps = {
-    onBack: () => void;
     getPlatformDashboard?: typeof getPlatformDashboardRequest;
     initialQuery?: PlatformDashboardQueryJSON;
     initialCustomValues?: { startDate: string; endDate: string };
@@ -51,7 +49,6 @@ const toAppliedQuery = (query: PlatformDashboardQueryJSON): PlatformDashboardQue
 };
 
 const PlatformDashboardPage = ({
-    onBack,
     getPlatformDashboard = getPlatformDashboardRequest,
     initialQuery,
     initialCustomValues,
@@ -105,17 +102,14 @@ const PlatformDashboardPage = ({
     return (
         <section className="space-y-6">
             <div className="space-y-1">
-                <Button type="button" variant="ghost" className="-ml-3" onClick={onBack}>
-                    <ArrowLeft className="size-4" /> Back to console
-                </Button>
                 <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-                <p className="text-slate-600">
+                <p className="text-muted-foreground">
                     Read-only platform scale and adoption. Completed Sales Value is sales value, not revenue or collected Payments.
                 </p>
             </div>
 
             <div className="space-y-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Platform Reporting Period</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Platform Reporting Period</h2>
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Platform Reporting Period">
                     {periodOptions.map((option) => (
                         <Button

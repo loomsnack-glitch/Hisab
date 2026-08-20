@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import {
     createOwnerUser as createOwnerUserRequest,
     listOwnerUsers as listOwnerUsersRequest,
@@ -25,7 +25,6 @@ const ownerUsersQueryKey = ["platform-owner", "owner-users"] as const;
 
 type OwnerUsersPageProps = {
     currentOwnerUser: OwnerUserDTO;
-    onBack: () => void;
     listOwnerUsers?: typeof listOwnerUsersRequest;
     createOwnerUser?: typeof createOwnerUserRequest;
     setOwnerUserActiveState?: typeof setOwnerUserActiveStateRequest;
@@ -42,7 +41,6 @@ const ownerDisplayName = (ownerUser: OwnerUserDTO) => `${ownerUser.firstName} ${
 
 const OwnerUsersPage = ({
     currentOwnerUser,
-    onBack,
     listOwnerUsers = listOwnerUsersRequest,
     createOwnerUser = createOwnerUserRequest,
     setOwnerUserActiveState = setOwnerUserActiveStateRequest,
@@ -154,11 +152,8 @@ const OwnerUsersPage = ({
         <section className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
-                    <Button type="button" variant="ghost" className="-ml-3" onClick={onBack}>
-                        <ArrowLeft className="size-4" /> Back to console
-                    </Button>
                     <h1 className="text-3xl font-semibold tracking-tight">Console Users</h1>
-                    <p className="text-slate-600">Manage internal Ganatri access. This screen cannot change Organizations, Stores, Sales, or other tenant data.</p>
+                    <p className="text-muted-foreground">Manage internal Ganatri access. This screen cannot change Organizations, Stores, Sales, or other tenant data.</p>
                 </div>
                 <Button type="button" onClick={() => { setShowCreateForm(true); setFormError(null); }}>
                     <UserPlus className="size-4" /> Add Owner User

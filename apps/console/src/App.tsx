@@ -26,14 +26,14 @@ type PlatformAppViewProps =
 
 export const PlatformAppView = (props: PlatformAppViewProps) => {
     if (props.state === "loading") {
-        return <main className="grid min-h-screen place-items-center bg-slate-950 text-slate-200" aria-busy="true">Checking owner session…</main>;
+        return <main className="grid min-h-screen place-items-center bg-background text-foreground" aria-busy="true">Checking owner session…</main>;
     }
     if (props.state === "error") {
         return (
-            <main className="grid min-h-screen place-items-center bg-slate-950 px-6 text-slate-100">
+            <main className="grid min-h-screen place-items-center bg-background px-6 text-foreground">
                 <div className="max-w-md space-y-4 text-center" role="alert">
                     <h1 className="text-2xl font-semibold">Console connection failed</h1>
-                    <p className="text-slate-300">{props.message}</p>
+                    <p className="text-muted-foreground">{props.message}</p>
                     <Button onClick={() => void props.onRetry()}>Try again</Button>
                 </div>
             </main>

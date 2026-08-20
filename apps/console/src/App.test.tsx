@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import type { OwnerUserDTO } from "@repo/types";
 
 import { getCurrentOwnerUser, PlatformAppView } from "./App";
@@ -17,7 +18,11 @@ const ownerUser: OwnerUserDTO = {
 };
 
 const render = (node: React.ReactNode) => renderToStaticMarkup(
-    <QueryClientProvider client={new QueryClient()}>{node}</QueryClientProvider>,
+    <QueryClientProvider client={new QueryClient()}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+            {node}
+        </ThemeProvider>
+    </QueryClientProvider>,
 );
 
 describe("Ganatri Console entry", () => {
@@ -60,13 +65,10 @@ describe("Ganatri Console entry", () => {
     test("enters the console with Dashboard, Organizations, and Console Users available", () => {
         const markup = render(<PlatformAppView state="authenticated" ownerUser={ownerUser} onLogout={async () => {}} onUnauthorized={async () => {}} />);
         expect(markup).toContain("Welcome, Asha");
-        expect(markup).toContain("Active Owner User");
         expect(markup).toContain("Dashboard");
         expect(markup).toContain("Organizations");
         expect(markup).toContain("Console Users");
-        expect(markup).toContain("Open Dashboard");
-        expect(markup).toContain("Open Organizations");
-        expect(markup).toContain("Open Console Users");
+        expect(markup).toContain("Ganatri Console");
         expect(markup).not.toContain("Later ticket");
     });
 });

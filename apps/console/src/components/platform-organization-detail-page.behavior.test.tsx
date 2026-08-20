@@ -2,6 +2,7 @@ import "../test-setup";
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import type {
     OwnerUserDTO,
     PlatformDashboardQueryJSON,
@@ -139,7 +140,6 @@ describe("Platform Organization drill-down", () => {
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
                 <PlatformOrganizationsPage
-                    onBack={() => {}}
                     reportingQuery={{ period: "7d" }}
                     getPlatformOrganizations={async () => successList([mixedBistro])}
                     getPlatformOrganization={async (_organizationId, query = {}) => {
@@ -185,49 +185,50 @@ describe("Platform Organization drill-down", () => {
         const requested: Array<{ kind: "list" | "detail"; query: PlatformOrganizationListQueryJSON | PlatformOrganizationDetailQueryJSON }> = [];
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-                <ConsoleEntry
-                    ownerUser={asha}
-                    onLogout={async () => {}}
-                    dashboardPageProps={{
-                        getPlatformDashboard: async (query = {}) => ({
-                            status: "success",
-                            data: {
-                                reportingPeriod: {
-                                    selection: query.period ?? "all-time",
-                                    startDate: query.period === "30d" ? "2026-07-23" : null,
-                                    endDate: query.period === "30d" ? "2026-08-21" : null,
+                <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+                    <ConsoleEntry
+                        ownerUser={asha}
+                        onLogout={async () => {}}
+                        dashboardPageProps={{
+                            getPlatformDashboard: async (query = {}) => ({
+                                status: "success",
+                                data: {
+                                    reportingPeriod: {
+                                        selection: query.period ?? "all-time",
+                                        startDate: query.period === "30d" ? "2026-07-23" : null,
+                                        endDate: query.period === "30d" ? "2026-08-21" : null,
+                                    },
+                                    allTime: { organizationCount: 4, storeCount: 4, customerCount: 2, completedSaleCount: 8 },
+                                    activity: { activeOrganizationCount: 2, activeStoreCount: 2 },
+                                    reportingPeriodMetrics: { completedSaleCount: 6, completedSalesValue: 240, customerCount: 1 },
                                 },
-                                allTime: { organizationCount: 4, storeCount: 4, customerCount: 2, completedSaleCount: 8 },
-                                activity: { activeOrganizationCount: 2, activeStoreCount: 2 },
-                                reportingPeriodMetrics: { completedSaleCount: 6, completedSalesValue: 240, customerCount: 1 },
+                                message: "Platform dashboard retrieved successfully",
+                                code: 200,
+                            }),
+                        }}
+                        organizationsPageProps={{
+                            getPlatformOrganizations: async (query = {}) => {
+                                requested.push({ kind: "list", query });
+                                return successList([mixedBistro]);
                             },
-                            message: "Platform dashboard retrieved successfully",
-                            code: 200,
-                        }),
-                    }}
-                    organizationsPageProps={{
-                        getPlatformOrganizations: async (query = {}) => {
-                            requested.push({ kind: "list", query });
-                            return successList([mixedBistro]);
-                        },
-                        getPlatformOrganization: async (_organizationId, query = {}) => {
-                            requested.push({ kind: "detail", query });
-                            return successDetail(mixedBistro, mixedStores, {
-                                selection: "30d",
-                                startDate: "2026-07-23",
-                                endDate: "2026-08-21",
-                            });
-                        },
-                    }}
-                />
+                            getPlatformOrganization: async (_organizationId, query = {}) => {
+                                requested.push({ kind: "detail", query });
+                                return successDetail(mixedBistro, mixedStores, {
+                                    selection: "30d",
+                                    startDate: "2026-07-23",
+                                    endDate: "2026-08-21",
+                                });
+                            },
+                        }}
+                    />
+                </ThemeProvider>
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getByRole("button", { name: "Open Dashboard" }));
+        fireEvent.click(view.getAllByRole("button", { name: "Dashboard" })[0]!);
         await view.findByRole("heading", { name: "Dashboard" });
         fireEvent.click(view.getByRole("button", { name: "30-day" }));
-        fireEvent.click(view.getByRole("button", { name: "Back to console" }));
-        fireEvent.click(view.getByRole("button", { name: "Open Organizations" }));
+        fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
         await view.findByRole("button", { name: "Mixed Bistro" });
         fireEvent.click(view.getByRole("button", { name: "Mixed Bistro" }));
 

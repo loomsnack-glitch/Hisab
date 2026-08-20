@@ -1,34 +1,17 @@
 import { useEffect, useState } from "react";
-import { BarChart3, Building2, LogOut, ShieldCheck, Users } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import type { OwnerUserDTO, PlatformDashboardQueryJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
-import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 
+import ConsoleLayout from "@/components/console-layout";
+import {
+    consoleDestinationPaths,
+    destinationFromPath,
+    type ConsoleDestination,
+} from "@/components/console-nav-items";
 import OwnerUsersPage, { type OwnerUsersPageProps } from "@/components/owner-users-page";
 import PlatformDashboardPage, { type PlatformDashboardPageProps } from "@/components/platform-dashboard-page";
 import PlatformOrganizationsPage, { type PlatformOrganizationsPageProps } from "@/components/platform-organizations-page";
-
-const destinations = [
-    { title: "Dashboard", description: "Platform adoption totals and reporting periods", icon: BarChart3 },
-    { title: "Organizations", description: "Cross-organization adoption health", icon: Building2 },
-    { title: "Console Users", description: "Internal access administration", icon: Users },
-] as const;
-
-type ConsoleDestination = "home" | "owner-users" | "dashboard" | "organizations";
-
-const destinationPaths: Record<ConsoleDestination, string> = {
-    home: "/",
-    dashboard: "/dashboard",
-    organizations: "/organizations",
-    "owner-users": "/console-users",
-};
-
-const destinationFromPath = (pathname: string): ConsoleDestination => {
-    const matched = (Object.entries(destinationPaths) as [ConsoleDestination, string][])
-        .find(([, path]) => path === pathname);
-    return matched?.[0] ?? "home";
-};
 
 type ConsoleEntryProps = {
     ownerUser: OwnerUserDTO;
@@ -42,7 +25,14 @@ type ConsoleEntryProps = {
     >;
 };
 
-const ConsoleEntry = ({ ownerUser, onLogout, onUnauthorized, ownerUsersPageProps, dashboardPageProps, organizationsPageProps }: ConsoleEntryProps) => {
+const ConsoleEntry = ({
+    ownerUser,
+    onLogout,
+    onUnauthorized,
+    ownerUsersPageProps,
+    dashboardPageProps,
+    organizationsPageProps,
+}: ConsoleEntryProps) => {
     const [destination, setDestination] = useState<ConsoleDestination>(() =>
         typeof window === "undefined" ? "home" : destinationFromPath(window.location.pathname),
     );
@@ -60,84 +50,76 @@ const ConsoleEntry = ({ ownerUser, onLogout, onUnauthorized, ownerUsersPageProps
     }, []);
 
     const navigate = (nextDestination: ConsoleDestination) => {
-        const path = destinationPaths[nextDestination];
+        const path = consoleDestinationPaths[nextDestination];
         if (window.location.pathname !== path) {
             window.history.pushState(null, "", path);
         }
         setDestination(nextDestination);
     };
 
-    return (
-        <main className="min-h-screen bg-slate-100 text-slate-950">
-            <header className="border-b bg-slate-950 text-white">
-                <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-                    <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">Ganatri internal</p>
-                        <p className="text-lg font-semibold">Ganatri Console</p>
-                    </div>
-                    <Button variant="outline" className="border-slate-600 bg-transparent text-white hover:bg-slate-800 hover:text-white" onClick={() => void onLogout()}>
-                        <LogOut className="size-4" /> Sign out
-                    </Button>
+    const pageContent = (() => {
+        if (destination === "owner-users") {
+            return (
+                <OwnerUsersPage
+                    currentOwnerUser={ownerUser}
+                    onUnauthorized={onUnauthorized}
+                    {...ownerUsersPageProps}
+                />
+            );
+        }
+
+        if (destination === "dashboard") {
+            return (
+                <PlatformDashboardPage
+                    onUnauthorized={onUnauthorized}
+                    {...dashboardPageProps}
+                    initialQuery={reportingQuery}
+                    initialCustomValues={customValues}
+                    onReportingPeriodChange={(query, nextCustomValues) => {
+                        setReportingQuery(query);
+                        setCustomValues(nextCustomValues);
+                    }}
+                />
+            );
+        }
+
+        if (destination === "organizations") {
+            return (
+                <PlatformOrganizationsPage
+                    reportingQuery={reportingQuery}
+                    onUnauthorized={onUnauthorized}
+                    {...organizationsPageProps}
+                />
+            );
+        }
+
+        return (
+            <section className="space-y-6">
+                <div className="rounded-[2rem] border border-border/70 bg-card/80 p-6 sm:p-8 shadow-sm">
+                    <Badge className="mb-4 rounded-full bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300">
+                        <ShieldCheck className="size-3" /> Active Owner User
+                    </Badge>
+                    <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+                        Welcome, {ownerUser.firstName}
+                    </h1>
+                    <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
+                        Your isolated owner session is active. Use the sidebar to open Dashboard, Organizations,
+                        or Console Users.
+                    </p>
                 </div>
-            </header>
-            <div className="mx-auto max-w-6xl space-y-8 px-6 py-10">
-                {destination === "owner-users" ? (
-                    <OwnerUsersPage
-                        currentOwnerUser={ownerUser}
-                        onBack={() => navigate("home")}
-                        onUnauthorized={onUnauthorized}
-                        {...ownerUsersPageProps}
-                    />
-                ) : destination === "dashboard" ? (
-                    <PlatformDashboardPage
-                        onBack={() => navigate("home")}
-                        onUnauthorized={onUnauthorized}
-                        {...dashboardPageProps}
-                        initialQuery={reportingQuery}
-                        initialCustomValues={customValues}
-                        onReportingPeriodChange={(query, nextCustomValues) => {
-                            setReportingQuery(query);
-                            setCustomValues(nextCustomValues);
-                        }}
-                    />
-                ) : destination === "organizations" ? (
-                    <PlatformOrganizationsPage
-                        onBack={() => navigate("home")}
-                        reportingQuery={reportingQuery}
-                        onUnauthorized={onUnauthorized}
-                        {...organizationsPageProps}
-                    />
-                ) : (
-                    <>
-                        <section className="space-y-2">
-                            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100"><ShieldCheck className="size-3" /> Active Owner User</Badge>
-                            <h1 className="text-3xl font-semibold tracking-tight">Welcome, {ownerUser.firstName}</h1>
-                            <p className="text-slate-600">Your isolated owner session is active. Choose a console destination.</p>
-                        </section>
-                        <section className="grid gap-4 md:grid-cols-3" aria-label="Console destinations">
-                            {destinations.map(({ title, description, icon: Icon }) => (
-                                <Card key={title}>
-                                    <CardHeader>
-                                        <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><Icon className="size-5" /></div>
-                                        <CardTitle>{title}</CardTitle>
-                                        <CardDescription>{description}</CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {title === "Console Users" ? (
-                                            <Button type="button" onClick={() => navigate("owner-users")}>Open Console Users</Button>
-                                        ) : title === "Dashboard" ? (
-                                            <Button type="button" onClick={() => navigate("dashboard")}>Open Dashboard</Button>
-                                        ) : (
-                                            <Button type="button" onClick={() => navigate("organizations")}>Open Organizations</Button>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </section>
-                    </>
-                )}
-            </div>
-        </main>
+            </section>
+        );
+    })();
+
+    return (
+        <ConsoleLayout
+            ownerUser={ownerUser}
+            activeDestination={destination}
+            onNavigate={navigate}
+            onLogout={onLogout}
+        >
+            {pageContent}
+        </ConsoleLayout>
     );
 };
 
