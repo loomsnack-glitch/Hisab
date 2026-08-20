@@ -337,6 +337,40 @@ Exit gate: the transport boundary is typed, redacted, deterministic, and
 fully fixture-tested; all existing tests pass; and changes remain uncommitted
 until explicitly approved.
 
+#### Phase 3A: Embedded Signup authorization and provisioning contract
+
+Research: `docs/research/2026-08-21-whatsapp-cloud-api-phase-3a-onboarding-research.md`.
+
+This first Phase 3 slice establishes the security and state rules before the
+Meta App configuration and credential-management seam are available locally.
+It is intentionally pure and fixture-tested; it does not claim that an
+Organization is connected merely because the browser returned from Embedded
+Signup.
+
+Deliverables:
+
+- signed, short-lived onboarding state bound to one Organization and initiating
+  administrator, with constant-time verification and an atomic replay-store
+  boundary;
+- ordered provisioning-step contract matching the documented onboarding flow;
+- idempotent step completion plus resumable failure, cancellation, and bounded
+  safe-error transitions;
+- fixture tests for tampering, expiry, audience mismatch, duplicate completion,
+  out-of-order steps, retry, and terminal states.
+
+Non-goals for Phase 3A:
+
+- no Facebook SDK or live Embedded Signup UI;
+- no authorization-code/token exchange or credential persistence;
+- no Graph API provisioning calls, database migration, Store assignment, or
+  connected-account UI;
+- no changes to the existing Baileys account routes or worker.
+
+Exit gate: onboarding state cannot be forged, expired, or accepted for another
+Organization/user; the one-time replay decision is explicit at the persistence
+boundary; provisioning transitions are deterministic and resumable; focused/full
+tests pass; and the slice remains uncommitted until explicitly approved.
+
 ### Phase 3: Embedded Signup and account operations
 
 Dependencies: Phases 0–2.
