@@ -88,6 +88,18 @@ export const WhatsAppCloudOnboardingStateResponseSchema = z.object({
     expiresAt: dtoDateSchema,
 });
 
+export const WhatsAppCloudOnboardingResultSchema = z
+    .object({
+        state: z.string().trim().min(1).max(4_096),
+        code: z.string().trim().min(1).max(4_096),
+        wabaId: z.string().trim().regex(/^\d{1,64}$/, "Invalid WABA id"),
+        phoneNumberId: z
+            .string()
+            .trim()
+            .regex(/^\d{1,64}$/, "Invalid phone number id"),
+    })
+    .strict();
+
 export const WhatsAppAccountDTOSchema = z.object({
     id: z.uuid("Invalid WhatsApp account id"),
     organizationId: z.uuid("Invalid organization id"),

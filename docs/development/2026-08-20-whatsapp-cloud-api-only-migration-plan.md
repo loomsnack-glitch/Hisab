@@ -408,6 +408,37 @@ are not persisted or returned in logs, the replay adapter is atomic and
 expiry-aware by construction, focused/full tests pass, and the changes remain
 uncommitted until explicitly approved.
 
+#### Phase 3C: Embedded Signup result-intake contract
+
+Research: `docs/research/2026-08-21-whatsapp-cloud-api-phase-3c-result-intake-research.md`.
+
+This slice makes the browser callback an explicit, typed server boundary. It
+validates the callback fields and binds the returned state to the authenticated
+Organization and administrator, without treating the callback as a connected
+account.
+
+Deliverables:
+
+- a strict callback payload schema for state, authorization code, WABA ID, and
+  phone-number ID with bounded fields and normalized output;
+- a pure verifier that composes the existing state signature and audience
+  checks;
+- focused tests for malformed, oversized, unknown, mismatched, expired, and
+  valid callback results.
+
+Non-goals for Phase 3C:
+
+- no Facebook SDK or Embedded Signup browser UI;
+- no authorization-code/token exchange, Graph API call, or provider fixture;
+- no credential persistence, WABA/sender/provisioning-attempt/account rows, or
+  Store assignment;
+- no migration execution, template synchronization, or Baileys worker change.
+
+Exit gate: callback input is strictly validated, state binding is
+Organization/user scoped, secrets and callback values are not logged or
+persisted, focused/full tests pass, and the slice remains uncommitted until
+explicitly approved.
+
 ### Phase 3: Embedded Signup and account operations
 
 Dependencies: Phases 0–2.

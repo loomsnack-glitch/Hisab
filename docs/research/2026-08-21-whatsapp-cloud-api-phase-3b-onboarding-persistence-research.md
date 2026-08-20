@@ -45,8 +45,8 @@ boundary:
   WABA ID, phone ID, or credential is accepted or persisted in this phase.
 
 The database record is deliberately separate from `whatsapp_cloud_provisioning_attempts`.
-Phase 3C will create a provisioning attempt only after validated provider data
-has identified the Cloud account/sender row.
+A later exchange/provisioning phase will create a provisioning attempt only
+after validated provider data has identified the Cloud account/sender row.
 
 ## Security and reliability requirements
 
