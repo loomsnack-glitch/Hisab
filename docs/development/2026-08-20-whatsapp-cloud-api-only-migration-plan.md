@@ -1,0 +1,988 @@
+# WhatsApp Cloud API-only migration plan
+
+Status: proposed
+Date: 2026-08-20
+Owner: Hisab platform
+
+## Decision
+
+Hisab will move from the QR/Baileys integration to Meta's official WhatsApp
+Business Platform Cloud API. Baileys will not remain as a second production
+provider after the migration is complete.
+
+The customer-facing connection flow will be Meta Embedded Signup. A customer
+will authorize and connect a business phone number once; Hisab will then
+manage the connected WABA, templates, Store assignment, messaging, delivery
+status, usage, and operational errors through the Cloud API.
+
+This is a provider replacement, not a rename of the existing QR flow. Cloud
+API has no QR session, no local WhatsApp Web auth state, and no port-8100
+worker requirement.
+
+## Goals
+
+- Replace QR/Baileys account linking with Embedded Signup.
+- Send bills, due reminders, promotions, media, and approved templates through
+  Meta Cloud API.
+- Receive inbound messages and delivery events through a verified HTTPS webhook.
+- Support one WhatsApp account assigned to multiple Stores in one Organization.
+- Keep conversations, messages, outbox retries, idempotency, and dead-letter
+  handling durable in PostgreSQL.
+- Verify and synchronize Meta template approval status.
+- Enforce opt-in, cooldown, Meta limits, Hisab quotas, and spending controls.
+- Give operators clear account, template, quality, limit, usage, and failure
+  visibility.
+- Migrate existing Baileys data without silently losing historical messages or
+  creating duplicate sends.
+- Remove Baileys code, dependencies, auth data, UI, deployment, and port 8100
+  only after the migration gates are passed.
+
+## Non-goals
+
+- Do not keep a QR fallback after the final cutover.
+- Do not put a Meta access token in the browser, an Organization row, or a
+  normal customer-editable `.env` value.
+- Do not treat a Hisab-local template as automatically approved by Meta.
+- Do not promise unlimited marketing delivery.
+- Do not send arbitrary business-initiated text outside Meta's customer-service
+  window.
+- Do not make a POS request wait for a Graph API request; all outbound work
+  remains asynchronous through the outbox.
+- Do not change Billing, Sales, Payments, or Customer Ledger semantics as part
+  of this migration.
+
+## External constraints
+
+Meta's current Cloud API documentation requires a Meta business portfolio,
+WABA, business phone number, access token, HTTPS webhook, and the WhatsApp
+management and messaging permissions. The official Embedded Signup flow covers
+WABA discovery, system-user assignment, phone registration, WABA subscription,
+and template discovery.
+
+- [Meta Cloud API collection](https://www.postman.com/meta/whatsapp-business-platform/documentation/wlk6lh4/whatsapp-cloud-api)
+- [Meta Embedded Signup collection](https://www.postman.com/meta/whatsapp-business-platform/documentation/du6gzjv/embedded-signup)
+- [Meta partner roles](https://whatsappbusiness.com/partners/become-a-partner/)
+
+Meta currently charges by delivered message and message category. Service
+messages and some utility replies have different pricing treatment from
+marketing messages. The implementation must fetch and record the applicable
+provider information rather than hardcoding a rate.
+
+- [Meta platform pricing](https://whatsappbusiness.com/products/platform-pricing/)
+
+Meta messaging policy requires recipient opt-in, opt-out handling, approved
+templates for business-initiated messages outside the rolling 24-hour
+customer-service window, and appropriate escalation/support paths.
+
+- [WhatsApp Business Messaging Policy](https://whatsappbusiness.com/policy/)
+
+## Operating assumptions and decision gates
+
+The implementation starts with these defaults unless the product owner changes
+them before Phase 0:
+
+- Hisab is a Meta Tech Provider, not yet a Solution Partner.
+- Each customer connects and authorizes its own WABA/phone number through
+  Embedded Signup.
+- Meta billing is customer-owned in the first rollout. Hisab quotas and
+  budgets are safety controls, not a replacement for Meta billing.
+- Centralized Meta billing is a separate BSP/Solution Partner workstream and
+  must not be mixed into the first Cloud API delivery path.
+- One Cloud API account may be assigned to many Stores, but every inbound
+  conversation has one deterministic Store route.
+- Cloud API migration is opt-in per Organization. No account is silently
+  converted because a phone number happens to match an old Baileys account.
+
+The following decisions block production onboarding:
+
+1. Meta billing owner: customer direct or contracted BSP/Solution Partner.
+2. Hisab plan quota, budget, and overage behavior.
+3. Required consent wording and accepted opt-in evidence.
+4. Secret-management provider, data region, and retention periods.
+5. Phone-number migration policy for numbers currently used by WhatsApp or
+   WhatsApp Business App.
+6. Whether platform-owned OTP/invite messages will use a dedicated Cloud API
+   account or move to another channel.
+
+These are explicit gates because changing them changes schema, authorization,
+financial liability, or customer behavior.
+
+## Current Hisab state
+
+The repository already has useful durable messaging infrastructure:
+
+- `whatsapp_accounts`, conversations, messages, and outbox tables;
+- Store assignment and default inbound Store support;
+- provider-event inboxing, retries, leases, dead lettering, and delivery
+  status handling;
+- bill, due-reminder, promotion, image, and document-related flows;
+- local Hisab message templates and campaign recipient records.
+
+The current implementation is still Baileys-shaped:
+
+- `packages/types/src/services/whatsapp.schema.ts` exposes `baileys`, QR
+  statuses, QR images, and worker status contracts;
+- `apps/whatsapp-worker` owns Baileys sockets, QR creation, auth state, and
+  provider sends;
+- outbox dispatch is coupled to the Baileys worker;
+- `whatsapp_accounts` still has QR/session fields and a provider enum created by
+  `20260811100000_create_whatsapp_messaging_foundation.sql`;
+- local templates and Meta-approved templates are not yet separate concepts;
+- campaign data has marketing opt-out state but needs auditable opt-in and
+  usage/quota accounting;
+- the older global Cloud API notification service is not a multi-tenant
+  customer-account implementation and must not be reused with one global token.
+
+Relevant existing areas:
+
+- `apps/backend/src/modules/tenant/whatsapp/whatsapp.repository.ts`
+- `apps/backend/src/modules/tenant/whatsapp/`
+- `apps/backend/src/services/notifications/whatsapp.service.ts`
+- `apps/backend/db/migrations/20260811100000_create_whatsapp_messaging_foundation.sql`
+- `apps/backend/db/migrations/20260816170000_organization_whatsapp_accounts.sql`
+- `apps/backend/db/migrations/20260816201000_customer_whatsapp_messaging.sql`
+- `apps/whatsapp-worker/`
+- `docs/development/ganatri_deployment_guide.md`
+- `docs/development/ecosystem.config.ganatri.js`
+
+## Execution phases and dependencies
+
+Work is delivered in vertical phases. A phase is not complete because its
+code compiles; its exit gate requires the listed database, security, and
+controlled-provider evidence.
+
+### Phase 0: Meta and product readiness
+
+Dependencies: none.
+
+Deliverables:
+
+- Hisab Meta Business Portfolio and Developer App;
+- Tech Provider onboarding and required App Review/Advanced Access;
+- verified production HTTPS domain, privacy policy, terms, support, and data
+  deletion pages;
+- test WABA and test phone number;
+- webhook verify secret and application secret stored outside source control;
+- written billing, quota, consent, retention, and phone-migration decisions.
+
+Exit gate: Embedded Signup can authorize the test account, the webhook can be
+verified, and the agreed billing/consent decisions are documented.
+
+### Phase 1: Secure account and database foundation
+
+Dependencies: Phase 0 Meta App and secret-management decisions.
+
+Deliverables:
+
+- additive Cloud account migration;
+- encrypted credential reference and key-version model;
+- Cloud lifecycle states and safe error DTOs;
+- globally unique WABA/Phone Number IDs;
+- Store assignment/default inbound routing constraints;
+- corrected Store-scoped conversation uniqueness;
+- migration/backfill checks and production-shaped database test.
+
+Exit gate: migrations apply cleanly to a copy of the target database, all
+existing rows remain readable, and no secret is present in DTOs or logs.
+
+### Phase 2: Cloud API module and webhook
+
+Dependencies: Phase 1 account/credential model.
+
+Deliverables:
+
+- backend Graph API client with timeout, retry classification, and redaction;
+- internal Cloud dispatcher with no public port;
+- webhook challenge/signature verification;
+- durable provider-event ingestion and idempotent normalization;
+- inbound conversation/message and outbound status mapping;
+- media upload/download handling through private storage.
+
+Exit gate: fixture tests cover signatures, duplicates, out-of-order statuses,
+tenant scoping, retryable errors, permanent errors, and dead lettering.
+
+### Phase 3: Embedded Signup and account operations
+
+Dependencies: Phases 0–2.
+
+Deliverables:
+
+- one-time Connect WhatsApp flow;
+- resumable provisioning state machine;
+- WABA subscription and phone registration;
+- connected/disconnected/revoked/needs-action UI;
+- reconnect, revoke, rotate credential, and refresh operations;
+- Store assignment and default inbound Store UI.
+
+Exit gate: one test Organization can connect, reload, reconnect, assign the
+account to multiple Stores, and receive a deterministic inbound message.
+
+### Phase 4: Templates and policy enforcement
+
+Dependencies: Phases 2–3 and approved test WABA.
+
+Deliverables:
+
+- Hisab preset versus Meta template binding model;
+- template create/sync/status/rejection handling;
+- bill, due-reminder, and promotion mappings;
+- variable and dynamic-link validation;
+- opt-in, opt-out, suppression, and 24-hour window checks;
+- send-time blocking for pending/rejected/paused templates.
+
+Exit gate: a controlled test proves that approved templates send, invalid
+templates are blocked, approval changes are reflected, and marketing cannot
+send without consent.
+
+### Phase 5: Quotas, usage, and campaign safety
+
+Dependencies: Phase 4 template and consent contracts.
+
+Deliverables:
+
+- append-only usage ledger and atomic reservations;
+- Organization quota and budget policy;
+- Meta limit/quality snapshot synchronization;
+- per-account rolling recipient-window accounting;
+- per-customer cooldown and campaign duplicate prevention;
+- preview-before-send and stop-campaign behavior;
+- usage/cost dashboard and reconciliation job.
+
+Exit gate: concurrent sends cannot overspend quota, duplicate recipients are
+not admitted, failed sends reconcile correctly, and the ledger can rebuild
+summary totals.
+
+### Phase 6: Feature migration
+
+Dependencies: Phases 2–5.
+
+Deliverables:
+
+- POS bill document template send;
+- due-reminder utility template send;
+- promotion campaign template/media send;
+- inbound replies and delivery status in existing messaging views;
+- platform OTP/invite decision implemented or explicitly retired;
+- no caller directly depends on Baileys or QR state.
+
+Exit gate: the full controlled checklist passes for bill, due reminder,
+promotion, media, inbound reply, status updates, failed delivery, and quota
+enforcement.
+
+### Phase 7: Customer migration and Baileys retirement
+
+Dependencies: Phases 0–6 and migration runbook approval.
+
+Deliverables:
+
+- Organization migration inventory and export;
+- customer-by-customer Cloud API connection;
+- safe outbox freeze/drain/rebuild process;
+- old-account retirement and historical-data verification;
+- final removal of QR/Baileys code, data, deployment, and port 8100.
+
+Exit gate: zero active Baileys accounts or unsafely recoverable Baileys sends;
+Cloud API-only production monitoring and support runbooks are live.
+
+No implementation phase may skip its exit gate to reach the cleanup phase.
+
+## Target architecture
+
+```text
+POS/Admin UI
+    |
+    | authenticated Hisab command
+    v
+Backend WhatsApp module
+    |
+    | validates Store, opt-in, template, quota, cooldown, and account state
+    v
+PostgreSQL message + outbox + usage ledger
+    |
+    | leased Cloud API dispatcher
+    v
+Meta Graph API
+    |
+    | HTTPS webhook: inbound messages, statuses, template/account events
+    v
+Webhook ingress -> provider-event inbox -> normalizer -> conversations/messages
+```
+
+The external seam is a deep `WhatsAppMessaging` module. Billing, POS, and
+campaign callers know only the Hisab command/result contract. They do not know
+Graph API paths, access tokens, Meta component syntax, or retry rules.
+
+Backend owns onboarding, account state, webhook ingress, template
+synchronization, and quota admission. A dedicated internal Cloud dispatcher
+owns outbox leases and Graph API calls. It has no public HTTP port; its health
+and metrics are reported through the backend's authenticated internal seam.
+This keeps slow provider calls and backpressure out of API request handlers and
+eliminates the old port-8100 WebSocket worker.
+
+The implementation may contain small internal adapters for Graph API HTTP,
+credential storage, media storage, template synchronization, and webhook
+normalization. Those are internal seams; the application must not expose a
+provider choice that no longer exists.
+
+## Domain invariants
+
+These invariants must be enforced in the backend and, where possible, by the
+database:
+
+1. A connected Cloud API account belongs to exactly one Organization.
+2. A Cloud API account may be assigned to many Stores in that Organization.
+3. A Meta Phone Number ID and WABA ID are globally unique in Hisab; they cannot
+   be connected to two Organizations.
+4. Every outbound row records the Organization, Store, account, recipient
+   snapshot, message intent, and idempotency key.
+5. Every inbound conversation is resolved by account, Store, and external chat
+   identity. An account assigned to multiple Stores must have deterministic
+   default inbound routing.
+6. A Meta token is never returned in any DTO, log, error, or client payload.
+7. A message cannot be queued if its account is not provisioned and usable.
+8. A business-initiated notification cannot be queued without an approved Meta
+   template and a valid recipient opt-in.
+9. A campaign recipient is counted once per campaign and once per unique
+   recipient window, even if the dispatcher retries.
+10. A provider webhook may be delivered more than once; duplicate events must
+    be harmless.
+11. A message status can move forward but must not move from delivered/read
+    back to queued/sending.
+12. A quota reservation is created atomically with message enqueueing and is
+    reconciled from provider status events.
+13. Store scoping is checked server-side from the authenticated Organization;
+    client-supplied Store or account IDs cannot cross tenant boundaries.
+
+For an account shared by multiple Stores, outbound Store scope comes from the
+sale, reminder, or campaign. Inbound messages use the account's explicit
+default inbound Store unless a future routing rule resolves them more
+specifically. The system must never guess a Store from a customer name alone.
+
+## Account and credential model
+
+### Account lifecycle
+
+Replace QR-specific lifecycle states with Cloud API states:
+
+- `pending_authorization`: no completed Embedded Signup authorization;
+- `provisioning`: authorization received; WABA/phone/webhook setup is running;
+- `connected`: account is registered, subscribed, and usable;
+- `needs_action`: Meta requires a customer/operator action;
+- `disconnected`: temporary provider or credential problem;
+- `revoked`: authorization or phone access was revoked;
+- `suspended`: provider/account policy or quality restriction;
+- `failed`: provisioning failed permanently until retried or reconnected.
+
+The API must return a stable user-facing reason and a safe remediation action,
+not a raw Graph API payload.
+
+### Provider identifiers
+
+Model the Meta WABA and its sender phone number separately. A WABA can own
+more than one phone number, while templates and many management operations are
+WABA-scoped. The Hisab concepts are:
+
+- `whatsapp_business_account`: Organization-scoped Meta WABA and encrypted
+  credential/authorization record;
+- `whatsapp_account`: one Meta sender phone number under that WABA, retaining
+  the existing Store assignment and message/outbox relationship;
+- `whatsapp_account_stores`: the many-to-many Store assignment with one
+  explicit default inbound Store;
+- Meta template binding: attached to the WABA, then mapped to Store/use-case
+  presets.
+
+Add sender-specific metadata with clear ownership:
+
+- Meta Phone Number ID;
+- display phone number;
+- verified business/display name;
+- Meta quality rating and quality timestamp;
+- Meta messaging limit and last synchronization time;
+- credential reference, never the raw credential;
+- token version/rotation metadata;
+- last webhook and Graph API health timestamps;
+- last provider error code and safe message.
+
+`phone_number` is a display/business value. It must never be confused with
+Meta's Phone Number ID or WABA ID.
+
+If the first implementation keeps WABA fields on `whatsapp_accounts` for
+delivery speed, it must still enforce WABA-level template synchronization and
+must not create duplicate template approval state for every phone number. A
+follow-up normalization migration can move those fields into the parent table.
+
+### Credential security
+
+- Exchange Embedded Signup results on the backend over HTTPS.
+- Encrypt tokens before persistence using an application key-management seam or
+  secret-manager reference.
+- Store key version metadata to support rotation.
+- Decrypt only inside the Cloud API command/dispatcher implementation.
+- Redact tokens, authorization codes, webhook secrets, media URLs, full phone
+  numbers, and message bodies from logs.
+- Use least-privilege system users and request only the Meta permissions needed.
+- Provide credential rotation and revoke/reconnect operations.
+- Do not reuse the old global OTP/invite token for customer-owned WABAs.
+
+## Database plan
+
+All changes are forward-only dbmate migrations. Never edit an already-applied
+migration.
+
+### Migration A: Cloud account foundation
+
+Add Cloud API fields and constraints while the old Baileys fields still exist:
+
+- `whatsapp_business_accounts` parent records for WABA identity and
+  authorization;
+- sender-level Phone Number ID and parent WABA reference;
+- verified display name and provider quality/limit snapshots;
+- credential reference and credential key version;
+- Cloud lifecycle status and safe provider error fields;
+- webhook/health timestamps;
+- globally unique WABA and Phone Number ID constraints;
+- explicit account-level billing/quality/limit synchronization timestamps;
+- resumable provisioning-attempt records with idempotency key, current step,
+  completed steps, and safe failure state.
+
+Keep existing rows readable. Do not mark an account Cloud-connected until all
+required external steps have succeeded and their results have been persisted.
+Database updates remain short, atomic transactions around each step.
+
+Add `reconciling` to the outbox lifecycle before implementing uncertain-send
+handling. A timeout after a provider submission must not be represented as
+ordinary retryable work.
+
+The migration must not make the old `UNIQUE (whatsapp_account_id,
+external_chat_id)` conversation key the final key for a shared account. The
+final Store-scoped key must be `UNIQUE (whatsapp_account_id, store_id,
+external_chat_id)` with matching foreign-key/index support, so the same
+customer chat can exist in separate Store contexts without cross-Store foreign
+key failures.
+
+### Migration B: Template and binding model
+
+Separate the existing Hisab template preset from Meta's template asset:
+
+- Hisab preset: kind, name, local preview, token mapping, active/default state;
+- Meta binding: WABA/account, Meta template ID/name, language, category,
+  component definition, approval state, rejection reason, last sync time;
+- immutable template version or binding history for messages already queued;
+- campaign/use-case binding to the approved Meta template version;
+- unique constraints preventing two active defaults for one Store/use case.
+
+The send path stores the selected template binding/version on the outbox row so
+later edits cannot change a message already queued.
+
+### Migration C: Consent and suppression
+
+Add auditable customer messaging consent:
+
+- marketing opt-in state and timestamp;
+- utility/bill-reminder opt-in state and timestamp where required by product
+  policy;
+- source and wording/version of the consent;
+- opt-out timestamp and reason;
+- suppression state that takes precedence over campaign selection.
+
+Existing customers must not be silently treated as opted in. Provide an
+explicit migration/default policy before enabling promotions.
+
+### Migration D: Quota, usage, and cost ledger
+
+Add append-only usage accounting rather than mutable counters alone:
+
+- Organization/account/Store scope;
+- message and campaign identifiers;
+- recipient identity hash or safe reference;
+- message category and intent;
+- reservation, submitted, delivered, failed, released, and reconciled states;
+- Meta message ID and provider error code;
+- quantity, currency, estimated cost, actual cost when available;
+- timestamps and idempotency key.
+
+Quota accounting must include a normalized recipient-window key scoped to the
+Cloud API account and rolling-window period. Meta limits are account/number
+concerns, not independent per-Store allowances; Store usage is attribution,
+while admission must prevent all Stores sharing one number from collectively
+exceeding the account policy.
+
+Add a quota policy/configuration record for:
+
+- monthly quota;
+- rolling daily recipient cap;
+- promotion cap;
+- per-recipient cooldown;
+- monthly budget;
+- optional auto-stop behavior.
+
+Use the ledger as the audit source. Cached usage summaries may be rebuilt from
+it and must never be the only record.
+
+### Migration E: Outbox/provider cleanup
+
+During migration, retain enough old columns to drain and audit Baileys rows.
+After the final cutover and retention window:
+
+- add Cloud-specific message intent/template/recipient metadata;
+- add a final account/template/recipient snapshot so historical messages do not
+  depend on mutable current templates;
+- remove QR response fields and worker-only constraints;
+- remove `session_reference` after verifying no remaining use;
+- remove Baileys rows/auth references only after backup and reconciliation;
+- remove the provider enum/column only in a final forward migration if it has no
+  remaining audit value. Product/API contracts must stop exposing provider
+  selection earlier.
+
+### Migration F: legacy platform notifications
+
+The existing global OTP/invite notification path is a separate credential and
+tenant model. Before final Baileys/legacy cleanup, choose one explicit route:
+
+- migrate OTP/invite delivery to a dedicated Hisab-owned Cloud API WABA and
+  template set; or
+- remove WhatsApp as an OTP/invite channel and use the approved replacement
+  channel.
+
+It must not continue using one global `WHATSAPP_API_TOKEN` for customer-owned
+Organization accounts. If a dedicated platform account is retained, model it
+as a separately scoped system account with its own templates, quota, audit, and
+incident policy; do not expose it as a Store's WhatsApp account.
+
+## Meta onboarding flow
+
+1. Hisab admin opens `Connect WhatsApp` for an Organization.
+2. Backend creates a short-lived onboarding state bound to the authenticated
+   Organization/user and an anti-CSRF state value.
+3. Frontend launches Meta Embedded Signup using the approved App configuration.
+4. Meta returns the authorization result to the frontend callback.
+5. Frontend sends the short-lived result to the backend; the backend validates
+   state and exchanges it server-side.
+6. Backend discovers the shared WABA and Phone Number ID and reconciles them
+   against existing Hisab identities.
+7. Backend creates or reuses the Organization's WABA parent record.
+8. Backend assigns/validates the required system-user access.
+9. Backend registers the phone number when required, including secure PIN
+   handling.
+10. Backend subscribes the WABA to the Hisab App webhook.
+11. Backend fetches the phone status, quality, limits, and approved templates.
+12. Backend stores encrypted credential metadata and updates the sender account
+    in a short database transaction after each verified provisioning step.
+13. UI shows the connected display number and asks the admin to assign the
+    account to Stores.
+
+Provisioning must be resumable and idempotent. If step 7, 8, 9, or 10 fails,
+the user sees the exact safe next action and can retry without creating a
+second account or duplicate assignment.
+
+Meta API calls cannot participate in the PostgreSQL transaction. Create a
+provisioning-attempt record with an idempotency key and completed-step markers;
+persist each successful external identifier before continuing. A retry resumes
+from the last verified step and reconciles existing WABA/phone assignments
+before creating anything new.
+
+If a number is already used by another Meta/WABA setup, show Meta's actual
+eligibility/conflict error. Do not silently unlink or migrate a number.
+
+## Webhook design
+
+### Ingress
+
+- Public HTTPS endpoint only.
+- Implement Meta verification challenge handling.
+- Verify `X-Hub-Signature-256` against the raw request body with constant-time
+  comparison.
+- Reject malformed, oversized, unsigned, and stale requests according to the
+  configured policy.
+- Persist an idempotent provider-event row and acknowledge quickly.
+- Do not process media downloads or long Graph calls during webhook response.
+
+### Normalization
+
+Normalize inbound payloads into the existing Hisab message model:
+
+- resolve `phone_number_id` to the Cloud API account;
+- resolve the account to Organization and default/assigned Store;
+- derive external chat ID and normalized customer phone;
+- create or reuse the Store-scoped conversation;
+- insert inbound message once by provider message ID;
+- enqueue media fetch asynchronously using the provider media ID;
+- process outbound status updates as monotonic transitions.
+
+Template approval, quality, phone status, WABA review, and account events must
+also update the account/template snapshots through the same idempotent inbox.
+
+## Outbound dispatch
+
+The dispatch loop is a backend-owned Cloud API module or a separate Cloud API
+worker. It must not be the old Baileys worker.
+
+### Enqueue transaction
+
+The enqueue command must, in one transaction:
+
+1. authorize Organization, Store, customer, and account;
+2. normalize and snapshot recipient information;
+3. validate consent and suppression;
+4. validate the template binding/category and required parameters;
+5. validate cooldown and duplicate campaign recipient rules;
+6. reserve quota/budget;
+7. create message and outbox rows with an idempotency key;
+8. record the selected template version and intent.
+
+If any check fails, no outbox row or quota reservation may remain.
+
+### Dispatch behavior
+
+- Lease rows with `FOR UPDATE SKIP LOCKED`.
+- Use per-account concurrency and rate limits.
+- Apply separate Graph API request throttling from Meta's notification-recipient
+  limit; one is transport capacity and the other is messaging policy.
+- Use bounded exponential backoff with jitter for retryable Graph errors.
+- Do not retry permanent template, recipient, policy, or authorization errors.
+- Send the correct Meta message category and template payload.
+- Upload media through the private storage/Meta media flow; never send arbitrary
+  untrusted URLs without validation.
+- Persist the returned `wamid` before acknowledging success.
+- Reconcile status through webhook events, not optimistic delivery claims.
+- Reconcile quota and cost from final status.
+- Move exhausted failures to dead letter with an operator-visible reason.
+
+### Idempotency
+
+Use separate idempotency boundaries:
+
+- Hisab command key for duplicate user actions;
+- campaign/recipient uniqueness for bulk sends;
+- outbox row ID for internal dispatch;
+- Meta provider message ID for status and webhook deduplication.
+
+If a Graph request times out after submission, do not blindly send again. Mark
+the row as `reconciling` and use a provider-supported reconciliation path or
+operator review before retrying. If Meta cannot prove whether the message was
+accepted, the system must prefer a visible uncertain/dead-letter outcome over
+silently sending a duplicate.
+
+## Template lifecycle
+
+### Concepts
+
+1. Hisab preset: friendly Store-facing content and variable preview.
+2. Meta template: the approved WABA asset that can actually be sent.
+3. Binding: the mapping between a Hisab use case and a Meta template version.
+
+### Rules
+
+- Bill, due reminder, and promotion are separate use cases.
+- Bills and due reminders use Utility templates when they describe a specific
+  sale or receivable balance.
+- Promotions use Marketing templates and require marketing opt-in.
+- URL buttons must be declared in the Meta template; a local reusable link
+  cannot bypass Meta approval.
+- Template variables are mapped server-side and validated for count, order,
+  type, and length.
+- A rejected, paused, disabled, or missing template cannot be queued.
+- Editing a local preset creates a new binding/version when the Meta structure
+  changes.
+- The UI displays sample preview values but never presents preview as proof of
+  Meta approval.
+
+### UI
+
+Keep the WhatsApp UI simple:
+
+- `Account`: connected number, business name, status, quality, Meta limit,
+  assigned Stores, reconnect/action state;
+- `Templates`: Bill, Due reminder, Promotion cards with Meta status, mapped
+  variables, preview, and safe sync/submit action;
+- `Usage`: Hisab quota, Meta limit snapshot, delivered/failed counts, budget,
+  and current period;
+- `Campaigns`: recipient count, opt-in count, cooldown/limit warnings, queue
+  status, delivered/read/failed counts, and stop action.
+
+Do not expose raw WABA IDs, Phone Number IDs, access tokens, or Graph payloads
+in the normal UI.
+
+## Limits, quotas, and billing controls
+
+There are four different controls and the UI must label them separately:
+
+1. Meta messaging limit: provider-controlled unique notification recipients in a
+   rolling window.
+2. Meta quality: provider-controlled quality signal that can reduce delivery
+   ability or limit.
+3. Hisab product quota: Organization's plan allowance.
+4. Hisab budget/cooldown: business safety controls against accidental or
+   abusive sends.
+
+Never hardcode a Meta limit tier as an Organization entitlement. Sync and show
+the provider-reported value with its timestamp.
+
+### Campaign admission
+
+Before a campaign is queued, calculate:
+
+- eligible customers with valid numbers;
+- customers with required opt-in;
+- customers not suppressed;
+- unique recipients already contacted in the Meta rolling window;
+- recipients remaining in the Hisab period quota;
+- recipients remaining in the campaign cap;
+- estimated provider and internal cost.
+
+Show the operator the result before confirmation. If the campaign exceeds a
+limit, do not silently truncate the audience; require an explicit smaller
+audience or a documented split plan.
+
+### Safety defaults
+
+- New Organizations start with a conservative quota.
+- Promotions require explicit confirmation and opt-in.
+- Promotions have a configurable cooldown per recipient.
+- Duplicate active campaigns for the same audience are blocked.
+- Budget exhaustion stops new queueing but does not corrupt already-submitted
+  messages.
+- Manual stop cancels only unsent/cancellable rows and records the operator.
+- Any provider quality warning pauses or throttles marketing campaigns while
+  utility delivery remains separately visible.
+
+## Baileys migration and removal sequence
+
+### Gate 0: freeze
+
+- Stop creating new Baileys accounts.
+- Stop adding new QR UI entry points.
+- Stop adding features to the Baileys worker.
+- Inventory every account, Store assignment, queued row, retryable row,
+  conversation, and auth-state directory.
+
+### Gate 1: internal Cloud API proof
+
+- Configure Hisab Meta App, App Review/permissions, Embedded Signup, and HTTPS
+  webhook.
+- Connect one controlled test number.
+- Verify template sync and approval state.
+- Send a bill/document, due reminder, promotion, and inbound reply.
+- Verify delivered/read/failed events and duplicate event handling.
+- Verify quota reservation/reconciliation and failure classification.
+
+### Gate 2: organization migration
+
+For each Organization:
+
+1. Export an account/message/outbox/usage reconciliation snapshot.
+2. Ask the admin to connect the number through Embedded Signup.
+3. Confirm WABA, Phone Number ID, number ownership, webhook subscription,
+   account status, and template readiness.
+4. Assign the Cloud API account to the intended Stores.
+5. Pause new Baileys outbound work for that account.
+6. Let in-flight work finish or mark it for safe reconstruction.
+7. Rebuild unsent bill/reminder/promotion rows using approved Cloud templates.
+8. Do not replay arbitrary old custom text outside the 24-hour window.
+9. Enable Cloud API sends and verify one controlled message.
+10. Mark the old Baileys account retired and retain its history for the
+    retention period.
+
+Cloud API cannot reuse Baileys auth state. A phone number migration is a Meta
+onboarding/eligibility operation and must be explicitly completed.
+
+### Gate 3: global cutover
+
+Proceed only when:
+
+- zero Organizations require Baileys for production sends;
+- zero pending/retryable Baileys rows remain, or each has an approved
+  reconstruction decision;
+- zero active Baileys accounts remain in the database;
+- Cloud API webhook and dispatcher metrics are healthy;
+- backup and reconciliation reports are stored;
+- support has the reconnect/template/quota runbook.
+
+Then remove, in separate reviewed changes:
+
+- QR dialogs, routes, polling, and worker status contracts;
+- Baileys provider classes, packages, tests, and auth-state storage;
+- port-8100 process, PM2 app, deployment copy rules, and environment entries;
+- Baileys-only schema fields and provider branches;
+- obsolete Baileys runbooks and research instructions;
+- stale global WhatsApp worker configuration.
+
+Do not delete historical message rows merely because the transport changed.
+
+## Error model
+
+Map provider errors into stable Hisab categories:
+
+- `account_not_connected`;
+- `authorization_required`;
+- `phone_not_registered`;
+- `template_pending`;
+- `template_rejected`;
+- `template_paused`;
+- `recipient_not_opted_in`;
+- `recipient_suppressed`;
+- `meta_limit_reached`;
+- `hisab_quota_reached`;
+- `budget_reached`;
+- `rate_limited`;
+- `media_invalid`;
+- `provider_transient`;
+- `provider_permanent`;
+- `unknown_reconciliation_required`.
+
+Each error must define whether it is retryable, user-actionable, operator-
+actionable, and quota-releasing. Raw Meta error text is retained only in
+protected diagnostics with redaction.
+
+## Observability and operations
+
+Metrics must be split by Organization, account, Store, intent, and safe error
+category where cardinality permits:
+
+- webhook accepted/duplicate/rejected;
+- webhook processing age and failure;
+- outbox queued/processing/sent/delivered/read/failed/dead-letter;
+- dispatcher latency and Graph response classes;
+- retry and lease expiry counts;
+- template approval/rejection/paused counts;
+- account quality and limit snapshot age;
+- quota reserved/released/delivered;
+- campaign eligible/queued/delivered/failed counts;
+- estimated and reconciled costs.
+
+Alerts:
+
+- webhook failures or stale events;
+- dispatcher unavailable;
+- growing dead-letter queue;
+- stale account/limit/template synchronization;
+- sudden quality downgrade;
+- repeated authorization failures;
+- quota ledger reconciliation mismatch;
+- provider 429 or 5xx spike.
+
+Runbooks must cover reconnect, token rotation, webhook verification, template
+rejection, campaign stop, dead-letter replay, quota correction, provider
+outage, and customer opt-out.
+
+## Testing strategy
+
+### Unit and contract tests
+
+- Embedded Signup state/CSRF validation;
+- Graph client request construction and error mapping;
+- webhook signature verification;
+- webhook payload normalization;
+- duplicate webhook idempotency;
+- monotonic message status transitions;
+- Store/account/conversation scoping;
+- template parameter validation;
+- consent, suppression, cooldown, quota, and budget admission;
+- usage reservation/reconciliation;
+- outbox lease/retry/dead-letter behavior;
+- media size/type and private storage handling.
+
+### Database tests
+
+- Organization/account/Store foreign keys;
+- one default inbound Store per account;
+- template binding uniqueness;
+- campaign recipient uniqueness;
+- concurrent quota reservation;
+- duplicate enqueue idempotency;
+- usage ledger rebuild;
+- migration up on a production-shaped copy;
+- rollback rehearsal for every pre-cutover migration where rollback is safe.
+
+### Controlled integration tests
+
+With a real Meta test WABA/number:
+
+- Embedded Signup completion;
+- phone registration and webhook subscription;
+- approved, pending, rejected, and paused templates;
+- text, document, image, and URL-button messages;
+- inbound reply and 24-hour window behavior;
+- delivered/read/failed status events;
+- duplicate and out-of-order webhooks;
+- revoked token/number and reconnect;
+- rate limit and provider outage behavior;
+- campaign opt-in, cooldown, quota, and stop behavior.
+
+Local tests cannot prove Meta approval, phone eligibility, provider delivery,
+quality changes, account limits, or real webhook behavior. Those require the
+controlled integration environment.
+
+## Release sequence
+
+1. Ship additive database and shared-contract changes.
+2. Ship Cloud API client, credential vault seam, webhook ingress, and event
+   processor behind a disabled feature flag.
+3. Ship template synchronization and account dashboard behind an internal-only
+   flag.
+4. Enable one internal Organization and one Store.
+5. Run the complete controlled integration checklist.
+6. Enable customer-by-customer migration.
+7. Freeze and drain Baileys.
+8. Remove Baileys in a separate cleanup release.
+9. Remove the feature flag only after the post-cutover observation period.
+
+Every release must include migration status, application version, webhook
+health, dispatcher health, and usage reconciliation evidence.
+
+## Acceptance criteria
+
+The migration is complete only when all are true:
+
+- A new customer can connect through Embedded Signup without QR or manual token
+  entry.
+- Hisab stores no raw Meta token in browser-visible data or logs.
+- A connected account can be assigned to multiple Stores safely.
+- Inbound messages route deterministically and do not cross Stores.
+- Approved bill, due-reminder, and promotion templates send successfully.
+- Unapproved templates are blocked with a useful message.
+- Promotions require opt-in and respect suppression/cooldown.
+- Duplicate campaign recipients cannot be queued twice.
+- Meta status events update the same Hisab message idempotently.
+- Hisab quota and budget checks are atomic under concurrent sends.
+- Meta limit/quality information is visible with freshness timestamps.
+- Retryable failures retry safely; permanent failures do not loop.
+- Dead-letter rows are inspectable and replayable only when safe.
+- Existing historical conversations and messages remain readable.
+- No production Baileys accounts, QR routes, auth state, worker process, or
+  port-8100 deployment remain.
+- Production runbooks, monitoring, migrations, and support documentation match
+  the Cloud API-only runtime.
+
+## Decisions required before implementation
+
+These are product/operations decisions, not implementation guesses:
+
+1. Will Meta charges be paid directly by each Organization or through an
+   existing Solution Partner/BSP with Hisab-managed billing?
+2. What is the initial Hisab monthly quota and budget for each plan?
+3. Which consent wording and opt-in sources will be accepted for bill,
+   due-reminder, and marketing messages?
+4. Which production region and secret manager will hold Cloud credentials?
+5. What is the retention period for message bodies, media, webhook diagnostics,
+   and usage ledger data?
+6. What is the customer migration window and support policy for numbers that
+   cannot be immediately registered with Cloud API?
+
+Implementation must stop at these decision gates if the answer changes billing,
+data retention, customer authorization, or number migration behavior.
+
+## Source and repository references
+
+- [Meta Cloud API](https://www.postman.com/meta/whatsapp-business-platform/documentation/wlk6lh4/whatsapp-cloud-api)
+- [Meta Embedded Signup](https://www.postman.com/meta/whatsapp-business-platform/documentation/du6gzjv/embedded-signup)
+- [Meta Templates API](https://www.postman.com/meta/whatsapp-business-platform/folder/huymv7d/templates)
+- [Meta template approval webhook](https://www.postman.com/meta/whatsapp-business-platform/request/enu4z5g/message-template-approved)
+- [Meta platform pricing](https://whatsappbusiness.com/products/platform-pricing/)
+- [Meta quality and messaging-limit guidance](https://whatsappbusiness.com/wp-content/uploads/2026/05/Utility-Messages-Playbook-English.pdf)
+- [WhatsApp Business Messaging Policy](https://whatsappbusiness.com/policy/)
+- [Existing Cloud API research](../research/2026-08-18-whatsapp-cloud-api-integration.md)
+- [WhatsApp schemas](../../packages/types/src/services/whatsapp.schema.ts)
+- [WhatsApp foundation migration](../../apps/backend/db/migrations/20260811100000_create_whatsapp_messaging_foundation.sql)
+- [Organization account migration](../../apps/backend/db/migrations/20260816170000_organization_whatsapp_accounts.sql)
+- [Customer messaging migration](../../apps/backend/db/migrations/20260816201000_customer_whatsapp_messaging.sql)
