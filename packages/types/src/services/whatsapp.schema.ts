@@ -83,6 +83,11 @@ export const WhatsAppCloudProvisioningAttemptSchema = z.object({
     updatedAt: dtoDateSchema,
 });
 
+export const WhatsAppCloudOnboardingStateResponseSchema = z.object({
+    state: z.string().trim().min(1).max(4_096),
+    expiresAt: dtoDateSchema,
+});
+
 export const WhatsAppAccountDTOSchema = z.object({
     id: z.uuid("Invalid WhatsApp account id"),
     organizationId: z.uuid("Invalid organization id"),

@@ -371,6 +371,43 @@ Organization/user; the one-time replay decision is explicit at the persistence
 boundary; provisioning transitions are deterministic and resumable; focused/full
 tests pass; and the slice remains uncommitted until explicitly approved.
 
+#### Phase 3B: Durable onboarding launch and replay boundary
+
+Research: `docs/research/2026-08-21-whatsapp-cloud-api-phase-3b-onboarding-persistence-research.md`.
+
+This slice turns the Phase 3A persistence seam into a real backend boundary
+without pretending that browser authorization has completed provider
+provisioning. It persists only the minimum data needed to bind and replay-proof
+the future Embedded Signup callback.
+
+Deliverables:
+
+- a migration for hash-only, short-lived onboarding-state records bound to an
+  Organization and initiating user;
+- an authenticated start service and route that issues the signed state only
+  after Organization authorization succeeds;
+- an atomic database-backed replay-store adapter for the Phase 3A state
+  contract;
+- a shared response schema and focused tests for authorization, persistence,
+  response redaction, and route validation; expiry and one-time consumption
+  remain covered by the Phase 3A contract until a live database test harness is
+  available.
+
+Non-goals for Phase 3B:
+
+- no Facebook SDK or Embedded Signup browser UI;
+- no authorization-code exchange, Graph API call, provider credential, WABA,
+  phone, or `whatsapp_accounts` persistence;
+- no provisioning-attempt row before a real Cloud account/sender exists;
+- no Store assignment, template sync, campaign behavior, or Baileys worker
+  change;
+- no migration execution against a target database.
+
+Exit gate: the start boundary is organization-scoped, secrets and raw state
+are not persisted or returned in logs, the replay adapter is atomic and
+expiry-aware by construction, focused/full tests pass, and the changes remain
+uncommitted until explicitly approved.
+
 ### Phase 3: Embedded Signup and account operations
 
 Dependencies: Phases 0–2.
