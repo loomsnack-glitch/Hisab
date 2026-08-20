@@ -2,6 +2,12 @@ import type { Context } from "hono";
 import { getDeviceId, setDeviceId } from "@/helpers/deviceId.helper";
 
 export const deviceMiddleware = async (c: Context, next: () => Promise<void>) => {
+    const pathname = new URL(c.req.url).pathname.replace(/\/+$/, "");
+    if (pathname.endsWith("/webhooks/whatsapp")) {
+        await next();
+        return;
+    }
+
     const existingDeviceId = getDeviceId(c);
 
     if (!existingDeviceId) {

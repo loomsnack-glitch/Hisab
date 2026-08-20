@@ -201,6 +201,39 @@ Deliverables:
 Exit gate: fixture tests cover signatures, duplicates, out-of-order statuses,
 tenant scoping, retryable errors, permanent errors, and dead lettering.
 
+#### Phase 2A: Signed webhook ingress vertical slice
+
+Research: `docs/research/2026-08-21-whatsapp-cloud-api-phase-2-research.md`.
+
+This is the first implementation slice of Phase 2. It deliberately stops at
+the durable, authenticated receipt boundary so webhook delivery can be tested
+without Meta setup or changing the existing Baileys replay path.
+
+Deliverables:
+
+- public `GET` verification endpoint using the application webhook verify token;
+- public `POST` endpoint that validates `X-Hub-Signature-256` against the raw
+  body before parsing or writing anything;
+- bounded envelope validation and extraction of WABA/Phone Number IDs;
+- idempotent durable Cloud webhook receipt records keyed by the authenticated
+  raw-body digest, including unknown-account receipts for later reconciliation;
+- fast `200` acknowledgement after persistence, with no media download,
+  conversation mutation, or Graph API call in the request path;
+- fixture tests for valid/invalid verification, signatures, malformed bodies,
+  duplicate deliveries, unknown accounts, and request-size limits.
+
+Non-goals for Phase 2A:
+
+- message/status normalization and monotonic state transitions;
+- Cloud outbox dispatch or uncertain-send reconciliation;
+- media retrieval, template synchronization, or Embedded Signup;
+- applying the migration to a target database or testing against Meta.
+
+Exit gate: the route authenticates the raw request, persists one durable receipt
+per delivery digest, acknowledges duplicates safely, does not expose secrets,
+and all fixture tests pass. The work remains uncommitted until explicitly
+approved.
+
 ### Phase 3: Embedded Signup and account operations
 
 Dependencies: Phases 0–2.
