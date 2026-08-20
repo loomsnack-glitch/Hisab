@@ -62,8 +62,8 @@ try {
         promptPassword,
         write: (message) => process.stdout.write(`${message}\n`),
         repository: ownerUserRepository,
-        hashPassword: Bun.password.hash,
-        createId: crypto.randomUUID,
+        hashPassword: (password) => Bun.password.hash(password),
+        createId: () => crypto.randomUUID(),
     });
     process.exitCode = exitCode;
 } catch (error) {

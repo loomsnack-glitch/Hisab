@@ -18,6 +18,24 @@ type OwnerCreateDependencies = {
 const isUniqueViolation = (error: unknown) =>
     typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 
+const unexpectedErrorMessage = (error: unknown) => {
+    const record = typeof error === "object" && error !== null ? error as Record<string, unknown> : undefined;
+    const cause = typeof record?.cause === "object" && record.cause !== null
+        ? record.cause as Record<string, unknown>
+        : undefined;
+    const code = typeof record?.code === "string"
+        ? record.code
+        : typeof cause?.code === "string"
+            ? cause.code
+            : undefined;
+    const message = error instanceof Error ? error.message : undefined;
+    const details = [code ? `database error ${code}` : undefined, message].filter(Boolean).join(": ");
+
+    return details
+        ? `Owner User was not created due to an unexpected error: ${details}.`
+        : "Owner User was not created due to an unexpected error.";
+};
+
 export const assertNoOwnerCreateArguments = (args: string[]) => {
     if (args.length > 0) {
         throw new Error("owner:create does not accept command-line arguments; all values are prompted securely");
@@ -69,7 +87,7 @@ export const runOwnerCreate = async (dependencies: OwnerCreateDependencies): Pro
         dependencies.write(
             isUniqueViolation(error)
                 ? "Owner User was not created: that phone already exists."
-                : "Owner User was not created due to an unexpected error.",
+                : unexpectedErrorMessage(error),
         );
         return 1;
     }

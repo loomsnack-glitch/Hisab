@@ -79,4 +79,24 @@ describe("Seed Owner User command", () => {
             "does not accept command-line arguments",
         );
     });
+
+    test("reports the safe database error details for unexpected persistence failures", async () => {
+        const output: string[] = [];
+        const exitCode = await runOwnerCreate({
+            promptText: async (label) => label.startsWith("WhatsApp") ? "7990176865" : label.startsWith("First") ? "Dev" : "Jariwala",
+            promptPassword: async () => password,
+            write: (message) => output.push(message),
+            repository: {
+                createSeedOwnerUser: async () => {
+                    throw Object.assign(new Error('relation "owner_users" does not exist'), { code: "42P01" });
+                },
+            },
+            hashPassword: Bun.password.hash,
+            createId: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        });
+
+        expect(exitCode).toBe(1);
+        expect(output.join(" ")).toContain('database error 42P01: relation "owner_users" does not exist');
+        expect(output.join(" ")).not.toContain(password);
+    });
 });
