@@ -1,5 +1,35 @@
 import { z } from "zod";
 import { dtoDateSchema, normalizePhoneNumber, phoneSchema } from "../../common";
+import {
+    CustomerLedgerEntryDTOSchema,
+    CustomerListStatusSchema,
+    CustomerSortSchema,
+    CustomerSummaryDTOSchema,
+    PaymentDTOSchema,
+    PaymentMethodSchema,
+    PaymentStatusSchema,
+    ProductSalesSummaryDTOSchema,
+    SaleDeviceAuditDTOSchema,
+    SaleItemDTOSchema,
+    SaleStatusSchema,
+    SalesSortSchema,
+} from "../billing/billing.schema";
+import {
+    AddOnStatusSchema,
+    CategoryStatusSchema,
+    ProductAddOnAttachmentStatusSchema,
+    ProductCodeKindSchema,
+    ProductStatusSchema,
+    ProductTypeSchema,
+} from "../catalog/catalog.schema";
+import { StoreDeviceStatusSchema, StoreMessageLinkTypeSchema } from "../organization/organization.schema";
+import { PurchaseItemDTOSchema, PurchaseStatusSchema } from "../purchase/purchase.schema";
+import {
+    WhatsAppAccountStatusSchema,
+    WhatsAppMessageTemplateKindSchema,
+    WhatsAppProviderSchema,
+} from "../../services/whatsapp.schema";
+import { ServiceTablePositionSchema, ServiceTableStateSchema } from "../table-service/table-service.schema";
 
 const ownerPhoneSchema = z
     .string()
@@ -126,11 +156,20 @@ const organizationListLimitSchema = z.coerce
 
 export const PlatformOrganizationActivityFilterSchema = z.enum(["all", "active", "inactive"]);
 
+export const PlatformOrganizationDirectorySortSchema = z.enum([
+    "recent_activity",
+    "name_asc",
+    "name_desc",
+    "sales_value_desc",
+    "sales_value_asc",
+]);
+
 export const PlatformOrganizationListQuerySchema = z
     .object({
         ...platformReportingPeriodQueryFields,
         search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
         activity: PlatformOrganizationActivityFilterSchema.default("all"),
+        sort: PlatformOrganizationDirectorySortSchema.default("recent_activity"),
         page: positivePageSchema.default(1),
         limit: organizationListLimitSchema.default(20),
     })
@@ -206,12 +245,558 @@ export const PlatformStoreActivityDTOSchema = z.object({
     lastCompletedSaleAt: dtoDateSchema.nullable(),
 });
 
+export const PLATFORM_OVERVIEW_RECENT_SALE_LIMIT = 10;
+
+export const PlatformRecentSaleDTOSchema = z.object({
+    id: z.uuid("Invalid sale id"),
+    saleNumber: z.string().nullable(),
+    status: SaleStatusSchema,
+    grandTotal: nonNegativeMoneySchema,
+    occurredAt: dtoDateSchema,
+    store: z.object({
+        id: z.uuid("Invalid store id"),
+        name: z.string().trim().min(1),
+    }),
+});
+
 export const PlatformOrganizationDetailDTOSchema = z.object({
     reportingPeriod: PlatformReportingPeriodDTOSchema,
     organization: PlatformOrganizationListItemDTOSchema.extend({
         stores: z.array(PlatformStoreActivityDTOSchema),
+        recentSales: z.array(PlatformRecentSaleDTOSchema),
     }),
 });
+
+export const PlatformStoreInspectionQuerySchema = PlatformOrganizationDetailQuerySchema;
+
+export const PlatformStoreListDTOSchema = z.object({
+    reportingPeriod: PlatformReportingPeriodDTOSchema,
+    stores: z.array(PlatformStoreActivityDTOSchema),
+});
+
+export const PlatformStoreDeviceInspectionDTOSchema = z.object({
+    id: z.uuid("Invalid device id"),
+    name: z.string().trim().min(1),
+    loginUsername: z.string().trim().min(1),
+    status: StoreDeviceStatusSchema,
+    lastSeenAt: dtoDateSchema.nullable(),
+    createdAt: dtoDateSchema,
+});
+
+export const PlatformStoreDetailDTOSchema = z.object({
+    id: z.uuid("Invalid store id"),
+    organizationId: z.uuid("Invalid organization id"),
+    name: z.string().trim().min(1),
+    address: z.string().nullable(),
+    kotSystemEnabled: z.boolean(),
+    tableManagementEnabled: z.boolean(),
+    createdAt: dtoDateSchema,
+    isActive: z.boolean(),
+    customerCount: nonNegativeIntSchema,
+    completedSaleCount: nonNegativeIntSchema,
+    completedSalesValue: nonNegativeMoneySchema,
+    lastCompletedSaleAt: dtoDateSchema.nullable(),
+    devices: z.array(PlatformStoreDeviceInspectionDTOSchema),
+    recentSales: z.array(PlatformRecentSaleDTOSchema),
+});
+
+export const PlatformStoreDetailResponseSchema = z.object({
+    reportingPeriod: PlatformReportingPeriodDTOSchema,
+    store: PlatformStoreDetailDTOSchema,
+});
+
+export const PlatformBillingInspectionQuerySchema = z
+    .object({
+        storeId: z.uuid("Invalid store id").optional(),
+        status: SaleStatusSchema.optional(),
+        paymentStatus: PaymentStatusSchema.optional(),
+        paymentMethod: PaymentMethodSchema.optional(),
+        search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+        startDate: calendarDateSchema.optional(),
+        endDate: calendarDateSchema.optional(),
+        sort: SalesSortSchema.default("newest"),
+        page: positivePageSchema.default(1),
+        limit: organizationListLimitSchema.default(20),
+    })
+    .superRefine((value, ctx) => {
+        if (value.startDate && value.endDate && value.startDate > value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Start date must be before or equal to end date",
+            });
+        }
+    });
+
+export const PlatformSaleInspectionStoreDTOSchema = z.object({
+    id: z.uuid("Invalid store id"),
+    name: z.string().trim().min(1),
+});
+
+export const PlatformSaleInspectionSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid sale id"),
+    saleNumber: z.string().nullable(),
+    status: SaleStatusSchema,
+    paymentStatus: PaymentStatusSchema,
+    grandTotal: nonNegativeMoneySchema,
+    paidTotal: nonNegativeMoneySchema,
+    dueTotal: nonNegativeMoneySchema,
+    createdAt: dtoDateSchema,
+    committedAt: dtoDateSchema.nullable(),
+    voidedAt: dtoDateSchema.nullable(),
+    itemCount: nonNegativeIntSchema,
+    itemsSummary: z.string().nullable(),
+    paymentMethods: z.string().nullable(),
+    customerName: z.string().nullable(),
+    store: PlatformSaleInspectionStoreDTOSchema,
+});
+
+export const PlatformSaleInspectionListDTOSchema = z.object({
+    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
+    sales: z.array(PlatformSaleInspectionSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformSaleInspectionReceiptDTOSchema = z.object({
+    organizationName: z.string().trim().min(1),
+    storeName: z.string().trim().min(1),
+    storeAddress: z.string().nullable(),
+    previewText: z.string(),
+});
+
+export const PlatformSaleInspectionDetailDTOSchema = PlatformSaleInspectionSummaryDTOSchema.extend({
+    subtotal: z.number(),
+    discountTotal: z.number(),
+    orderDiscountAmount: z.number(),
+    notes: z.string().nullable(),
+    voidReason: z.string().nullable(),
+    customer: CustomerSummaryDTOSchema.nullable(),
+    createdByDevice: SaleDeviceAuditDTOSchema.nullable().optional(),
+    updatedByDevice: SaleDeviceAuditDTOSchema.nullable().optional(),
+    items: z.array(SaleItemDTOSchema),
+    payments: z.array(PaymentDTOSchema),
+    receipt: PlatformSaleInspectionReceiptDTOSchema,
+});
+
+export const PlatformSaleInspectionDetailResponseSchema = z.object({
+    sale: PlatformSaleInspectionDetailDTOSchema,
+});
+
+export const PlatformCatalogInspectionTabSchema = z.enum(["products", "categories", "add-ons"]);
+
+export const PlatformCatalogStatusFilterSchema = z.enum(["all", "active", "inactive"]);
+
+export const PlatformCatalogInspectionQuerySchema = z.object({
+    tab: PlatformCatalogInspectionTabSchema.default("products"),
+    search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    status: PlatformCatalogStatusFilterSchema.default("all"),
+    page: positivePageSchema.default(1),
+    limit: organizationListLimitSchema.default(20),
+});
+
+export const PlatformCatalogCategorySummaryDTOSchema = z.object({
+    id: z.uuid("Invalid category id"),
+    name: z.string().trim().min(1),
+    sortOrder: z.number().int().nonnegative(),
+    status: CategoryStatusSchema,
+    productCount: nonNegativeIntSchema,
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformCatalogProductSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid product id"),
+    name: z.string().trim().min(1),
+    category: z.object({
+        id: z.uuid("Invalid category id"),
+        name: z.string().trim().min(1),
+    }),
+    price: nonNegativeMoneySchema,
+    discount: nonNegativeMoneySchema,
+    status: ProductStatusSchema,
+    productType: ProductTypeSchema,
+    productCode: z.string().nullable(),
+    productCodeKind: ProductCodeKindSchema.nullable(),
+    sortOrder: z.number().int().nonnegative(),
+    attachmentCount: nonNegativeIntSchema,
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformCatalogAddOnSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid add-on id"),
+    name: z.string().trim().min(1),
+    price: nonNegativeMoneySchema,
+    discount: nonNegativeMoneySchema,
+    status: AddOnStatusSchema,
+    attachmentCount: nonNegativeIntSchema,
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformCatalogListDTOSchema = z.object({
+    tab: PlatformCatalogInspectionTabSchema,
+    counts: z.object({
+        categories: nonNegativeIntSchema,
+        products: nonNegativeIntSchema,
+        addOns: nonNegativeIntSchema,
+    }),
+    categories: z.array(PlatformCatalogCategorySummaryDTOSchema),
+    products: z.array(PlatformCatalogProductSummaryDTOSchema),
+    addOns: z.array(PlatformCatalogAddOnSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformCatalogAttachmentInspectionDTOSchema = z.object({
+    id: z.uuid("Invalid attachment id"),
+    addOnId: z.uuid("Invalid add-on id"),
+    addOnName: z.string().trim().min(1),
+    selectionCap: z.number().int().min(1),
+    status: ProductAddOnAttachmentStatusSchema,
+    addOnPrice: nonNegativeMoneySchema,
+    addOnDiscount: nonNegativeMoneySchema,
+    addOnStatus: AddOnStatusSchema,
+});
+
+export const PlatformCatalogProductDetailDTOSchema = PlatformCatalogProductSummaryDTOSchema.extend({
+    hasImage: z.boolean(),
+    attachments: z.array(PlatformCatalogAttachmentInspectionDTOSchema),
+});
+
+export const PlatformCatalogProductDetailResponseSchema = z.object({
+    product: PlatformCatalogProductDetailDTOSchema,
+});
+
+export const PlatformCatalogCategoryDetailDTOSchema = PlatformCatalogCategorySummaryDTOSchema.extend({
+    products: z.array(PlatformCatalogProductSummaryDTOSchema),
+});
+
+export const PlatformCatalogCategoryDetailResponseSchema = z.object({
+    category: PlatformCatalogCategoryDetailDTOSchema,
+});
+
+export const PlatformCatalogProductAttachmentInspectionDTOSchema = z.object({
+    id: z.uuid("Invalid attachment id"),
+    productId: z.uuid("Invalid product id"),
+    productName: z.string().trim().min(1),
+    selectionCap: z.number().int().min(1),
+    status: ProductAddOnAttachmentStatusSchema,
+});
+
+export const PlatformCatalogAddOnDetailDTOSchema = PlatformCatalogAddOnSummaryDTOSchema.extend({
+    attachments: z.array(PlatformCatalogProductAttachmentInspectionDTOSchema),
+});
+
+export const PlatformCatalogAddOnDetailResponseSchema = z.object({
+    addOn: PlatformCatalogAddOnDetailDTOSchema,
+});
+
+export const PlatformCustomerInspectionQuerySchema = z.object({
+    search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    status: CustomerListStatusSchema.default("all"),
+    sort: CustomerSortSchema.default("newest"),
+    page: positivePageSchema.default(1),
+    limit: organizationListLimitSchema.default(20),
+});
+
+export const PlatformCustomerInspectionSummaryDTOSchema = CustomerSummaryDTOSchema.extend({
+    createdAt: dtoDateSchema,
+});
+
+export const PlatformCustomerInspectionListDTOSchema = z.object({
+    customers: z.array(PlatformCustomerInspectionSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PLATFORM_CUSTOMER_INSPECTION_SALE_LIMIT = 50;
+
+export const PlatformCustomerInspectionDetailDTOSchema = CustomerSummaryDTOSchema.extend({
+    marketingOptedOut: z.boolean(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+    ledger: z.array(CustomerLedgerEntryDTOSchema),
+    sales: z.array(PlatformSaleInspectionSummaryDTOSchema),
+});
+
+export const PlatformCustomerInspectionDetailResponseSchema = z.object({
+    customer: PlatformCustomerInspectionDetailDTOSchema,
+});
+
+export const PlatformReportInspectionQuerySchema = z
+    .object({
+        storeId: z.uuid("Invalid store id").optional(),
+        startDate: calendarDateSchema.optional(),
+        endDate: calendarDateSchema.optional(),
+    })
+    .superRefine((value, ctx) => {
+        if (value.startDate && value.endDate && value.startDate > value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Start date must be before or equal to end date",
+            });
+        }
+    });
+
+export const PlatformReportDateRangeDTOSchema = z.object({
+    startDate: z.string().date().nullable(),
+    endDate: z.string().date().nullable(),
+    label: z.string().trim().min(1),
+    timezone: z.literal(PLATFORM_REPORTING_TIMEZONE),
+});
+
+export const PlatformReportProductSalesDTOSchema = z.object({
+    products: z.array(ProductSalesSummaryDTOSchema),
+    productCount: nonNegativeIntSchema,
+    totalQuantitySold: nonNegativeIntSchema,
+});
+
+export const PlatformReportInspectionDTOSchema = z.object({
+    dateRange: PlatformReportDateRangeDTOSchema,
+    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
+    productSales: PlatformReportProductSalesDTOSchema,
+});
+
+export const PlatformTableInspectionStateFilterSchema = z.enum([
+    "all",
+    ...ServiceTableStateSchema.options,
+]);
+
+export const PlatformTableInspectionSortSchema = z.enum([
+    "table_asc",
+    "table_desc",
+    "store_asc",
+    "state",
+]);
+
+export const PlatformTableInspectionQuerySchema = z.object({
+    storeId: z.uuid("Invalid store id").optional(),
+    search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    state: PlatformTableInspectionStateFilterSchema.default("all"),
+    page: positivePageSchema.default(1),
+    limit: organizationListLimitSchema.default(20),
+    sort: PlatformTableInspectionSortSchema.default("table_asc"),
+});
+
+export const PlatformTableInspectionAreaDTOSchema = z.object({
+    id: z.uuid("Invalid area id"),
+    title: z.string().trim().min(1),
+});
+
+export const PlatformTableInspectionCurrentSaleDTOSchema = z.object({
+    id: z.uuid("Invalid sale id"),
+    saleNumber: z.string().nullable(),
+    status: SaleStatusSchema,
+    paymentStatus: PaymentStatusSchema,
+    grandTotal: nonNegativeMoneySchema,
+    dueTotal: nonNegativeMoneySchema,
+});
+
+export const PlatformTableInspectionSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid table id"),
+    tableLabel: z.string().trim().min(1),
+    capacity: z.number().int().positive().nullable(),
+    position: ServiceTablePositionSchema,
+    state: ServiceTableStateSchema,
+    store: PlatformSaleInspectionStoreDTOSchema,
+    serviceArea: PlatformTableInspectionAreaDTOSchema.nullable(),
+    currentSaleId: z.uuid("Invalid current sale id").nullable(),
+    currentSaleTotal: z.number().nullable(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformTableInspectionListDTOSchema = z.object({
+    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
+    tables: z.array(PlatformTableInspectionSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformTableInspectionDetailDTOSchema = PlatformTableInspectionSummaryDTOSchema.extend({
+    currentSale: PlatformTableInspectionCurrentSaleDTOSchema.nullable(),
+});
+
+export const PlatformTableInspectionDetailResponseSchema = z.object({
+    table: PlatformTableInspectionDetailDTOSchema,
+});
+
+export const PlatformPurchaseStatusFilterSchema = z.enum(["all", ...PurchaseStatusSchema.options]);
+
+export const PlatformPurchaseInspectionSortSchema = z.enum(["newest", "oldest", "highest", "lowest"]);
+
+export const PlatformPurchaseInspectionQuerySchema = z
+    .object({
+        storeId: z.uuid("Invalid store id").optional(),
+        search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+        status: PlatformPurchaseStatusFilterSchema.default("all"),
+        startDate: calendarDateSchema.optional(),
+        endDate: calendarDateSchema.optional(),
+        page: positivePageSchema.default(1),
+        limit: organizationListLimitSchema.default(20),
+        sort: PlatformPurchaseInspectionSortSchema.default("newest"),
+    })
+    .superRefine((value, ctx) => {
+        if (value.startDate && value.endDate && value.startDate > value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Start date must be before or equal to end date",
+            });
+        }
+    });
+
+export const PlatformPurchaseInspectionSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid purchase id"),
+    purchaseDate: z.string(),
+    supplierName: z.string().trim().min(1),
+    invoiceNumber: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    totalAmount: nonNegativeMoneySchema,
+    status: PurchaseStatusSchema,
+    itemCount: nonNegativeIntSchema,
+    itemsSummary: z.string().nullable().optional(),
+    voidedAt: dtoDateSchema.nullable().optional(),
+    voidReason: z.string().nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+    store: PlatformSaleInspectionStoreDTOSchema,
+});
+
+export const PlatformPurchaseInspectionListDTOSchema = z.object({
+    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
+    purchases: z.array(PlatformPurchaseInspectionSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformPurchaseInspectionDetailDTOSchema = PlatformPurchaseInspectionSummaryDTOSchema.extend({
+    items: z.array(PurchaseItemDTOSchema),
+});
+
+export const PlatformPurchaseInspectionDetailResponseSchema = z.object({
+    purchase: PlatformPurchaseInspectionDetailDTOSchema,
+});
+
+export const PlatformWhatsAppInspectionStoreDTOSchema = z.object({
+    id: z.uuid("Invalid store id"),
+    name: z.string().trim().min(1),
+});
+
+export const PlatformWhatsAppAccountInspectionDTOSchema = z.object({
+    id: z.uuid("Invalid WhatsApp account id"),
+    provider: WhatsAppProviderSchema,
+    phoneNumber: phoneSchema,
+    status: WhatsAppAccountStatusSchema,
+    lastConnectedAt: dtoDateSchema.nullable(),
+    lastSeenAt: dtoDateSchema.nullable(),
+    lastErrorCode: z.string().nullable(),
+    defaultStore: PlatformWhatsAppInspectionStoreDTOSchema.nullable(),
+    assignedStores: z.array(PlatformWhatsAppInspectionStoreDTOSchema),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformWhatsAppTemplateInspectionDTOSchema = z.object({
+    kind: WhatsAppMessageTemplateKindSchema,
+    name: z.string().trim().min(1),
+    isActive: z.boolean(),
+    isDefault: z.boolean(),
+});
+
+export const PlatformWhatsAppMessageLinkInspectionDTOSchema = z.object({
+    key: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    type: StoreMessageLinkTypeSchema,
+    isActive: z.boolean(),
+});
+
+export const PlatformWhatsAppStoreConfigInspectionDTOSchema = z.object({
+    store: PlatformWhatsAppInspectionStoreDTOSchema,
+    accountId: z.uuid("Invalid WhatsApp account id").nullable(),
+    accountStatus: WhatsAppAccountStatusSchema.nullable(),
+    templates: z.array(PlatformWhatsAppTemplateInspectionDTOSchema),
+    messageLinks: z.array(PlatformWhatsAppMessageLinkInspectionDTOSchema),
+});
+
+export const PlatformWhatsAppInspectionDTOSchema = z.object({
+    accounts: z.array(PlatformWhatsAppAccountInspectionDTOSchema),
+    storeConfigs: z.array(PlatformWhatsAppStoreConfigInspectionDTOSchema),
+});
+
+export const formatPlatformReportDateRangeLabel = (
+    startDate: string | null,
+    endDate: string | null,
+): string => {
+    if (!startDate && !endDate) return "All dates";
+    if (startDate && endDate && startDate === endDate) return startDate;
+    if (startDate && endDate) return `${startDate} to ${endDate}`;
+    return startDate ?? endDate ?? "All dates";
+};
+
+export const FUTURE_BILLING_INSPECTION_DATE_MESSAGE = "Billing inspection dates cannot be in the future";
+
+export type ResolvedBillingInspectionDateRange = {
+    startDate: string | null;
+    endDate: string | null;
+    startAt: Date | null;
+    endAt: Date | null;
+};
+
+export const FUTURE_REPORT_INSPECTION_DATE_MESSAGE = FUTURE_BILLING_INSPECTION_DATE_MESSAGE;
+
+export const resolveBillingInspectionDateRange = (
+    query: Pick<
+        z.output<typeof PlatformBillingInspectionQuerySchema | typeof PlatformReportInspectionQuerySchema>,
+        "startDate" | "endDate"
+    >,
+    now: Date,
+): { ok: true; range: ResolvedBillingInspectionDateRange } | { ok: false; message: string } => {
+    if (!query.startDate && !query.endDate) {
+        return {
+            ok: true,
+            range: { startDate: null, endDate: null, startAt: null, endAt: null },
+        };
+    }
+
+    const today = kolkataCalendarDate(now);
+    const startDate = query.startDate ?? query.endDate ?? "";
+    const endDate = query.endDate ?? query.startDate ?? "";
+
+    if (startDate > today || endDate > today) {
+        return { ok: false, message: FUTURE_BILLING_INSPECTION_DATE_MESSAGE };
+    }
+
+    return {
+        ok: true,
+        range: {
+            startDate,
+            endDate,
+            startAt: kolkataDayStartUtc(startDate),
+            endAt: kolkataDayStartUtc(addCalendarDays(endDate, 1)),
+        },
+    };
+};
+
+export const resolveReportInspectionDateRange = resolveBillingInspectionDateRange;
 
 export const kolkataCalendarDate = (now: Date): string =>
     new Intl.DateTimeFormat("en-CA", { timeZone: PLATFORM_REPORTING_TIMEZONE }).format(now);
