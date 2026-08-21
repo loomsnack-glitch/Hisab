@@ -335,7 +335,11 @@ const SaleDetailDialog = ({
                                 <DialogHeader className="min-w-0 flex-1 space-y-3">
                                     <div className="flex flex-wrap items-end gap-3">
                                         <div className="min-w-0">
-                                            {sale.tokenNumber ? (
+                                            {sale.kotNumbers && sale.kotNumbers.length > 0 ? (
+                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+                                                    Token {sale.kotNumbers.join(", ")}
+                                                </p>
+                                            ) : sale.tokenNumber ? (
                                                 <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
                                                     Token {sale.tokenNumber}
                                                 </p>

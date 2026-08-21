@@ -414,6 +414,12 @@ mock.module("./kot.repository", () => ({
     createKot,
     getKotBySaleId,
     getKotById,
+    getKotNumbersBySaleId: mock(
+        async (_organizationId: string, _storeId: string, saleId: string) =>
+            createdKots
+                .filter((kot) => kot.saleId === saleId)
+                .map((kot) => String(kot.kotNumber)),
+    ),
     createTableOrder,
     getTableOrderById,
     lockActiveTableOrderForTable,
@@ -846,5 +852,54 @@ describe("Table Order KOT workflow", () => {
         expect(checkedOut.data?.sale?.items.map((item) => item.unitPriceSnapshot)).toEqual([100, 80]);
         expect(checkedOut.data?.sale?.grandTotal).toBe(170);
         expect(createdSales).toHaveLength(1);
+    });
+
+    test("merges same product and configuration across KOTs and lists all KOT Numbers on the Sale", async () => {
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 2, addOns: [] }],
+        });
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 3, addOns: [] }],
+        });
+
+        const checkedOut = await kotService.checkoutTableOrderForDevice(deviceSession, tableId, {
+            requestId: "95959595-9595-4959-8959-959595959595",
+            payments: [],
+        });
+
+        expect(checkedOut.status).toBe("success");
+        expect(checkedOut.data?.sale?.items).toHaveLength(1);
+        expect(checkedOut.data?.sale?.items[0]?.productId).toBe(productId);
+        expect(checkedOut.data?.sale?.items[0]?.quantity).toBe(5);
+        expect(checkedOut.data?.sale?.items[0]?.lineTotal).toBe(450);
+        expect(checkedOut.data?.sale?.grandTotal).toBe(450);
+        expect(checkedOut.data?.sale?.kotNumbers).toEqual(["KOT-001", "KOT-002"]);
+    });
+
+    test("keeps the same product on separate Sale lines when configurations differ", async () => {
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        const checkedOut = await kotService.checkoutTableOrderForDevice(deviceSession, tableId, {
+            requestId: "96969696-9696-4969-8969-969696969696",
+            payments: [],
+        });
+
+        expect(checkedOut.status).toBe("success");
+        expect(checkedOut.data?.sale?.items).toHaveLength(2);
+        expect(checkedOut.data?.sale?.items.map((item) => item.quantity)).toEqual([1, 1]);
+        expect(checkedOut.data?.sale?.kotNumbers).toEqual(["KOT-001", "KOT-002"]);
     });
 });

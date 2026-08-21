@@ -324,6 +324,10 @@ mock.module("./billing.repository", () => ({
     getBundleComponentAddOnUsageRollups,
 }));
 
+mock.module("@/modules/tenant/kot/kot.repository", () => ({
+    getKotNumbersBySaleId: mock(async () => []),
+}));
+
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
 const billingService = await import("./billing.service");
 

@@ -236,6 +236,7 @@ export const SaleSummaryDTOSchema = z.object({
   tokenNumber: z.string().nullable().optional(),
   tokenSequenceNumber: z.number().int().nullable().optional(),
   tokenPeriodKey: z.string().nullable().optional(),
+  kotNumbers: z.array(z.string().min(1)).optional(),
   customerId: z.uuid("Invalid customer id").nullable().optional(),
   serviceTableId: z.uuid("Invalid service table id").nullable().optional(),
   customerNameSnapshot: nameSchema.nullable().optional(),

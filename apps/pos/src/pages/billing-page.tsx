@@ -3155,7 +3155,11 @@ const BillingPage = ({
                                                         <div className="min-w-0 flex-1 pr-2">
                                                             <div className="flex min-w-0 items-center gap-2">
                                                                 <p className="shrink-0 whitespace-nowrap text-xs font-bold text-amber-500 dark:text-amber-400">
-                                                                    {sale.tokenNumber ? `Token ${sale.tokenNumber} · ` : ""}
+                                                                    {sale.kotNumbers && sale.kotNumbers.length > 0
+                                                                        ? `Token ${sale.kotNumbers.join(", ")} · `
+                                                                        : sale.tokenNumber
+                                                                          ? `Token ${sale.tokenNumber} · `
+                                                                          : ""}
                                                                     {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft"}
                                                                 </p>
                                                                 <p className="min-w-0 truncate text-xs font-semibold text-foreground/80">

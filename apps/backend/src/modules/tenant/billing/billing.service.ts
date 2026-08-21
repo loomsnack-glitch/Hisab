@@ -42,6 +42,7 @@ import {
 } from "@repo/types";
 import * as billingRepository from "./billing.repository";
 import * as tableRepository from "@/modules/tenant/table-service/table-service.repository";
+import * as kotRepository from "@/modules/tenant/kot/kot.repository";
 import { decodeSalesCursor } from "./sales-pagination";
 import { DEFAULT_SALE_NUMBER_TIMEZONE } from "./sale-numbering";
 
@@ -575,11 +576,18 @@ const buildSaleDetails = async (
   const items = await billingRepository.getSaleItemsBySaleId(saleId, tx);
   const payments = await billingRepository.getPaymentsBySaleId(saleId, tx);
   const lineDiscountTotal = getSaleLineDiscountTotal(items);
+  const kotNumbers = await kotRepository.getKotNumbersBySaleId(
+    organizationId,
+    storeId,
+    saleId,
+    tx,
+  );
 
   return {
     ...sale,
     items,
     payments,
+    ...(kotNumbers.length > 0 ? { kotNumbers } : {}),
     orderDiscountAmount: deriveOrderDiscountAmount(
       sale.discountTotal,
       lineDiscountTotal,

@@ -388,6 +388,24 @@ export const getKotBySaleId = async (
     return mapKot(result, await getKotItemsByKotId(String(result.id), tx));
 };
 
+export const getKotNumbersBySaleId = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<string[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT kot_number
+        FROM kots
+        WHERE sale_id = ${saleId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+        ORDER BY created_at ASC, kot_sequence_number ASC
+    `;
+    return results.map((row) => String(row.kot_number));
+};
+
 export const getKotsByTableOrderId = async (
     organizationId: string,
     storeId: string,

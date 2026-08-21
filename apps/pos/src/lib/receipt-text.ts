@@ -182,7 +182,9 @@ export const buildReceiptText = (
     storePhone
   )
     lines.push(separator);
-  if (sale.tokenNumber) {
+  if (sale.kotNumbers && sale.kotNumbers.length > 0) {
+    appendWrappedText(lines, `Token No: ${sale.kotNumbers.join(", ")}`, width);
+  } else if (sale.tokenNumber) {
     appendWrappedText(lines, `Token No: ${sale.tokenNumber}`, width);
   }
   appendWrappedText(

@@ -26,6 +26,92 @@ import {
 
 const moneyFrom = (value: number | string | null | undefined) => Number(value ?? 0);
 
+const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+const configurationKeyFor = (productId: string, configurationSignature: string) =>
+    `${productId}::${configurationSignature}`;
+
+const bundleComponentKeyFor = (
+    choiceGroupId: string | null | undefined,
+    componentProductId: string,
+) => `${choiceGroupId ?? ""}::${componentProductId}`;
+
+const mergeKotItemsByConfiguration = (items: KotItemDTO[]): KotItemDTO[] => {
+    const mergedByKey = new Map<string, KotItemDTO>();
+
+    for (const item of items) {
+        const key = configurationKeyFor(item.productId, item.configurationSignature ?? "");
+        const existing = mergedByKey.get(key);
+        if (!existing) {
+            mergedByKey.set(key, {
+                ...item,
+                addOns: item.addOns.map((addOn) => ({ ...addOn })),
+                bundleComponents: item.bundleComponents.map((component) => ({
+                    ...component,
+                    addOns: component.addOns.map((addOn) => ({ ...addOn })),
+                })),
+            });
+            continue;
+        }
+
+        existing.quantity = Number(existing.quantity) + Number(item.quantity);
+        existing.discountAmount = roundMoney(
+            moneyFrom(existing.discountAmount) + moneyFrom(item.discountAmount),
+        );
+        existing.lineSubtotal = roundMoney(
+            moneyFrom(existing.lineSubtotal) + moneyFrom(item.lineSubtotal),
+        );
+        existing.lineTotal = roundMoney(moneyFrom(existing.lineTotal) + moneyFrom(item.lineTotal));
+
+        for (const addOn of item.addOns) {
+            const matched = existing.addOns.find((row) => row.addOnId === addOn.addOnId);
+            if (!matched) {
+                existing.addOns.push({ ...addOn });
+                continue;
+            }
+            matched.totalQuantity = Number(matched.totalQuantity) + Number(addOn.totalQuantity);
+            matched.discountAmount = roundMoney(
+                moneyFrom(matched.discountAmount) + moneyFrom(addOn.discountAmount),
+            );
+            matched.lineSubtotal = roundMoney(
+                moneyFrom(matched.lineSubtotal) + moneyFrom(addOn.lineSubtotal),
+            );
+            matched.lineTotal = roundMoney(moneyFrom(matched.lineTotal) + moneyFrom(addOn.lineTotal));
+        }
+
+        for (const component of item.bundleComponents) {
+            const componentKey = bundleComponentKeyFor(
+                component.choiceGroupId,
+                component.componentProductId,
+            );
+            const matched = existing.bundleComponents.find(
+                (row) =>
+                    bundleComponentKeyFor(row.choiceGroupId, row.componentProductId) === componentKey,
+            );
+            if (!matched) {
+                existing.bundleComponents.push({
+                    ...component,
+                    addOns: component.addOns.map((addOn) => ({ ...addOn })),
+                });
+                continue;
+            }
+            matched.totalQuantity =
+                Number(matched.totalQuantity) + Number(component.totalQuantity);
+            for (const addOn of component.addOns) {
+                const matchedAddOn = matched.addOns.find((row) => row.addOnId === addOn.addOnId);
+                if (!matchedAddOn) {
+                    matched.addOns.push({ ...addOn });
+                    continue;
+                }
+                matchedAddOn.totalQuantity =
+                    Number(matchedAddOn.totalQuantity) + Number(addOn.totalQuantity);
+            }
+        }
+    }
+
+    return [...mergedByKey.values()];
+};
+
 const mapSaleItemsToKotItems = (sale: SaleDetailDTO, kotId: string): CreateKotItemREPO[] =>
     sale.items.map((item) => {
         const kotItemId = crypto.randomUUID();
@@ -99,7 +185,13 @@ const parcelKotResponse = (
     created: boolean,
 ): ServiceResponse<ParcelKotResponse> => ({
     status: "success",
-    data: { kot, sale },
+    data: {
+        kot,
+        sale: {
+            ...sale,
+            kotNumbers: [kot.kotNumber],
+        },
+    },
     message: created ? "Parcel KOT generated successfully" : "Parcel KOT fetched successfully",
     code: created ? STATUS_CODES.CREATED : STATUS_CODES.SUCCESS,
 });
@@ -1063,7 +1155,9 @@ export const checkoutTableOrderForDevice = async (
                 return { kind: "conflict" as const };
             }
 
-            const remainingItems = tableOrder.kots.flatMap((kot) => kot.items);
+            const remainingItems = mergeKotItemsByConfiguration(
+                tableOrder.kots.flatMap((kot) => kot.items),
+            );
             if (remainingItems.length === 0) {
                 return { kind: "empty" as const };
             }
@@ -1220,10 +1314,15 @@ export const checkoutTableOrderForDevice = async (
             };
         }
 
+        const sale = {
+            ...saleResponse.data.sale,
+            kotNumbers: result.tableOrder.kots.map((kot) => kot.kotNumber),
+        };
+
         return tableOrderWorkspace(
             result.table,
             result.tableOrder,
-            saleResponse.data.sale,
+            sale,
             "Table order checked out",
             STATUS_CODES.CREATED,
         );
