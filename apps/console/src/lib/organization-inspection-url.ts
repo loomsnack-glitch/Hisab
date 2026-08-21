@@ -2,6 +2,7 @@ import type {
     PaymentMethod,
     PaymentStatus,
     PlatformBillingInspectionQueryJSON,
+    PlatformCustomerInspectionQueryJSON,
     SaleStatus,
     SalesSort,
 } from "@repo/types";
@@ -32,6 +33,8 @@ export type OrganizationInspectionLocation =
     | { kind: "invalid"; reason: "missing-organization" | "unknown-section" };
 
 export type BillingInspectionFilters = PlatformBillingInspectionQueryJSON;
+
+export type CustomerInspectionFilters = PlatformCustomerInspectionQueryJSON;
 
 export type CatalogInspectionTab = "products" | "categories" | "add-ons";
 
@@ -177,6 +180,52 @@ export const billingInspectionSearchString = (filters: BillingInspectionFilters 
     return serialized ? `?${serialized}` : "";
 };
 
+const customerFilterKeys = ["search", "status", "sort", "page", "limit"] as const;
+
+export const parseCustomerInspectionSearch = (search: string): CustomerInspectionFilters => {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const filters: CustomerInspectionFilters = {};
+
+    const searchValue = params.get("search")?.trim();
+    if (searchValue) filters.search = searchValue;
+
+    const status = params.get("status");
+    if (status === "all" || status === "active" || status === "inactive" || status === "due" || status === "no_due") {
+        filters.status = status;
+    }
+
+    const sort = params.get("sort");
+    if (
+        sort === "newest"
+        || sort === "oldest"
+        || sort === "name_asc"
+        || sort === "name_desc"
+        || sort === "highest_due"
+        || sort === "lowest_due"
+    ) {
+        filters.sort = sort;
+    }
+
+    const page = params.get("page");
+    if (page) filters.page = Number(page);
+
+    const limit = params.get("limit");
+    if (limit) filters.limit = Number(limit);
+
+    return filters;
+};
+
+export const customerInspectionSearchString = (filters: CustomerInspectionFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const key of customerFilterKeys) {
+        const value = filters[key];
+        if (value === undefined || value === null || value === "") continue;
+        params.set(key, String(value));
+    }
+    const serialized = params.toString();
+    return serialized ? `?${serialized}` : "";
+};
+
 export const isOrganizationsPath = (pathname: string) =>
     pathname === ORGANIZATIONS_PREFIX || pathname.startsWith(`${ORGANIZATIONS_PREFIX}/`);
 
@@ -186,7 +235,7 @@ export const organizationInspectionPath = (
     organizationId: string,
     section: OrganizationInspectionSection = "overview",
     resourceId?: string,
-    billingFilters?: BillingInspectionFilters,
+    sectionFilters?: BillingInspectionFilters | CustomerInspectionFilters,
 ) => {
     let pathname: string;
     if (section === "overview" && !resourceId) {
@@ -198,7 +247,11 @@ export const organizationInspectionPath = (
     }
 
     if (section === "billing") {
-        return `${pathname}${billingInspectionSearchString(billingFilters)}`;
+        return `${pathname}${billingInspectionSearchString(sectionFilters as BillingInspectionFilters | undefined)}`;
+    }
+
+    if (section === "customers") {
+        return `${pathname}${customerInspectionSearchString(sectionFilters as CustomerInspectionFilters | undefined)}`;
     }
 
     return pathname;

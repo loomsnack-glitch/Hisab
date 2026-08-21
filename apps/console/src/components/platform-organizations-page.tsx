@@ -10,6 +10,8 @@ import {
     getPlatformOrganizationCatalogProduct as getPlatformOrganizationCatalogProductRequest,
     getPlatformOrganizationCatalogCategory as getPlatformOrganizationCatalogCategoryRequest,
     getPlatformOrganizationCatalogAddOn as getPlatformOrganizationCatalogAddOnRequest,
+    getPlatformOrganizationCustomers as getPlatformOrganizationCustomersRequest,
+    getPlatformOrganizationCustomer as getPlatformOrganizationCustomerRequest,
     getPlatformOrganizations as getPlatformOrganizationsRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
@@ -55,6 +57,8 @@ type PlatformOrganizationsPageProps = {
     getPlatformOrganizationCatalogProduct?: typeof getPlatformOrganizationCatalogProductRequest;
     getPlatformOrganizationCatalogCategory?: typeof getPlatformOrganizationCatalogCategoryRequest;
     getPlatformOrganizationCatalogAddOn?: typeof getPlatformOrganizationCatalogAddOnRequest;
+    getPlatformOrganizationCustomers?: typeof getPlatformOrganizationCustomersRequest;
+    getPlatformOrganizationCustomer?: typeof getPlatformOrganizationCustomerRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
     initialSort?: DirectorySort;
@@ -133,6 +137,8 @@ const PlatformOrganizationsPage = ({
     getPlatformOrganizationCatalogProduct = getPlatformOrganizationCatalogProductRequest,
     getPlatformOrganizationCatalogCategory = getPlatformOrganizationCatalogCategoryRequest,
     getPlatformOrganizationCatalogAddOn = getPlatformOrganizationCatalogAddOnRequest,
+    getPlatformOrganizationCustomers = getPlatformOrganizationCustomersRequest,
+    getPlatformOrganizationCustomer = getPlatformOrganizationCustomerRequest,
     initialSearch = "",
     initialActivity = "all",
     initialSort = "recent_activity",
@@ -255,6 +261,8 @@ const PlatformOrganizationsPage = ({
                 getPlatformOrganizationCatalogProduct={getPlatformOrganizationCatalogProduct}
                 getPlatformOrganizationCatalogCategory={getPlatformOrganizationCatalogCategory}
                 getPlatformOrganizationCatalogAddOn={getPlatformOrganizationCatalogAddOn}
+                getPlatformOrganizationCustomers={getPlatformOrganizationCustomers}
+                getPlatformOrganizationCustomer={getPlatformOrganizationCustomer}
             />
         );
     }

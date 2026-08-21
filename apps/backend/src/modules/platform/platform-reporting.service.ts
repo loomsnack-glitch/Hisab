@@ -9,6 +9,9 @@ import {
     type PlatformCatalogInspectionQuerySVC,
     type PlatformCatalogListResponse,
     type PlatformCatalogProductDetailResponse,
+    type PlatformCustomerInspectionDetailResponse,
+    type PlatformCustomerInspectionListResponse,
+    type PlatformCustomerInspectionQuerySVC,
     type PlatformDashboardQuerySVC,
     type PlatformDashboardResponse,
     type PlatformOrganizationDetailQuerySVC,
@@ -41,6 +44,8 @@ type PlatformReportingRepository = Pick<
     | "getOrganizationCatalogAddOn"
     | "listOrganizationSales"
     | "getOrganizationSaleContext"
+    | "listOrganizationCustomers"
+    | "getOrganizationCustomerContext"
 >;
 
 type BillingReadRepository = Pick<
@@ -778,6 +783,96 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                         storeAddress: context.storeAddress,
                         previewText: receiptPreview,
                     },
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    listOrganizationCustomers: async (
+        organizationId: string,
+        query: PlatformCustomerInspectionQuerySVC,
+    ): Promise<ServiceResponse<PlatformCustomerInspectionListResponse | null>> => {
+        const customers = await dependencies.repository.listOrganizationCustomers({
+            organizationId,
+            search: query.search ?? "",
+            status: query.status,
+            sort: query.sort,
+            page: query.page,
+            limit: query.limit,
+        });
+
+        if (!customers) {
+            return {
+                status: "error",
+                message: "Organization not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Customers retrieved successfully",
+            data: {
+                customers: customers.customers.map((customer) => ({
+                    id: customer.id,
+                    name: customer.name,
+                    phone: customer.phone,
+                    balance: customer.balance,
+                    isActive: customer.isActive,
+                    createdAt: customer.createdAt,
+                })),
+                pagination: {
+                    page: query.page,
+                    limit: query.limit,
+                    totalCount: customers.totalCount,
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationCustomer: async (
+        organizationId: string,
+        customerId: string,
+    ): Promise<ServiceResponse<PlatformCustomerInspectionDetailResponse | null>> => {
+        const customer = await dependencies.repository.getOrganizationCustomerContext(organizationId, customerId);
+        if (!customer) {
+            return {
+                status: "error",
+                message: "Customer not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Customer retrieved successfully",
+            data: {
+                customer: {
+                    id: customer.id,
+                    name: customer.name,
+                    phone: customer.phone,
+                    balance: customer.balance,
+                    isActive: customer.isActive,
+                    marketingOptedOut: customer.marketingOptedOut,
+                    createdAt: customer.createdAt,
+                    updatedAt: customer.updatedAt,
+                    ledger: customer.ledger.map((entry) => ({
+                        id: entry.id,
+                        organizationId,
+                        customerId: customer.id,
+                        saleId: entry.saleId,
+                        paymentId: entry.paymentId,
+                        entryType: entry.entryType,
+                        amount: entry.amount,
+                        balanceAfter: entry.balanceAfter,
+                        notes: entry.notes,
+                        createdAt: entry.createdAt,
+                    })),
+                    sales: customer.sales.map(toSaleInspectionSummary),
                 },
             },
             code: STATUS_CODES.SUCCESS,

@@ -15,6 +15,9 @@ import {
     PlatformCatalogInspectionQuerySchema,
     PlatformCatalogListDTOSchema,
     PlatformCatalogProductDetailResponseSchema,
+    PlatformCustomerInspectionDetailResponseSchema,
+    PlatformCustomerInspectionListDTOSchema,
+    PlatformCustomerInspectionQuerySchema,
     PlatformSaleInspectionDetailResponseSchema,
     PlatformSaleInspectionListDTOSchema,
     FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
@@ -586,5 +589,85 @@ describe("Platform Catalog inspection contracts", () => {
         expect(JSON.stringify({ list, product, addOn })).not.toContain("password");
         expect(JSON.stringify({ list, product, addOn })).not.toContain("token");
         expect(JSON.stringify({ list, product, addOn })).not.toContain("deviceSecret");
+    });
+
+    test("accepts Customer inspection query and response contracts without secrets", () => {
+        expect(PlatformCustomerInspectionQuerySchema.parse({})).toEqual({
+            status: "all",
+            sort: "newest",
+            page: 1,
+            limit: 20,
+        });
+        expect(PlatformCustomerInspectionQuerySchema.parse({
+            search: "Anita",
+            status: "due",
+            sort: "highest_due",
+            page: "2",
+            limit: "10",
+        })).toEqual({
+            search: "Anita",
+            status: "due",
+            sort: "highest_due",
+            page: 2,
+            limit: 10,
+        });
+        expect(PlatformCustomerInspectionQuerySchema.safeParse({ page: "0" }).success).toBe(false);
+
+        const list = PlatformCustomerInspectionListDTOSchema.parse({
+            customers: [{
+                id: "cccccccc-1111-4111-8111-ccccccccccc1",
+                name: "Anita Rao",
+                phone: "+919800000201",
+                balance: 0,
+                isActive: true,
+                createdAt: "2026-02-01T10:00:00.000Z",
+            }],
+            pagination: { page: 1, limit: 20, totalCount: 1 },
+        });
+        const detail = PlatformCustomerInspectionDetailResponseSchema.parse({
+            customer: {
+                id: "cccccccc-2222-4222-8222-ccccccccccc2",
+                name: "Dev Patel",
+                phone: "+919800000202",
+                balance: 25,
+                isActive: true,
+                marketingOptedOut: true,
+                createdAt: "2026-03-01T10:00:00.000Z",
+                updatedAt: "2026-08-18T10:00:00.000Z",
+                ledger: [{
+                    id: "a1111111-1111-4111-8111-a11111111111",
+                    organizationId: "33333333-3333-4333-8333-333333333333",
+                    customerId: "cccccccc-2222-4222-8222-ccccccccccc2",
+                    saleId: "b6666666-6666-4666-8666-b66666666666",
+                    entryType: "sale",
+                    amount: 25,
+                    balanceAfter: 25,
+                    createdAt: "2026-08-19T10:00:00.000Z",
+                }],
+                sales: [{
+                    id: "b6666666-6666-4666-8666-b66666666666",
+                    saleNumber: "13",
+                    status: "completed",
+                    paymentStatus: "partial",
+                    grandTotal: 75,
+                    paidTotal: 50,
+                    dueTotal: 25,
+                    createdAt: "2026-08-18T10:00:00.000Z",
+                    committedAt: "2026-08-18T10:00:00.000Z",
+                    voidedAt: null,
+                    itemCount: 2,
+                    itemsSummary: "Tea, Snacks",
+                    paymentMethods: "cash",
+                    customerName: "Dev Patel",
+                    store: { id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" },
+                }],
+            },
+        });
+
+        expect(list.customers[0]?.name).toBe("Anita Rao");
+        expect(detail.customer.ledger[0]?.entryType).toBe("sale");
+        expect(JSON.stringify({ list, detail })).not.toContain("password");
+        expect(JSON.stringify({ list, detail })).not.toContain("token");
+        expect(JSON.stringify({ list, detail })).not.toContain("deviceSecret");
     });
 });

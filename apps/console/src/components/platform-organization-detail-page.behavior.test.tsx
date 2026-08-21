@@ -9,6 +9,9 @@ import type {
     PlatformBillingInspectionQueryJSON,
     PlatformCatalogProductDetailResponse,
     PlatformCatalogListResponse,
+    PlatformCustomerInspectionDetailResponse,
+    PlatformCustomerInspectionListResponse,
+    PlatformCustomerInspectionQueryJSON,
     PlatformOrganizationDetailQueryJSON,
     PlatformOrganizationDetailResponse,
     PlatformOrganizationListItemDTO,
@@ -143,6 +146,8 @@ const categoryMixed = "c1111111-1111-4111-8111-c11111111111";
 const productMixed = "d1111111-1111-4111-8111-d11111111111";
 const addOnMixed = "e1111111-1111-4111-8111-e11111111111";
 const attachmentMixed = "f1111111-1111-4111-8111-f11111111111";
+const customerMixedActive = "cccccccc-1111-4111-8111-ccccccccccc1";
+const customerMixedDue = "cccccccc-2222-4222-8222-ccccccccccc2";
 
 const successCatalog = (
     overrides: Partial<PlatformCatalogListResponse> = {},
@@ -210,6 +215,86 @@ const successCatalogProduct = (): ServiceResponse<PlatformCatalogProductDetailRe
         },
     },
     message: "Platform Organization Catalog Product retrieved successfully",
+    code: 200,
+});
+
+const successCustomers = (
+    overrides: Partial<PlatformCustomerInspectionListResponse> = {},
+): ServiceResponse<PlatformCustomerInspectionListResponse> => ({
+    status: "success",
+    data: {
+        customers: [
+            {
+                id: customerMixedActive,
+                name: "Anita Rao",
+                phone: "+919800000201",
+                balance: 0,
+                isActive: true,
+                createdAt: "2026-02-01T10:00:00.000Z",
+            },
+            {
+                id: customerMixedDue,
+                name: "Dev Patel",
+                phone: "+919800000202",
+                balance: 25,
+                isActive: true,
+                createdAt: "2026-03-01T10:00:00.000Z",
+            },
+        ],
+        pagination: { page: 1, limit: 20, totalCount: 2 },
+        ...overrides,
+    },
+    message: "Platform Organization Customers retrieved successfully",
+    code: 200,
+});
+
+const successCustomerDetail = (): ServiceResponse<PlatformCustomerInspectionDetailResponse> => ({
+    status: "success",
+    data: {
+        customer: {
+            id: customerMixedDue,
+            name: "Dev Patel",
+            phone: "+919800000202",
+            balance: 25,
+            isActive: true,
+            marketingOptedOut: true,
+            createdAt: "2026-03-01T10:00:00.000Z",
+            updatedAt: "2026-08-18T10:00:00.000Z",
+            ledger: [
+                {
+                    id: "a1111111-1111-4111-8111-a11111111111",
+                    organizationId: mixedBistro.id,
+                    customerId: customerMixedDue,
+                    saleId: mixedRecentSales[0]!.id,
+                    entryType: "sale",
+                    amount: 25,
+                    balanceAfter: 25,
+                    notes: null,
+                    createdAt: "2026-08-19T10:00:00.000Z",
+                },
+            ],
+            sales: [
+                {
+                    id: mixedRecentSales[0]!.id,
+                    saleNumber: "13",
+                    status: "completed",
+                    paymentStatus: "partial",
+                    grandTotal: 75,
+                    paidTotal: 50,
+                    dueTotal: 25,
+                    createdAt: "2026-08-18T10:00:00.000Z",
+                    committedAt: "2026-08-18T10:00:00.000Z",
+                    voidedAt: null,
+                    itemCount: 2,
+                    itemsSummary: "Tea, Snacks",
+                    paymentMethods: "cash",
+                    customerName: "Dev Patel",
+                    store: { id: mixedStores[0]!.id, name: "Front Hall" },
+                },
+            ],
+        },
+    },
+    message: "Platform Organization Customer retrieved successfully",
     code: 200,
 });
 
@@ -946,5 +1031,101 @@ describe("Organization Billing inspection", () => {
         );
         expect(await missingView.findByText("Bill was not found")).toBeTruthy();
         expect(missingView.queryByText("Tea")).toBeNull();
+    });
+});
+
+describe("Organization Customer inspection", () => {
+    const renderCustomerSection = (
+        path: string,
+        options: {
+            getPlatformOrganization?: LoadOrganization;
+            getPlatformOrganizationCustomers?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationCustomers"]>;
+            getPlatformOrganizationCustomer?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationCustomer"]>;
+        } = {},
+    ) => {
+        window.history.replaceState(null, "", path);
+        const inspection = parseOrganizationInspectionPath(path);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        return render(
+            <QueryClientProvider client={client}>
+                <PlatformOrganizationDetailPage
+                    organizationId={mixedBistro.id}
+                    section="customers"
+                    resourceId={inspection?.kind === "workspace" ? inspection.resourceId : undefined}
+                    onNavigate={(nextPath) => {
+                        window.history.pushState(null, "", nextPath);
+                    }}
+                    onBack={() => {}}
+                    getPlatformOrganization={options.getPlatformOrganization ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales))}
+                    getPlatformOrganizationCustomers={options.getPlatformOrganizationCustomers ?? (async () => successCustomers())}
+                    getPlatformOrganizationCustomer={options.getPlatformOrganizationCustomer ?? (async () => successCustomerDetail())}
+                />
+            </QueryClientProvider>,
+        );
+    };
+
+    test("shows a read-only customer list with filters and no tenant mutation controls", async () => {
+        const requested: PlatformCustomerInspectionQueryJSON[] = [];
+        const view = renderCustomerSection(
+            organizationInspectionPath(mixedBistro.id, "customers", undefined, { status: "due", search: "Dev" }),
+            {
+                getPlatformOrganizationCustomers: async (_organizationId, query = {}) => {
+                    requested.push(query);
+                    return successCustomers();
+                },
+            },
+        );
+
+        expect(await view.findByRole("heading", { name: "Customers" })).toBeTruthy();
+        expect(view.getByText("Anita Rao")).toBeTruthy();
+        expect(view.getByText("Dev Patel")).toBeTruthy();
+        expect(view.getByText(/not limited by the Dashboard reporting period/)).toBeTruthy();
+        expect(view.queryByText("Create Customer")).toBeNull();
+        expect(view.queryByText("Edit Customer")).toBeNull();
+        expect(view.queryByText("Collect Payment")).toBeNull();
+        expect(view.queryByText("Adjust Balance")).toBeNull();
+        await waitFor(() => {
+            expect(requested.some((query) => query.status === "due" && query.search === "Dev")).toBe(true);
+        });
+    });
+
+    test("opens customer detail with ledger and billing context from an Inspection URL", async () => {
+        const view = renderCustomerSection(
+            organizationInspectionPath(mixedBistro.id, "customers", customerMixedDue),
+        );
+
+        expect(await view.findByRole("heading", { name: "Dev Patel" })).toBeTruthy();
+        expect(view.getByText("Customer ledger")).toBeTruthy();
+        expect(view.getByText("Billing history")).toBeTruthy();
+        expect(view.getByRole("link", { name: "13" })).toBeTruthy();
+        expect(view.getByRole("button", { name: "Back to customers" })).toBeTruthy();
+        expect(view.queryByText("Send reminder")).toBeNull();
+        expect(view.queryByText("Edit")).toBeNull();
+    });
+
+    test("shows empty, loading, and not-found customer states without exposing other Organizations", async () => {
+        const emptyView = renderCustomerSection(organizationInspectionPath(mixedBistro.id, "customers"), {
+            getPlatformOrganizationCustomers: async () => successCustomers({
+                customers: [],
+                pagination: { page: 1, limit: 20, totalCount: 0 },
+            }),
+        });
+        expect(await emptyView.findByText("No customers match these filters")).toBeTruthy();
+
+        const loadingView = renderCustomerSection(organizationInspectionPath(mixedBistro.id, "customers"), {
+            getPlatformOrganizationCustomers: () => new Promise(() => {}),
+        });
+        expect(await loadingView.findByLabelText("Loading customers")).toBeTruthy();
+
+        const missingView = renderCustomerSection(
+            organizationInspectionPath(mixedBistro.id, "customers", customerMixedDue),
+            {
+                getPlatformOrganizationCustomer: async () => {
+                    throw { code: 404, message: "Customer not found", data: null, status: "error" };
+                },
+            },
+        );
+        expect(await missingView.findByText("Customer was not found")).toBeTruthy();
+        expect(missingView.queryByText("Dev Patel")).toBeNull();
     });
 });

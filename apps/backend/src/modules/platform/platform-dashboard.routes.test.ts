@@ -230,6 +230,8 @@ const createHarness = async () => {
             getOrganizationCatalogAddOn: async () => null,
             listOrganizationSales: async () => null,
             getOrganizationSaleContext: async () => null,
+            listOrganizationCustomers: async () => null,
+            getOrganizationCustomerContext: async () => null,
         },
         billingRepository: {
             getSaleById: async () => null,

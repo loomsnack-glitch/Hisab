@@ -1,5 +1,11 @@
 import { sql } from "bun";
-import { PLATFORM_OVERVIEW_RECENT_SALE_LIMIT, type PlatformOrganizationDirectorySort, type SalesSort } from "@repo/types";
+import {
+    PLATFORM_CUSTOMER_INSPECTION_SALE_LIMIT,
+    PLATFORM_OVERVIEW_RECENT_SALE_LIMIT,
+    normalizePhoneNumber,
+    type PlatformOrganizationDirectorySort,
+    type SalesSort,
+} from "@repo/types";
 import { pg } from "@/config/db";
 
 export type PlatformDashboardMetricsQuery = {
@@ -1518,6 +1524,286 @@ export const getOrganizationCatalogAddOn = async (
                 productName: String(row.product_name),
                 selectionCap: asCount(row.selection_cap),
                 status,
+            }];
+        }),
+    };
+};
+
+export type PlatformOrganizationCustomersMetricsQuery = {
+    organizationId: string;
+    search: string;
+    status: "all" | "active" | "inactive" | "due" | "no_due";
+    sort: "newest" | "oldest" | "name_asc" | "name_desc" | "highest_due" | "lowest_due";
+    page: number;
+    limit: number;
+};
+
+export type PlatformOrganizationCustomerSummaryMetricsRow = {
+    id: string;
+    name: string;
+    phone: string | null;
+    balance: number;
+    isActive: boolean;
+    createdAt: string;
+};
+
+export type PlatformOrganizationCustomersMetrics = {
+    customers: PlatformOrganizationCustomerSummaryMetricsRow[];
+    totalCount: number;
+};
+
+export type PlatformOrganizationCustomerDetailMetrics = {
+    id: string;
+    name: string;
+    phone: string | null;
+    balance: number;
+    isActive: boolean;
+    marketingOptedOut: boolean;
+    createdAt: string;
+    updatedAt: string;
+    ledger: Array<{
+        id: string;
+        saleId: string | null;
+        paymentId: string | null;
+        entryType: "sale" | "payment" | "void" | "adjustment";
+        amount: number;
+        balanceAfter: number;
+        notes: string | null;
+        createdAt: string;
+    }>;
+    sales: PlatformOrganizationSaleSummaryMetricsRow[];
+};
+
+const customerSearchPattern = (search: string) => `%${search.replace(/[%_\\]/g, "\\$&")}%`;
+
+export const listOrganizationCustomers = async (
+    query: PlatformOrganizationCustomersMetricsQuery,
+): Promise<PlatformOrganizationCustomersMetrics | null> => {
+    if (!(await organizationExists(query.organizationId))) {
+        return null;
+    }
+
+    const search = query.search.trim();
+    const searchPattern = search ? customerSearchPattern(search) : null;
+    const normalizedPhoneSearch = search ? normalizePhoneNumber(search) : null;
+    const normalizedPhonePattern = normalizedPhoneSearch ? customerSearchPattern(normalizedPhoneSearch) : null;
+    const statusFilter = query.status;
+    const offset = (query.page - 1) * query.limit;
+    const sort = query.sort;
+
+    const statusClause = {
+        all: sql``,
+        active: sql`AND c.is_active = TRUE`,
+        inactive: sql`AND c.is_active = FALSE`,
+        due: sql`AND c.balance > 0`,
+        no_due: sql`AND c.balance = 0`,
+    }[statusFilter];
+
+    const orderClause = {
+        newest: sql`c.created_at DESC, c.id DESC`,
+        oldest: sql`c.created_at ASC, c.id ASC`,
+        name_asc: sql`LOWER(c.name) ASC, c.id ASC`,
+        name_desc: sql`LOWER(c.name) DESC, c.id DESC`,
+        highest_due: sql`c.balance DESC, c.id DESC`,
+        lowest_due: sql`c.balance ASC, c.id ASC`,
+    }[sort];
+
+    const [countRow] = await pg`
+        SELECT COUNT(*)::int AS total_count
+        FROM customers c
+        WHERE c.organization_id = ${query.organizationId}
+          ${statusClause}
+          AND (
+            ${searchPattern}::text IS NULL
+            OR c.name ILIKE ${searchPattern}
+            OR COALESCE(c.phone, '') ILIKE ${searchPattern}
+            OR (${normalizedPhonePattern}::text IS NOT NULL AND COALESCE(c.phone, '') ILIKE ${normalizedPhonePattern})
+          )
+    `;
+
+    const customerRows = await pg`
+        SELECT
+            c.id,
+            c.name,
+            c.phone,
+            c.balance,
+            c.is_active,
+            c.created_at
+        FROM customers c
+        WHERE c.organization_id = ${query.organizationId}
+          ${statusClause}
+          AND (
+            ${searchPattern}::text IS NULL
+            OR c.name ILIKE ${searchPattern}
+            OR COALESCE(c.phone, '') ILIKE ${searchPattern}
+            OR (${normalizedPhonePattern}::text IS NOT NULL AND COALESCE(c.phone, '') ILIKE ${normalizedPhonePattern})
+          )
+        ORDER BY ${orderClause}
+        LIMIT ${query.limit}
+        OFFSET ${offset}
+    `;
+
+    return {
+        customers: customerRows.flatMap((row: Record<string, unknown>) => {
+            const createdAt = asTimestamp(row.created_at);
+            if (!createdAt) return [];
+            return [{
+                id: String(row.id),
+                name: String(row.name),
+                phone: row.phone == null ? null : String(row.phone),
+                balance: asMoney(row.balance),
+                isActive: Boolean(row.is_active),
+                createdAt,
+            }];
+        }),
+        totalCount: asCount(countRow?.total_count),
+    };
+};
+
+export const getOrganizationCustomerContext = async (
+    organizationId: string,
+    customerId: string,
+): Promise<PlatformOrganizationCustomerDetailMetrics | null> => {
+    const [customerRow] = await pg`
+        SELECT
+            c.id,
+            c.name,
+            c.phone,
+            c.balance,
+            c.is_active,
+            c.marketing_opted_out,
+            c.created_at,
+            c.updated_at
+        FROM customers c
+        WHERE c.organization_id = ${organizationId}
+          AND c.id = ${customerId}
+    `;
+
+    if (!customerRow?.id) {
+        return null;
+    }
+
+    const createdAt = asTimestamp(customerRow.created_at);
+    const updatedAt = asTimestamp(customerRow.updated_at);
+    if (!createdAt || !updatedAt) {
+        return null;
+    }
+
+    const ledgerRows = await pg`
+        SELECT
+            entry.id,
+            entry.sale_id,
+            entry.payment_id,
+            entry.entry_type::text AS entry_type,
+            entry.amount,
+            entry.balance_after,
+            entry.notes,
+            entry.created_at
+        FROM customer_ledger entry
+        WHERE entry.organization_id = ${organizationId}
+          AND entry.customer_id = ${customerId}
+        ORDER BY entry.created_at ASC, entry.id ASC
+    `;
+
+    const saleRows = await pg`
+        SELECT
+            s.id,
+            s.sale_number,
+            s.status::text AS status,
+            s.payment_status::text AS payment_status,
+            s.grand_total,
+            s.created_at,
+            s.committed_at,
+            s.voided_at,
+            COALESCE(item_stats.item_count, 0) AS item_count,
+            COALESCE(item_stats.items_summary, '') AS items_summary,
+            COALESCE(payment_stats.payment_methods, '') AS payment_methods,
+            COALESCE(payment_stats.paid_total, 0) AS paid_total,
+            GREATEST(s.grand_total - COALESCE(payment_stats.paid_total, 0), 0) AS due_total,
+            COALESCE(c.name, s.customer_name_snapshot) AS customer_name,
+            store.id AS store_id,
+            store.name AS store_name
+        FROM sales s
+        INNER JOIN stores store
+          ON store.id = s.store_id
+         AND store.organization_id = s.organization_id
+        LEFT JOIN customers c ON c.id = s.customer_id
+        LEFT JOIN (
+            SELECT
+                sale_id,
+                COUNT(*)::int AS item_count,
+                STRING_AGG(product_name_snapshot, ', ') AS items_summary
+            FROM sale_items
+            GROUP BY sale_id
+        ) item_stats ON item_stats.sale_id = s.id
+        LEFT JOIN (
+            SELECT
+                sale_id,
+                COALESCE(SUM(amount), 0) AS paid_total,
+                NULLIF(STRING_AGG(DISTINCT method::text, ', '), '') AS payment_methods
+            FROM payments
+            GROUP BY sale_id
+        ) payment_stats ON payment_stats.sale_id = s.id
+        WHERE s.organization_id = ${organizationId}
+          AND s.customer_id = ${customerId}
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT ${PLATFORM_CUSTOMER_INSPECTION_SALE_LIMIT}
+    `;
+
+    return {
+        id: String(customerRow.id),
+        name: String(customerRow.name),
+        phone: customerRow.phone == null ? null : String(customerRow.phone),
+        balance: asMoney(customerRow.balance),
+        isActive: Boolean(customerRow.is_active),
+        marketingOptedOut: Boolean(customerRow.marketing_opted_out),
+        createdAt,
+        updatedAt,
+        ledger: ledgerRows.flatMap((row: Record<string, unknown>) => {
+            const entryType = row.entry_type;
+            const entryCreatedAt = asTimestamp(row.created_at);
+            if (
+                entryType !== "sale"
+                && entryType !== "payment"
+                && entryType !== "void"
+                && entryType !== "adjustment"
+            ) {
+                return [];
+            }
+            if (!entryCreatedAt) return [];
+            return [{
+                id: String(row.id),
+                saleId: row.sale_id == null ? null : String(row.sale_id),
+                paymentId: row.payment_id == null ? null : String(row.payment_id),
+                entryType,
+                amount: Number(row.amount ?? 0),
+                balanceAfter: asMoney(row.balance_after),
+                notes: row.notes == null ? null : String(row.notes),
+                createdAt: entryCreatedAt,
+            }];
+        }),
+        sales: saleRows.flatMap((row: Record<string, unknown>) => {
+            const statusValue = asSaleStatus(row.status);
+            const paymentStatusValue = asPaymentStatus(row.payment_status);
+            const saleCreatedAt = asTimestamp(row.created_at);
+            if (!statusValue || !paymentStatusValue || !saleCreatedAt) return [];
+            return [{
+                id: String(row.id),
+                saleNumber: row.sale_number == null ? null : String(row.sale_number),
+                status: statusValue,
+                paymentStatus: paymentStatusValue,
+                grandTotal: asMoney(row.grand_total),
+                paidTotal: asMoney(row.paid_total),
+                dueTotal: asMoney(row.due_total),
+                createdAt: saleCreatedAt,
+                committedAt: asTimestamp(row.committed_at),
+                voidedAt: asTimestamp(row.voided_at),
+                itemCount: asCount(row.item_count),
+                itemsSummary: row.items_summary ? String(row.items_summary) : null,
+                paymentMethods: row.payment_methods ? String(row.payment_methods) : null,
+                customerName: row.customer_name ? String(row.customer_name) : null,
+                storeId: String(row.store_id),
+                storeName: String(row.store_name),
             }];
         }),
     };

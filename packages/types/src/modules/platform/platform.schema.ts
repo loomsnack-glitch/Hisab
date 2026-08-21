@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { dtoDateSchema, normalizePhoneNumber, phoneSchema } from "../../common";
 import {
+    CustomerLedgerEntryDTOSchema,
+    CustomerListStatusSchema,
+    CustomerSortSchema,
     CustomerSummaryDTOSchema,
     PaymentDTOSchema,
     PaymentMethodSchema,
@@ -486,6 +489,41 @@ export const PlatformCatalogAddOnDetailDTOSchema = PlatformCatalogAddOnSummaryDT
 
 export const PlatformCatalogAddOnDetailResponseSchema = z.object({
     addOn: PlatformCatalogAddOnDetailDTOSchema,
+});
+
+export const PlatformCustomerInspectionQuerySchema = z.object({
+    search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    status: CustomerListStatusSchema.default("all"),
+    sort: CustomerSortSchema.default("newest"),
+    page: positivePageSchema.default(1),
+    limit: organizationListLimitSchema.default(20),
+});
+
+export const PlatformCustomerInspectionSummaryDTOSchema = CustomerSummaryDTOSchema.extend({
+    createdAt: dtoDateSchema,
+});
+
+export const PlatformCustomerInspectionListDTOSchema = z.object({
+    customers: z.array(PlatformCustomerInspectionSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PLATFORM_CUSTOMER_INSPECTION_SALE_LIMIT = 50;
+
+export const PlatformCustomerInspectionDetailDTOSchema = CustomerSummaryDTOSchema.extend({
+    marketingOptedOut: z.boolean(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+    ledger: z.array(CustomerLedgerEntryDTOSchema),
+    sales: z.array(PlatformSaleInspectionSummaryDTOSchema),
+});
+
+export const PlatformCustomerInspectionDetailResponseSchema = z.object({
+    customer: PlatformCustomerInspectionDetailDTOSchema,
 });
 
 export const FUTURE_BILLING_INSPECTION_DATE_MESSAGE = "Billing inspection dates cannot be in the future";

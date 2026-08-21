@@ -10,6 +10,7 @@ import {
     PlatformOrganizationListQuerySchema,
     PlatformBillingInspectionQuerySchema,
     PlatformCatalogInspectionQuerySchema,
+    PlatformCustomerInspectionQuerySchema,
     PlatformStoreInspectionQuerySchema,
     STATUS_CODES,
     type PlatformEntryResponse,
@@ -357,6 +358,61 @@ export const createPlatformRoutes = (
             );
         } catch (error) {
             return handleError("platform.routes", "getPlatformOrganizationSale", c, error);
+        }
+    });
+
+    router.get(
+        "/organizations/:organizationId/customers",
+        validateSchema("query", PlatformCustomerInspectionQuerySchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await reportingService.listOrganizationCustomers(organizationId.data, c.req.valid("query")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "listPlatformOrganizationCustomers", c, error);
+            }
+        },
+    );
+
+    router.get("/organizations/:organizationId/customers/:customerId", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const customerId = z.uuid("Invalid customer id").safeParse(c.req.param("customerId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!customerId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid customer id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await reportingService.getOrganizationCustomer(organizationId.data, customerId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformOrganizationCustomer", c, error);
         }
     });
 

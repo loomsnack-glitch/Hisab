@@ -20,6 +20,9 @@ import type {
     PlatformCatalogInspectionQueryJSON,
     PlatformCatalogListResponse,
     PlatformCatalogProductDetailResponse,
+    PlatformCustomerInspectionDetailResponse,
+    PlatformCustomerInspectionListResponse,
+    PlatformCustomerInspectionQueryJSON,
     PlatformSaleInspectionDetailResponse,
     PlatformSaleInspectionListResponse,
     PlatformStoreInspectionQueryJSON,
@@ -219,6 +222,30 @@ export const getPlatformOrganizationCatalogAddOn = async (
 ): Promise<ServiceResponse<PlatformCatalogAddOnDetailResponse | null>> => {
     try {
         const response = await api.get(`/platform/organizations/${organizationId}/catalog/add-ons/${addOnId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationCustomers = async (
+    organizationId: string,
+    query: PlatformCustomerInspectionQueryJSON = {},
+): Promise<ServiceResponse<PlatformCustomerInspectionListResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/customers`, { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationCustomer = async (
+    organizationId: string,
+    customerId: string,
+): Promise<ServiceResponse<PlatformCustomerInspectionDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/customers/${customerId}`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

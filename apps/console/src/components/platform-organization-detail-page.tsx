@@ -28,6 +28,8 @@ import {
     getPlatformOrganizationCatalogProduct as getPlatformOrganizationCatalogProductRequest,
     getPlatformOrganizationCatalogCategory as getPlatformOrganizationCatalogCategoryRequest,
     getPlatformOrganizationCatalogAddOn as getPlatformOrganizationCatalogAddOnRequest,
+    getPlatformOrganizationCustomers as getPlatformOrganizationCustomersRequest,
+    getPlatformOrganizationCustomer as getPlatformOrganizationCustomerRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
 import {
@@ -37,6 +39,8 @@ import {
     type PlatformCatalogAddOnDetailResponse,
     type PlatformCatalogCategoryDetailResponse,
     type PlatformCatalogProductDetailResponse,
+    type PlatformCustomerInspectionDetailDTO,
+    type PlatformCustomerInspectionQueryJSON,
     type PlatformDashboardQueryJSON,
     type PlatformOrganizationDetailQueryJSON,
     type PlatformRecentSaleDTO,
@@ -63,8 +67,10 @@ import {
     organizationInspectionSections,
     parseBillingInspectionSearch,
     parseCatalogInspectionSearch,
+    parseCustomerInspectionSearch,
     type BillingInspectionFilters,
     type CatalogInspectionFilters,
+    type CustomerInspectionFilters,
     type CatalogResourceKind,
     type OrganizationInspectionSection,
 } from "@/lib/organization-inspection-url";
@@ -78,6 +84,8 @@ const organizationCatalogQueryKey = ["platform-owner", "organization-catalog"] a
 const organizationCatalogProductQueryKey = ["platform-owner", "organization-catalog-product"] as const;
 const organizationCatalogCategoryQueryKey = ["platform-owner", "organization-catalog-category"] as const;
 const organizationCatalogAddOnQueryKey = ["platform-owner", "organization-catalog-add-on"] as const;
+const organizationCustomersQueryKey = ["platform-owner", "organization-customers"] as const;
+const organizationCustomerQueryKey = ["platform-owner", "organization-customer"] as const;
 
 type PlatformOrganizationDetailPageProps = {
     organizationId: string;
@@ -95,6 +103,8 @@ type PlatformOrganizationDetailPageProps = {
     getPlatformOrganizationCatalogProduct?: typeof getPlatformOrganizationCatalogProductRequest;
     getPlatformOrganizationCatalogCategory?: typeof getPlatformOrganizationCatalogCategoryRequest;
     getPlatformOrganizationCatalogAddOn?: typeof getPlatformOrganizationCatalogAddOnRequest;
+    getPlatformOrganizationCustomers?: typeof getPlatformOrganizationCustomersRequest;
+    getPlatformOrganizationCustomer?: typeof getPlatformOrganizationCustomerRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
 };
@@ -182,6 +192,30 @@ const catalogTabOptions = [
     { value: "add-ons", label: "Add-ons" },
 ] as const;
 
+const customerStatusOptions = [
+    { value: "all", label: "All customers" },
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+    { value: "due", label: "Has due" },
+    { value: "no_due", label: "No due" },
+] as const;
+
+const customerSortOptions = [
+    { value: "newest", label: "Recently added" },
+    { value: "oldest", label: "Oldest first" },
+    { value: "name_asc", label: "Name A–Z" },
+    { value: "name_desc", label: "Name Z–A" },
+    { value: "highest_due", label: "Highest due" },
+    { value: "lowest_due", label: "Lowest due" },
+] as const;
+
+const ledgerEntryTypeLabel = (entryType: PlatformCustomerInspectionDetailDTO["ledger"][number]["entryType"]) => {
+    if (entryType === "payment") return "Payment";
+    if (entryType === "void") return "Void";
+    if (entryType === "adjustment") return "Adjustment";
+    return "Sale";
+};
+
 const MetricCard = ({ label, value }: { label: string; value: string }) => (
     <div className="rounded-xl border border-border/60 bg-background/80 p-4">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -205,6 +239,8 @@ const PlatformOrganizationDetailPage = ({
     getPlatformOrganizationCatalogProduct = getPlatformOrganizationCatalogProductRequest,
     getPlatformOrganizationCatalogCategory = getPlatformOrganizationCatalogCategoryRequest,
     getPlatformOrganizationCatalogAddOn = getPlatformOrganizationCatalogAddOnRequest,
+    getPlatformOrganizationCustomers = getPlatformOrganizationCustomersRequest,
+    getPlatformOrganizationCustomer = getPlatformOrganizationCustomerRequest,
     onNavigate,
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
@@ -216,6 +252,10 @@ const PlatformOrganizationDetailPage = ({
         parseCatalogInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
     );
     const [catalogSearchInput, setCatalogSearchInput] = useState(catalogFilters.search ?? "");
+    const [customerFilters, setCustomerFilters] = useState<CustomerInspectionFilters>(() =>
+        parseCustomerInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+    );
+    const [customerSearchInput, setCustomerSearchInput] = useState(customerFilters.search ?? "");
     const detailQueryInput = toDetailQuery(reportingQuery);
     const periodLabel = reportingPeriodLabel(reportingQuery);
     const detailQuery = useQuery({
@@ -280,6 +320,20 @@ const PlatformOrganizationDetailPage = ({
         placeholderData: keepPreviousData,
         enabled: section === "catalog" && catalogResourceKind === "add-ons" && Boolean(resourceId),
     });
+    const customersQuery = useQuery({
+        queryKey: [...organizationCustomersQueryKey, organizationId, customerFilters],
+        queryFn: () => getPlatformOrganizationCustomers(organizationId, customerFilters),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "customers" && !resourceId,
+    });
+    const customerQuery = useQuery({
+        queryKey: [...organizationCustomerQueryKey, organizationId, resourceId],
+        queryFn: () => getPlatformOrganizationCustomer(organizationId, resourceId!),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "customers" && Boolean(resourceId),
+    });
     const response = detailQuery.data;
     const organization = response?.status === "success" ? response.data?.organization : undefined;
     const storesResponse = storesQuery.data;
@@ -298,6 +352,10 @@ const PlatformOrganizationDetailPage = ({
     const catalogCategory = catalogCategoryResponse?.status === "success" ? catalogCategoryResponse.data?.category : undefined;
     const catalogAddOnResponse = catalogAddOnQuery.data;
     const catalogAddOn = catalogAddOnResponse?.status === "success" ? catalogAddOnResponse.data?.addOn : undefined;
+    const customersResponse = customersQuery.data;
+    const customersList = customersResponse?.status === "success" ? customersResponse.data : undefined;
+    const customerResponse = customerQuery.data;
+    const customerDetail = customerResponse?.status === "success" ? customerResponse.data?.customer : undefined;
     const errorCode = (detailQuery.error as { code?: number } | null)?.code ?? (response?.status === "error" ? response.code : undefined);
     const storesErrorCode = (storesQuery.error as { code?: number } | null)?.code
         ?? (storesResponse?.status === "error" ? storesResponse.code : undefined);
@@ -315,6 +373,10 @@ const PlatformOrganizationDetailPage = ({
         ?? (catalogCategoryResponse?.status === "error" ? catalogCategoryResponse.code : undefined);
     const catalogAddOnErrorCode = (catalogAddOnQuery.error as { code?: number } | null)?.code
         ?? (catalogAddOnResponse?.status === "error" ? catalogAddOnResponse.code : undefined);
+    const customersErrorCode = (customersQuery.error as { code?: number } | null)?.code
+        ?? (customersResponse?.status === "error" ? customersResponse.code : undefined);
+    const customerErrorCode = (customerQuery.error as { code?: number } | null)?.code
+        ?? (customerResponse?.status === "error" ? customerResponse.code : undefined);
     const catalogDetailErrorCode = catalogResourceKind === "products"
         ? catalogProductErrorCode
         : catalogResourceKind === "categories"
@@ -334,7 +396,11 @@ const PlatformOrganizationDetailPage = ({
                         ? catalogDetailErrorCode ?? errorCode
                         : section === "catalog"
                             ? catalogErrorCode ?? errorCode
-                            : errorCode;
+                            : section === "customers" && resourceId
+                                ? customerErrorCode ?? errorCode
+                                : section === "customers"
+                                    ? customersErrorCode ?? errorCode
+                                    : errorCode;
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
         ?? (response?.status === "error" ? response.message : undefined);
@@ -362,6 +428,12 @@ const PlatformOrganizationDetailPage = ({
     const catalogAddOnErrorMessage =
         (catalogAddOnQuery.error as { message?: string } | null)?.message
         ?? (catalogAddOnResponse?.status === "error" ? catalogAddOnResponse.message : undefined);
+    const customersErrorMessage =
+        (customersQuery.error as { message?: string } | null)?.message
+        ?? (customersResponse?.status === "error" ? customersResponse.message : undefined);
+    const customerErrorMessage =
+        (customerQuery.error as { message?: string } | null)?.message
+        ?? (customerResponse?.status === "error" ? customerResponse.message : undefined);
     const catalogDetailErrorMessage = catalogResourceKind === "products"
         ? catalogProductErrorMessage
         : catalogResourceKind === "categories"
@@ -381,7 +453,23 @@ const PlatformOrganizationDetailPage = ({
                         ? catalogDetailErrorMessage ?? errorMessage
                         : section === "catalog"
                             ? catalogErrorMessage ?? errorMessage
-                            : errorMessage;
+                            : section === "customers" && resourceId
+                                ? customerErrorMessage ?? errorMessage
+                                : section === "customers"
+                                    ? customersErrorMessage ?? errorMessage
+                                    : errorMessage;
+
+    useEffect(() => {
+        if (section !== "customers") return;
+        const syncCustomerFilters = () => {
+            const nextFilters = parseCustomerInspectionSearch(window.location.search);
+            setCustomerFilters(nextFilters);
+            setCustomerSearchInput(nextFilters.search ?? "");
+        };
+        syncCustomerFilters();
+        window.addEventListener("popstate", syncCustomerFilters);
+        return () => window.removeEventListener("popstate", syncCustomerFilters);
+    }, [section, resourceId]);
 
     useEffect(() => {
         if (section !== "billing") return;
@@ -435,6 +523,16 @@ const PlatformOrganizationDetailPage = ({
         navigateCatalog({ ...catalogFilters, ...patch, page: patch.page ?? 1 }, target);
     };
 
+    const navigateCustomers = (nextFilters: CustomerInspectionFilters, nextResourceId?: string) => {
+        const path = organizationInspectionPath(organizationId, "customers", nextResourceId, nextFilters);
+        setCustomerFilters(nextFilters);
+        go(path);
+    };
+
+    const updateCustomerFilters = (patch: Partial<CustomerInspectionFilters>, nextResourceId?: string) => {
+        navigateCustomers({ ...customerFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
+    };
+
     useEffect(() => {
         if (activeSectionErrorCode === 401) void onUnauthorized?.();
     }, [activeSectionErrorCode, onUnauthorized]);
@@ -456,7 +554,9 @@ const PlatformOrganizationDetailPage = ({
                         ? organizationInspectionPath(organizationId, item, undefined, billingFilters)
                         : item === "catalog"
                             ? catalogInspectionPath(organizationId, { view: "list", filters: catalogFilters })
-                            : organizationInspectionPath(organizationId, item);
+                            : item === "customers"
+                                ? organizationInspectionPath(organizationId, item, undefined, customerFilters)
+                                : organizationInspectionPath(organizationId, item);
                     const active = item === section;
                     const Icon = sectionConfig[item].icon;
                     return (
@@ -1851,6 +1951,370 @@ const PlatformOrganizationDetailPage = ({
         return renderCatalogList();
     };
 
+    const renderCustomerFilters = () => (
+        <div className="space-y-3">
+            <form
+                className="flex flex-col gap-3 lg:flex-row lg:items-end"
+                onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                    event.preventDefault();
+                    updateCustomerFilters({ search: customerSearchInput.trim() || undefined });
+                }}
+                role="search"
+            >
+                <div className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        value={customerSearchInput}
+                        onChange={(event) => setCustomerSearchInput(event.target.value)}
+                        aria-label="Search customers"
+                        placeholder="Search by name or phone"
+                        className="h-10 rounded-xl pl-9"
+                    />
+                </div>
+                <Button type="submit" size="sm" className="rounded-full">Search</Button>
+            </form>
+            <div className="flex flex-wrap gap-2">
+                <Select
+                    value={customerFilters.status ?? "all"}
+                    onValueChange={(value) =>
+                        updateCustomerFilters({
+                            status: value as CustomerInspectionFilters["status"],
+                            page: 1,
+                        })}
+                >
+                    <SelectTrigger aria-label="Customer status filter" className="w-[180px]">
+                        <SelectValue placeholder="All customers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {customerStatusOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Select
+                    value={customerFilters.sort ?? "newest"}
+                    onValueChange={(value) =>
+                        updateCustomerFilters({
+                            sort: value as NonNullable<PlatformCustomerInspectionQueryJSON["sort"]>,
+                            page: 1,
+                        })}
+                >
+                    <SelectTrigger aria-label="Customer sort" className="w-[180px]">
+                        <SelectValue placeholder="Sort customers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {customerSortOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Customer inspection shows the full Organization customer directory and is not limited by the Dashboard reporting period.
+            </p>
+        </div>
+    );
+
+    const renderCustomerList = () => {
+        if (customersQuery.isLoading) {
+            return (
+                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading customers">
+                    <Spinner className="size-6 text-primary" />
+                </div>
+            );
+        }
+        if (customersErrorCode === 404 || customersErrorMessage === "Organization not found") {
+            return (
+                <Alert role="alert">
+                    <AlertTitle>Organization was not found</AlertTitle>
+                    <AlertDescription>
+                        This organization is not available. Return to the organizations list to continue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (customersQuery.isError || customersResponse?.status === "error") {
+            return (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>Customers could not be loaded</AlertTitle>
+                    <AlertDescription>{customersErrorMessage ?? "The customer list is unavailable."}</AlertDescription>
+                </Alert>
+            );
+        }
+        if (!customersList) return null;
+
+        const page = customersList.pagination.page;
+        const limit = customersList.pagination.limit;
+        const totalPages = Math.max(1, Math.ceil(customersList.pagination.totalCount / limit));
+
+        return (
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <h2 className="font-display text-xl font-semibold tracking-tight">Customers</h2>
+                    <CardDescription>
+                        {`Read-only customer directory · ${customersList.pagination.totalCount} customers`}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {renderCustomerFilters()}
+                    {customersList.customers.length === 0 ? (
+                        <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon">
+                                    <Users />
+                                </EmptyMedia>
+                                <EmptyTitle>No customers match these filters</EmptyTitle>
+                                <EmptyDescription>Try a different search term, status, or sort order.</EmptyDescription>
+                            </EmptyHeader>
+                        </Empty>
+                    ) : (
+                        <div className="overflow-x-auto rounded-xl border border-border/60">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Customer</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Phone</TableHead>
+                                        <TableHead>Balance</TableHead>
+                                        <TableHead>Added</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {customersList.customers.map((customerRow) => {
+                                        const href = organizationInspectionPath(organizationId, "customers", customerRow.id, customerFilters);
+                                        return (
+                                            <TableRow key={customerRow.id}>
+                                                <TableCell className="font-medium">
+                                                    <a
+                                                        href={href}
+                                                        className="text-primary underline-offset-4 hover:underline"
+                                                        onClick={(event) => followInspectionLink(event, href)}
+                                                    >
+                                                        {customerRow.name}
+                                                    </a>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="rounded-full">
+                                                        {customerRow.isActive ? "Active" : "Inactive"}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {customerRow.phone ? formatPhoneDisplay(customerRow.phone) : "—"}
+                                                </TableCell>
+                                                <TableCell>{formatCompletedSalesValue(customerRow.balance)}</TableCell>
+                                                <TableCell className="whitespace-nowrap text-muted-foreground">
+                                                    {formatLastCompletedSale(customerRow.createdAt)}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                    {customersList.pagination.totalCount > limit ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-sm text-muted-foreground">Page {page} of {totalPages}</p>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page <= 1}
+                                    onClick={() => updateCustomerFilters({ page: page - 1 })}
+                                >
+                                    <ChevronLeft className="size-4" />
+                                    Previous
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page >= totalPages}
+                                    onClick={() => updateCustomerFilters({ page: page + 1 })}
+                                >
+                                    Next
+                                    <ChevronRight className="size-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    ) : null}
+                </CardContent>
+            </Card>
+        );
+    };
+
+    const renderCustomerDetail = (customer: PlatformCustomerInspectionDetailDTO) => (
+        <div className="space-y-6">
+            <Button
+                type="button"
+                variant="ghost"
+                className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                onClick={() => navigateCustomers(customerFilters)}
+            >
+                <ArrowLeft className="size-4" />
+                Back to customers
+            </Button>
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
+                            Read-only inspection
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full">
+                            {customer.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                        {customer.balance > 0 ? (
+                            <Badge variant="outline" className="rounded-full">Receivable</Badge>
+                        ) : null}
+                    </div>
+                    <h2 className="font-display text-2xl font-semibold tracking-tight">{customer.name}</h2>
+                    <CardDescription>
+                        {customer.phone ? formatPhoneDisplay(customer.phone) : "No phone on file"}
+                        {` · Updated ${formatLastCompletedSale(customer.updatedAt)}`}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <MetricCard label="Balance" value={formatCompletedSalesValue(customer.balance)} />
+                        <MetricCard label="Bills" value={String(customer.sales.length)} />
+                        <MetricCard label="Ledger entries" value={String(customer.ledger.length)} />
+                        <MetricCard label="Marketing opt-out" value={customer.marketingOptedOut ? "Yes" : "No"} />
+                    </div>
+                    <Card className="border-border/60 bg-background/70">
+                        <CardHeader className="gap-1">
+                            <h3 className="font-medium">Billing history</h3>
+                            <CardDescription>Sales linked to this customer across all stores.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {customer.sales.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No bills are linked to this customer yet.</p>
+                            ) : (
+                                <div className="overflow-x-auto rounded-xl border border-border/60">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Bill</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>Payment</TableHead>
+                                                <TableHead>Store</TableHead>
+                                                <TableHead>Value</TableHead>
+                                                <TableHead>Due</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {customer.sales.map((saleRow) => {
+                                                const href = organizationInspectionPath(organizationId, "billing", saleRow.id);
+                                                return (
+                                                    <TableRow key={saleRow.id}>
+                                                        <TableCell className="font-medium">
+                                                            <a
+                                                                href={href}
+                                                                className="text-primary underline-offset-4 hover:underline"
+                                                                onClick={(event) => followInspectionLink(event, href)}
+                                                            >
+                                                                {saleRow.saleNumber ?? "Draft"}
+                                                            </a>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className="rounded-full">
+                                                                {billingSaleStatusLabel(saleRow.status)}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className="rounded-full">
+                                                                {paymentStatusLabel(saleRow.paymentStatus)}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell>{saleRow.store.name}</TableCell>
+                                                        <TableCell>{formatCompletedSalesValue(saleRow.grandTotal)}</TableCell>
+                                                        <TableCell>{formatCompletedSalesValue(saleRow.dueTotal)}</TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                    <Card className="border-border/60 bg-background/70">
+                        <CardHeader className="gap-1">
+                            <h3 className="font-medium">Customer ledger</h3>
+                            <CardDescription>Balance-changing history for this customer.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {customer.ledger.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No ledger entries yet.</p>
+                            ) : (
+                                <div className="overflow-x-auto rounded-xl border border-border/60">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>When</TableHead>
+                                                <TableHead>Type</TableHead>
+                                                <TableHead>Amount</TableHead>
+                                                <TableHead>Balance after</TableHead>
+                                                <TableHead>Notes</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {customer.ledger.map((entry) => (
+                                                <TableRow key={entry.id}>
+                                                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                                                        {formatLastCompletedSale(entry.createdAt)}
+                                                    </TableCell>
+                                                    <TableCell>{ledgerEntryTypeLabel(entry.entryType)}</TableCell>
+                                                    <TableCell>{formatCompletedSalesValue(entry.amount)}</TableCell>
+                                                    <TableCell>{formatCompletedSalesValue(entry.balanceAfter)}</TableCell>
+                                                    <TableCell>{entry.notes ?? "—"}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </CardContent>
+            </Card>
+        </div>
+    );
+
+    const renderCustomerInspection = () => {
+        if (resourceId) {
+            if (customerQuery.isLoading) {
+                return (
+                    <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading customer">
+                        <Spinner className="size-6 text-primary" />
+                    </div>
+                );
+            }
+            if (customerErrorCode === 404 || customerErrorMessage === "Customer not found") {
+                return (
+                    <Alert role="alert">
+                        <AlertTitle>Customer was not found</AlertTitle>
+                        <AlertDescription>
+                            This customer is not available in this organization. Return to the customer list to continue.
+                        </AlertDescription>
+                    </Alert>
+                );
+            }
+            if (customerQuery.isError || customerResponse?.status === "error") {
+                return (
+                    <Alert variant="destructive" role="alert">
+                        <AlertTitle>Customer could not be loaded</AlertTitle>
+                        <AlertDescription>{customerErrorMessage ?? "The customer detail is unavailable."}</AlertDescription>
+                    </Alert>
+                );
+            }
+            if (!customerDetail) return null;
+            return renderCustomerDetail(customerDetail);
+        }
+
+        return renderCustomerList();
+    };
+
     const renderLaterSection = () => {
         const config = sectionConfig[section];
         const Icon = config.icon;
@@ -1944,7 +2408,7 @@ const PlatformOrganizationDetailPage = ({
 
             {renderSectionNav()}
 
-            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" ? (
+            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
                     <Spinner className="size-6 text-primary" />
                 </div>
@@ -1955,19 +2419,19 @@ const PlatformOrganizationDetailPage = ({
                         {activeSectionErrorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
                 <Alert role="alert">
                     <AlertTitle>Organization was not found</AlertTitle>
                     <AlertDescription>
                         This organization is not available. Return to the organizations list to continue.
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && (detailQuery.isError || response?.status === "error") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && (detailQuery.isError || response?.status === "error") ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Organization could not be loaded</AlertTitle>
                     <AlertDescription>{errorMessage ?? "The organization detail is unavailable."}</AlertDescription>
                 </Alert>
-            ) : section === "stores" || section === "billing" || section === "catalog" || organization ? (
+            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || organization ? (
                 section === "overview" && organization
                     ? renderOverview()
                     : section === "stores"
@@ -1976,9 +2440,11 @@ const PlatformOrganizationDetailPage = ({
                             ? renderBillingInspection()
                             : section === "catalog"
                                 ? renderCatalogInspection()
-                                : organization
-                                    ? renderLaterSection()
-                                    : null
+                                : section === "customers"
+                                    ? renderCustomerInspection()
+                                    : organization
+                                        ? renderLaterSection()
+                                        : null
             ) : null}
         </section>
     );
