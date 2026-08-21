@@ -31,6 +31,10 @@ import {
     getPlatformOrganizationCustomers as getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer as getPlatformOrganizationCustomerRequest,
     getPlatformOrganizationReports as getPlatformOrganizationReportsRequest,
+    getPlatformOrganizationTables as getPlatformOrganizationTablesRequest,
+    getPlatformOrganizationTable as getPlatformOrganizationTableRequest,
+    getPlatformOrganizationPurchases as getPlatformOrganizationPurchasesRequest,
+    getPlatformOrganizationPurchase as getPlatformOrganizationPurchaseRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
 import {
@@ -44,12 +48,16 @@ import {
     type PlatformCustomerInspectionQueryJSON,
     type PlatformDashboardQueryJSON,
     type PlatformOrganizationDetailQueryJSON,
+    type PlatformPurchaseInspectionDetailDTO,
+    type PlatformPurchaseInspectionQueryJSON,
     type PlatformRecentSaleDTO,
     type PlatformSaleInspectionDetailDTO,
     type PlatformSaleInspectionSummaryDTO,
     type PlatformStoreActivityDTO,
     type PlatformStoreDetailDTO,
     type PlatformStoreDeviceInspectionDTO,
+    type PlatformTableInspectionDetailDTO,
+    type PlatformTableInspectionQueryJSON,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Input } from "@repo/ui/components/input";
@@ -70,10 +78,14 @@ import {
     parseCatalogInspectionSearch,
     parseCustomerInspectionSearch,
     parseReportInspectionSearch,
+    parseTableInspectionSearch,
+    parsePurchaseInspectionSearch,
     type BillingInspectionFilters,
     type CatalogInspectionFilters,
     type CustomerInspectionFilters,
     type ReportInspectionFilters,
+    type TableInspectionFilters,
+    type PurchaseInspectionFilters,
     type CatalogResourceKind,
     type OrganizationInspectionSection,
 } from "@/lib/organization-inspection-url";
@@ -90,6 +102,10 @@ const organizationCatalogAddOnQueryKey = ["platform-owner", "organization-catalo
 const organizationCustomersQueryKey = ["platform-owner", "organization-customers"] as const;
 const organizationCustomerQueryKey = ["platform-owner", "organization-customer"] as const;
 const organizationReportsQueryKey = ["platform-owner", "organization-reports"] as const;
+const organizationTablesQueryKey = ["platform-owner", "organization-tables"] as const;
+const organizationTableQueryKey = ["platform-owner", "organization-table"] as const;
+const organizationPurchasesQueryKey = ["platform-owner", "organization-purchases"] as const;
+const organizationPurchaseQueryKey = ["platform-owner", "organization-purchase"] as const;
 
 type PlatformOrganizationDetailPageProps = {
     organizationId: string;
@@ -110,6 +126,10 @@ type PlatformOrganizationDetailPageProps = {
     getPlatformOrganizationCustomers?: typeof getPlatformOrganizationCustomersRequest;
     getPlatformOrganizationCustomer?: typeof getPlatformOrganizationCustomerRequest;
     getPlatformOrganizationReports?: typeof getPlatformOrganizationReportsRequest;
+    getPlatformOrganizationTables?: typeof getPlatformOrganizationTablesRequest;
+    getPlatformOrganizationTable?: typeof getPlatformOrganizationTableRequest;
+    getPlatformOrganizationPurchases?: typeof getPlatformOrganizationPurchasesRequest;
+    getPlatformOrganizationPurchase?: typeof getPlatformOrganizationPurchaseRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
 };
@@ -137,6 +157,18 @@ const formatLastCompletedSale = (value: string | Date | null) => {
         timeStyle: "short",
     }).format(new Date(value));
 };
+
+const serviceTableStateLabel = (state: PlatformTableInspectionDetailDTO["state"]) => {
+    if (state === "free") return "Free";
+    if (state === "allocated") return "Allocated";
+    if (state === "engaged") return "Engaged";
+    if (state === "ready_to_bill") return "Ready to bill";
+    if (state === "payment_due") return "Payment due";
+    return "Paid";
+};
+
+const purchaseStatusLabel = (status: PlatformPurchaseInspectionDetailDTO["status"]) =>
+    status === "voided" ? "Voided" : "Recorded";
 
 const reportingPeriodLabel = (query: PlatformDashboardQueryJSON) => {
     const period = query.period ?? "all-time";
@@ -247,6 +279,10 @@ const PlatformOrganizationDetailPage = ({
     getPlatformOrganizationCustomers = getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer = getPlatformOrganizationCustomerRequest,
     getPlatformOrganizationReports = getPlatformOrganizationReportsRequest,
+    getPlatformOrganizationTables = getPlatformOrganizationTablesRequest,
+    getPlatformOrganizationTable = getPlatformOrganizationTableRequest,
+    getPlatformOrganizationPurchases = getPlatformOrganizationPurchasesRequest,
+    getPlatformOrganizationPurchase = getPlatformOrganizationPurchaseRequest,
     onNavigate,
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
@@ -265,6 +301,14 @@ const PlatformOrganizationDetailPage = ({
     const [reportFilters, setReportFilters] = useState<ReportInspectionFilters>(() =>
         parseReportInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
     );
+    const [tableFilters, setTableFilters] = useState<TableInspectionFilters>(() =>
+        parseTableInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+    );
+    const [tableSearchInput, setTableSearchInput] = useState(tableFilters.search ?? "");
+    const [purchaseFilters, setPurchaseFilters] = useState<PurchaseInspectionFilters>(() =>
+        parsePurchaseInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+    );
+    const [purchaseSearchInput, setPurchaseSearchInput] = useState(purchaseFilters.search ?? "");
     const detailQueryInput = toDetailQuery(reportingQuery);
     const periodLabel = reportingPeriodLabel(reportingQuery);
     const detailQuery = useQuery({
@@ -350,6 +394,34 @@ const PlatformOrganizationDetailPage = ({
         placeholderData: keepPreviousData,
         enabled: section === "reports",
     });
+    const tablesQuery = useQuery({
+        queryKey: [...organizationTablesQueryKey, organizationId, tableFilters],
+        queryFn: () => getPlatformOrganizationTables(organizationId, tableFilters),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "tables" && !resourceId,
+    });
+    const tableQuery = useQuery({
+        queryKey: [...organizationTableQueryKey, organizationId, resourceId],
+        queryFn: () => getPlatformOrganizationTable(organizationId, resourceId!),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "tables" && Boolean(resourceId),
+    });
+    const purchasesQuery = useQuery({
+        queryKey: [...organizationPurchasesQueryKey, organizationId, purchaseFilters],
+        queryFn: () => getPlatformOrganizationPurchases(organizationId, purchaseFilters),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "purchases" && !resourceId,
+    });
+    const purchaseQuery = useQuery({
+        queryKey: [...organizationPurchaseQueryKey, organizationId, resourceId],
+        queryFn: () => getPlatformOrganizationPurchase(organizationId, resourceId!),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "purchases" && Boolean(resourceId),
+    });
     const response = detailQuery.data;
     const organization = response?.status === "success" ? response.data?.organization : undefined;
     const storesResponse = storesQuery.data;
@@ -374,6 +446,14 @@ const PlatformOrganizationDetailPage = ({
     const customerDetail = customerResponse?.status === "success" ? customerResponse.data?.customer : undefined;
     const reportsResponse = reportsQuery.data;
     const reportsData = reportsResponse?.status === "success" ? reportsResponse.data : undefined;
+    const tablesResponse = tablesQuery.data;
+    const tablesList = tablesResponse?.status === "success" ? tablesResponse.data : undefined;
+    const tableResponse = tableQuery.data;
+    const tableDetail = tableResponse?.status === "success" ? tableResponse.data?.table : undefined;
+    const purchasesResponse = purchasesQuery.data;
+    const purchasesList = purchasesResponse?.status === "success" ? purchasesResponse.data : undefined;
+    const purchaseResponse = purchaseQuery.data;
+    const purchaseDetail = purchaseResponse?.status === "success" ? purchaseResponse.data?.purchase : undefined;
     const errorCode = (detailQuery.error as { code?: number } | null)?.code ?? (response?.status === "error" ? response.code : undefined);
     const storesErrorCode = (storesQuery.error as { code?: number } | null)?.code
         ?? (storesResponse?.status === "error" ? storesResponse.code : undefined);
@@ -397,6 +477,14 @@ const PlatformOrganizationDetailPage = ({
         ?? (customerResponse?.status === "error" ? customerResponse.code : undefined);
     const reportsErrorCode = (reportsQuery.error as { code?: number } | null)?.code
         ?? (reportsResponse?.status === "error" ? reportsResponse.code : undefined);
+    const tablesErrorCode = (tablesQuery.error as { code?: number } | null)?.code
+        ?? (tablesResponse?.status === "error" ? tablesResponse.code : undefined);
+    const tableErrorCode = (tableQuery.error as { code?: number } | null)?.code
+        ?? (tableResponse?.status === "error" ? tableResponse.code : undefined);
+    const purchasesErrorCode = (purchasesQuery.error as { code?: number } | null)?.code
+        ?? (purchasesResponse?.status === "error" ? purchasesResponse.code : undefined);
+    const purchaseErrorCode = (purchaseQuery.error as { code?: number } | null)?.code
+        ?? (purchaseResponse?.status === "error" ? purchaseResponse.code : undefined);
     const catalogDetailErrorCode = catalogResourceKind === "products"
         ? catalogProductErrorCode
         : catalogResourceKind === "categories"
@@ -422,6 +510,14 @@ const PlatformOrganizationDetailPage = ({
                                     ? customersErrorCode ?? errorCode
                                     : section === "reports"
                                         ? reportsErrorCode ?? errorCode
+                                        : section === "tables" && resourceId
+                                            ? tableErrorCode ?? errorCode
+                                            : section === "tables"
+                                                ? tablesErrorCode ?? errorCode
+                                                : section === "purchases" && resourceId
+                                                    ? purchaseErrorCode ?? errorCode
+                                                    : section === "purchases"
+                                                        ? purchasesErrorCode ?? errorCode
                                     : errorCode;
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
@@ -456,6 +552,18 @@ const PlatformOrganizationDetailPage = ({
     const customerErrorMessage =
         (customerQuery.error as { message?: string } | null)?.message
         ?? (customerResponse?.status === "error" ? customerResponse.message : undefined);
+    const tablesErrorMessage =
+        (tablesQuery.error as { message?: string } | null)?.message
+        ?? (tablesResponse?.status === "error" ? tablesResponse.message : undefined);
+    const tableErrorMessage =
+        (tableQuery.error as { message?: string } | null)?.message
+        ?? (tableResponse?.status === "error" ? tableResponse.message : undefined);
+    const purchasesErrorMessage =
+        (purchasesQuery.error as { message?: string } | null)?.message
+        ?? (purchasesResponse?.status === "error" ? purchasesResponse.message : undefined);
+    const purchaseErrorMessage =
+        (purchaseQuery.error as { message?: string } | null)?.message
+        ?? (purchaseResponse?.status === "error" ? purchaseResponse.message : undefined);
     const catalogDetailErrorMessage = catalogResourceKind === "products"
         ? catalogProductErrorMessage
         : catalogResourceKind === "categories"
@@ -483,6 +591,14 @@ const PlatformOrganizationDetailPage = ({
                                         ? (reportsQuery.error as { message?: string } | null)?.message
                                             ?? (reportsResponse?.status === "error" ? reportsResponse.message : undefined)
                                             ?? errorMessage
+                                        : section === "tables" && resourceId
+                                            ? tableErrorMessage ?? errorMessage
+                                            : section === "tables"
+                                                ? tablesErrorMessage ?? errorMessage
+                                                : section === "purchases" && resourceId
+                                                    ? purchaseErrorMessage ?? errorMessage
+                                                    : section === "purchases"
+                                                        ? purchasesErrorMessage ?? errorMessage
                                     : errorMessage;
 
     useEffect(() => {
@@ -530,6 +646,30 @@ const PlatformOrganizationDetailPage = ({
         window.addEventListener("popstate", syncCatalogFilters);
         return () => window.removeEventListener("popstate", syncCatalogFilters);
     }, [section, resourceId, catalogResourceKind]);
+
+    useEffect(() => {
+        if (section !== "tables") return;
+        const syncTableFilters = () => {
+            const nextFilters = parseTableInspectionSearch(window.location.search);
+            setTableFilters(nextFilters);
+            setTableSearchInput(nextFilters.search ?? "");
+        };
+        syncTableFilters();
+        window.addEventListener("popstate", syncTableFilters);
+        return () => window.removeEventListener("popstate", syncTableFilters);
+    }, [section, resourceId]);
+
+    useEffect(() => {
+        if (section !== "purchases") return;
+        const syncPurchaseFilters = () => {
+            const nextFilters = parsePurchaseInspectionSearch(window.location.search);
+            setPurchaseFilters(nextFilters);
+            setPurchaseSearchInput(nextFilters.search ?? "");
+        };
+        syncPurchaseFilters();
+        window.addEventListener("popstate", syncPurchaseFilters);
+        return () => window.removeEventListener("popstate", syncPurchaseFilters);
+    }, [section, resourceId]);
 
     const navigateBilling = (nextFilters: BillingInspectionFilters, nextResourceId?: string) => {
         const path = organizationInspectionPath(organizationId, "billing", nextResourceId, nextFilters);
@@ -579,6 +719,26 @@ const PlatformOrganizationDetailPage = ({
         navigateReports({ ...reportFilters, ...patch });
     };
 
+    const navigateTables = (nextFilters: TableInspectionFilters, nextResourceId?: string) => {
+        const path = organizationInspectionPath(organizationId, "tables", nextResourceId, nextFilters);
+        setTableFilters(nextFilters);
+        go(path);
+    };
+
+    const updateTableFilters = (patch: Partial<TableInspectionFilters>, nextResourceId?: string) => {
+        navigateTables({ ...tableFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
+    };
+
+    const navigatePurchases = (nextFilters: PurchaseInspectionFilters, nextResourceId?: string) => {
+        const path = organizationInspectionPath(organizationId, "purchases", nextResourceId, nextFilters);
+        setPurchaseFilters(nextFilters);
+        go(path);
+    };
+
+    const updatePurchaseFilters = (patch: Partial<PurchaseInspectionFilters>, nextResourceId?: string) => {
+        navigatePurchases({ ...purchaseFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
+    };
+
     useEffect(() => {
         if (activeSectionErrorCode === 401) void onUnauthorized?.();
     }, [activeSectionErrorCode, onUnauthorized]);
@@ -602,6 +762,12 @@ const PlatformOrganizationDetailPage = ({
                             ? catalogInspectionPath(organizationId, { view: "list", filters: catalogFilters })
                             : item === "customers"
                                 ? organizationInspectionPath(organizationId, item, undefined, customerFilters)
+                                : item === "reports"
+                                    ? organizationInspectionPath(organizationId, item, undefined, reportFilters)
+                                    : item === "tables"
+                                        ? organizationInspectionPath(organizationId, item, undefined, tableFilters)
+                                        : item === "purchases"
+                                            ? organizationInspectionPath(organizationId, item, undefined, purchaseFilters)
                                 : organizationInspectionPath(organizationId, item);
                     const active = item === section;
                     const Icon = sectionConfig[item].icon;
@@ -2519,6 +2685,579 @@ const PlatformOrganizationDetailPage = ({
         );
     };
 
+    const renderTableInspection = () => {
+        if (resourceId) {
+            if (tableQuery.isLoading) {
+                return (
+                    <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading table">
+                        <Spinner className="size-6 text-primary" />
+                    </div>
+                );
+            }
+            if (tableErrorCode === 404 || tableErrorMessage === "Table not found") {
+                return (
+                    <Alert role="alert">
+                        <AlertTitle>Table was not found</AlertTitle>
+                        <AlertDescription>
+                            This table is not available in this organization. Return to the table list to continue.
+                        </AlertDescription>
+                    </Alert>
+                );
+            }
+            if (tableQuery.isError || tableResponse?.status === "error") {
+                return (
+                    <Alert variant="destructive" role="alert">
+                        <AlertTitle>Table could not be loaded</AlertTitle>
+                        <AlertDescription>{tableErrorMessage ?? "The table detail is unavailable."}</AlertDescription>
+                    </Alert>
+                );
+            }
+            if (!tableDetail) return null;
+
+            return (
+                <div className="space-y-4">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                        onClick={() => navigateTables(tableFilters)}
+                    >
+                        <ArrowLeft className="size-4" />
+                        Back to tables
+                    </Button>
+                    <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                        <CardHeader>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h2 className="font-display text-2xl font-semibold tracking-tight">
+                                    {`Table ${tableDetail.tableLabel}`}
+                                </h2>
+                                <Badge variant="outline" className="rounded-full">{serviceTableStateLabel(tableDetail.state)}</Badge>
+                            </div>
+                            <CardDescription>
+                                {`${tableDetail.store.name} · Read-only service table inspection`}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                <MetricCard label="Store" value={tableDetail.store.name} />
+                                <MetricCard label="Capacity" value={tableDetail.capacity ? String(tableDetail.capacity) : "Unknown"} />
+                                <MetricCard label="Service area" value={tableDetail.serviceArea?.title ?? "Unassigned"} />
+                                <MetricCard
+                                    label="Current order total"
+                                    value={tableDetail.currentSaleTotal == null ? "—" : formatCompletedSalesValue(tableDetail.currentSaleTotal)}
+                                />
+                            </div>
+                            {tableDetail.currentSale ? (
+                                <div className="rounded-xl border border-border/60 bg-background/60 p-4">
+                                    <p className="text-sm font-medium">Active table order</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        {tableDetail.currentSale.saleNumber
+                                            ? `Bill ${tableDetail.currentSale.saleNumber} · ${saleStatusLabel(tableDetail.currentSale.status)} · ${paymentStatusLabel(tableDetail.currentSale.paymentStatus)}`
+                                            : `${saleStatusLabel(tableDetail.currentSale.status)} · ${paymentStatusLabel(tableDetail.currentSale.paymentStatus)}`}
+                                    </p>
+                                    <a
+                                        href={organizationInspectionPath(organizationId, "billing", tableDetail.currentSale.id)}
+                                        className="mt-3 inline-flex text-sm font-medium text-primary hover:underline"
+                                        onClick={(event) => followInspectionLink(event, organizationInspectionPath(organizationId, "billing", tableDetail.currentSale!.id))}
+                                    >
+                                        Open bill in Billing
+                                    </a>
+                                </div>
+                            ) : null}
+                        </CardContent>
+                    </Card>
+                </div>
+            );
+        }
+
+        if (tablesQuery.isLoading) {
+            return (
+                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading tables">
+                    <Spinner className="size-6 text-primary" />
+                </div>
+            );
+        }
+        if (tablesErrorCode === 404 || tablesErrorMessage === "Organization not found" || tablesErrorMessage === "Store not found") {
+            return (
+                <Alert role="alert">
+                    <AlertTitle>Table data was not found</AlertTitle>
+                    <AlertDescription>
+                        This organization or store is not available. Adjust the table filters to continue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (tablesQuery.isError || tablesResponse?.status === "error") {
+            return (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>Tables could not be loaded</AlertTitle>
+                    <AlertDescription>{tablesErrorMessage ?? "The table list is unavailable."}</AlertDescription>
+                </Alert>
+            );
+        }
+        if (!tablesList) return null;
+
+        const page = tablesList.pagination.page;
+        const limit = tablesList.pagination.limit;
+        const totalPages = Math.max(1, Math.ceil(tablesList.pagination.totalCount / limit));
+
+        return (
+            <div className="space-y-4">
+                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                    <CardHeader className="gap-3">
+                        <div>
+                            <h2 className="font-display text-xl font-semibold tracking-tight">Tables</h2>
+                            <CardDescription>
+                                Read-only service table configuration and operational state. Filters are independent of the Dashboard reporting period.
+                            </CardDescription>
+                        </div>
+                        <form
+                            className="flex flex-col gap-3 lg:flex-row lg:items-end"
+                            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                                event.preventDefault();
+                                updateTableFilters({ search: tableSearchInput.trim() || undefined });
+                            }}
+                            role="search"
+                        >
+                            <div className="relative min-w-0 flex-1">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    value={tableSearchInput}
+                                    onChange={(event) => setTableSearchInput(event.target.value)}
+                                    aria-label="Search tables"
+                                    placeholder="Search table no or area"
+                                    className="h-10 rounded-xl pl-9"
+                                />
+                            </div>
+                            <Button type="submit" size="sm" className="rounded-full">Search</Button>
+                        </form>
+                        <div className="flex flex-wrap gap-2">
+                            <Select
+                                value={tableFilters.storeId ?? "all"}
+                                onValueChange={(value) =>
+                                    updateTableFilters({
+                                        storeId: value === "all" ? undefined : value,
+                                        page: 1,
+                                    })}
+                            >
+                                <SelectTrigger className="h-10 w-44 rounded-xl" aria-label="Filter tables by store">
+                                    <SelectValue placeholder="All stores" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All stores</SelectItem>
+                                    {tablesList.stores.map((storeOption) => (
+                                        <SelectItem key={storeOption.id} value={storeOption.id}>{storeOption.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select
+                                value={tableFilters.state ?? "all"}
+                                onValueChange={(value) =>
+                                    updateTableFilters({
+                                        state: value as TableInspectionFilters["state"],
+                                        page: 1,
+                                    })}
+                            >
+                                <SelectTrigger className="h-10 w-44 rounded-xl" aria-label="Filter tables by state">
+                                    <SelectValue placeholder="All states" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All states</SelectItem>
+                                    <SelectItem value="free">Free</SelectItem>
+                                    <SelectItem value="allocated">Allocated</SelectItem>
+                                    <SelectItem value="engaged">Engaged</SelectItem>
+                                    <SelectItem value="ready_to_bill">Ready to bill</SelectItem>
+                                    <SelectItem value="payment_due">Payment due</SelectItem>
+                                    <SelectItem value="paid">Paid</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="mb-4 text-sm text-muted-foreground">
+                            {`Read-only table directory · ${tablesList.pagination.totalCount} tables`}
+                        </p>
+                        {tablesList.tables.length === 0 ? (
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <LayoutGrid />
+                                    </EmptyMedia>
+                                    <EmptyTitle>No tables match these filters</EmptyTitle>
+                                    <EmptyDescription>Try another store, state, or search term.</EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        ) : (
+                            <div className="overflow-x-auto rounded-xl border border-border/60">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Table no</TableHead>
+                                            <TableHead>Store</TableHead>
+                                            <TableHead>Area</TableHead>
+                                            <TableHead>State</TableHead>
+                                            <TableHead className="text-right">Current total</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {tablesList.tables.map((tableRow) => {
+                                            const href = organizationInspectionPath(organizationId, "tables", tableRow.id, tableFilters);
+                                            return (
+                                                <TableRow key={tableRow.id}>
+                                                    <TableCell>
+                                                        <a
+                                                            href={href}
+                                                            className="font-medium text-primary hover:underline"
+                                                            onClick={(event) => followInspectionLink(event, href)}
+                                                        >
+                                                            {tableRow.tableLabel}
+                                                        </a>
+                                                    </TableCell>
+                                                    <TableCell>{tableRow.store.name}</TableCell>
+                                                    <TableCell>{tableRow.serviceArea?.title ?? "Unassigned"}</TableCell>
+                                                    <TableCell>{serviceTableStateLabel(tableRow.state)}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        {tableRow.currentSaleTotal == null ? "—" : formatCompletedSalesValue(tableRow.currentSaleTotal)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                        {tablesList.pagination.totalCount > limit ? (
+                            <div className="mt-4 flex items-center justify-between gap-3">
+                                <p className="text-sm text-muted-foreground">{`Page ${page} of ${totalPages}`}</p>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full"
+                                        disabled={page <= 1}
+                                        onClick={() => updateTableFilters({ page: page - 1 })}
+                                    >
+                                        <ChevronLeft className="size-4" />
+                                        Previous
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full"
+                                        disabled={page >= totalPages}
+                                        onClick={() => updateTableFilters({ page: page + 1 })}
+                                    >
+                                        Next
+                                        <ChevronRight className="size-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : null}
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    };
+
+    const renderPurchaseInspection = () => {
+        if (resourceId) {
+            if (purchaseQuery.isLoading) {
+                return (
+                    <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading purchase">
+                        <Spinner className="size-6 text-primary" />
+                    </div>
+                );
+            }
+            if (purchaseErrorCode === 404 || purchaseErrorMessage === "Purchase not found") {
+                return (
+                    <Alert role="alert">
+                        <AlertTitle>Purchase was not found</AlertTitle>
+                        <AlertDescription>
+                            This purchase is not available in this organization. Return to the purchase list to continue.
+                        </AlertDescription>
+                    </Alert>
+                );
+            }
+            if (purchaseQuery.isError || purchaseResponse?.status === "error") {
+                return (
+                    <Alert variant="destructive" role="alert">
+                        <AlertTitle>Purchase could not be loaded</AlertTitle>
+                        <AlertDescription>{purchaseErrorMessage ?? "The purchase detail is unavailable."}</AlertDescription>
+                    </Alert>
+                );
+            }
+            if (!purchaseDetail) return null;
+
+            return (
+                <div className="space-y-4">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                        onClick={() => navigatePurchases(purchaseFilters)}
+                    >
+                        <ArrowLeft className="size-4" />
+                        Back to purchases
+                    </Button>
+                    <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                        <CardHeader>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h2 className="font-display text-2xl font-semibold tracking-tight">{purchaseDetail.supplierName}</h2>
+                                <Badge variant="outline" className="rounded-full">{purchaseStatusLabel(purchaseDetail.status)}</Badge>
+                            </div>
+                            <CardDescription>
+                                {`${purchaseDetail.store.name} · ${purchaseDetail.purchaseDate} · Read-only purchase inspection`}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                <MetricCard label="Store" value={purchaseDetail.store.name} />
+                                <MetricCard label="Invoice" value={purchaseDetail.invoiceNumber ?? "—"} />
+                                <MetricCard label="Total" value={formatCompletedSalesValue(purchaseDetail.totalAmount)} />
+                                <MetricCard label="Items" value={String(purchaseDetail.itemCount)} />
+                            </div>
+                            {purchaseDetail.notes ? (
+                                <p className="text-sm text-muted-foreground">{purchaseDetail.notes}</p>
+                            ) : null}
+                            {purchaseDetail.status === "voided" ? (
+                                <Alert role="alert">
+                                    <AlertTitle>Purchase voided</AlertTitle>
+                                    <AlertDescription>{purchaseDetail.voidReason ?? "No void reason recorded."}</AlertDescription>
+                                </Alert>
+                            ) : null}
+                            <div className="overflow-x-auto rounded-xl border border-border/60">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Item</TableHead>
+                                            <TableHead>Description</TableHead>
+                                            <TableHead className="text-right">Qty</TableHead>
+                                            <TableHead className="text-right">Rate</TableHead>
+                                            <TableHead className="text-right">Line total</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {purchaseDetail.items.map((item) => (
+                                            <TableRow key={item.id}>
+                                                <TableCell className="font-medium">{item.itemName}</TableCell>
+                                                <TableCell>{item.description ?? "—"}</TableCell>
+                                                <TableCell className="text-right">{item.quantity}</TableCell>
+                                                <TableCell className="text-right">{formatCompletedSalesValue(item.rate)}</TableCell>
+                                                <TableCell className="text-right">{formatCompletedSalesValue(item.lineTotal)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            );
+        }
+
+        if (purchasesQuery.isLoading) {
+            return (
+                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading purchases">
+                    <Spinner className="size-6 text-primary" />
+                </div>
+            );
+        }
+        if (purchasesErrorCode === 404 || purchasesErrorMessage === "Organization not found" || purchasesErrorMessage === "Store not found") {
+            return (
+                <Alert role="alert">
+                    <AlertTitle>Purchase data was not found</AlertTitle>
+                    <AlertDescription>
+                        This organization or store is not available. Adjust the purchase filters to continue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (purchasesQuery.isError || purchasesResponse?.status === "error") {
+            return (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>Purchases could not be loaded</AlertTitle>
+                    <AlertDescription>{purchasesErrorMessage ?? "The purchase list is unavailable."}</AlertDescription>
+                </Alert>
+            );
+        }
+        if (!purchasesList) return null;
+
+        const page = purchasesList.pagination.page;
+        const limit = purchasesList.pagination.limit;
+        const totalPages = Math.max(1, Math.ceil(purchasesList.pagination.totalCount / limit));
+
+        return (
+            <div className="space-y-4">
+                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                    <CardHeader className="gap-3">
+                        <div>
+                            <h2 className="font-display text-xl font-semibold tracking-tight">Purchases</h2>
+                            <CardDescription>
+                                Read-only supplier purchase records by Store. Filters are independent of the Dashboard reporting period.
+                            </CardDescription>
+                        </div>
+                        <form
+                            className="flex flex-col gap-3 lg:flex-row lg:items-end"
+                            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                                event.preventDefault();
+                                updatePurchaseFilters({ search: purchaseSearchInput.trim() || undefined });
+                            }}
+                            role="search"
+                        >
+                            <div className="relative min-w-0 flex-1">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    value={purchaseSearchInput}
+                                    onChange={(event) => setPurchaseSearchInput(event.target.value)}
+                                    aria-label="Search purchases"
+                                    placeholder="Search supplier, invoice, or item"
+                                    className="h-10 rounded-xl pl-9"
+                                />
+                            </div>
+                            <Button type="submit" size="sm" className="rounded-full">Search</Button>
+                        </form>
+                        <div className="flex flex-wrap gap-2">
+                            <Select
+                                value={purchaseFilters.storeId ?? "all"}
+                                onValueChange={(value) =>
+                                    updatePurchaseFilters({
+                                        storeId: value === "all" ? undefined : value,
+                                        page: 1,
+                                    })}
+                            >
+                                <SelectTrigger className="h-10 w-44 rounded-xl" aria-label="Filter purchases by store">
+                                    <SelectValue placeholder="All stores" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All stores</SelectItem>
+                                    {purchasesList.stores.map((storeOption) => (
+                                        <SelectItem key={storeOption.id} value={storeOption.id}>{storeOption.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select
+                                value={purchaseFilters.status ?? "all"}
+                                onValueChange={(value) =>
+                                    updatePurchaseFilters({
+                                        status: value as PurchaseInspectionFilters["status"],
+                                        page: 1,
+                                    })}
+                            >
+                                <SelectTrigger className="h-10 w-40 rounded-xl" aria-label="Filter purchases by status">
+                                    <SelectValue placeholder="All status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All status</SelectItem>
+                                    <SelectItem value="recorded">Recorded</SelectItem>
+                                    <SelectItem value="voided">Voided</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Input
+                                type="date"
+                                aria-label="Purchase start date"
+                                value={purchaseFilters.startDate ?? ""}
+                                onChange={(event) => updatePurchaseFilters({ startDate: event.target.value || undefined, page: 1 })}
+                                className="h-10 w-40 rounded-xl"
+                            />
+                            <Input
+                                type="date"
+                                aria-label="Purchase end date"
+                                value={purchaseFilters.endDate ?? ""}
+                                onChange={(event) => updatePurchaseFilters({ endDate: event.target.value || undefined, page: 1 })}
+                                className="h-10 w-40 rounded-xl"
+                            />
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="mb-4 text-sm text-muted-foreground">
+                            {`Read-only purchase directory · ${purchasesList.pagination.totalCount} purchases`}
+                        </p>
+                        {purchasesList.purchases.length === 0 ? (
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <ShoppingCart />
+                                    </EmptyMedia>
+                                    <EmptyTitle>No purchases match these filters</EmptyTitle>
+                                    <EmptyDescription>Try another store, date range, or search term.</EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        ) : (
+                            <div className="overflow-x-auto rounded-xl border border-border/60">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Supplier</TableHead>
+                                            <TableHead>Store</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="text-right">Total</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {purchasesList.purchases.map((purchaseRow) => {
+                                            const href = organizationInspectionPath(organizationId, "purchases", purchaseRow.id, purchaseFilters);
+                                            return (
+                                                <TableRow key={purchaseRow.id}>
+                                                    <TableCell>{purchaseRow.purchaseDate}</TableCell>
+                                                    <TableCell>
+                                                        <a
+                                                            href={href}
+                                                            className="font-medium text-primary hover:underline"
+                                                            onClick={(event) => followInspectionLink(event, href)}
+                                                        >
+                                                            {purchaseRow.supplierName}
+                                                        </a>
+                                                    </TableCell>
+                                                    <TableCell>{purchaseRow.store.name}</TableCell>
+                                                    <TableCell>{purchaseStatusLabel(purchaseRow.status)}</TableCell>
+                                                    <TableCell className="text-right font-semibold">
+                                                        {formatCompletedSalesValue(purchaseRow.totalAmount)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                        {purchasesList.pagination.totalCount > limit ? (
+                            <div className="mt-4 flex items-center justify-between gap-3">
+                                <p className="text-sm text-muted-foreground">{`Page ${page} of ${totalPages}`}</p>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full"
+                                        disabled={page <= 1}
+                                        onClick={() => updatePurchaseFilters({ page: page - 1 })}
+                                    >
+                                        <ChevronLeft className="size-4" />
+                                        Previous
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full"
+                                        disabled={page >= totalPages}
+                                        onClick={() => updatePurchaseFilters({ page: page + 1 })}
+                                    >
+                                        Next
+                                        <ChevronRight className="size-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : null}
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    };
+
     const renderLaterSection = () => {
         const config = sectionConfig[section];
         const Icon = config.icon;
@@ -2612,7 +3351,7 @@ const PlatformOrganizationDetailPage = ({
 
             {renderSectionNav()}
 
-            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" ? (
+            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
                     <Spinner className="size-6 text-primary" />
                 </div>
@@ -2623,19 +3362,19 @@ const PlatformOrganizationDetailPage = ({
                         {activeSectionErrorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
                 <Alert role="alert">
                     <AlertTitle>Organization was not found</AlertTitle>
                     <AlertDescription>
                         This organization is not available. Return to the organizations list to continue.
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && (detailQuery.isError || response?.status === "error") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && (detailQuery.isError || response?.status === "error") ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Organization could not be loaded</AlertTitle>
                     <AlertDescription>{errorMessage ?? "The organization detail is unavailable."}</AlertDescription>
                 </Alert>
-            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || section === "reports" || organization ? (
+            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || section === "reports" || section === "tables" || section === "purchases" || organization ? (
                 section === "overview" && organization
                     ? renderOverview()
                     : section === "stores"
@@ -2648,6 +3387,10 @@ const PlatformOrganizationDetailPage = ({
                                     ? renderCustomerInspection()
                                     : section === "reports"
                                         ? renderReportInspection()
+                                        : section === "tables"
+                                            ? renderTableInspection()
+                                            : section === "purchases"
+                                                ? renderPurchaseInspection()
                                     : organization
                                         ? renderLaterSection()
                                         : null

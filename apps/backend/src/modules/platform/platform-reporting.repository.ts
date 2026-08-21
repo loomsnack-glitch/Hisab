@@ -1839,3 +1839,536 @@ export const getOrganizationReportContext = async (
         })),
     };
 };
+
+export type PlatformOrganizationTablesMetricsQuery = {
+    organizationId: string;
+    storeId?: string;
+    search: string;
+    state: "all" | "free" | "allocated" | "engaged" | "ready_to_bill" | "payment_due" | "paid";
+    sort: "table_asc" | "table_desc" | "store_asc" | "state";
+    page: number;
+    limit: number;
+};
+
+export type PlatformOrganizationTableSummaryMetricsRow = {
+    id: string;
+    tableLabel: string;
+    capacity: number | null;
+    position: { x: number; y: number };
+    state: "free" | "allocated" | "engaged" | "ready_to_bill" | "payment_due" | "paid";
+    storeId: string;
+    storeName: string;
+    serviceAreaId: string | null;
+    serviceAreaTitle: string | null;
+    currentSaleId: string | null;
+    currentSaleTotal: number | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PlatformOrganizationTablesMetrics = {
+    stores: Array<{ id: string; name: string }>;
+    tables: PlatformOrganizationTableSummaryMetricsRow[];
+    totalCount: number;
+};
+
+export type PlatformOrganizationTableDetailMetrics = PlatformOrganizationTableSummaryMetricsRow & {
+    currentSale: {
+        id: string;
+        saleNumber: string | null;
+        status: "draft" | "completed" | "voided";
+        paymentStatus: "pending" | "partial" | "paid";
+        grandTotal: number;
+        dueTotal: number;
+    } | null;
+};
+
+const tableSearchPattern = (search: string) => `%${search.replace(/[%_\\]/g, "\\$&")}%`;
+
+const mapTableSummaryRow = (row: Record<string, unknown>): PlatformOrganizationTableSummaryMetricsRow | null => {
+    const state = row.state as PlatformOrganizationTableSummaryMetricsRow["state"] | undefined;
+    const createdAt = asTimestamp(row.created_at);
+    const updatedAt = asTimestamp(row.updated_at);
+    if (!state || !createdAt || !updatedAt) return null;
+    return {
+        id: String(row.id),
+        tableLabel: String(row.table_label),
+        capacity: row.capacity == null ? null : Number(row.capacity),
+        position: {
+            x: Number(row.position_x),
+            y: Number(row.position_y),
+        },
+        state,
+        storeId: String(row.store_id),
+        storeName: String(row.store_name),
+        serviceAreaId: row.service_area_id == null ? null : String(row.service_area_id),
+        serviceAreaTitle: row.service_area_title == null ? null : String(row.service_area_title),
+        currentSaleId: row.current_sale_id == null ? null : String(row.current_sale_id),
+        currentSaleTotal: row.current_sale_total == null ? null : asMoney(row.current_sale_total),
+        createdAt,
+        updatedAt,
+    };
+};
+
+export const listOrganizationTables = async (
+    query: PlatformOrganizationTablesMetricsQuery,
+): Promise<PlatformOrganizationTablesMetrics | null> => {
+    if (!(await organizationExists(query.organizationId))) {
+        return null;
+    }
+
+    const storeRows = await pg`
+        SELECT id, name
+        FROM stores
+        WHERE organization_id = ${query.organizationId}
+        ORDER BY name ASC, id ASC
+    `;
+
+    const search = query.search.trim();
+    const searchPattern = search ? tableSearchPattern(search) : null;
+    const storeId = query.storeId ?? "";
+    const state = query.state === "all" ? "" : query.state;
+    const offset = (query.page - 1) * query.limit;
+
+    const orderClause = {
+        table_asc: sql`LOWER(st.table_label) ASC, store.name ASC, st.id ASC`,
+        table_desc: sql`LOWER(st.table_label) DESC, store.name ASC, st.id DESC`,
+        store_asc: sql`store.name ASC, LOWER(st.table_label) ASC, st.id ASC`,
+        state: sql`st.state::text ASC, store.name ASC, LOWER(st.table_label) ASC, st.id ASC`,
+    }[query.sort];
+
+    const [countRow] = await pg`
+        SELECT COUNT(*)::int AS total_count
+        FROM service_tables st
+        INNER JOIN stores store
+          ON store.id = st.store_id
+         AND store.organization_id = st.organization_id
+        LEFT JOIN service_areas area
+          ON area.id = st.service_area_id
+         AND area.organization_id = st.organization_id
+         AND area.store_id = st.store_id
+        WHERE st.organization_id = ${query.organizationId}
+          AND (${storeId} = '' OR st.store_id::text = ${storeId})
+          AND (${state} = '' OR st.state::text = ${state})
+          AND (
+            ${searchPattern}::text IS NULL
+            OR st.table_label ILIKE ${searchPattern}
+            OR COALESCE(area.title, '') ILIKE ${searchPattern}
+          )
+    `;
+
+    const tableRows = await pg`
+        SELECT
+            st.id,
+            st.table_label,
+            st.capacity,
+            st.position_x,
+            st.position_y,
+            st.state::text AS state,
+            st.service_area_id,
+            st.current_sale_id,
+            st.created_at,
+            st.updated_at,
+            store.id AS store_id,
+            store.name AS store_name,
+            area.title AS service_area_title,
+            CASE
+                WHEN current_sale.id IS NULL THEN NULL
+                WHEN current_sale.status = 'draft' THEN current_sale.grand_total
+                WHEN current_sale.payment_status = 'paid' THEN current_sale.grand_total
+                ELSE current_sale.grand_total - COALESCE((
+                    SELECT SUM(payment.amount)
+                    FROM payments AS payment
+                    WHERE payment.sale_id = current_sale.id
+                ), 0)
+            END AS current_sale_total
+        FROM service_tables st
+        INNER JOIN stores store
+          ON store.id = st.store_id
+         AND store.organization_id = st.organization_id
+        LEFT JOIN service_areas area
+          ON area.id = st.service_area_id
+         AND area.organization_id = st.organization_id
+         AND area.store_id = st.store_id
+        LEFT JOIN sales AS current_sale
+          ON current_sale.id = st.current_sale_id
+         AND current_sale.organization_id = st.organization_id
+         AND current_sale.store_id = st.store_id
+         AND current_sale.status IN ('draft', 'completed')
+        WHERE st.organization_id = ${query.organizationId}
+          AND (${storeId} = '' OR st.store_id::text = ${storeId})
+          AND (${state} = '' OR st.state::text = ${state})
+          AND (
+            ${searchPattern}::text IS NULL
+            OR st.table_label ILIKE ${searchPattern}
+            OR COALESCE(area.title, '') ILIKE ${searchPattern}
+          )
+        ORDER BY ${orderClause}
+        LIMIT ${query.limit}
+        OFFSET ${offset}
+    `;
+
+    return {
+        stores: storeRows.map((row: Record<string, unknown>) => ({
+            id: String(row.id),
+            name: String(row.name),
+        })),
+        tables: tableRows.flatMap((row: Record<string, unknown>) => {
+            const mapped = mapTableSummaryRow(row);
+            return mapped ? [mapped] : [];
+        }),
+        totalCount: asCount(countRow?.total_count),
+    };
+};
+
+export const getOrganizationTableContext = async (
+    organizationId: string,
+    tableId: string,
+): Promise<PlatformOrganizationTableDetailMetrics | null> => {
+    const [row] = await pg`
+        SELECT
+            st.id,
+            st.table_label,
+            st.capacity,
+            st.position_x,
+            st.position_y,
+            st.state::text AS state,
+            st.service_area_id,
+            st.current_sale_id,
+            st.created_at,
+            st.updated_at,
+            store.id AS store_id,
+            store.name AS store_name,
+            area.title AS service_area_title,
+            current_sale.id AS current_sale_detail_id,
+            current_sale.sale_number AS current_sale_number,
+            current_sale.status::text AS current_sale_status,
+            current_sale.payment_status::text AS current_sale_payment_status,
+            current_sale.grand_total AS current_sale_grand_total,
+            CASE
+                WHEN current_sale.id IS NULL THEN NULL
+                WHEN current_sale.status = 'draft' THEN current_sale.grand_total
+                WHEN current_sale.payment_status = 'paid' THEN current_sale.grand_total
+                ELSE current_sale.grand_total - COALESCE((
+                    SELECT SUM(payment.amount)
+                    FROM payments AS payment
+                    WHERE payment.sale_id = current_sale.id
+                ), 0)
+            END AS current_sale_total
+        FROM service_tables st
+        INNER JOIN stores store
+          ON store.id = st.store_id
+         AND store.organization_id = st.organization_id
+        LEFT JOIN service_areas area
+          ON area.id = st.service_area_id
+         AND area.organization_id = st.organization_id
+         AND area.store_id = st.store_id
+        LEFT JOIN sales AS current_sale
+          ON current_sale.id = st.current_sale_id
+         AND current_sale.organization_id = st.organization_id
+         AND current_sale.store_id = st.store_id
+         AND current_sale.status IN ('draft', 'completed')
+        WHERE st.organization_id = ${organizationId}
+          AND st.id = ${tableId}
+        LIMIT 1
+    `;
+
+    if (!row?.id) {
+        return null;
+    }
+
+    const summary = mapTableSummaryRow(row);
+    if (!summary) {
+        return null;
+    }
+
+    const saleStatus = asSaleStatus(row.current_sale_status);
+    const paymentStatus = asPaymentStatus(row.current_sale_payment_status);
+    const currentSaleId = row.current_sale_detail_id == null ? null : String(row.current_sale_detail_id);
+
+    return {
+        ...summary,
+        currentSale: currentSaleId && saleStatus && paymentStatus
+            ? {
+                id: currentSaleId,
+                saleNumber: row.current_sale_number == null ? null : String(row.current_sale_number),
+                status: saleStatus,
+                paymentStatus,
+                grandTotal: asMoney(row.current_sale_grand_total),
+                dueTotal: asMoney(row.current_sale_total),
+            }
+            : null,
+    };
+};
+
+export type PlatformOrganizationPurchasesMetricsQuery = {
+    organizationId: string;
+    storeId?: string;
+    search: string;
+    status: "all" | "recorded" | "voided";
+    startDate: string | null;
+    endDate: string | null;
+    sort: "newest" | "oldest" | "highest" | "lowest";
+    page: number;
+    limit: number;
+};
+
+export type PlatformOrganizationPurchaseSummaryMetricsRow = {
+    id: string;
+    purchaseDate: string;
+    supplierName: string;
+    invoiceNumber: string | null;
+    notes: string | null;
+    totalAmount: number;
+    status: "recorded" | "voided";
+    itemCount: number;
+    itemsSummary: string | null;
+    voidedAt: string | null;
+    voidReason: string | null;
+    createdAt: string;
+    updatedAt: string;
+    storeId: string;
+    storeName: string;
+};
+
+export type PlatformOrganizationPurchasesMetrics = {
+    stores: Array<{ id: string; name: string }>;
+    purchases: PlatformOrganizationPurchaseSummaryMetricsRow[];
+    totalCount: number;
+};
+
+export type PlatformOrganizationPurchaseDetailMetrics = PlatformOrganizationPurchaseSummaryMetricsRow & {
+    items: Array<{
+        id: string;
+        purchaseId: string;
+        itemName: string;
+        description: string | null;
+        quantity: number;
+        rate: number;
+        lineTotal: number;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+const purchaseSearchPattern = (search: string) => `%${search.replace(/[%_\\]/g, "\\$&")}%`;
+
+const mapPurchaseSummaryRow = (row: Record<string, unknown>): PlatformOrganizationPurchaseSummaryMetricsRow | null => {
+    const status = row.status as "recorded" | "voided" | undefined;
+    const createdAt = asTimestamp(row.created_at);
+    const updatedAt = asTimestamp(row.updated_at);
+    const purchaseDate = row.purchase_date ? String(row.purchase_date) : null;
+    if (!status || !createdAt || !updatedAt || !purchaseDate) return null;
+    return {
+        id: String(row.id),
+        purchaseDate,
+        supplierName: String(row.supplier_name),
+        invoiceNumber: row.invoice_number == null ? null : String(row.invoice_number),
+        notes: row.notes == null ? null : String(row.notes),
+        totalAmount: asMoney(row.total_amount),
+        status,
+        itemCount: asCount(row.item_count),
+        itemsSummary: row.items_summary ? String(row.items_summary) : null,
+        voidedAt: asTimestamp(row.voided_at),
+        voidReason: row.void_reason == null ? null : String(row.void_reason),
+        createdAt,
+        updatedAt,
+        storeId: String(row.store_id),
+        storeName: String(row.store_name),
+    };
+};
+
+export const listOrganizationPurchases = async (
+    query: PlatformOrganizationPurchasesMetricsQuery,
+): Promise<PlatformOrganizationPurchasesMetrics | null> => {
+    if (!(await organizationExists(query.organizationId))) {
+        return null;
+    }
+
+    const storeRows = await pg`
+        SELECT id, name
+        FROM stores
+        WHERE organization_id = ${query.organizationId}
+        ORDER BY name ASC, id ASC
+    `;
+
+    const search = query.search.trim();
+    const searchPattern = search ? purchaseSearchPattern(search) : null;
+    const storeId = query.storeId ?? "";
+    const status = query.status === "all" ? "" : query.status;
+    const startDate = query.startDate ?? "";
+    const endDate = query.endDate ?? "";
+    const offset = (query.page - 1) * query.limit;
+
+    const orderClause = {
+        newest: sql`p.purchase_date DESC, p.created_at DESC, p.id DESC`,
+        oldest: sql`p.purchase_date ASC, p.created_at ASC, p.id ASC`,
+        highest: sql`p.total_amount DESC, p.purchase_date DESC, p.id DESC`,
+        lowest: sql`p.total_amount ASC, p.purchase_date DESC, p.id ASC`,
+    }[query.sort];
+
+    const [countRow] = await pg`
+        SELECT COUNT(*)::int AS total_count
+        FROM purchases p
+        INNER JOIN stores store
+          ON store.id = p.store_id
+         AND store.organization_id = p.organization_id
+        LEFT JOIN (
+            SELECT purchase_id, STRING_AGG(item_name, ', ' ORDER BY id) AS items_summary
+            FROM purchase_items
+            GROUP BY purchase_id
+        ) item_stats ON item_stats.purchase_id = p.id
+        WHERE p.organization_id = ${query.organizationId}
+          AND (${storeId} = '' OR p.store_id::text = ${storeId})
+          AND (${status} = '' OR p.status::text = ${status})
+          AND (${startDate} = '' OR p.purchase_date >= NULLIF(${startDate}, '')::date)
+          AND (${endDate} = '' OR p.purchase_date <= NULLIF(${endDate}, '')::date)
+          AND (
+            ${searchPattern}::text IS NULL
+            OR p.supplier_name ILIKE ${searchPattern}
+            OR COALESCE(p.invoice_number, '') ILIKE ${searchPattern}
+            OR COALESCE(item_stats.items_summary, '') ILIKE ${searchPattern}
+          )
+    `;
+
+    const purchaseRows = await pg`
+        SELECT
+            p.id,
+            p.purchase_date,
+            p.supplier_name,
+            p.invoice_number,
+            p.notes,
+            p.total_amount,
+            p.status::text AS status,
+            p.voided_at,
+            p.void_reason,
+            p.created_at,
+            p.updated_at,
+            store.id AS store_id,
+            store.name AS store_name,
+            COALESCE(item_stats.item_count, 0)::int AS item_count,
+            COALESCE(item_stats.items_summary, '') AS items_summary
+        FROM purchases p
+        INNER JOIN stores store
+          ON store.id = p.store_id
+         AND store.organization_id = p.organization_id
+        LEFT JOIN (
+            SELECT
+                purchase_id,
+                COUNT(*)::int AS item_count,
+                STRING_AGG(item_name, ', ' ORDER BY id) AS items_summary
+            FROM purchase_items
+            GROUP BY purchase_id
+        ) item_stats ON item_stats.purchase_id = p.id
+        WHERE p.organization_id = ${query.organizationId}
+          AND (${storeId} = '' OR p.store_id::text = ${storeId})
+          AND (${status} = '' OR p.status::text = ${status})
+          AND (${startDate} = '' OR p.purchase_date >= NULLIF(${startDate}, '')::date)
+          AND (${endDate} = '' OR p.purchase_date <= NULLIF(${endDate}, '')::date)
+          AND (
+            ${searchPattern}::text IS NULL
+            OR p.supplier_name ILIKE ${searchPattern}
+            OR COALESCE(p.invoice_number, '') ILIKE ${searchPattern}
+            OR COALESCE(item_stats.items_summary, '') ILIKE ${searchPattern}
+          )
+        ORDER BY ${orderClause}
+        LIMIT ${query.limit}
+        OFFSET ${offset}
+    `;
+
+    return {
+        stores: storeRows.map((row: Record<string, unknown>) => ({
+            id: String(row.id),
+            name: String(row.name),
+        })),
+        purchases: purchaseRows.flatMap((row: Record<string, unknown>) => {
+            const mapped = mapPurchaseSummaryRow(row);
+            return mapped ? [mapped] : [];
+        }),
+        totalCount: asCount(countRow?.total_count),
+    };
+};
+
+export const getOrganizationPurchaseContext = async (
+    organizationId: string,
+    purchaseId: string,
+): Promise<PlatformOrganizationPurchaseDetailMetrics | null> => {
+    const [purchaseRow] = await pg`
+        SELECT
+            p.id,
+            p.purchase_date,
+            p.supplier_name,
+            p.invoice_number,
+            p.notes,
+            p.total_amount,
+            p.status::text AS status,
+            p.voided_at,
+            p.void_reason,
+            p.created_at,
+            p.updated_at,
+            store.id AS store_id,
+            store.name AS store_name,
+            COALESCE(item_stats.item_count, 0)::int AS item_count,
+            COALESCE(item_stats.items_summary, '') AS items_summary
+        FROM purchases p
+        INNER JOIN stores store
+          ON store.id = p.store_id
+         AND store.organization_id = p.organization_id
+        LEFT JOIN (
+            SELECT
+                purchase_id,
+                COUNT(*)::int AS item_count,
+                STRING_AGG(item_name, ', ' ORDER BY id) AS items_summary
+            FROM purchase_items
+            GROUP BY purchase_id
+        ) item_stats ON item_stats.purchase_id = p.id
+        WHERE p.organization_id = ${organizationId}
+          AND p.id = ${purchaseId}
+        LIMIT 1
+    `;
+
+    if (!purchaseRow?.id) {
+        return null;
+    }
+
+    const summary = mapPurchaseSummaryRow(purchaseRow);
+    if (!summary) {
+        return null;
+    }
+
+    const itemRows = await pg`
+        SELECT
+            id,
+            purchase_id,
+            item_name,
+            description,
+            quantity,
+            rate,
+            line_total,
+            created_at,
+            updated_at
+        FROM purchase_items
+        WHERE purchase_id = ${purchaseId}
+        ORDER BY id ASC
+    `;
+
+    return {
+        ...summary,
+        items: itemRows.flatMap((row: Record<string, unknown>) => {
+            const createdAt = asTimestamp(row.created_at);
+            const updatedAt = asTimestamp(row.updated_at);
+            if (!createdAt || !updatedAt) return [];
+            return [{
+                id: String(row.id),
+                purchaseId: String(row.purchase_id),
+                itemName: String(row.item_name),
+                description: row.description == null ? null : String(row.description),
+                quantity: Number(row.quantity),
+                rate: asMoney(row.rate),
+                lineTotal: asMoney(row.line_total),
+                createdAt,
+                updatedAt,
+            }];
+        }),
+    };
+};

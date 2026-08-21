@@ -12,6 +12,8 @@ import {
     PlatformCatalogInspectionQuerySchema,
     PlatformCustomerInspectionQuerySchema,
     PlatformReportInspectionQuerySchema,
+    PlatformTableInspectionQuerySchema,
+    PlatformPurchaseInspectionQuerySchema,
     PlatformStoreInspectionQuerySchema,
     STATUS_CODES,
     type PlatformEntryResponse,
@@ -441,6 +443,116 @@ export const createPlatformRoutes = (
             }
         },
     );
+
+    router.get(
+        "/organizations/:organizationId/tables",
+        validateSchema("query", PlatformTableInspectionQuerySchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await reportingService.listOrganizationTables(organizationId.data, c.req.valid("query")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "listPlatformOrganizationTables", c, error);
+            }
+        },
+    );
+
+    router.get("/organizations/:organizationId/tables/:tableId", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const tableId = z.uuid("Invalid table id").safeParse(c.req.param("tableId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!tableId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid table id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await reportingService.getOrganizationTable(organizationId.data, tableId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformOrganizationTable", c, error);
+        }
+    });
+
+    router.get(
+        "/organizations/:organizationId/purchases",
+        validateSchema("query", PlatformPurchaseInspectionQuerySchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await reportingService.listOrganizationPurchases(organizationId.data, c.req.valid("query")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "listPlatformOrganizationPurchases", c, error);
+            }
+        },
+    );
+
+    router.get("/organizations/:organizationId/purchases/:purchaseId", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const purchaseId = z.uuid("Invalid purchase id").safeParse(c.req.param("purchaseId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!purchaseId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid purchase id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await reportingService.getOrganizationPurchase(organizationId.data, purchaseId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformOrganizationPurchase", c, error);
+        }
+    });
 
     router.get("/owner-users", async (c) => {
         try {

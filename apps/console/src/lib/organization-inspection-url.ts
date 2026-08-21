@@ -3,7 +3,9 @@ import type {
     PaymentStatus,
     PlatformBillingInspectionQueryJSON,
     PlatformCustomerInspectionQueryJSON,
+    PlatformPurchaseInspectionQueryJSON,
     PlatformReportInspectionQueryJSON,
+    PlatformTableInspectionQueryJSON,
     SaleStatus,
     SalesSort,
 } from "@repo/types";
@@ -38,6 +40,10 @@ export type BillingInspectionFilters = PlatformBillingInspectionQueryJSON;
 export type CustomerInspectionFilters = PlatformCustomerInspectionQueryJSON;
 
 export type ReportInspectionFilters = PlatformReportInspectionQueryJSON;
+
+export type TableInspectionFilters = PlatformTableInspectionQueryJSON;
+
+export type PurchaseInspectionFilters = PlatformPurchaseInspectionQueryJSON;
 
 export type CatalogInspectionTab = "products" | "categories" | "add-ons";
 
@@ -258,6 +264,104 @@ export const reportInspectionSearchString = (filters: ReportInspectionFilters = 
     return serialized ? `?${serialized}` : "";
 };
 
+const tableFilterKeys = ["storeId", "search", "state", "sort", "page", "limit"] as const;
+
+export const parseTableInspectionSearch = (search: string): TableInspectionFilters => {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const filters: TableInspectionFilters = {};
+
+    const storeId = params.get("storeId");
+    if (storeId) filters.storeId = storeId;
+
+    const searchValue = params.get("search")?.trim();
+    if (searchValue) filters.search = searchValue;
+
+    const state = params.get("state");
+    if (
+        state === "all"
+        || state === "free"
+        || state === "allocated"
+        || state === "engaged"
+        || state === "ready_to_bill"
+        || state === "payment_due"
+        || state === "paid"
+    ) {
+        filters.state = state;
+    }
+
+    const sort = params.get("sort");
+    if (sort === "table_asc" || sort === "table_desc" || sort === "store_asc" || sort === "state") {
+        filters.sort = sort;
+    }
+
+    const page = params.get("page");
+    if (page) filters.page = Number(page);
+
+    const limit = params.get("limit");
+    if (limit) filters.limit = Number(limit);
+
+    return filters;
+};
+
+export const tableInspectionSearchString = (filters: TableInspectionFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const key of tableFilterKeys) {
+        const value = filters[key];
+        if (value === undefined || value === null || value === "") continue;
+        params.set(key, String(value));
+    }
+    const serialized = params.toString();
+    return serialized ? `?${serialized}` : "";
+};
+
+const purchaseFilterKeys = ["storeId", "search", "status", "startDate", "endDate", "sort", "page", "limit"] as const;
+
+export const parsePurchaseInspectionSearch = (search: string): PurchaseInspectionFilters => {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const filters: PurchaseInspectionFilters = {};
+
+    const storeId = params.get("storeId");
+    if (storeId) filters.storeId = storeId;
+
+    const searchValue = params.get("search")?.trim();
+    if (searchValue) filters.search = searchValue;
+
+    const status = params.get("status");
+    if (status === "all" || status === "recorded" || status === "voided") {
+        filters.status = status;
+    }
+
+    const startDate = params.get("startDate");
+    if (startDate) filters.startDate = startDate;
+
+    const endDate = params.get("endDate");
+    if (endDate) filters.endDate = endDate;
+
+    const sort = params.get("sort");
+    if (sort === "newest" || sort === "oldest" || sort === "highest" || sort === "lowest") {
+        filters.sort = sort;
+    }
+
+    const page = params.get("page");
+    if (page) filters.page = Number(page);
+
+    const limit = params.get("limit");
+    if (limit) filters.limit = Number(limit);
+
+    return filters;
+};
+
+export const purchaseInspectionSearchString = (filters: PurchaseInspectionFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const key of purchaseFilterKeys) {
+        const value = filters[key];
+        if (value === undefined || value === null || value === "") continue;
+        params.set(key, String(value));
+    }
+    const serialized = params.toString();
+    return serialized ? `?${serialized}` : "";
+};
+
 export const isOrganizationsPath = (pathname: string) =>
     pathname === ORGANIZATIONS_PREFIX || pathname.startsWith(`${ORGANIZATIONS_PREFIX}/`);
 
@@ -267,7 +371,7 @@ export const organizationInspectionPath = (
     organizationId: string,
     section: OrganizationInspectionSection = "overview",
     resourceId?: string,
-    sectionFilters?: BillingInspectionFilters | CustomerInspectionFilters | ReportInspectionFilters,
+    sectionFilters?: BillingInspectionFilters | CustomerInspectionFilters | ReportInspectionFilters | TableInspectionFilters | PurchaseInspectionFilters,
 ) => {
     let pathname: string;
     if (section === "overview" && !resourceId) {
@@ -288,6 +392,14 @@ export const organizationInspectionPath = (
 
     if (section === "reports") {
         return `${pathname}${reportInspectionSearchString(sectionFilters as ReportInspectionFilters | undefined)}`;
+    }
+
+    if (section === "tables") {
+        return `${pathname}${tableInspectionSearchString(sectionFilters as TableInspectionFilters | undefined)}`;
+    }
+
+    if (section === "purchases") {
+        return `${pathname}${purchaseInspectionSearchString(sectionFilters as PurchaseInspectionFilters | undefined)}`;
     }
 
     return pathname;

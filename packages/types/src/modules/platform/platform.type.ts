@@ -32,6 +32,16 @@ import type {
     PlatformCustomerInspectionSummaryDTOSchema,
     PlatformReportInspectionDTOSchema,
     PlatformReportInspectionQuerySchema,
+    PlatformTableInspectionDetailDTOSchema,
+    PlatformTableInspectionDetailResponseSchema,
+    PlatformTableInspectionListDTOSchema,
+    PlatformTableInspectionQuerySchema,
+    PlatformTableInspectionSummaryDTOSchema,
+    PlatformPurchaseInspectionDetailDTOSchema,
+    PlatformPurchaseInspectionDetailResponseSchema,
+    PlatformPurchaseInspectionListDTOSchema,
+    PlatformPurchaseInspectionQuerySchema,
+    PlatformPurchaseInspectionSummaryDTOSchema,
     PlatformSaleInspectionDetailDTOSchema,
     PlatformSaleInspectionDetailResponseSchema,
     PlatformSaleInspectionListDTOSchema,
@@ -130,3 +140,19 @@ export type PlatformReportInspectionQueryJSON = z.input<typeof PlatformReportIns
 export type PlatformReportInspectionQuerySVC = z.output<typeof PlatformReportInspectionQuerySchema>;
 export type PlatformReportInspectionDTO = z.infer<typeof PlatformReportInspectionDTOSchema>;
 export type PlatformReportInspectionResponse = PlatformReportInspectionDTO;
+
+export type PlatformTableInspectionQueryJSON = z.input<typeof PlatformTableInspectionQuerySchema>;
+export type PlatformTableInspectionQuerySVC = z.output<typeof PlatformTableInspectionQuerySchema>;
+export type PlatformTableInspectionSummaryDTO = z.infer<typeof PlatformTableInspectionSummaryDTOSchema>;
+export type PlatformTableInspectionListDTO = z.infer<typeof PlatformTableInspectionListDTOSchema>;
+export type PlatformTableInspectionListResponse = PlatformTableInspectionListDTO;
+export type PlatformTableInspectionDetailDTO = z.infer<typeof PlatformTableInspectionDetailDTOSchema>;
+export type PlatformTableInspectionDetailResponse = z.infer<typeof PlatformTableInspectionDetailResponseSchema>;
+
+export type PlatformPurchaseInspectionQueryJSON = z.input<typeof PlatformPurchaseInspectionQuerySchema>;
+export type PlatformPurchaseInspectionQuerySVC = z.output<typeof PlatformPurchaseInspectionQuerySchema>;
+export type PlatformPurchaseInspectionSummaryDTO = z.infer<typeof PlatformPurchaseInspectionSummaryDTOSchema>;
+export type PlatformPurchaseInspectionListDTO = z.infer<typeof PlatformPurchaseInspectionListDTOSchema>;
+export type PlatformPurchaseInspectionListResponse = PlatformPurchaseInspectionListDTO;
+export type PlatformPurchaseInspectionDetailDTO = z.infer<typeof PlatformPurchaseInspectionDetailDTOSchema>;
+export type PlatformPurchaseInspectionDetailResponse = z.infer<typeof PlatformPurchaseInspectionDetailResponseSchema>;

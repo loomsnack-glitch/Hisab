@@ -23,6 +23,8 @@ import {
     ProductTypeSchema,
 } from "../catalog/catalog.schema";
 import { StoreDeviceStatusSchema } from "../organization/organization.schema";
+import { PurchaseItemDTOSchema, PurchaseStatusSchema } from "../purchase/purchase.schema";
+import { ServiceTablePositionSchema, ServiceTableStateSchema } from "../table-service/table-service.schema";
 
 const ownerPhoneSchema = z
     .string()
@@ -560,6 +562,133 @@ export const PlatformReportInspectionDTOSchema = z.object({
     dateRange: PlatformReportDateRangeDTOSchema,
     stores: z.array(PlatformSaleInspectionStoreDTOSchema),
     productSales: PlatformReportProductSalesDTOSchema,
+});
+
+export const PlatformTableInspectionStateFilterSchema = z.enum([
+    "all",
+    ...ServiceTableStateSchema.options,
+]);
+
+export const PlatformTableInspectionSortSchema = z.enum([
+    "table_asc",
+    "table_desc",
+    "store_asc",
+    "state",
+]);
+
+export const PlatformTableInspectionQuerySchema = z.object({
+    storeId: z.uuid("Invalid store id").optional(),
+    search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    state: PlatformTableInspectionStateFilterSchema.default("all"),
+    page: positivePageSchema.default(1),
+    limit: organizationListLimitSchema.default(20),
+    sort: PlatformTableInspectionSortSchema.default("table_asc"),
+});
+
+export const PlatformTableInspectionAreaDTOSchema = z.object({
+    id: z.uuid("Invalid area id"),
+    title: z.string().trim().min(1),
+});
+
+export const PlatformTableInspectionCurrentSaleDTOSchema = z.object({
+    id: z.uuid("Invalid sale id"),
+    saleNumber: z.string().nullable(),
+    status: SaleStatusSchema,
+    paymentStatus: PaymentStatusSchema,
+    grandTotal: nonNegativeMoneySchema,
+    dueTotal: nonNegativeMoneySchema,
+});
+
+export const PlatformTableInspectionSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid table id"),
+    tableLabel: z.string().trim().min(1),
+    capacity: z.number().int().positive().nullable(),
+    position: ServiceTablePositionSchema,
+    state: ServiceTableStateSchema,
+    store: PlatformSaleInspectionStoreDTOSchema,
+    serviceArea: PlatformTableInspectionAreaDTOSchema.nullable(),
+    currentSaleId: z.uuid("Invalid current sale id").nullable(),
+    currentSaleTotal: z.number().nullable(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformTableInspectionListDTOSchema = z.object({
+    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
+    tables: z.array(PlatformTableInspectionSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformTableInspectionDetailDTOSchema = PlatformTableInspectionSummaryDTOSchema.extend({
+    currentSale: PlatformTableInspectionCurrentSaleDTOSchema.nullable(),
+});
+
+export const PlatformTableInspectionDetailResponseSchema = z.object({
+    table: PlatformTableInspectionDetailDTOSchema,
+});
+
+export const PlatformPurchaseStatusFilterSchema = z.enum(["all", ...PurchaseStatusSchema.options]);
+
+export const PlatformPurchaseInspectionSortSchema = z.enum(["newest", "oldest", "highest", "lowest"]);
+
+export const PlatformPurchaseInspectionQuerySchema = z
+    .object({
+        storeId: z.uuid("Invalid store id").optional(),
+        search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+        status: PlatformPurchaseStatusFilterSchema.default("all"),
+        startDate: calendarDateSchema.optional(),
+        endDate: calendarDateSchema.optional(),
+        page: positivePageSchema.default(1),
+        limit: organizationListLimitSchema.default(20),
+        sort: PlatformPurchaseInspectionSortSchema.default("newest"),
+    })
+    .superRefine((value, ctx) => {
+        if (value.startDate && value.endDate && value.startDate > value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Start date must be before or equal to end date",
+            });
+        }
+    });
+
+export const PlatformPurchaseInspectionSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid purchase id"),
+    purchaseDate: z.string(),
+    supplierName: z.string().trim().min(1),
+    invoiceNumber: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    totalAmount: nonNegativeMoneySchema,
+    status: PurchaseStatusSchema,
+    itemCount: nonNegativeIntSchema,
+    itemsSummary: z.string().nullable().optional(),
+    voidedAt: dtoDateSchema.nullable().optional(),
+    voidReason: z.string().nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+    store: PlatformSaleInspectionStoreDTOSchema,
+});
+
+export const PlatformPurchaseInspectionListDTOSchema = z.object({
+    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
+    purchases: z.array(PlatformPurchaseInspectionSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformPurchaseInspectionDetailDTOSchema = PlatformPurchaseInspectionSummaryDTOSchema.extend({
+    items: z.array(PurchaseItemDTOSchema),
+});
+
+export const PlatformPurchaseInspectionDetailResponseSchema = z.object({
+    purchase: PlatformPurchaseInspectionDetailDTOSchema,
 });
 
 export const formatPlatformReportDateRangeLabel = (

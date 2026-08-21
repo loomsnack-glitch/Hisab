@@ -20,6 +20,12 @@ import {
     PlatformCustomerInspectionQuerySchema,
     PlatformReportInspectionQuerySchema,
     PlatformReportInspectionDTOSchema,
+    PlatformTableInspectionQuerySchema,
+    PlatformTableInspectionListDTOSchema,
+    PlatformTableInspectionDetailResponseSchema,
+    PlatformPurchaseInspectionQuerySchema,
+    PlatformPurchaseInspectionListDTOSchema,
+    PlatformPurchaseInspectionDetailResponseSchema,
     PlatformSaleInspectionDetailResponseSchema,
     PlatformSaleInspectionListDTOSchema,
     FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
@@ -727,5 +733,133 @@ describe("Platform Report inspection contracts", () => {
         expect(parsed.dateRange.label).toBe("2026-08-01 to 2026-08-21");
         expect(JSON.stringify(parsed)).not.toContain("Export");
         expect(JSON.stringify(parsed)).not.toContain("Configure");
+    });
+});
+
+describe("Platform Table inspection contracts", () => {
+    test("accepts store, state, search, and pagination filters", () => {
+        expect(
+            PlatformTableInspectionQuerySchema.parse({
+                storeId: "77777777-7777-4777-8777-777777777777",
+                search: "T1",
+                state: "engaged",
+                sort: "store_asc",
+                page: 2,
+                limit: 10,
+            }),
+        ).toEqual({
+            storeId: "77777777-7777-4777-8777-777777777777",
+            search: "T1",
+            state: "engaged",
+            sort: "store_asc",
+            page: 2,
+            limit: 10,
+        });
+    });
+
+    test("accepts read-only table list and detail responses", () => {
+        const list = PlatformTableInspectionListDTOSchema.parse({
+            stores: [{ id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" }],
+            tables: [{
+                id: "t1111111-1111-4111-8111-t11111111111",
+                tableLabel: "T1",
+                capacity: 4,
+                position: { x: 0.1, y: 0.2 },
+                state: "engaged",
+                store: { id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" },
+                serviceArea: null,
+                currentSaleId: "b6666666-6666-4666-8666-b66666666666",
+                currentSaleTotal: 25,
+                createdAt: "2026-02-01T10:00:00.000Z",
+                updatedAt: "2026-08-19T10:00:00.000Z",
+            }],
+            pagination: { page: 1, limit: 20, totalCount: 1 },
+        });
+
+        const detail = PlatformTableInspectionDetailResponseSchema.parse({
+            table: {
+                ...list.tables[0]!,
+                currentSale: {
+                    id: "b6666666-6666-4666-8666-b66666666666",
+                    saleNumber: "13",
+                    status: "completed",
+                    paymentStatus: "partial",
+                    grandTotal: 25,
+                    dueTotal: 25,
+                },
+            },
+        });
+
+        expect(detail.table.currentSale?.saleNumber).toBe("13");
+        expect(JSON.stringify(list)).not.toContain("Allocate");
+    });
+});
+
+describe("Platform Purchase inspection contracts", () => {
+    test("accepts store, status, date, and pagination filters", () => {
+        expect(
+            PlatformPurchaseInspectionQuerySchema.parse({
+                storeId: "77777777-7777-4777-8777-777777777777",
+                search: "Fresh",
+                status: "recorded",
+                startDate: "2026-08-01",
+                endDate: "2026-08-21",
+                sort: "highest",
+                page: 1,
+                limit: 20,
+            }),
+        ).toEqual({
+            storeId: "77777777-7777-4777-8777-777777777777",
+            search: "Fresh",
+            status: "recorded",
+            startDate: "2026-08-01",
+            endDate: "2026-08-21",
+            sort: "highest",
+            page: 1,
+            limit: 20,
+        });
+    });
+
+    test("accepts read-only purchase list and detail responses", () => {
+        const list = PlatformPurchaseInspectionListDTOSchema.parse({
+            stores: [{ id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" }],
+            purchases: [{
+                id: "p1111111-1111-4111-8111-p11111111111",
+                purchaseDate: "2026-08-18",
+                supplierName: "Fresh Produce Co",
+                invoiceNumber: "INV-100",
+                notes: null,
+                totalAmount: 1200,
+                status: "recorded",
+                itemCount: 1,
+                itemsSummary: "Tomatoes",
+                voidedAt: null,
+                voidReason: null,
+                createdAt: "2026-08-18T10:00:00.000Z",
+                updatedAt: "2026-08-18T10:00:00.000Z",
+                store: { id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" },
+            }],
+            pagination: { page: 1, limit: 20, totalCount: 1 },
+        });
+
+        const detail = PlatformPurchaseInspectionDetailResponseSchema.parse({
+            purchase: {
+                ...list.purchases[0]!,
+                items: [{
+                    id: "pi111111-1111-4111-8111-p11111111111",
+                    purchaseId: "p1111111-1111-4111-8111-p11111111111",
+                    itemName: "Tomatoes",
+                    description: null,
+                    quantity: 10,
+                    rate: 120,
+                    lineTotal: 1200,
+                    createdAt: "2026-08-18T10:00:00.000Z",
+                    updatedAt: "2026-08-18T10:00:00.000Z",
+                }],
+            },
+        });
+
+        expect(detail.purchase.items[0]?.itemName).toBe("Tomatoes");
+        expect(JSON.stringify(list)).not.toContain("Void purchase");
     });
 });

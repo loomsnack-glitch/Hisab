@@ -25,6 +25,12 @@ import type {
     PlatformCustomerInspectionQueryJSON,
     PlatformReportInspectionQueryJSON,
     PlatformReportInspectionResponse,
+    PlatformTableInspectionDetailResponse,
+    PlatformTableInspectionListResponse,
+    PlatformTableInspectionQueryJSON,
+    PlatformPurchaseInspectionDetailResponse,
+    PlatformPurchaseInspectionListResponse,
+    PlatformPurchaseInspectionQueryJSON,
     PlatformSaleInspectionDetailResponse,
     PlatformSaleInspectionListResponse,
     PlatformStoreInspectionQueryJSON,
@@ -260,6 +266,54 @@ export const getPlatformOrganizationReports = async (
 ): Promise<ServiceResponse<PlatformReportInspectionResponse | null>> => {
     try {
         const response = await api.get(`/platform/organizations/${organizationId}/reports`, { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationTables = async (
+    organizationId: string,
+    query: PlatformTableInspectionQueryJSON = {},
+): Promise<ServiceResponse<PlatformTableInspectionListResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/tables`, { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationTable = async (
+    organizationId: string,
+    tableId: string,
+): Promise<ServiceResponse<PlatformTableInspectionDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/tables/${tableId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationPurchases = async (
+    organizationId: string,
+    query: PlatformPurchaseInspectionQueryJSON = {},
+): Promise<ServiceResponse<PlatformPurchaseInspectionListResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/purchases`, { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationPurchase = async (
+    organizationId: string,
+    purchaseId: string,
+): Promise<ServiceResponse<PlatformPurchaseInspectionDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/purchases/${purchaseId}`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

@@ -13,6 +13,10 @@ import {
     getPlatformOrganizationCustomers as getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer as getPlatformOrganizationCustomerRequest,
     getPlatformOrganizationReports as getPlatformOrganizationReportsRequest,
+    getPlatformOrganizationTables as getPlatformOrganizationTablesRequest,
+    getPlatformOrganizationTable as getPlatformOrganizationTableRequest,
+    getPlatformOrganizationPurchases as getPlatformOrganizationPurchasesRequest,
+    getPlatformOrganizationPurchase as getPlatformOrganizationPurchaseRequest,
     getPlatformOrganizations as getPlatformOrganizationsRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
@@ -61,6 +65,10 @@ type PlatformOrganizationsPageProps = {
     getPlatformOrganizationCustomers?: typeof getPlatformOrganizationCustomersRequest;
     getPlatformOrganizationCustomer?: typeof getPlatformOrganizationCustomerRequest;
     getPlatformOrganizationReports?: typeof getPlatformOrganizationReportsRequest;
+    getPlatformOrganizationTables?: typeof getPlatformOrganizationTablesRequest;
+    getPlatformOrganizationTable?: typeof getPlatformOrganizationTableRequest;
+    getPlatformOrganizationPurchases?: typeof getPlatformOrganizationPurchasesRequest;
+    getPlatformOrganizationPurchase?: typeof getPlatformOrganizationPurchaseRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
     initialSort?: DirectorySort;
@@ -142,6 +150,10 @@ const PlatformOrganizationsPage = ({
     getPlatformOrganizationCustomers = getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer = getPlatformOrganizationCustomerRequest,
     getPlatformOrganizationReports = getPlatformOrganizationReportsRequest,
+    getPlatformOrganizationTables = getPlatformOrganizationTablesRequest,
+    getPlatformOrganizationTable = getPlatformOrganizationTableRequest,
+    getPlatformOrganizationPurchases = getPlatformOrganizationPurchasesRequest,
+    getPlatformOrganizationPurchase = getPlatformOrganizationPurchaseRequest,
     initialSearch = "",
     initialActivity = "all",
     initialSort = "recent_activity",
@@ -267,6 +279,10 @@ const PlatformOrganizationsPage = ({
                 getPlatformOrganizationCustomers={getPlatformOrganizationCustomers}
                 getPlatformOrganizationCustomer={getPlatformOrganizationCustomer}
                 getPlatformOrganizationReports={getPlatformOrganizationReports}
+                getPlatformOrganizationTables={getPlatformOrganizationTables}
+                getPlatformOrganizationTable={getPlatformOrganizationTable}
+                getPlatformOrganizationPurchases={getPlatformOrganizationPurchases}
+                getPlatformOrganizationPurchase={getPlatformOrganizationPurchase}
             />
         );
     }

@@ -22,6 +22,9 @@ import {
     type PlatformOrganizationListItemDTO,
     type PlatformOrganizationListQuerySVC,
     type PlatformOrganizationListResponse,
+    type PlatformPurchaseInspectionDetailResponse,
+    type PlatformPurchaseInspectionListResponse,
+    type PlatformPurchaseInspectionQuerySVC,
     type PlatformReportInspectionQuerySVC,
     type PlatformReportInspectionResponse,
     type PlatformSaleInspectionDetailResponse,
@@ -29,6 +32,9 @@ import {
     type PlatformStoreDetailResponse,
     type PlatformStoreInspectionQuerySVC,
     type PlatformStoreListResponse,
+    type PlatformTableInspectionDetailResponse,
+    type PlatformTableInspectionListResponse,
+    type PlatformTableInspectionQuerySVC,
     type SaleDetailDTO,
     type ServiceResponse,
 } from "@repo/types";
@@ -52,6 +58,10 @@ type PlatformReportingRepository = Pick<
     | "listOrganizationCustomers"
     | "getOrganizationCustomerContext"
     | "getOrganizationReportContext"
+    | "listOrganizationTables"
+    | "getOrganizationTableContext"
+    | "listOrganizationPurchases"
+    | "getOrganizationPurchaseContext"
 >;
 
 type BillingReadRepository = Pick<
@@ -942,6 +952,228 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                     products,
                     productCount: products.length,
                     totalQuantitySold,
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    listOrganizationTables: async (
+        organizationId: string,
+        query: PlatformTableInspectionQuerySVC,
+    ): Promise<ServiceResponse<PlatformTableInspectionListResponse | null>> => {
+        const tables = await dependencies.repository.listOrganizationTables({
+            organizationId,
+            storeId: query.storeId,
+            search: query.search ?? "",
+            state: query.state,
+            sort: query.sort,
+            page: query.page,
+            limit: query.limit,
+        });
+
+        if (!tables) {
+            return {
+                status: "error",
+                message: "Organization not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        if (query.storeId && !tables.stores.some((store) => store.id === query.storeId)) {
+            return {
+                status: "error",
+                message: "Store not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Tables retrieved successfully",
+            data: {
+                stores: tables.stores,
+                tables: tables.tables.map((table) => ({
+                    id: table.id,
+                    tableLabel: table.tableLabel,
+                    capacity: table.capacity,
+                    position: table.position,
+                    state: table.state,
+                    store: { id: table.storeId, name: table.storeName },
+                    serviceArea: table.serviceAreaId && table.serviceAreaTitle
+                        ? { id: table.serviceAreaId, title: table.serviceAreaTitle }
+                        : null,
+                    currentSaleId: table.currentSaleId,
+                    currentSaleTotal: table.currentSaleTotal,
+                    createdAt: table.createdAt,
+                    updatedAt: table.updatedAt,
+                })),
+                pagination: {
+                    page: query.page,
+                    limit: query.limit,
+                    totalCount: tables.totalCount,
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationTable: async (
+        organizationId: string,
+        tableId: string,
+    ): Promise<ServiceResponse<PlatformTableInspectionDetailResponse | null>> => {
+        const table = await dependencies.repository.getOrganizationTableContext(organizationId, tableId);
+        if (!table) {
+            return {
+                status: "error",
+                message: "Table not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Table retrieved successfully",
+            data: {
+                table: {
+                    id: table.id,
+                    tableLabel: table.tableLabel,
+                    capacity: table.capacity,
+                    position: table.position,
+                    state: table.state,
+                    store: { id: table.storeId, name: table.storeName },
+                    serviceArea: table.serviceAreaId && table.serviceAreaTitle
+                        ? { id: table.serviceAreaId, title: table.serviceAreaTitle }
+                        : null,
+                    currentSaleId: table.currentSaleId,
+                    currentSaleTotal: table.currentSaleTotal,
+                    createdAt: table.createdAt,
+                    updatedAt: table.updatedAt,
+                    currentSale: table.currentSale,
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    listOrganizationPurchases: async (
+        organizationId: string,
+        query: PlatformPurchaseInspectionQuerySVC,
+    ): Promise<ServiceResponse<PlatformPurchaseInspectionListResponse | null>> => {
+        const now = dependencies.now();
+        const resolvedDates = resolveBillingInspectionDateRange(query, now);
+        if (!resolvedDates.ok) {
+            return reportingPeriodError(resolvedDates.message);
+        }
+
+        const purchases = await dependencies.repository.listOrganizationPurchases({
+            organizationId,
+            storeId: query.storeId,
+            search: query.search ?? "",
+            status: query.status,
+            startDate: resolvedDates.range.startDate,
+            endDate: resolvedDates.range.endDate,
+            sort: query.sort,
+            page: query.page,
+            limit: query.limit,
+        });
+
+        if (!purchases) {
+            return {
+                status: "error",
+                message: "Organization not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        if (query.storeId && !purchases.stores.some((store) => store.id === query.storeId)) {
+            return {
+                status: "error",
+                message: "Store not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Purchases retrieved successfully",
+            data: {
+                stores: purchases.stores,
+                purchases: purchases.purchases.map((purchase) => ({
+                    id: purchase.id,
+                    purchaseDate: purchase.purchaseDate,
+                    supplierName: purchase.supplierName,
+                    invoiceNumber: purchase.invoiceNumber,
+                    notes: purchase.notes,
+                    totalAmount: purchase.totalAmount,
+                    status: purchase.status,
+                    itemCount: purchase.itemCount,
+                    itemsSummary: purchase.itemsSummary,
+                    voidedAt: purchase.voidedAt,
+                    voidReason: purchase.voidReason,
+                    createdAt: purchase.createdAt,
+                    updatedAt: purchase.updatedAt,
+                    store: { id: purchase.storeId, name: purchase.storeName },
+                })),
+                pagination: {
+                    page: query.page,
+                    limit: query.limit,
+                    totalCount: purchases.totalCount,
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationPurchase: async (
+        organizationId: string,
+        purchaseId: string,
+    ): Promise<ServiceResponse<PlatformPurchaseInspectionDetailResponse | null>> => {
+        const purchase = await dependencies.repository.getOrganizationPurchaseContext(organizationId, purchaseId);
+        if (!purchase) {
+            return {
+                status: "error",
+                message: "Purchase not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Purchase retrieved successfully",
+            data: {
+                purchase: {
+                    id: purchase.id,
+                    purchaseDate: purchase.purchaseDate,
+                    supplierName: purchase.supplierName,
+                    invoiceNumber: purchase.invoiceNumber,
+                    notes: purchase.notes,
+                    totalAmount: purchase.totalAmount,
+                    status: purchase.status,
+                    itemCount: purchase.itemCount,
+                    itemsSummary: purchase.itemsSummary,
+                    voidedAt: purchase.voidedAt,
+                    voidReason: purchase.voidReason,
+                    createdAt: purchase.createdAt,
+                    updatedAt: purchase.updatedAt,
+                    store: { id: purchase.storeId, name: purchase.storeName },
+                    items: purchase.items.map((item) => ({
+                        id: item.id,
+                        purchaseId: item.purchaseId,
+                        itemName: item.itemName,
+                        description: item.description,
+                        quantity: item.quantity,
+                        rate: item.rate,
+                        lineTotal: item.lineTotal,
+                        createdAt: item.createdAt,
+                        updatedAt: item.updatedAt,
+                    })),
                 },
             },
             code: STATUS_CODES.SUCCESS,

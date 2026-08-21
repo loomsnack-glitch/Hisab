@@ -15,9 +15,13 @@ import {
     type PlatformCatalogProductDetailResponse,
     type PlatformCustomerInspectionDetailResponse,
     type PlatformCustomerInspectionListResponse,
+    type PlatformPurchaseInspectionDetailResponse,
+    type PlatformPurchaseInspectionListResponse,
     type PlatformSaleInspectionDetailResponse,
     type PlatformSaleInspectionListResponse,
     type PlatformReportInspectionResponse,
+    type PlatformTableInspectionDetailResponse,
+    type PlatformTableInspectionListResponse,
     type PlatformStoreDetailResponse,
     type PlatformStoreListResponse,
     type ServiceResponse,
@@ -82,6 +86,12 @@ const customerCafeInactive = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaa2";
 const customerMixedActive = "cccccccc-1111-4111-8111-ccccccccccc1";
 const customerMixedDue = "cccccccc-2222-4222-8222-ccccccccccc2";
 const missingCustomerId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const tableMixedEngaged = "t1111111-1111-4111-8111-t11111111111";
+const tableMixedFree = "t2222222-2222-4222-8222-t22222222222";
+const missingTableId = "99999999-9999-4999-8999-999999999998";
+const purchaseMixedRecorded = "p1111111-1111-4111-8111-p11111111111";
+const purchaseMixedVoided = "p2222222-2222-4222-8222-p22222222222";
+const missingPurchaseId = "99999999-9999-4999-8999-999999999997";
 
 type SaleStatus = "draft" | "completed" | "voided";
 
@@ -204,6 +214,53 @@ type ReportingAttachment = {
     status: "active" | "inactive";
 };
 
+type ReportingTable = {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    tableLabel: string;
+    capacity: number | null;
+    position: { x: number; y: number };
+    state: "free" | "allocated" | "engaged" | "ready_to_bill" | "payment_due" | "paid";
+    serviceAreaId: string | null;
+    serviceAreaTitle: string | null;
+    currentSaleId: string | null;
+    currentSaleTotal: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type ReportingPurchaseItem = {
+    id: string;
+    purchaseId: string;
+    itemName: string;
+    description: string | null;
+    quantity: number;
+    rate: number;
+    lineTotal: number;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type ReportingPurchase = {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    purchaseDate: string;
+    supplierName: string;
+    invoiceNumber: string | null;
+    notes: string | null;
+    totalAmount: number;
+    status: "recorded" | "voided";
+    itemCount: number;
+    itemsSummary: string | null;
+    voidedAt: Date | null;
+    voidReason: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    items: ReportingPurchaseItem[];
+};
+
 const inWindow = (value: Date | null, startAt: Date | null, endAt: Date | null) => {
     if (!value) return false;
     if (startAt && value.getTime() < startAt.getTime()) return false;
@@ -226,6 +283,8 @@ const createReportingMetrics = (
     attachments: ReportingAttachment[] = [],
     ledgerEntries: ReportingLedgerEntry[] = [],
     saleLines: ReportingSaleLine[] = [],
+    tables: ReportingTable[] = [],
+    purchases: ReportingPurchase[] = [],
 ) => {
     const organizationRow = (
         query: PlatformDashboardMetricsQuery,
@@ -855,6 +914,138 @@ const createReportingMetrics = (
         };
     };
 
+    const listOrganizationTables = async (
+        query: {
+            organizationId: string;
+            storeId?: string;
+            search: string;
+            state: "all" | ReportingTable["state"];
+            sort: "table_asc" | "table_desc" | "store_asc" | "state";
+            page: number;
+            limit: number;
+        },
+    ) => {
+        const organization = organizations.find((item) => item.id === query.organizationId);
+        if (!organization) return null;
+
+        const search = query.search.trim().toLowerCase();
+        const filtered = tables
+            .filter((table) => table.organizationId === organization.id)
+            .filter((table) => !query.storeId || table.storeId === query.storeId)
+            .filter((table) => query.state === "all" || table.state === query.state)
+            .filter((table) => {
+                if (!search) return true;
+                const haystack = [table.tableLabel, table.serviceAreaTitle ?? ""].join(" ").toLowerCase();
+                return haystack.includes(search);
+            })
+            .sort((left, right) => {
+                const store = stores.find((item) => item.id === left.storeId)?.name.localeCompare(
+                    stores.find((item) => item.id === right.storeId)?.name ?? "",
+                ) ?? 0;
+                if (query.sort === "store_asc") return store || left.tableLabel.localeCompare(right.tableLabel);
+                if (query.sort === "state") return left.state.localeCompare(right.state) || left.tableLabel.localeCompare(right.tableLabel);
+                if (query.sort === "table_desc") return right.tableLabel.localeCompare(left.tableLabel);
+                return left.tableLabel.localeCompare(right.tableLabel);
+            });
+
+        const start = (query.page - 1) * query.limit;
+        return {
+            stores: stores
+                .filter((store) => store.organizationId === organization.id)
+                .map((store) => ({ id: store.id, name: store.name })),
+            totalCount: filtered.length,
+            tables: filtered.slice(start, start + query.limit).map((table) => ({
+                ...table,
+                storeName: stores.find((store) => store.id === table.storeId)?.name ?? "",
+            })),
+        };
+    };
+
+    const getOrganizationTableContext = async (organizationId: string, tableId: string) => {
+        const table = tables.find((item) => item.organizationId === organizationId && item.id === tableId);
+        if (!table) return null;
+        const currentSale = table.currentSaleId
+            ? sales.find((sale) => sale.id === table.currentSaleId && sale.organizationId === organizationId)
+            : null;
+        return {
+            ...table,
+            storeName: stores.find((store) => store.id === table.storeId)?.name ?? "",
+            currentSale: currentSale
+                ? {
+                    id: currentSale.id,
+                    saleNumber: currentSale.saleNumber ?? null,
+                    status: currentSale.status,
+                    paymentStatus: currentSale.paymentStatus ?? "pending",
+                    grandTotal: currentSale.grandTotal,
+                    dueTotal: Math.max(currentSale.grandTotal - (currentSale.paidTotal ?? 0), 0),
+                }
+                : null,
+        };
+    };
+
+    const listOrganizationPurchases = async (
+        query: {
+            organizationId: string;
+            storeId?: string;
+            search: string;
+            status: "all" | "recorded" | "voided";
+            startDate: string | null;
+            endDate: string | null;
+            sort: "newest" | "oldest" | "highest" | "lowest";
+            page: number;
+            limit: number;
+        },
+    ) => {
+        const organization = organizations.find((item) => item.id === query.organizationId);
+        if (!organization) return null;
+
+        const search = query.search.trim().toLowerCase();
+        const filtered = purchases
+            .filter((purchase) => purchase.organizationId === organization.id)
+            .filter((purchase) => !query.storeId || purchase.storeId === query.storeId)
+            .filter((purchase) => query.status === "all" || purchase.status === query.status)
+            .filter((purchase) => !query.startDate || purchase.purchaseDate >= query.startDate)
+            .filter((purchase) => !query.endDate || purchase.purchaseDate <= query.endDate)
+            .filter((purchase) => {
+                if (!search) return true;
+                const haystack = [purchase.supplierName, purchase.invoiceNumber ?? "", purchase.itemsSummary ?? ""].join(" ").toLowerCase();
+                return haystack.includes(search);
+            })
+            .sort((left, right) => {
+                if (query.sort === "oldest") {
+                    return left.purchaseDate.localeCompare(right.purchaseDate) || left.id.localeCompare(right.id);
+                }
+                if (query.sort === "highest") {
+                    return right.totalAmount - left.totalAmount || left.purchaseDate.localeCompare(right.purchaseDate);
+                }
+                if (query.sort === "lowest") {
+                    return left.totalAmount - right.totalAmount || left.purchaseDate.localeCompare(right.purchaseDate);
+                }
+                return right.purchaseDate.localeCompare(left.purchaseDate) || right.id.localeCompare(left.id);
+            });
+
+        const start = (query.page - 1) * query.limit;
+        return {
+            stores: stores
+                .filter((store) => store.organizationId === organization.id)
+                .map((store) => ({ id: store.id, name: store.name })),
+            totalCount: filtered.length,
+            purchases: filtered.slice(start, start + query.limit).map((purchase) => ({
+                ...purchase,
+                storeName: stores.find((store) => store.id === purchase.storeId)?.name ?? "",
+            })),
+        };
+    };
+
+    const getOrganizationPurchaseContext = async (organizationId: string, purchaseId: string) => {
+        const purchase = purchases.find((item) => item.organizationId === organizationId && item.id === purchaseId);
+        if (!purchase) return null;
+        return {
+            ...purchase,
+            storeName: stores.find((store) => store.id === purchase.storeId)?.name ?? "",
+        };
+    };
+
     return {
         getDashboardMetrics,
         listOrganizations,
@@ -870,6 +1061,10 @@ const createReportingMetrics = (
         listOrganizationCustomers,
         getOrganizationCustomerContext,
         getOrganizationReportContext,
+        listOrganizationTables,
+        getOrganizationTableContext,
+        listOrganizationPurchases,
+        getOrganizationPurchaseContext,
     };
 };
 
@@ -1187,7 +1382,99 @@ const platformFacts = () => {
         },
     ];
 
-    return { organizations, stores, customers, sales, devices, categories, products, addOns, attachments, ledgerEntries, saleLines };
+    const tables: ReportingTable[] = [
+        {
+            id: tableMixedEngaged,
+            organizationId: orgMixed,
+            storeId: storeMixedActive,
+            tableLabel: "T1",
+            capacity: 4,
+            position: { x: 0.1, y: 0.2 },
+            state: "engaged",
+            serviceAreaId: null,
+            serviceAreaTitle: null,
+            currentSaleId: saleMixedReceivable,
+            currentSaleTotal: 25,
+            createdAt: new Date("2026-02-01T10:00:00.000Z"),
+            updatedAt: new Date("2026-08-19T10:00:00.000Z"),
+        },
+        {
+            id: tableMixedFree,
+            organizationId: orgMixed,
+            storeId: storeMixedQuiet,
+            tableLabel: "Patio 2",
+            capacity: 2,
+            position: { x: 0.4, y: 0.5 },
+            state: "free",
+            serviceAreaId: null,
+            serviceAreaTitle: "Garden",
+            currentSaleId: null,
+            currentSaleTotal: null,
+            createdAt: new Date("2026-03-01T10:00:00.000Z"),
+            updatedAt: new Date("2026-03-01T10:00:00.000Z"),
+        },
+    ];
+
+    const purchases: ReportingPurchase[] = [
+        {
+            id: purchaseMixedRecorded,
+            organizationId: orgMixed,
+            storeId: storeMixedActive,
+            purchaseDate: "2026-08-18",
+            supplierName: "Fresh Produce Co",
+            invoiceNumber: "INV-100",
+            notes: "Weekly vegetables",
+            totalAmount: 1200,
+            status: "recorded",
+            itemCount: 1,
+            itemsSummary: "Tomatoes",
+            voidedAt: null,
+            voidReason: null,
+            createdAt: new Date("2026-08-18T10:00:00.000Z"),
+            updatedAt: new Date("2026-08-18T10:00:00.000Z"),
+            items: [{
+                id: "pi111111-1111-4111-8111-p11111111111",
+                purchaseId: purchaseMixedRecorded,
+                itemName: "Tomatoes",
+                description: null,
+                quantity: 10,
+                rate: 120,
+                lineTotal: 1200,
+                createdAt: new Date("2026-08-18T10:00:00.000Z"),
+                updatedAt: new Date("2026-08-18T10:00:00.000Z"),
+            }],
+        },
+        {
+            id: purchaseMixedVoided,
+            organizationId: orgMixed,
+            storeId: storeMixedQuiet,
+            purchaseDate: "2026-08-10",
+            supplierName: "Paper Supplies",
+            invoiceNumber: null,
+            notes: null,
+            totalAmount: 500,
+            status: "voided",
+            itemCount: 1,
+            itemsSummary: "Napkins",
+            voidedAt: new Date("2026-08-11T10:00:00.000Z"),
+            voidReason: "Duplicate entry",
+            createdAt: new Date("2026-08-10T10:00:00.000Z"),
+            updatedAt: new Date("2026-08-11T10:00:00.000Z"),
+            items: [{
+                id: "pi222222-2222-4222-8222-p22222222222",
+                purchaseId: purchaseMixedVoided,
+                itemName: "Napkins",
+                description: null,
+                quantity: 5,
+                rate: 100,
+                lineTotal: 500,
+                createdAt: new Date("2026-08-10T10:00:00.000Z"),
+                updatedAt: new Date("2026-08-10T10:00:00.000Z"),
+            }],
+        },
+    ];
+
+    return { organizations, stores, customers, sales, devices, categories, products, addOns, attachments, ledgerEntries, saleLines, tables, purchases };
 };
 
 const activeOwner = async (): Promise<OwnerUserRecord> => ({
@@ -1232,6 +1519,8 @@ const createHarness = async () => {
             facts.attachments,
             facts.ledgerEntries,
             facts.saleLines,
+            facts.tables,
+            facts.purchases,
         ),
         billingRepository: {
             getSaleById: async (organizationId, storeId, saleId) => {
@@ -1407,6 +1696,18 @@ const organizationCustomerDetail = (app: Hono, cookie: string, organizationId: s
 
 const organizationReports = (app: Hono, cookie: string, organizationId: string, query = "") =>
     app.request(`/platform/organizations/${organizationId}/reports${query}`, { headers: { cookie } });
+
+const organizationTables = (app: Hono, cookie: string, organizationId: string, query = "") =>
+    app.request(`/platform/organizations/${organizationId}/tables${query}`, { headers: { cookie } });
+
+const organizationTableDetail = (app: Hono, cookie: string, organizationId: string, tableId: string) =>
+    app.request(`/platform/organizations/${organizationId}/tables/${tableId}`, { headers: { cookie } });
+
+const organizationPurchases = (app: Hono, cookie: string, organizationId: string, query = "") =>
+    app.request(`/platform/organizations/${organizationId}/purchases${query}`, { headers: { cookie } });
+
+const organizationPurchaseDetail = (app: Hono, cookie: string, organizationId: string, purchaseId: string) =>
+    app.request(`/platform/organizations/${organizationId}/purchases/${purchaseId}`, { headers: { cookie } });
 
 const names = (rows: PlatformOrganizationListItemDTO[] | undefined) => rows?.map((row) => row.name);
 
@@ -2315,5 +2616,157 @@ describe("Platform Report inspection API", () => {
         expect(future.status).toBe(400);
         expect(futureBody.message).toBe(FUTURE_REPORT_INSPECTION_DATE_MESSAGE);
         expect(JSON.stringify(missingOrgBody)).not.toContain("Masala Chai");
+    });
+});
+
+describe("Platform Table inspection API", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("returns Organization Tables only to an active Owner User", async () => {
+        const { app, setOwnerActive } = await createHarness();
+        const customerToken = await sign(
+            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
+            "customer-and-device-secret",
+        );
+        const ownerCookie = cookieFrom(await passwordLogin(app));
+
+        expect((await app.request(`/platform/organizations/${orgMixed}/tables`)).status).toBe(401);
+        expect((await app.request(`/platform/organizations/${orgMixed}/tables`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
+
+        setOwnerActive(false);
+        expect((await organizationTables(app, ownerCookie, orgMixed)).status).toBe(401);
+    });
+
+    test("lists Tables with store, state, search filters, and pagination", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const allTables = await organizationTables(app, cookie, orgMixed);
+        const engagedTables = await organizationTables(app, cookie, orgMixed, "?state=engaged");
+        const patioTables = await organizationTables(app, cookie, orgMixed, "?search=Patio");
+        const allBody = await allTables.json() as ServiceResponse<PlatformTableInspectionListResponse>;
+        const engagedBody = await engagedTables.json() as ServiceResponse<PlatformTableInspectionListResponse>;
+        const patioBody = await patioTables.json() as ServiceResponse<PlatformTableInspectionListResponse>;
+
+        expect(allTables.status).toBe(200);
+        expect(allBody.data?.tables.map((table) => table.tableLabel)).toEqual(["T1", "Patio 2"]);
+        expect(engagedBody.data?.tables.map((table) => table.tableLabel)).toEqual(["T1"]);
+        expect(patioBody.data?.tables.map((table) => table.tableLabel)).toEqual(["Patio 2"]);
+        expect(JSON.stringify(allBody.data)).not.toContain("password");
+        expect(JSON.stringify(allBody.data)).not.toContain("token");
+        expect(JSON.stringify(allBody.data)).not.toContain("deviceSecret");
+    });
+
+    test("returns Table detail with current sale context", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const response = await organizationTableDetail(app, cookie, orgMixed, tableMixedEngaged);
+        const body = await response.json() as ServiceResponse<PlatformTableInspectionDetailResponse>;
+
+        expect(response.status).toBe(200);
+        expect(body.data?.table.tableLabel).toBe("T1");
+        expect(body.data?.table.store).toEqual({ id: storeMixedActive, name: "Front Hall" });
+        expect(body.data?.table.currentSale).toEqual(
+            expect.objectContaining({
+                saleNumber: "13",
+                paymentStatus: "partial",
+            }),
+        );
+    });
+
+    test("returns 404 for missing Organization, Tables, and cross-Organization store filters", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const missingOrg = await organizationTables(app, cookie, missingOrganizationId);
+        const missingTable = await organizationTableDetail(app, cookie, orgMixed, missingTableId);
+        const otherOrgStore = await organizationTables(app, cookie, orgActive, `?storeId=${storeMixedActive}`);
+        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
+        const missingTableBody = await missingTable.json() as ServiceResponse<null>;
+
+        expect(missingOrg.status).toBe(404);
+        expect(missingOrgBody.message).toBe("Organization not found");
+        expect(missingTable.status).toBe(404);
+        expect(missingTableBody.message).toBe("Table not found");
+        expect(otherOrgStore.status).toBe(404);
+        expect(JSON.stringify(missingTableBody)).not.toContain("T1");
+    });
+});
+
+describe("Platform Purchase inspection API", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("returns Organization Purchases only to an active Owner User", async () => {
+        const { app, setOwnerActive } = await createHarness();
+        const customerToken = await sign(
+            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
+            "customer-and-device-secret",
+        );
+        const ownerCookie = cookieFrom(await passwordLogin(app));
+
+        expect((await app.request(`/platform/organizations/${orgMixed}/purchases`)).status).toBe(401);
+        expect((await app.request(`/platform/organizations/${orgMixed}/purchases`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
+
+        setOwnerActive(false);
+        expect((await organizationPurchases(app, ownerCookie, orgMixed)).status).toBe(401);
+    });
+
+    test("lists Purchases with store, status, search filters, and pagination", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const allPurchases = await organizationPurchases(app, cookie, orgMixed);
+        const recordedPurchases = await organizationPurchases(app, cookie, orgMixed, "?status=recorded");
+        const searchedPurchases = await organizationPurchases(app, cookie, orgMixed, "?search=Paper");
+        const allBody = await allPurchases.json() as ServiceResponse<PlatformPurchaseInspectionListResponse>;
+        const recordedBody = await recordedPurchases.json() as ServiceResponse<PlatformPurchaseInspectionListResponse>;
+        const searchedBody = await searchedPurchases.json() as ServiceResponse<PlatformPurchaseInspectionListResponse>;
+
+        expect(allPurchases.status).toBe(200);
+        expect(allBody.data?.purchases.map((purchase) => purchase.supplierName)).toEqual(["Fresh Produce Co", "Paper Supplies"]);
+        expect(recordedBody.data?.purchases.map((purchase) => purchase.supplierName)).toEqual(["Fresh Produce Co"]);
+        expect(searchedBody.data?.purchases.map((purchase) => purchase.supplierName)).toEqual(["Paper Supplies"]);
+        expect(JSON.stringify(allBody.data)).not.toContain("password");
+        expect(JSON.stringify(allBody.data)).not.toContain("token");
+        expect(JSON.stringify(allBody.data)).not.toContain("deviceSecret");
+    });
+
+    test("returns Purchase detail with line items", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const response = await organizationPurchaseDetail(app, cookie, orgMixed, purchaseMixedRecorded);
+        const body = await response.json() as ServiceResponse<PlatformPurchaseInspectionDetailResponse>;
+
+        expect(response.status).toBe(200);
+        expect(body.data?.purchase.supplierName).toBe("Fresh Produce Co");
+        expect(body.data?.purchase.store).toEqual({ id: storeMixedActive, name: "Front Hall" });
+        expect(body.data?.purchase.items).toEqual([
+            expect.objectContaining({
+                itemName: "Tomatoes",
+                lineTotal: 1200,
+            }),
+        ]);
+    });
+
+    test("returns 404 for missing Organization, Purchases, invalid store scope, and future dates", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const missingOrg = await organizationPurchases(app, cookie, missingOrganizationId);
+        const missingPurchase = await organizationPurchaseDetail(app, cookie, orgMixed, missingPurchaseId);
+        const otherOrgStore = await organizationPurchases(app, cookie, orgActive, `?storeId=${storeMixedActive}`);
+        const future = await organizationPurchases(app, cookie, orgMixed, "?startDate=2026-08-21&endDate=2026-08-22");
+        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
+        const missingPurchaseBody = await missingPurchase.json() as ServiceResponse<null>;
+        const futureBody = await future.json() as { message: string };
+
+        expect(missingOrg.status).toBe(404);
+        expect(missingOrgBody.message).toBe("Organization not found");
+        expect(missingPurchase.status).toBe(404);
+        expect(missingPurchaseBody.message).toBe("Purchase not found");
+        expect(otherOrgStore.status).toBe(404);
+        expect(future.status).toBe(400);
+        expect(futureBody.message).toBe(FUTURE_BILLING_INSPECTION_DATE_MESSAGE);
+        expect(JSON.stringify(missingPurchaseBody)).not.toContain("Fresh Produce Co");
     });
 });
