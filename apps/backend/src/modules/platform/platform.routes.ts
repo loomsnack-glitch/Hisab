@@ -8,6 +8,7 @@ import {
     PlatformDashboardQuerySchema,
     PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListQuerySchema,
+    PlatformBillingInspectionQuerySchema,
     PlatformStoreInspectionQuerySchema,
     STATUS_CODES,
     type PlatformEntryResponse,
@@ -187,6 +188,61 @@ export const createPlatformRoutes = (
             }
         },
     );
+
+    router.get(
+        "/organizations/:organizationId/sales",
+        validateSchema("query", PlatformBillingInspectionQuerySchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await reportingService.listOrganizationSales(organizationId.data, c.req.valid("query")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "listPlatformOrganizationSales", c, error);
+            }
+        },
+    );
+
+    router.get("/organizations/:organizationId/sales/:saleId", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const saleId = z.uuid("Invalid sale id").safeParse(c.req.param("saleId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!saleId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid sale id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await reportingService.getOrganizationSale(organizationId.data, saleId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformOrganizationSale", c, error);
+        }
+    });
 
     router.get("/owner-users", async (c) => {
         try {

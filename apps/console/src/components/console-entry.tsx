@@ -21,7 +21,14 @@ type ConsoleEntryProps = {
     dashboardPageProps?: Pick<PlatformDashboardPageProps, "getPlatformDashboard" | "initialQuery" | "initialCustomValues">;
     organizationsPageProps?: Pick<
         PlatformOrganizationsPageProps,
-        "getPlatformOrganizations" | "getPlatformOrganization" | "getPlatformOrganizationStores" | "getPlatformStore" | "initialSearch" | "initialActivity"
+        | "getPlatformOrganizations"
+        | "getPlatformOrganization"
+        | "getPlatformOrganizationStores"
+        | "getPlatformStore"
+        | "getPlatformOrganizationSales"
+        | "getPlatformOrganizationSale"
+        | "initialSearch"
+        | "initialActivity"
     >;
 };
 

@@ -1,9 +1,11 @@
-import { useEffect, type MouseEvent } from "react";
+import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
     ArrowLeft,
     BarChart3,
     Building2,
+    ChevronLeft,
+    ChevronRight,
     LayoutDashboard,
     LayoutGrid,
     MessageCircle,
@@ -11,23 +13,35 @@ import {
     Package2,
     Phone,
     Receipt,
+    Search,
     ShoppingCart,
     Store,
     Users,
     type LucideIcon,
 } from "lucide-react";
-import { getPlatformOrganization as getPlatformOrganizationRequest, getPlatformOrganizationStores as getPlatformOrganizationStoresRequest, getPlatformStore as getPlatformStoreRequest } from "@repo/services";
+import {
+    getPlatformOrganization as getPlatformOrganizationRequest,
+    getPlatformOrganizationSales as getPlatformOrganizationSalesRequest,
+    getPlatformOrganizationSale as getPlatformOrganizationSaleRequest,
+    getPlatformOrganizationStores as getPlatformOrganizationStoresRequest,
+    getPlatformStore as getPlatformStoreRequest,
+} from "@repo/services";
 import {
     PLATFORM_REPORTING_TIMEZONE,
     formatPhoneDisplay,
+    type PlatformBillingInspectionQueryJSON,
     type PlatformDashboardQueryJSON,
     type PlatformOrganizationDetailQueryJSON,
     type PlatformRecentSaleDTO,
+    type PlatformSaleInspectionDetailDTO,
+    type PlatformSaleInspectionSummaryDTO,
     type PlatformStoreActivityDTO,
     type PlatformStoreDetailDTO,
     type PlatformStoreDeviceInspectionDTO,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
+import { Input } from "@repo/ui/components/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@repo/ui/components/card";
@@ -39,12 +53,16 @@ import { cn } from "@repo/ui/lib/utils";
 import {
     organizationInspectionPath,
     organizationInspectionSections,
+    parseBillingInspectionSearch,
+    type BillingInspectionFilters,
     type OrganizationInspectionSection,
 } from "@/lib/organization-inspection-url";
 
 const organizationDetailQueryKey = ["platform-owner", "organization"] as const;
 const organizationStoresQueryKey = ["platform-owner", "organization-stores"] as const;
 const platformStoreQueryKey = ["platform-owner", "store"] as const;
+const organizationSalesQueryKey = ["platform-owner", "organization-sales"] as const;
+const organizationSaleQueryKey = ["platform-owner", "organization-sale"] as const;
 
 type PlatformOrganizationDetailPageProps = {
     organizationId: string;
@@ -55,6 +73,8 @@ type PlatformOrganizationDetailPageProps = {
     getPlatformOrganization?: typeof getPlatformOrganizationRequest;
     getPlatformOrganizationStores?: typeof getPlatformOrganizationStoresRequest;
     getPlatformStore?: typeof getPlatformStoreRequest;
+    getPlatformOrganizationSales?: typeof getPlatformOrganizationSalesRequest;
+    getPlatformOrganizationSale?: typeof getPlatformOrganizationSaleRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
 };
@@ -107,6 +127,21 @@ const saleStatusLabel = (status: PlatformRecentSaleDTO["status"]) => {
     return "Completed";
 };
 
+const billingSaleStatusLabel = saleStatusLabel;
+
+const paymentStatusLabel = (status: PlatformSaleInspectionSummaryDTO["paymentStatus"]) => {
+    if (status === "partial") return "Partial";
+    if (status === "paid") return "Paid";
+    return "Pending";
+};
+
+const billingSortOptions = [
+    { value: "newest", label: "Newest first" },
+    { value: "oldest", label: "Oldest first" },
+    { value: "highest", label: "Highest value" },
+    { value: "lowest", label: "Lowest value" },
+] as const;
+
 const deviceStatusLabel = (status: PlatformStoreDeviceInspectionDTO["status"]) => {
     if (status === "revoked") return "Revoked";
     if (status === "inactive") return "Inactive";
@@ -129,9 +164,15 @@ const PlatformOrganizationDetailPage = ({
     getPlatformOrganization = getPlatformOrganizationRequest,
     getPlatformOrganizationStores = getPlatformOrganizationStoresRequest,
     getPlatformStore = getPlatformStoreRequest,
+    getPlatformOrganizationSales = getPlatformOrganizationSalesRequest,
+    getPlatformOrganizationSale = getPlatformOrganizationSaleRequest,
     onNavigate,
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
+    const [billingFilters, setBillingFilters] = useState<BillingInspectionFilters>(() =>
+        parseBillingInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+    );
+    const [billingSearchInput, setBillingSearchInput] = useState(billingFilters.search ?? "");
     const detailQueryInput = toDetailQuery(reportingQuery);
     const periodLabel = reportingPeriodLabel(reportingQuery);
     const detailQuery = useQuery({
@@ -154,22 +195,48 @@ const PlatformOrganizationDetailPage = ({
         placeholderData: keepPreviousData,
         enabled: section === "stores" && Boolean(resourceId),
     });
+    const salesQuery = useQuery({
+        queryKey: [...organizationSalesQueryKey, organizationId, billingFilters],
+        queryFn: () => getPlatformOrganizationSales(organizationId, billingFilters),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "billing" && !resourceId,
+    });
+    const saleQuery = useQuery({
+        queryKey: [...organizationSaleQueryKey, organizationId, resourceId],
+        queryFn: () => getPlatformOrganizationSale(organizationId, resourceId!),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "billing" && Boolean(resourceId),
+    });
     const response = detailQuery.data;
     const organization = response?.status === "success" ? response.data?.organization : undefined;
     const storesResponse = storesQuery.data;
     const stores = storesResponse?.status === "success" ? storesResponse.data?.stores : undefined;
     const storeResponse = storeQuery.data;
     const store = storeResponse?.status === "success" ? storeResponse.data?.store : undefined;
+    const salesResponse = salesQuery.data;
+    const salesList = salesResponse?.status === "success" ? salesResponse.data : undefined;
+    const saleResponse = saleQuery.data;
+    const sale = saleResponse?.status === "success" ? saleResponse.data?.sale : undefined;
     const errorCode = (detailQuery.error as { code?: number } | null)?.code ?? (response?.status === "error" ? response.code : undefined);
     const storesErrorCode = (storesQuery.error as { code?: number } | null)?.code
         ?? (storesResponse?.status === "error" ? storesResponse.code : undefined);
     const storeErrorCode = (storeQuery.error as { code?: number } | null)?.code
         ?? (storeResponse?.status === "error" ? storeResponse.code : undefined);
-    const activeSectionErrorCode = section === "stores" && resourceId
-        ? storeErrorCode ?? errorCode
-        : section === "stores"
-            ? storesErrorCode ?? errorCode
-            : errorCode;
+    const salesErrorCode = (salesQuery.error as { code?: number } | null)?.code
+        ?? (salesResponse?.status === "error" ? salesResponse.code : undefined);
+    const saleErrorCode = (saleQuery.error as { code?: number } | null)?.code
+        ?? (saleResponse?.status === "error" ? saleResponse.code : undefined);
+    const activeSectionErrorCode = section === "billing" && resourceId
+        ? saleErrorCode ?? errorCode
+        : section === "billing"
+            ? salesErrorCode ?? errorCode
+            : section === "stores" && resourceId
+                ? storeErrorCode ?? errorCode
+                : section === "stores"
+                    ? storesErrorCode ?? errorCode
+                    : errorCode;
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
         ?? (response?.status === "error" ? response.message : undefined);
@@ -179,11 +246,43 @@ const PlatformOrganizationDetailPage = ({
     const storeErrorMessage =
         (storeQuery.error as { message?: string } | null)?.message
         ?? (storeResponse?.status === "error" ? storeResponse.message : undefined);
-    const activeSectionErrorMessage = section === "stores" && resourceId
-        ? storeErrorMessage ?? errorMessage
-        : section === "stores"
-            ? storesErrorMessage ?? errorMessage
-            : errorMessage;
+    const salesErrorMessage =
+        (salesQuery.error as { message?: string } | null)?.message
+        ?? (salesResponse?.status === "error" ? salesResponse.message : undefined);
+    const saleErrorMessage =
+        (saleQuery.error as { message?: string } | null)?.message
+        ?? (saleResponse?.status === "error" ? saleResponse.message : undefined);
+    const activeSectionErrorMessage = section === "billing" && resourceId
+        ? saleErrorMessage ?? errorMessage
+        : section === "billing"
+            ? salesErrorMessage ?? errorMessage
+            : section === "stores" && resourceId
+                ? storeErrorMessage ?? errorMessage
+                : section === "stores"
+                    ? storesErrorMessage ?? errorMessage
+                    : errorMessage;
+
+    useEffect(() => {
+        if (section !== "billing") return;
+        const syncBillingFilters = () => {
+            const nextFilters = parseBillingInspectionSearch(window.location.search);
+            setBillingFilters(nextFilters);
+            setBillingSearchInput(nextFilters.search ?? "");
+        };
+        syncBillingFilters();
+        window.addEventListener("popstate", syncBillingFilters);
+        return () => window.removeEventListener("popstate", syncBillingFilters);
+    }, [section, resourceId]);
+
+    const navigateBilling = (nextFilters: BillingInspectionFilters, nextResourceId?: string) => {
+        const path = organizationInspectionPath(organizationId, "billing", nextResourceId, nextFilters);
+        setBillingFilters(nextFilters);
+        go(path);
+    };
+
+    const updateBillingFilters = (patch: Partial<BillingInspectionFilters>, nextResourceId?: string) => {
+        navigateBilling({ ...billingFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
+    };
 
     useEffect(() => {
         if (activeSectionErrorCode === 401) void onUnauthorized?.();
@@ -202,7 +301,9 @@ const PlatformOrganizationDetailPage = ({
         <nav aria-label="Organization inspection sections" className="border-b border-border/60">
             <div className="flex gap-1 overflow-x-auto pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {organizationInspectionSections.map((item) => {
-                    const href = organizationInspectionPath(organizationId, item);
+                    const href = item === "billing"
+                        ? organizationInspectionPath(organizationId, item, undefined, billingFilters)
+                        : organizationInspectionPath(organizationId, item);
                     const active = item === section;
                     const Icon = sectionConfig[item].icon;
                     return (
@@ -648,6 +749,426 @@ const PlatformOrganizationDetailPage = ({
         );
     };
 
+    const renderBillingFilters = () => (
+        <div className="space-y-3">
+            <form
+                className="flex flex-col gap-3 lg:flex-row lg:items-end"
+                onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                    event.preventDefault();
+                    updateBillingFilters({ search: billingSearchInput.trim() || undefined });
+                }}
+                role="search"
+            >
+                <div className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        value={billingSearchInput}
+                        onChange={(event) => setBillingSearchInput(event.target.value)}
+                        aria-label="Search bills"
+                        placeholder="Search bill number or customer"
+                        className="h-10 rounded-xl pl-9"
+                    />
+                </div>
+                <Button type="submit" size="sm" className="rounded-full">Search</Button>
+            </form>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Select
+                    value={billingFilters.storeId ?? "all"}
+                    onValueChange={(value) => updateBillingFilters({ storeId: value === "all" ? undefined : value })}
+                >
+                    <SelectTrigger aria-label="Store filter">
+                        <SelectValue placeholder="All stores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All stores</SelectItem>
+                        {(salesList?.stores ?? organization?.stores ?? []).map((storeOption) => (
+                            <SelectItem key={storeOption.id} value={storeOption.id}>{storeOption.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Select
+                    value={billingFilters.status ?? "all"}
+                    onValueChange={(value) =>
+                        updateBillingFilters({
+                            status: value === "all" ? undefined : value as PlatformBillingInspectionQueryJSON["status"],
+                        })}
+                >
+                    <SelectTrigger aria-label="Sale status filter">
+                        <SelectValue placeholder="All statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="voided">Voided</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Select
+                    value={billingFilters.paymentStatus ?? "all"}
+                    onValueChange={(value) =>
+                        updateBillingFilters({
+                            paymentStatus: value === "all"
+                                ? undefined
+                                : value as PlatformBillingInspectionQueryJSON["paymentStatus"],
+                        })}
+                >
+                    <SelectTrigger aria-label="Payment status filter">
+                        <SelectValue placeholder="All payment states" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All payment states</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="partial">Partial</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Select
+                    value={billingFilters.paymentMethod ?? "all"}
+                    onValueChange={(value) =>
+                        updateBillingFilters({
+                            paymentMethod: value === "all"
+                                ? undefined
+                                : value as PlatformBillingInspectionQueryJSON["paymentMethod"],
+                        })}
+                >
+                    <SelectTrigger aria-label="Payment method filter">
+                        <SelectValue placeholder="All payment methods" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All payment methods</SelectItem>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="upi">UPI</SelectItem>
+                        <SelectItem value="card">Card</SelectItem>
+                        <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Select
+                    value={billingFilters.sort ?? "newest"}
+                    onValueChange={(value) =>
+                        updateBillingFilters({ sort: value as PlatformBillingInspectionQueryJSON["sort"] })}
+                >
+                    <SelectTrigger aria-label="Sort bills">
+                        <SelectValue placeholder="Sort" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {billingSortOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+                <Input
+                    type="date"
+                    aria-label="Billing start date"
+                    value={billingFilters.startDate ?? ""}
+                    onChange={(event) => updateBillingFilters({ startDate: event.target.value || undefined })}
+                />
+                <Input
+                    type="date"
+                    aria-label="Billing end date"
+                    value={billingFilters.endDate ?? ""}
+                    onChange={(event) => updateBillingFilters({ endDate: event.target.value || undefined })}
+                />
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Billing filters use this page&apos;s own date and store controls, not the Dashboard reporting period.
+            </p>
+        </div>
+    );
+
+    const renderBillingList = () => {
+        if (salesQuery.isLoading) {
+            return (
+                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading bills">
+                    <Spinner className="size-6 text-primary" />
+                </div>
+            );
+        }
+        if (salesErrorCode === 404 || salesErrorMessage === "Organization not found") {
+            return (
+                <Alert role="alert">
+                    <AlertTitle>Organization was not found</AlertTitle>
+                    <AlertDescription>
+                        This organization is not available. Return to the organizations list to continue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (salesQuery.isError || salesResponse?.status === "error") {
+            return (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>Billing could not be loaded</AlertTitle>
+                    <AlertDescription>{salesErrorMessage ?? "The bill list is unavailable."}</AlertDescription>
+                </Alert>
+            );
+        }
+        if (!salesList) return null;
+
+        const page = salesList.pagination.page;
+        const limit = salesList.pagination.limit;
+        const totalPages = Math.max(1, Math.ceil(salesList.pagination.totalCount / limit));
+
+        return (
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <h2 className="font-display text-xl font-semibold tracking-tight">Billing</h2>
+                    <CardDescription>Read-only bills across all stores by default, with Store attribution on every row.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {renderBillingFilters()}
+                    {salesList.sales.length === 0 ? (
+                        <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon">
+                                    <Receipt />
+                                </EmptyMedia>
+                                <EmptyTitle>No bills match these filters</EmptyTitle>
+                                <EmptyDescription>Try a different store, status, or search term.</EmptyDescription>
+                            </EmptyHeader>
+                        </Empty>
+                    ) : (
+                        <div className="overflow-x-auto rounded-xl border border-border/60">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Bill</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Payment</TableHead>
+                                        <TableHead>Store</TableHead>
+                                        <TableHead>Customer</TableHead>
+                                        <TableHead>Value</TableHead>
+                                        <TableHead>When</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {salesList.sales.map((saleRow) => {
+                                        const href = organizationInspectionPath(organizationId, "billing", saleRow.id, billingFilters);
+                                        const storeHref = organizationInspectionPath(organizationId, "stores", saleRow.store.id);
+                                        return (
+                                            <TableRow key={saleRow.id}>
+                                                <TableCell className="font-medium">
+                                                    <a
+                                                        href={href}
+                                                        className="text-primary underline-offset-4 hover:underline"
+                                                        onClick={(event) => followInspectionLink(event, href)}
+                                                    >
+                                                        {saleRow.saleNumber ?? "Draft"}
+                                                    </a>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="rounded-full">
+                                                        {billingSaleStatusLabel(saleRow.status)}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="rounded-full">
+                                                        {paymentStatusLabel(saleRow.paymentStatus)}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <a
+                                                        href={storeHref}
+                                                        className="text-primary underline-offset-4 hover:underline"
+                                                        onClick={(event) => followInspectionLink(event, storeHref)}
+                                                    >
+                                                        {saleRow.store.name}
+                                                    </a>
+                                                </TableCell>
+                                                <TableCell>{saleRow.customerName ?? "Walk-in"}</TableCell>
+                                                <TableCell>{formatCompletedSalesValue(saleRow.grandTotal)}</TableCell>
+                                                <TableCell className="whitespace-nowrap text-muted-foreground">
+                                                    {formatLastCompletedSale(saleRow.committedAt ?? saleRow.createdAt)}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                    {salesList.pagination.totalCount > limit ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-sm text-muted-foreground">Page {page} of {totalPages}</p>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page <= 1}
+                                    onClick={() => updateBillingFilters({ page: page - 1 })}
+                                >
+                                    <ChevronLeft className="size-4" />
+                                    Previous
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page >= totalPages}
+                                    onClick={() => updateBillingFilters({ page: page + 1 })}
+                                >
+                                    Next
+                                    <ChevronRight className="size-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    ) : null}
+                </CardContent>
+            </Card>
+        );
+    };
+
+    const renderSaleDetail = (saleDetail: PlatformSaleInspectionDetailDTO) => (
+        <div className="space-y-6">
+            <Button
+                type="button"
+                variant="ghost"
+                className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                onClick={() => navigateBilling(billingFilters)}
+            >
+                <ArrowLeft className="size-4" />
+                Back to billing
+            </Button>
+
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
+                            Read-only inspection
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full">
+                            {billingSaleStatusLabel(saleDetail.status)}
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full">
+                            {paymentStatusLabel(saleDetail.paymentStatus)}
+                        </Badge>
+                    </div>
+                    <h2 className="font-display text-2xl font-semibold tracking-tight">
+                        {saleDetail.saleNumber ?? "Draft bill"}
+                    </h2>
+                    <CardDescription>
+                        {`${saleDetail.store.name} · ${saleDetail.customer?.name ?? saleDetail.customerName ?? "Walk-in"}`}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <MetricCard label="Grand total" value={formatCompletedSalesValue(saleDetail.grandTotal)} />
+                        <MetricCard label="Paid" value={formatCompletedSalesValue(saleDetail.paidTotal)} />
+                        <MetricCard label="Due" value={formatCompletedSalesValue(saleDetail.dueTotal)} />
+                        <MetricCard label="Order discount" value={formatCompletedSalesValue(saleDetail.orderDiscountAmount)} />
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        <Card className="border-border/60 bg-background/70">
+                            <CardHeader className="gap-1">
+                                <h3 className="font-medium">Line items</h3>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {saleDetail.items.map((item) => (
+                                    <div key={item.id} className="rounded-lg border border-border/60 p-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="font-medium">{item.productNameSnapshot}</p>
+                                                <p className="text-xs text-muted-foreground">{`Qty ${item.quantity}`}</p>
+                                            </div>
+                                            <p className="font-medium">{formatCompletedSalesValue(item.lineTotal)}</p>
+                                        </div>
+                                        {(item.addOns ?? []).map((addOn) => (
+                                            <p key={addOn.id} className="mt-2 text-sm text-muted-foreground">
+                                                {`+ ${addOn.addOnNameSnapshot} x${addOn.totalQuantity}`}
+                                            </p>
+                                        ))}
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+
+                        <div className="space-y-4">
+                            <Card className="border-border/60 bg-background/70">
+                                <CardHeader className="gap-1">
+                                    <h3 className="font-medium">Payments</h3>
+                                </CardHeader>
+                                <CardContent>
+                                    {saleDetail.payments.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">No payments recorded.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {saleDetail.payments.map((payment) => (
+                                                <div key={payment.id} className="flex items-center justify-between text-sm">
+                                                    <span>{`${payment.method} · ${formatLastCompletedSale(payment.collectedAt)}`}</span>
+                                                    <span>{formatCompletedSalesValue(payment.amount)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-border/60 bg-background/70">
+                                <CardHeader className="gap-1">
+                                    <h3 className="font-medium">Device attribution</h3>
+                                    <CardDescription>Console-safe operational metadata only.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm">
+                                    <p>{`Created by ${saleDetail.createdByDevice?.name ?? "Unknown device"}`}</p>
+                                    <p>{`Last updated by ${saleDetail.updatedByDevice?.name ?? "Unknown device"}`}</p>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+
+                    <Card className="border-border/60 bg-background/70">
+                        <CardHeader className="gap-1">
+                            <h3 className="font-medium">Receipt preview</h3>
+                            <CardDescription>Historical receipt data for inspection only. Printing and messaging are not available in Console.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <pre className="overflow-x-auto rounded-xl border border-border/60 bg-muted/20 p-4 font-mono text-xs whitespace-pre-wrap">
+                                {saleDetail.receipt.previewText}
+                            </pre>
+                        </CardContent>
+                    </Card>
+                </CardContent>
+            </Card>
+        </div>
+    );
+
+    const renderBillingInspection = () => {
+        if (resourceId) {
+            if (saleQuery.isLoading) {
+                return (
+                    <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading bill">
+                        <Spinner className="size-6 text-primary" />
+                    </div>
+                );
+            }
+            if (saleErrorCode === 404 || saleErrorMessage === "Sale not found") {
+                return (
+                    <Alert role="alert">
+                        <AlertTitle>Bill was not found</AlertTitle>
+                        <AlertDescription>
+                            This bill is not available in this organization. Return to the billing list to continue.
+                        </AlertDescription>
+                    </Alert>
+                );
+            }
+            if (saleQuery.isError || saleResponse?.status === "error") {
+                return (
+                    <Alert variant="destructive" role="alert">
+                        <AlertTitle>Bill could not be loaded</AlertTitle>
+                        <AlertDescription>{saleErrorMessage ?? "The bill detail is unavailable."}</AlertDescription>
+                    </Alert>
+                );
+            }
+            if (!sale) return null;
+            return renderSaleDetail(sale);
+        }
+
+        return renderBillingList();
+    };
+
     const renderLaterSection = () => {
         const config = sectionConfig[section];
         const Icon = config.icon;
@@ -741,7 +1262,7 @@ const PlatformOrganizationDetailPage = ({
 
             {renderSectionNav()}
 
-            {detailQuery.isLoading && section !== "stores" ? (
+            {detailQuery.isLoading && section !== "stores" && section !== "billing" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
                     <Spinner className="size-6 text-primary" />
                 </div>
@@ -752,26 +1273,28 @@ const PlatformOrganizationDetailPage = ({
                         {activeSectionErrorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
+            ) : section !== "stores" && section !== "billing" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
                 <Alert role="alert">
                     <AlertTitle>Organization was not found</AlertTitle>
                     <AlertDescription>
                         This organization is not available. Return to the organizations list to continue.
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && (detailQuery.isError || response?.status === "error") ? (
+            ) : section !== "stores" && section !== "billing" && (detailQuery.isError || response?.status === "error") ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Organization could not be loaded</AlertTitle>
                     <AlertDescription>{errorMessage ?? "The organization detail is unavailable."}</AlertDescription>
                 </Alert>
-            ) : section === "stores" || organization ? (
+            ) : section === "stores" || section === "billing" || organization ? (
                 section === "overview" && organization
                     ? renderOverview()
                     : section === "stores"
                         ? renderStoreInspection()
-                        : organization
-                            ? renderLaterSection()
-                            : null
+                        : section === "billing"
+                            ? renderBillingInspection()
+                            : organization
+                                ? renderLaterSection()
+                                : null
             ) : null}
         </section>
     );

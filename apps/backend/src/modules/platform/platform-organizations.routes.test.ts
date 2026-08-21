@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { sign } from "hono/jwt";
 import {
+    FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
     FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
     type OwnerUserRecord,
     type PlatformOrganizationDetailResponse,
     type PlatformOrganizationListItemDTO,
     type PlatformOrganizationListResponse,
+    type PlatformSaleInspectionDetailResponse,
+    type PlatformSaleInspectionListResponse,
     type PlatformStoreDetailResponse,
     type PlatformStoreListResponse,
     type ServiceResponse,
@@ -22,6 +25,9 @@ import type {
     PlatformOrganizationListMetrics,
     PlatformOrganizationListMetricsQuery,
     PlatformOrganizationStoresMetrics,
+    PlatformOrganizationSalesMetrics,
+    PlatformOrganizationSalesMetricsQuery,
+    PlatformOrganizationSaleContextMetrics,
     PlatformStoreDetailMetrics,
     PlatformStoreDetailMetricsQuery,
 } from "./platform-reporting.repository";
@@ -44,6 +50,7 @@ const deviceMixedActive = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const missingOrganizationId = "99999999-9999-4999-8999-999999999999";
 const missingStoreId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const saleMixedCompleted = "b1111111-1111-4111-8111-b11111111111";
+const missingSaleId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const saleQuietOld = "b2222222-2222-4222-8222-b22222222222";
 const saleQuietRecent = "b3333333-3333-4333-8333-b33333333333";
 const saleQuietVoided = "b4444444-4444-4444-8444-b44444444444";
@@ -65,11 +72,18 @@ type ReportingSale = {
     organizationId: string;
     storeId: string;
     status: SaleStatus;
+    paymentStatus?: "pending" | "partial" | "paid";
     grandTotal: number;
+    paidTotal?: number;
     committedAt: Date | null;
+    createdAt?: Date;
     customerId?: string | null;
+    customerName?: string | null;
     saleNumber?: string | null;
     updatedAt?: Date;
+    paymentMethods?: string | null;
+    itemCount?: number;
+    itemsSummary?: string | null;
 };
 
 type ReportingCustomer = {
@@ -346,7 +360,99 @@ const createReportingMetrics = (
         };
     };
 
-    return { getDashboardMetrics, listOrganizations, getOrganizationDetail, listOrganizationStores, getStoreDetail };
+    const listOrganizationSales = async (
+        query: PlatformOrganizationSalesMetricsQuery,
+    ): Promise<PlatformOrganizationSalesMetrics | null> => {
+        const organization = organizations.find((item) => item.id === query.organizationId);
+        if (!organization) return null;
+
+        const organizationStores = stores
+            .filter((store) => store.organizationId === organization.id)
+            .slice()
+            .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+
+        const filtered = sales
+            .filter((sale) => sale.organizationId === organization.id)
+            .filter((sale) => !query.storeId || sale.storeId === query.storeId)
+            .filter((sale) => !query.status || sale.status === query.status)
+            .filter((sale) => !query.paymentStatus || (sale.paymentStatus ?? "pending") === query.paymentStatus)
+            .filter((sale) => {
+                if (!query.paymentMethod) return true;
+                return (sale.paymentMethods ?? "").split(", ").includes(query.paymentMethod ?? "");
+            })
+            .filter((sale) => {
+                const createdAt = sale.createdAt ?? sale.committedAt ?? sale.updatedAt ?? new Date(0);
+                if (query.startAt && createdAt.getTime() < query.startAt.getTime()) return false;
+                if (query.endAt && createdAt.getTime() >= query.endAt.getTime()) return false;
+                return true;
+            })
+            .filter((sale) => {
+                const search = query.search?.trim().toLowerCase() ?? "";
+                if (!search) return true;
+                const haystack = [
+                    sale.saleNumber ?? "",
+                    sale.customerName ?? "",
+                ].join(" ").toLowerCase();
+                return haystack.includes(search);
+            })
+            .sort((left, right) => {
+                const leftCreated = (left.createdAt ?? left.committedAt ?? left.updatedAt ?? new Date(0)).getTime();
+                const rightCreated = (right.createdAt ?? right.committedAt ?? right.updatedAt ?? new Date(0)).getTime();
+                if (query.sort === "oldest") return leftCreated - rightCreated || left.id.localeCompare(right.id);
+                if (query.sort === "highest") return right.grandTotal - left.grandTotal || rightCreated - leftCreated;
+                if (query.sort === "lowest") return left.grandTotal - right.grandTotal || leftCreated - rightCreated;
+                return rightCreated - leftCreated || right.id.localeCompare(left.id);
+            });
+
+        const start = (query.page - 1) * query.limit;
+        const pageRows = filtered.slice(start, start + query.limit);
+
+        return {
+            stores: organizationStores.map((store) => ({ id: store.id, name: store.name })),
+            sales: pageRows.map((sale) => {
+                const store = stores.find((item) => item.id === sale.storeId);
+                const paidTotal = sale.paidTotal ?? (sale.paymentStatus === "paid" ? sale.grandTotal : 0);
+                return {
+                    id: sale.id,
+                    saleNumber: sale.saleNumber ?? null,
+                    status: sale.status,
+                    paymentStatus: sale.paymentStatus ?? "pending",
+                    grandTotal: sale.grandTotal,
+                    paidTotal,
+                    dueTotal: Math.max(sale.grandTotal - paidTotal, 0),
+                    createdAt: (sale.createdAt ?? sale.committedAt ?? sale.updatedAt ?? new Date(0)).toISOString(),
+                    committedAt: sale.committedAt?.toISOString() ?? null,
+                    voidedAt: sale.status === "voided" ? sale.committedAt?.toISOString() ?? null : null,
+                    itemCount: sale.itemCount ?? 0,
+                    itemsSummary: sale.itemsSummary ?? null,
+                    paymentMethods: sale.paymentMethods ?? null,
+                    customerName: sale.customerName ?? null,
+                    storeId: sale.storeId,
+                    storeName: store?.name ?? "",
+                };
+            }),
+            totalCount: filtered.length,
+        };
+    };
+
+    const getOrganizationSaleContext = async (
+        organizationId: string,
+        saleId: string,
+    ): Promise<PlatformOrganizationSaleContextMetrics | null> => {
+        const sale = sales.find((item) => item.organizationId === organizationId && item.id === saleId);
+        if (!sale) return null;
+        const organization = organizations.find((item) => item.id === organizationId);
+        const store = stores.find((item) => item.id === sale.storeId && item.organizationId === organizationId);
+        if (!organization || !store) return null;
+        return {
+            organizationName: organization.name,
+            storeId: store.id,
+            storeName: store.name,
+            storeAddress: store.address ?? null,
+        };
+    };
+
+    return { getDashboardMetrics, listOrganizations, getOrganizationDetail, listOrganizationStores, getStoreDetail, listOrganizationSales, getOrganizationSaleContext };
 };
 
 const platformFacts = () => {
@@ -453,9 +559,15 @@ const platformFacts = () => {
             organizationId: orgMixed,
             storeId: storeMixedActive,
             status: "completed",
+            paymentStatus: "paid",
             saleNumber: "12",
             grandTotal: 50.5,
+            paidTotal: 50.5,
+            paymentMethods: "cash",
+            itemCount: 1,
+            itemsSummary: "Tea",
             committedAt: new Date("2026-08-19T10:00:00.000Z"),
+            createdAt: new Date("2026-08-19T10:00:00.000Z"),
         },
         {
             id: "c5555555-5555-4555-8555-c55555555555",
@@ -481,21 +593,27 @@ const platformFacts = () => {
             organizationId: orgActive,
             storeId: storeActive,
             status: "draft",
+            paymentStatus: "pending",
             saleNumber: null,
             grandTotal: 999,
             committedAt: null,
-            updatedAt: new Date("2026-08-21T19:00:00.000Z"),
+            createdAt: new Date("2026-08-21T10:00:00.000Z"),
+            updatedAt: new Date("2026-08-21T10:00:00.000Z"),
             customerId: customerCafeActive,
+            customerName: "Cafe Customer",
         },
         {
             id: saleQuietVoided,
             organizationId: orgInactive,
             storeId: storeQuiet,
             status: "voided",
+            paymentStatus: "pending",
             saleNumber: "3",
             grandTotal: 888,
             committedAt: new Date("2026-08-20T10:00:00.000Z"),
+            createdAt: new Date("2026-08-20T10:00:00.000Z"),
             customerId: customerCafeInactive,
+            customerName: "Quiet Customer",
         },
     ];
 
@@ -533,6 +651,77 @@ const createHarness = async () => {
     });
     const reportingService = createPlatformReportingService({
         repository: createReportingMetrics(facts.organizations, facts.stores, facts.customers, facts.sales, facts.devices),
+        billingRepository: {
+            getSaleById: async (organizationId, storeId, saleId) => {
+                const sale = facts.sales.find(
+                    (item) => item.organizationId === organizationId && item.storeId === storeId && item.id === saleId,
+                );
+                if (!sale) return null;
+                const paidTotal = sale.paidTotal ?? (sale.paymentStatus === "paid" ? sale.grandTotal : 0);
+                return {
+                    id: sale.id,
+                    organizationId: sale.organizationId,
+                    storeId: sale.storeId,
+                    saleNumber: sale.saleNumber ?? null,
+                    status: sale.status,
+                    paymentStatus: sale.paymentStatus ?? "pending",
+                    subtotal: sale.grandTotal,
+                    discountTotal: 0,
+                    grandTotal: sale.grandTotal,
+                    paidTotal,
+                    dueTotal: Math.max(sale.grandTotal - paidTotal, 0),
+                    itemCount: sale.itemCount ?? 0,
+                    itemsSummary: sale.itemsSummary ?? null,
+                    paymentMethods: sale.paymentMethods ?? null,
+                    customer: sale.customerName
+                        ? { id: sale.customerId ?? sale.id, name: sale.customerName, phone: null, balance: 0, isActive: true }
+                        : null,
+                    createdByDevice: { id: deviceMixedActive, name: "Counter POS" },
+                    updatedByDevice: { id: deviceMixedActive, name: "Counter POS" },
+                    createdAt: (sale.createdAt ?? sale.committedAt ?? sale.updatedAt ?? now).toISOString(),
+                    updatedAt: (sale.updatedAt ?? sale.committedAt ?? sale.createdAt ?? now).toISOString(),
+                    committedAt: sale.committedAt?.toISOString() ?? null,
+                    voidedAt: sale.status === "voided" ? sale.committedAt?.toISOString() ?? null : null,
+                    voidReason: sale.status === "voided" ? "Mistake" : null,
+                    notes: null,
+                };
+            },
+            getSaleItemsBySaleId: async (saleId) => {
+                if (saleId !== saleMixedCompleted) return [];
+                return [{
+                    id: "item-1",
+                    organizationId: orgMixed,
+                    storeId: storeMixedActive,
+                    saleId,
+                    productId: "prod-1",
+                    quantity: 1,
+                    configurationSignature: "plain",
+                    productNameSnapshot: "Tea",
+                    unitPriceSnapshot: 50.5,
+                    discountAmount: 0,
+                    lineSubtotal: 50.5,
+                    lineTotal: 50.5,
+                    addOns: [],
+                    bundleComponents: [],
+                    createdAt: "2026-08-19T10:00:00.000Z",
+                    updatedAt: "2026-08-19T10:00:00.000Z",
+                }];
+            },
+            getPaymentsBySaleId: async (saleId) => {
+                if (saleId !== saleMixedCompleted) return [];
+                return [{
+                    id: "pay-1",
+                    organizationId: orgMixed,
+                    storeId: storeMixedActive,
+                    saleId,
+                    amount: 50.5,
+                    method: "cash",
+                    collectedAt: "2026-08-19T10:00:00.000Z",
+                    createdAt: "2026-08-19T10:00:00.000Z",
+                    updatedAt: "2026-08-19T10:00:00.000Z",
+                }];
+            },
+        },
         now: () => now,
     });
     const app = new Hono().route("/platform", createPlatformRoutes(authService, undefined, reportingService));
@@ -569,6 +758,12 @@ const organizationStores = (app: Hono, cookie: string, organizationId: string, q
 
 const organizationStoreDetail = (app: Hono, cookie: string, organizationId: string, storeId: string, query = "") =>
     app.request(`/platform/organizations/${organizationId}/stores/${storeId}${query}`, { headers: { cookie } });
+
+const organizationSales = (app: Hono, cookie: string, organizationId: string, query = "") =>
+    app.request(`/platform/organizations/${organizationId}/sales${query}`, { headers: { cookie } });
+
+const organizationSaleDetail = (app: Hono, cookie: string, organizationId: string, saleId: string) =>
+    app.request(`/platform/organizations/${organizationId}/sales/${saleId}`, { headers: { cookie } });
 
 const names = (rows: PlatformOrganizationListItemDTO[] | undefined) => rows?.map((row) => row.name);
 
@@ -1093,5 +1288,117 @@ describe("Platform Store inspection API", () => {
         expect(missingStoreBody.message).toBe("Store not found");
         expect(invalidStore.status).toBe(400);
         expect(JSON.stringify(missingStoreBody)).not.toContain("Front Hall");
+    });
+});
+
+describe("Platform Billing inspection API", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("returns Organization Sales only to an active Owner User", async () => {
+        const { app, setOwnerActive } = await createHarness();
+        const customerToken = await sign(
+            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
+            "customer-and-device-secret",
+        );
+        const ownerCookie = cookieFrom(await passwordLogin(app));
+
+        expect((await app.request(`/platform/organizations/${orgMixed}/sales`)).status).toBe(401);
+        expect((await app.request(`/platform/organizations/${orgMixed}/sales`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
+
+        setOwnerActive(false);
+        expect((await organizationSales(app, ownerCookie, orgMixed)).status).toBe(401);
+    });
+
+    test("lists bills across all Stores by default with Store attribution and pagination", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const response = await organizationSales(app, cookie, orgMixed);
+        const body = await response.json() as ServiceResponse<PlatformSaleInspectionListResponse>;
+
+        expect(response.status).toBe(200);
+        expect(body.data?.stores.map((store) => store.name)).toEqual(["Front Hall", "Garden Patio"]);
+        expect(body.data?.sales).toEqual([
+            expect.objectContaining({
+                id: saleMixedCompleted,
+                saleNumber: "12",
+                status: "completed",
+                paymentStatus: "paid",
+                store: { id: storeMixedActive, name: "Front Hall" },
+            }),
+        ]);
+        expect(body.data?.pagination).toEqual({ page: 1, limit: 20, totalCount: 1 });
+        expect(JSON.stringify(body.data)).not.toContain("deviceSecret");
+        expect(JSON.stringify(body.data)).not.toContain("password");
+        expect(JSON.stringify(body.data)).not.toContain("token");
+    });
+
+    test("filters bills by Store, status, search, and billing date range without using the Dashboard reporting period", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const filtered = await organizationSales(
+            app,
+            cookie,
+            orgActive,
+            "?status=draft&search=Cafe&startDate=2026-08-21&endDate=2026-08-21",
+        );
+        const dashboardPeriod = await organizationDetail(app, cookie, orgActive, "?period=7d");
+        const filteredBody = await filtered.json() as ServiceResponse<PlatformSaleInspectionListResponse>;
+        const dashboardBody = await dashboardPeriod.json() as ServiceResponse<PlatformOrganizationDetailResponse>;
+
+        expect(filteredBody.data?.sales.map((sale) => sale.id)).toEqual([saleCafeDraft]);
+        expect(filteredBody.data?.sales[0]?.store.name).toBe("Cafe Counter");
+        expect(dashboardBody.data?.organization.completedSaleCount).toBe(4);
+        expect(filteredBody.data?.sales[0]?.status).toBe("draft");
+    });
+
+    test("returns read-only Sale detail with line items, payments, device attribution, and receipt preview", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const response = await organizationSaleDetail(app, cookie, orgMixed, saleMixedCompleted);
+        const body = await response.json() as ServiceResponse<PlatformSaleInspectionDetailResponse>;
+
+        expect(response.status).toBe(200);
+        expect(body.data?.sale).toMatchObject({
+            id: saleMixedCompleted,
+            saleNumber: "12",
+            status: "completed",
+            paymentStatus: "paid",
+            store: { id: storeMixedActive, name: "Front Hall" },
+            createdByDevice: { id: deviceMixedActive, name: "Counter POS" },
+            updatedByDevice: { id: deviceMixedActive, name: "Counter POS" },
+            receipt: {
+                organizationName: "Mixed Bistro",
+                storeName: "Front Hall",
+                storeAddress: "12 Market Road",
+            },
+        });
+        expect(body.data?.sale.items).toHaveLength(1);
+        expect(body.data?.sale.payments).toHaveLength(1);
+        expect(body.data?.sale.receipt.previewText).toContain("Mixed Bistro");
+        expect(JSON.stringify(body.data)).not.toContain("deviceSecret");
+        expect(JSON.stringify(body.data)).not.toContain("Collect Payment");
+    });
+
+    test("hides missing Organizations and Sales and rejects invalid ids or future billing dates", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const missingOrg = await organizationSales(app, cookie, missingOrganizationId);
+        const missingSale = await organizationSaleDetail(app, cookie, orgMixed, missingSaleId);
+        const invalidSale = await organizationSaleDetail(app, cookie, orgMixed, "not-a-uuid");
+        const future = await organizationSales(app, cookie, orgMixed, "?startDate=2026-08-21&endDate=2026-08-22");
+        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
+        const missingSaleBody = await missingSale.json() as ServiceResponse<null>;
+        const futureBody = await future.json() as { message: string };
+
+        expect(missingOrg.status).toBe(404);
+        expect(missingOrgBody.message).toBe("Organization not found");
+        expect(missingSale.status).toBe(404);
+        expect(missingSaleBody.message).toBe("Sale not found");
+        expect(invalidSale.status).toBe(400);
+        expect(future.status).toBe(400);
+        expect(futureBody.message).toBe(FUTURE_BILLING_INSPECTION_DATE_MESSAGE);
+        expect(JSON.stringify(missingSaleBody)).not.toContain("Front Hall");
     });
 });

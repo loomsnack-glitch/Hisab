@@ -1,3 +1,11 @@
+import type {
+    PaymentMethod,
+    PaymentStatus,
+    PlatformBillingInspectionQueryJSON,
+    SaleStatus,
+    SalesSort,
+} from "@repo/types";
+
 export const organizationInspectionSections = [
     "overview",
     "stores",
@@ -22,11 +30,88 @@ export type OrganizationInspectionLocation =
     }
     | { kind: "invalid"; reason: "missing-organization" | "unknown-section" };
 
+export type BillingInspectionFilters = PlatformBillingInspectionQueryJSON;
+
 const ORGANIZATIONS_PREFIX = "/organizations";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const isInspectionSection = (value: string): value is OrganizationInspectionSection =>
     (organizationInspectionSections as readonly string[]).includes(value);
+
+const billingFilterKeys = [
+    "storeId",
+    "status",
+    "paymentStatus",
+    "paymentMethod",
+    "search",
+    "startDate",
+    "endDate",
+    "sort",
+    "page",
+    "limit",
+] as const;
+
+export const parseBillingInspectionSearch = (search: string): BillingInspectionFilters => {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const filters: BillingInspectionFilters = {};
+
+    const storeId = params.get("storeId");
+    if (storeId) filters.storeId = storeId;
+
+    const status = params.get("status");
+    if (status === "draft" || status === "completed" || status === "voided") {
+        filters.status = status satisfies SaleStatus;
+    }
+
+    const paymentStatus = params.get("paymentStatus");
+    if (paymentStatus === "pending" || paymentStatus === "partial" || paymentStatus === "paid") {
+        filters.paymentStatus = paymentStatus satisfies PaymentStatus;
+    }
+
+    const paymentMethod = params.get("paymentMethod");
+    if (
+        paymentMethod === "cash"
+        || paymentMethod === "upi"
+        || paymentMethod === "card"
+        || paymentMethod === "bank_transfer"
+        || paymentMethod === "other"
+    ) {
+        filters.paymentMethod = paymentMethod satisfies PaymentMethod;
+    }
+
+    const searchValue = params.get("search")?.trim();
+    if (searchValue) filters.search = searchValue;
+
+    const startDate = params.get("startDate");
+    if (startDate) filters.startDate = startDate;
+
+    const endDate = params.get("endDate");
+    if (endDate) filters.endDate = endDate;
+
+    const sort = params.get("sort");
+    if (sort === "newest" || sort === "oldest" || sort === "highest" || sort === "lowest") {
+        filters.sort = sort satisfies SalesSort;
+    }
+
+    const page = params.get("page");
+    if (page) filters.page = Number(page);
+
+    const limit = params.get("limit");
+    if (limit) filters.limit = Number(limit);
+
+    return filters;
+};
+
+export const billingInspectionSearchString = (filters: BillingInspectionFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const key of billingFilterKeys) {
+        const value = filters[key];
+        if (value === undefined || value === null || value === "") continue;
+        params.set(key, String(value));
+    }
+    const serialized = params.toString();
+    return serialized ? `?${serialized}` : "";
+};
 
 export const isOrganizationsPath = (pathname: string) =>
     pathname === ORGANIZATIONS_PREFIX || pathname.startsWith(`${ORGANIZATIONS_PREFIX}/`);
@@ -37,14 +122,22 @@ export const organizationInspectionPath = (
     organizationId: string,
     section: OrganizationInspectionSection = "overview",
     resourceId?: string,
+    billingFilters?: BillingInspectionFilters,
 ) => {
+    let pathname: string;
     if (section === "overview" && !resourceId) {
-        return `${ORGANIZATIONS_PREFIX}/${organizationId}`;
+        pathname = `${ORGANIZATIONS_PREFIX}/${organizationId}`;
+    } else if (resourceId) {
+        pathname = `${ORGANIZATIONS_PREFIX}/${organizationId}/${section}/${resourceId}`;
+    } else {
+        pathname = `${ORGANIZATIONS_PREFIX}/${organizationId}/${section}`;
     }
-    if (resourceId) {
-        return `${ORGANIZATIONS_PREFIX}/${organizationId}/${section}/${resourceId}`;
+
+    if (section === "billing") {
+        return `${pathname}${billingInspectionSearchString(billingFilters)}`;
     }
-    return `${ORGANIZATIONS_PREFIX}/${organizationId}/${section}`;
+
+    return pathname;
 };
 
 export const parseOrganizationInspectionPath = (pathname: string): OrganizationInspectionLocation | null => {

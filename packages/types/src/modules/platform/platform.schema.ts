@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { dtoDateSchema, normalizePhoneNumber, phoneSchema } from "../../common";
-import { SaleStatusSchema } from "../billing/billing.schema";
+import {
+    CustomerSummaryDTOSchema,
+    PaymentDTOSchema,
+    PaymentMethodSchema,
+    PaymentStatusSchema,
+    SaleDeviceAuditDTOSchema,
+    SaleItemDTOSchema,
+    SaleStatusSchema,
+    SalesSortSchema,
+} from "../billing/billing.schema";
 import { StoreDeviceStatusSchema } from "../organization/organization.schema";
 
 const ownerPhoneSchema = z
@@ -276,6 +285,126 @@ export const PlatformStoreDetailResponseSchema = z.object({
     reportingPeriod: PlatformReportingPeriodDTOSchema,
     store: PlatformStoreDetailDTOSchema,
 });
+
+export const PlatformBillingInspectionQuerySchema = z
+    .object({
+        storeId: z.uuid("Invalid store id").optional(),
+        status: SaleStatusSchema.optional(),
+        paymentStatus: PaymentStatusSchema.optional(),
+        paymentMethod: PaymentMethodSchema.optional(),
+        search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+        startDate: calendarDateSchema.optional(),
+        endDate: calendarDateSchema.optional(),
+        sort: SalesSortSchema.default("newest"),
+        page: positivePageSchema.default(1),
+        limit: organizationListLimitSchema.default(20),
+    })
+    .superRefine((value, ctx) => {
+        if (value.startDate && value.endDate && value.startDate > value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Start date must be before or equal to end date",
+            });
+        }
+    });
+
+export const PlatformSaleInspectionStoreDTOSchema = z.object({
+    id: z.uuid("Invalid store id"),
+    name: z.string().trim().min(1),
+});
+
+export const PlatformSaleInspectionSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid sale id"),
+    saleNumber: z.string().nullable(),
+    status: SaleStatusSchema,
+    paymentStatus: PaymentStatusSchema,
+    grandTotal: nonNegativeMoneySchema,
+    paidTotal: nonNegativeMoneySchema,
+    dueTotal: nonNegativeMoneySchema,
+    createdAt: dtoDateSchema,
+    committedAt: dtoDateSchema.nullable(),
+    voidedAt: dtoDateSchema.nullable(),
+    itemCount: nonNegativeIntSchema,
+    itemsSummary: z.string().nullable(),
+    paymentMethods: z.string().nullable(),
+    customerName: z.string().nullable(),
+    store: PlatformSaleInspectionStoreDTOSchema,
+});
+
+export const PlatformSaleInspectionListDTOSchema = z.object({
+    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
+    sales: z.array(PlatformSaleInspectionSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformSaleInspectionReceiptDTOSchema = z.object({
+    organizationName: z.string().trim().min(1),
+    storeName: z.string().trim().min(1),
+    storeAddress: z.string().nullable(),
+    previewText: z.string(),
+});
+
+export const PlatformSaleInspectionDetailDTOSchema = PlatformSaleInspectionSummaryDTOSchema.extend({
+    subtotal: z.number(),
+    discountTotal: z.number(),
+    orderDiscountAmount: z.number(),
+    notes: z.string().nullable(),
+    voidReason: z.string().nullable(),
+    customer: CustomerSummaryDTOSchema.nullable(),
+    createdByDevice: SaleDeviceAuditDTOSchema.nullable().optional(),
+    updatedByDevice: SaleDeviceAuditDTOSchema.nullable().optional(),
+    items: z.array(SaleItemDTOSchema),
+    payments: z.array(PaymentDTOSchema),
+    receipt: PlatformSaleInspectionReceiptDTOSchema,
+});
+
+export const PlatformSaleInspectionDetailResponseSchema = z.object({
+    sale: PlatformSaleInspectionDetailDTOSchema,
+});
+
+export const FUTURE_BILLING_INSPECTION_DATE_MESSAGE = "Billing inspection dates cannot be in the future";
+
+export type ResolvedBillingInspectionDateRange = {
+    startDate: string | null;
+    endDate: string | null;
+    startAt: Date | null;
+    endAt: Date | null;
+};
+
+export const resolveBillingInspectionDateRange = (
+    query: Pick<z.output<typeof PlatformBillingInspectionQuerySchema>, "startDate" | "endDate">,
+    now: Date,
+): { ok: true; range: ResolvedBillingInspectionDateRange } | { ok: false; message: string } => {
+    if (!query.startDate && !query.endDate) {
+        return {
+            ok: true,
+            range: { startDate: null, endDate: null, startAt: null, endAt: null },
+        };
+    }
+
+    const today = kolkataCalendarDate(now);
+    const startDate = query.startDate ?? query.endDate ?? "";
+    const endDate = query.endDate ?? query.startDate ?? "";
+
+    if (startDate > today || endDate > today) {
+        return { ok: false, message: FUTURE_BILLING_INSPECTION_DATE_MESSAGE };
+    }
+
+    return {
+        ok: true,
+        range: {
+            startDate,
+            endDate,
+            startAt: kolkataDayStartUtc(startDate),
+            endAt: kolkataDayStartUtc(addCalendarDays(endDate, 1)),
+        },
+    };
+};
 
 export const kolkataCalendarDate = (now: Date): string =>
     new Intl.DateTimeFormat("en-CA", { timeZone: PLATFORM_REPORTING_TIMEZONE }).format(now);

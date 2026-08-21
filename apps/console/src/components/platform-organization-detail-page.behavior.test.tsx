@@ -6,12 +6,15 @@ import { ThemeProvider } from "next-themes";
 import type {
     OwnerUserDTO,
     PlatformDashboardQueryJSON,
+    PlatformBillingInspectionQueryJSON,
     PlatformOrganizationDetailQueryJSON,
     PlatformOrganizationDetailResponse,
     PlatformOrganizationListItemDTO,
     PlatformOrganizationListQueryJSON,
     PlatformOrganizationListResponse,
     PlatformRecentSaleDTO,
+    PlatformSaleInspectionDetailResponse,
+    PlatformSaleInspectionListResponse,
     PlatformStoreDetailResponse,
     PlatformStoreListResponse,
     ServiceResponse,
@@ -179,6 +182,105 @@ const successStoreDetail = (
         store,
     },
     message: "Platform Store retrieved successfully",
+    code: 200,
+});
+
+const successSales = (
+    sales: PlatformSaleInspectionListResponse["sales"] = [
+        {
+            id: mixedRecentSales[0]!.id,
+            saleNumber: "12",
+            status: "completed",
+            paymentStatus: "paid",
+            grandTotal: 50.5,
+            paidTotal: 50.5,
+            dueTotal: 0,
+            createdAt: "2026-08-19T10:00:00.000Z",
+            committedAt: "2026-08-19T10:00:00.000Z",
+            voidedAt: null,
+            itemCount: 1,
+            itemsSummary: "Tea",
+            paymentMethods: "cash",
+            customerName: null,
+            store: { id: mixedStores[0]!.id, name: "Front Hall" },
+        },
+    ],
+): ServiceResponse<PlatformSaleInspectionListResponse> => ({
+    status: "success",
+    data: {
+        stores: mixedStores.map((store) => ({ id: store.id, name: store.name })),
+        sales,
+        pagination: { page: 1, limit: 20, totalCount: sales.length },
+    },
+    message: "Platform Organization Sales retrieved successfully",
+    code: 200,
+});
+
+const successSaleDetail = (): ServiceResponse<PlatformSaleInspectionDetailResponse> => ({
+    status: "success",
+    data: {
+        sale: {
+            id: mixedRecentSales[0]!.id,
+            saleNumber: "12",
+            status: "completed",
+            paymentStatus: "paid",
+            grandTotal: 50.5,
+            paidTotal: 50.5,
+            dueTotal: 0,
+            createdAt: "2026-08-19T10:00:00.000Z",
+            committedAt: "2026-08-19T10:00:00.000Z",
+            voidedAt: null,
+            itemCount: 1,
+            itemsSummary: "Tea",
+            paymentMethods: "cash",
+            customerName: null,
+            store: { id: mixedStores[0]!.id, name: "Front Hall" },
+            subtotal: 50.5,
+            discountTotal: 0,
+            orderDiscountAmount: 0,
+            notes: null,
+            voidReason: null,
+            customer: null,
+            createdByDevice: { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", name: "Counter POS" },
+            updatedByDevice: { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", name: "Counter POS" },
+            items: [{
+                id: "item-1",
+                organizationId: mixedBistro.id,
+                storeId: mixedStores[0]!.id,
+                saleId: mixedRecentSales[0]!.id,
+                productId: "prod-1",
+                quantity: 1,
+                configurationSignature: "plain",
+                productNameSnapshot: "Tea",
+                unitPriceSnapshot: 50.5,
+                discountAmount: 0,
+                lineSubtotal: 50.5,
+                lineTotal: 50.5,
+                addOns: [],
+                bundleComponents: [],
+                createdAt: "2026-08-19T10:00:00.000Z",
+                updatedAt: "2026-08-19T10:00:00.000Z",
+            }],
+            payments: [{
+                id: "pay-1",
+                organizationId: mixedBistro.id,
+                storeId: mixedStores[0]!.id,
+                saleId: mixedRecentSales[0]!.id,
+                amount: 50.5,
+                method: "cash",
+                collectedAt: "2026-08-19T10:00:00.000Z",
+                createdAt: "2026-08-19T10:00:00.000Z",
+                updatedAt: "2026-08-19T10:00:00.000Z",
+            }],
+            receipt: {
+                organizationName: "Mixed Bistro",
+                storeName: "Front Hall",
+                storeAddress: "12 Market Road",
+                previewText: "Mixed Bistro\nFront Hall\nBill 12",
+            },
+        },
+    },
+    message: "Platform Organization Sale retrieved successfully",
     code: 200,
 });
 
@@ -384,6 +486,8 @@ describe("Organization Inspection Workspace", () => {
             getPlatformOrganization?: LoadOrganization;
             getPlatformOrganizationStores?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationStores"]>;
             getPlatformStore?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformStore"]>;
+            getPlatformOrganizationSales?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationSales"]>;
+            getPlatformOrganizationSale?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationSale"]>;
         } = {},
     ) => {
         window.history.replaceState(null, "", path);
@@ -399,6 +503,8 @@ describe("Organization Inspection Workspace", () => {
                                 ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales)),
                             getPlatformOrganizationStores: options.getPlatformOrganizationStores ?? (async () => successStores()),
                             getPlatformStore: options.getPlatformStore ?? (async () => successStoreDetail()),
+                            getPlatformOrganizationSales: options.getPlatformOrganizationSales ?? (async () => successSales()),
+                            getPlatformOrganizationSale: options.getPlatformOrganizationSale ?? (async () => successSaleDetail()),
                         }}
                     />
                 </ThemeProvider>
@@ -491,8 +597,11 @@ describe("Organization Inspection Workspace", () => {
         expect(await view.findByRole("heading", { name: "Store performance" })).toBeTruthy();
         fireEvent.click(view.getByRole("link", { name: "12" }));
         expect(window.location.pathname).toBe(organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id));
-        expect(await view.findByRole("heading", { name: "Billing" })).toBeTruthy();
+        expect(await view.findByRole("heading", { name: "12" })).toBeTruthy();
+        expect(view.getByText("Receipt preview")).toBeTruthy();
         expect(view.queryByText("Collect Payment")).toBeNull();
+        expect(view.queryByText("Void")).toBeNull();
+        expect(view.queryByText("Print")).toBeNull();
     });
 
     test("handles invalid Inspection URLs without exposing Organization data", async () => {
@@ -580,5 +689,97 @@ describe("Organization Store inspection", () => {
         });
         expect(await missingView.findByText("Store was not found")).toBeTruthy();
         expect(missingView.queryByText("Counter POS")).toBeNull();
+    });
+});
+
+describe("Organization Billing inspection", () => {
+    const renderBillingSection = (
+        path: string,
+        options: {
+            getPlatformOrganization?: LoadOrganization;
+            getPlatformOrganizationSales?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationSales"]>;
+            getPlatformOrganizationSale?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationSale"]>;
+        } = {},
+    ) => {
+        window.history.replaceState(null, "", path);
+        const inspection = parseOrganizationInspectionPath(path);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        return render(
+            <QueryClientProvider client={client}>
+                <PlatformOrganizationDetailPage
+                    organizationId={mixedBistro.id}
+                    section="billing"
+                    resourceId={inspection?.kind === "workspace" ? inspection.resourceId : undefined}
+                    onNavigate={(nextPath) => {
+                        window.history.pushState(null, "", nextPath);
+                    }}
+                    onBack={() => {}}
+                    getPlatformOrganization={options.getPlatformOrganization ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales))}
+                    getPlatformOrganizationSales={options.getPlatformOrganizationSales ?? (async () => successSales())}
+                    getPlatformOrganizationSale={options.getPlatformOrganizationSale ?? (async () => successSaleDetail())}
+                />
+            </QueryClientProvider>,
+        );
+    };
+
+    test("shows a read-only bill list with Store attribution and independent billing filters", async () => {
+        const requested: PlatformBillingInspectionQueryJSON[] = [];
+        const view = renderBillingSection(organizationInspectionPath(mixedBistro.id, "billing", undefined, { storeId: mixedStores[0]!.id }), {
+            getPlatformOrganizationSales: async (_organizationId, query = {}) => {
+                requested.push(query);
+                return successSales();
+            },
+        });
+
+        expect(await view.findByRole("heading", { name: "Billing" })).toBeTruthy();
+        expect(view.getByText("Front Hall")).toBeTruthy();
+        expect(view.getByText(/not the Dashboard reporting period/)).toBeTruthy();
+        expect(view.getByRole("link", { name: "12" })).toBeTruthy();
+        expect(view.queryByText("Create Sale")).toBeNull();
+        expect(view.queryByText("Collect Payment")).toBeNull();
+        await waitFor(() => {
+            expect(requested.some((query) => query.storeId === mixedStores[0]!.id)).toBe(true);
+        });
+    });
+
+    test("opens read-only Sale inspection with items, payments, devices, and receipt preview", async () => {
+        const view = renderBillingSection(organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id));
+
+        expect(await view.findByRole("heading", { name: "12" })).toBeTruthy();
+        expect(view.getByText("Line items")).toBeTruthy();
+        expect(view.getByText("Tea")).toBeTruthy();
+        expect(view.getByText("Payments")).toBeTruthy();
+        expect(view.getByText("Device attribution")).toBeTruthy();
+        expect(view.getByText(/Created by Counter POS/)).toBeTruthy();
+        expect(view.getByText("Receipt preview")).toBeTruthy();
+        expect(view.getByText(/Bill 12/)).toBeTruthy();
+        expect(view.getByRole("button", { name: "Back to billing" })).toBeTruthy();
+        expect(view.queryByText("Void")).toBeNull();
+        expect(view.queryByText("Print")).toBeNull();
+        expect(view.queryByText("Download")).toBeNull();
+        expect(view.queryByRole("button", { name: "WhatsApp" })).toBeNull();
+    });
+
+    test("shows empty, loading, and not-found billing states without exposing other Organizations", async () => {
+        const emptyView = renderBillingSection(organizationInspectionPath(mixedBistro.id, "billing"), {
+            getPlatformOrganizationSales: async () => successSales([]),
+        });
+        expect(await emptyView.findByText("No bills match these filters")).toBeTruthy();
+
+        const loadingView = renderBillingSection(organizationInspectionPath(mixedBistro.id, "billing"), {
+            getPlatformOrganizationSales: () => new Promise(() => {}),
+        });
+        expect(await loadingView.findByLabelText("Loading bills")).toBeTruthy();
+
+        const missingView = renderBillingSection(
+            organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id),
+            {
+                getPlatformOrganizationSale: async () => {
+                    throw { code: 404, message: "Sale not found", data: null, status: "error" };
+                },
+            },
+        );
+        expect(await missingView.findByText("Bill was not found")).toBeTruthy();
+        expect(missingView.queryByText("Tea")).toBeNull();
     });
 });

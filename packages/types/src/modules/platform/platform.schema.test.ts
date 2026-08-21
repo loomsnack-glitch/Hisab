@@ -10,6 +10,10 @@ import {
     PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListQuerySchema,
     PlatformStoreDetailResponseSchema,
+    PlatformBillingInspectionQuerySchema,
+    PlatformSaleInspectionDetailResponseSchema,
+    PlatformSaleInspectionListDTOSchema,
+    FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
     FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
     kolkataCalendarDate,
     kolkataDayStartUtc,
@@ -357,5 +361,125 @@ describe("Platform Store inspection contracts", () => {
         expect(JSON.stringify(parsed)).not.toContain("deviceSecret");
         expect(JSON.stringify(parsed)).not.toContain("password");
         expect(JSON.stringify(parsed)).not.toContain("token");
+    });
+});
+
+describe("Platform Billing inspection contracts", () => {
+    test("defaults billing filters to page 1 with newest-first sorting and no Dashboard reporting period", () => {
+        expect(PlatformBillingInspectionQuerySchema.parse({})).toEqual({
+            sort: "newest",
+            page: 1,
+            limit: 20,
+        });
+    });
+
+    test("accepts store, lifecycle, payment, search, date, sort, and pagination filters", () => {
+        expect(
+            PlatformBillingInspectionQuerySchema.parse({
+                storeId: "77777777-7777-4777-8777-777777777777",
+                status: "completed",
+                paymentStatus: "paid",
+                paymentMethod: "cash",
+                search: " 12 ",
+                startDate: "2026-08-01",
+                endDate: "2026-08-21",
+                sort: "highest",
+                page: "2",
+                limit: "10",
+            }),
+        ).toEqual({
+            storeId: "77777777-7777-4777-8777-777777777777",
+            status: "completed",
+            paymentStatus: "paid",
+            paymentMethod: "cash",
+            search: "12",
+            startDate: "2026-08-01",
+            endDate: "2026-08-21",
+            sort: "highest",
+            page: 2,
+            limit: 10,
+        });
+    });
+
+    test("rejects invalid pagination, unknown sort, and inverted billing date ranges", () => {
+        expect(PlatformBillingInspectionQuerySchema.safeParse({ page: "0" }).success).toBe(false);
+        expect(PlatformBillingInspectionQuerySchema.safeParse({ sort: "recent_activity" }).success).toBe(false);
+        expect(
+            PlatformBillingInspectionQuerySchema.safeParse({
+                startDate: "2026-08-21",
+                endDate: "2026-08-01",
+            }).success,
+        ).toBe(false);
+    });
+
+    test("accepts read-only sale inspection detail with receipt preview and no credential fields", () => {
+        const parsed = PlatformSaleInspectionDetailResponseSchema.parse({
+            sale: {
+                id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+                saleNumber: "12",
+                status: "completed",
+                paymentStatus: "paid",
+                grandTotal: 50.5,
+                paidTotal: 50.5,
+                dueTotal: 0,
+                createdAt: "2026-08-19T10:00:00.000Z",
+                committedAt: "2026-08-19T10:00:00.000Z",
+                voidedAt: null,
+                itemCount: 1,
+                itemsSummary: "Tea",
+                paymentMethods: "cash",
+                customerName: "Walk-in",
+                store: { id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" },
+                subtotal: 50.5,
+                discountTotal: 0,
+                orderDiscountAmount: 0,
+                notes: null,
+                voidReason: null,
+                customer: null,
+                createdByDevice: { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", name: "Counter POS" },
+                updatedByDevice: { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", name: "Counter POS" },
+                items: [],
+                payments: [],
+                receipt: {
+                    organizationName: "Mixed Bistro",
+                    storeName: "Front Hall",
+                    storeAddress: "12 Market Road",
+                    previewText: "Mixed Bistro\nFront Hall",
+                },
+            },
+        });
+
+        expect(parsed.sale.receipt.previewText).toContain("Mixed Bistro");
+        expect(JSON.stringify(parsed)).not.toContain("deviceSecret");
+        expect(JSON.stringify(parsed)).not.toContain("password");
+        expect(JSON.stringify(parsed)).not.toContain("token");
+    });
+
+    test("accepts a paginated billing list response", () => {
+        const parsed = PlatformSaleInspectionListDTOSchema.parse({
+            stores: [{ id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" }],
+            sales: [
+                {
+                    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+                    saleNumber: "12",
+                    status: "completed",
+                    paymentStatus: "paid",
+                    grandTotal: 50.5,
+                    paidTotal: 50.5,
+                    dueTotal: 0,
+                    createdAt: "2026-08-19T10:00:00.000Z",
+                    committedAt: "2026-08-19T10:00:00.000Z",
+                    voidedAt: null,
+                    itemCount: 1,
+                    itemsSummary: "Tea",
+                    paymentMethods: "cash",
+                    customerName: null,
+                    store: { id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" },
+                },
+            ],
+            pagination: { page: 1, limit: 20, totalCount: 1 },
+        });
+
+        expect(parsed.sales[0]?.store.name).toBe("Front Hall");
     });
 });

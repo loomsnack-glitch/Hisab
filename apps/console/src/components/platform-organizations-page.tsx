@@ -3,6 +3,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Building2, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import {
     getPlatformOrganization as getPlatformOrganizationRequest,
+    getPlatformOrganizationSales as getPlatformOrganizationSalesRequest,
+    getPlatformOrganizationSale as getPlatformOrganizationSaleRequest,
     getPlatformOrganizationStores as getPlatformOrganizationStoresRequest,
     getPlatformOrganizations as getPlatformOrganizationsRequest,
     getPlatformStore as getPlatformStoreRequest,
@@ -43,6 +45,8 @@ type PlatformOrganizationsPageProps = {
     getPlatformOrganization?: typeof getPlatformOrganizationRequest;
     getPlatformOrganizationStores?: typeof getPlatformOrganizationStoresRequest;
     getPlatformStore?: typeof getPlatformStoreRequest;
+    getPlatformOrganizationSales?: typeof getPlatformOrganizationSalesRequest;
+    getPlatformOrganizationSale?: typeof getPlatformOrganizationSaleRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
     initialSort?: DirectorySort;
@@ -115,6 +119,8 @@ const PlatformOrganizationsPage = ({
     getPlatformOrganization = getPlatformOrganizationRequest,
     getPlatformOrganizationStores = getPlatformOrganizationStoresRequest,
     getPlatformStore = getPlatformStoreRequest,
+    getPlatformOrganizationSales = getPlatformOrganizationSalesRequest,
+    getPlatformOrganizationSale = getPlatformOrganizationSaleRequest,
     initialSearch = "",
     initialActivity = "all",
     initialSort = "recent_activity",
@@ -156,10 +162,12 @@ const PlatformOrganizationsPage = ({
     }, [errorCode, onUnauthorized]);
 
     const go = (path: string) => {
-        if (window.location.pathname !== path) {
-            window.history.pushState(null, "", path);
+        const url = new URL(path, window.location.origin);
+        const next = `${url.pathname}${url.search}`;
+        if (`${window.location.pathname}${window.location.search}` !== next) {
+            window.history.pushState(null, "", next);
         }
-        setPathname(path);
+        setPathname(url.pathname);
     };
 
     const followInspectionLink = (event: MouseEvent<HTMLAnchorElement>, path: string) => {
@@ -228,6 +236,8 @@ const PlatformOrganizationsPage = ({
                 getPlatformOrganization={getPlatformOrganization}
                 getPlatformOrganizationStores={getPlatformOrganizationStores}
                 getPlatformStore={getPlatformStore}
+                getPlatformOrganizationSales={getPlatformOrganizationSales}
+                getPlatformOrganizationSale={getPlatformOrganizationSale}
             />
         );
     }

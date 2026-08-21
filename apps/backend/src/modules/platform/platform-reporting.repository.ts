@@ -1,5 +1,5 @@
 import { sql } from "bun";
-import { PLATFORM_OVERVIEW_RECENT_SALE_LIMIT, type PlatformOrganizationDirectorySort } from "@repo/types";
+import { PLATFORM_OVERVIEW_RECENT_SALE_LIMIT, type PlatformOrganizationDirectorySort, type SalesSort } from "@repo/types";
 import { pg } from "@/config/db";
 
 export type PlatformDashboardMetricsQuery = {
@@ -715,5 +715,252 @@ export const getOrganizationDetail = async (
                 storeName: String(row.store_name),
             }];
         }),
+    };
+};
+
+export type PlatformOrganizationSalesMetricsQuery = {
+    organizationId: string;
+    storeId?: string;
+    status?: "draft" | "completed" | "voided";
+    paymentStatus?: "pending" | "partial" | "paid";
+    paymentMethod?: string;
+    search?: string;
+    startAt: Date | null;
+    endAt: Date | null;
+    sort: SalesSort;
+    page: number;
+    limit: number;
+};
+
+export type PlatformOrganizationSaleSummaryMetricsRow = {
+    id: string;
+    saleNumber: string | null;
+    status: "draft" | "completed" | "voided";
+    paymentStatus: "pending" | "partial" | "paid";
+    grandTotal: number;
+    paidTotal: number;
+    dueTotal: number;
+    createdAt: string;
+    committedAt: string | null;
+    voidedAt: string | null;
+    itemCount: number;
+    itemsSummary: string | null;
+    paymentMethods: string | null;
+    customerName: string | null;
+    storeId: string;
+    storeName: string;
+};
+
+export type PlatformOrganizationSalesMetrics = {
+    stores: Array<{ id: string; name: string }>;
+    sales: PlatformOrganizationSaleSummaryMetricsRow[];
+    totalCount: number;
+};
+
+export type PlatformOrganizationSaleContextMetrics = {
+    organizationName: string;
+    storeId: string;
+    storeName: string;
+    storeAddress: string | null;
+};
+
+const asPaymentStatus = (value: unknown): "pending" | "partial" | "paid" | null => {
+    if (value === "pending" || value === "partial" || value === "paid") return value;
+    return null;
+};
+
+export const listOrganizationSales = async (
+    query: PlatformOrganizationSalesMetricsQuery,
+): Promise<PlatformOrganizationSalesMetrics | null> => {
+    const [organization] = await pg`
+        SELECT id
+        FROM organizations
+        WHERE id = ${query.organizationId}
+    `;
+    if (!organization?.id) {
+        return null;
+    }
+
+    const storeRows = await pg`
+        SELECT id, name
+        FROM stores
+        WHERE organization_id = ${query.organizationId}
+        ORDER BY name ASC, id ASC
+    `;
+
+    const search = query.search?.trim() ?? "";
+    const searchPattern = search ? `%${search}%` : "";
+    const storeId = query.storeId ?? "";
+    const status = query.status ?? "";
+    const paymentStatus = query.paymentStatus ?? "";
+    const paymentMethod = query.paymentMethod ?? "";
+    const startAt = query.startAt?.toISOString() ?? null;
+    const endAt = query.endAt?.toISOString() ?? null;
+    const offset = (query.page - 1) * query.limit;
+    const sort = query.sort;
+
+    const [countRow] = await pg`
+        SELECT COUNT(*)::int AS total_count
+        FROM sales s
+        LEFT JOIN customers c ON c.id = s.customer_id
+        WHERE s.organization_id = ${query.organizationId}
+          AND (${storeId} = '' OR s.store_id::text = ${storeId})
+          AND (${status} = '' OR s.status::text = ${status})
+          AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
+          AND (
+              ${paymentMethod} = ''
+              OR EXISTS (
+                  SELECT 1
+                  FROM payments payment_filter
+                  WHERE payment_filter.sale_id = s.id
+                    AND payment_filter.method::text = ${paymentMethod}
+              )
+          )
+          AND (${startAt}::timestamptz IS NULL OR s.created_at >= ${startAt}::timestamptz)
+          AND (${endAt}::timestamptz IS NULL OR s.created_at < ${endAt}::timestamptz)
+          AND (
+              ${search} = ''
+              OR CAST(s.sale_number AS TEXT) ILIKE ${searchPattern}
+              OR COALESCE(c.name, '') ILIKE ${searchPattern}
+              OR COALESCE(c.phone, '') ILIKE ${searchPattern}
+              OR COALESCE(s.customer_name_snapshot, '') ILIKE ${searchPattern}
+              OR COALESCE(s.customer_phone_snapshot, '') ILIKE ${searchPattern}
+          )
+    `;
+
+    const saleRows = await pg`
+        SELECT
+            s.id,
+            s.sale_number,
+            s.status::text AS status,
+            s.payment_status::text AS payment_status,
+            s.grand_total,
+            s.created_at,
+            s.committed_at,
+            s.voided_at,
+            COALESCE(item_stats.item_count, 0) AS item_count,
+            COALESCE(item_stats.items_summary, '') AS items_summary,
+            COALESCE(payment_stats.payment_methods, '') AS payment_methods,
+            COALESCE(payment_stats.paid_total, 0) AS paid_total,
+            GREATEST(s.grand_total - COALESCE(payment_stats.paid_total, 0), 0) AS due_total,
+            COALESCE(c.name, s.customer_name_snapshot) AS customer_name,
+            store.id AS store_id,
+            store.name AS store_name
+        FROM sales s
+        INNER JOIN stores store
+          ON store.id = s.store_id
+         AND store.organization_id = s.organization_id
+        LEFT JOIN customers c ON c.id = s.customer_id
+        LEFT JOIN (
+            SELECT
+                sale_id,
+                COUNT(*)::int AS item_count,
+                STRING_AGG(product_name_snapshot, ', ') AS items_summary
+            FROM sale_items
+            GROUP BY sale_id
+        ) item_stats ON item_stats.sale_id = s.id
+        LEFT JOIN (
+            SELECT
+                sale_id,
+                COALESCE(SUM(amount), 0) AS paid_total,
+                NULLIF(STRING_AGG(DISTINCT method::text, ', '), '') AS payment_methods
+            FROM payments
+            GROUP BY sale_id
+        ) payment_stats ON payment_stats.sale_id = s.id
+        WHERE s.organization_id = ${query.organizationId}
+          AND (${storeId} = '' OR s.store_id::text = ${storeId})
+          AND (${status} = '' OR s.status::text = ${status})
+          AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
+          AND (
+              ${paymentMethod} = ''
+              OR EXISTS (
+                  SELECT 1
+                  FROM payments payment_filter
+                  WHERE payment_filter.sale_id = s.id
+                    AND payment_filter.method::text = ${paymentMethod}
+              )
+          )
+          AND (${startAt}::timestamptz IS NULL OR s.created_at >= ${startAt}::timestamptz)
+          AND (${endAt}::timestamptz IS NULL OR s.created_at < ${endAt}::timestamptz)
+          AND (
+              ${search} = ''
+              OR CAST(s.sale_number AS TEXT) ILIKE ${searchPattern}
+              OR COALESCE(c.name, '') ILIKE ${searchPattern}
+              OR COALESCE(c.phone, '') ILIKE ${searchPattern}
+              OR COALESCE(s.customer_name_snapshot, '') ILIKE ${searchPattern}
+              OR COALESCE(s.customer_phone_snapshot, '') ILIKE ${searchPattern}
+          )
+        ORDER BY
+            CASE WHEN ${sort} = 'newest' THEN s.created_at END DESC,
+            CASE WHEN ${sort} = 'oldest' THEN s.created_at END ASC,
+            CASE WHEN ${sort} = 'highest' THEN s.grand_total END DESC,
+            CASE WHEN ${sort} = 'lowest' THEN s.grand_total END ASC,
+            CASE WHEN ${sort} IN ('newest', 'highest') THEN s.id END DESC,
+            CASE WHEN ${sort} IN ('oldest', 'lowest') THEN s.id END ASC
+        LIMIT ${query.limit}
+        OFFSET ${offset}
+    `;
+
+    return {
+        stores: storeRows.map((row: Record<string, unknown>) => ({
+            id: String(row.id),
+            name: String(row.name),
+        })),
+        sales: saleRows.flatMap((row: Record<string, unknown>) => {
+            const statusValue = asSaleStatus(row.status);
+            const paymentStatusValue = asPaymentStatus(row.payment_status);
+            const createdAt = asTimestamp(row.created_at);
+            if (!statusValue || !paymentStatusValue || !createdAt) return [];
+            return [{
+                id: String(row.id),
+                saleNumber: row.sale_number == null ? null : String(row.sale_number),
+                status: statusValue,
+                paymentStatus: paymentStatusValue,
+                grandTotal: asMoney(row.grand_total),
+                paidTotal: asMoney(row.paid_total),
+                dueTotal: asMoney(row.due_total),
+                createdAt,
+                committedAt: asTimestamp(row.committed_at),
+                voidedAt: asTimestamp(row.voided_at),
+                itemCount: asCount(row.item_count),
+                itemsSummary: row.items_summary ? String(row.items_summary) : null,
+                paymentMethods: row.payment_methods ? String(row.payment_methods) : null,
+                customerName: row.customer_name ? String(row.customer_name) : null,
+                storeId: String(row.store_id),
+                storeName: String(row.store_name),
+            }];
+        }),
+        totalCount: asCount(countRow?.total_count),
+    };
+};
+
+export const getOrganizationSaleContext = async (
+    organizationId: string,
+    saleId: string,
+): Promise<PlatformOrganizationSaleContextMetrics | null> => {
+    const [row] = await pg`
+        SELECT
+            organization.name AS organization_name,
+            store.id AS store_id,
+            store.name AS store_name,
+            store.address AS store_address
+        FROM sales sale
+        INNER JOIN organizations organization ON organization.id = sale.organization_id
+        INNER JOIN stores store
+          ON store.id = sale.store_id
+         AND store.organization_id = sale.organization_id
+        WHERE sale.organization_id = ${organizationId}
+          AND sale.id = ${saleId}
+    `;
+
+    if (!row?.store_id) {
+        return null;
+    }
+
+    return {
+        organizationName: String(row.organization_name),
+        storeId: String(row.store_id),
+        storeName: String(row.store_name),
+        storeAddress: row.store_address == null ? null : String(row.store_address),
     };
 };
