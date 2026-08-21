@@ -232,6 +232,8 @@ const createHarness = async () => {
             getOrganizationSaleContext: async () => null,
             listOrganizationCustomers: async () => null,
             getOrganizationCustomerContext: async () => null,
+            getOrganizationReportContext: async () => null,
+            listOrganizationBillActivity: async () => null,
         },
         billingRepository: {
             getSaleById: async () => null,

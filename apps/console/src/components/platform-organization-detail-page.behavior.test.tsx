@@ -3,8 +3,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
-import type {
-    OwnerUserDTO,
+import {
+    addCalendarDays,
+    kolkataCalendarDate,
+    type OwnerUserDTO,
     PlatformDashboardQueryJSON,
     PlatformBillingInspectionQueryJSON,
     PlatformCatalogProductDetailResponse,
@@ -20,6 +22,8 @@ import type {
     PlatformRecentSaleDTO,
     PlatformReportInspectionQueryJSON,
     PlatformReportInspectionResponse,
+    PlatformBillActivityQueryJSON,
+    PlatformBillActivityResponse,
     PlatformTableInspectionDetailResponse,
     PlatformTableInspectionListResponse,
     PlatformTableInspectionQueryJSON,
@@ -289,6 +293,34 @@ const successReports = (
     message: "Platform Organization Reports retrieved successfully",
     code: 200,
 });
+
+const successBillActivity = (
+    overrides: Partial<PlatformBillActivityResponse> = {},
+): ServiceResponse<PlatformBillActivityResponse> => {
+    const today = kolkataCalendarDate(new Date());
+    return {
+        status: "success",
+        data: {
+            dateRange: {
+                startDate: today,
+                endDate: today,
+                label: today,
+                timezone: "Asia/Kolkata",
+            },
+            granularity: "hour",
+            points: [{
+                bucketKey: `${today}T10`,
+                bucketStart: `${today}T10:00:00+05:30`,
+                label: "10 am",
+                billCount: 2,
+            }],
+            totalBillCount: 2,
+            ...overrides,
+        },
+        message: "Platform Organization bill activity retrieved successfully",
+        code: 200,
+    };
+};
 
 const successTables = (
     overrides: Partial<PlatformTableInspectionListResponse> = {},
@@ -706,6 +738,7 @@ const renderDetail = (
                 onBack={() => {}}
                 reportingQuery={options.reportingQuery}
                 getPlatformOrganization={loadOrganization}
+                getPlatformOrganizationBillActivity={async () => successBillActivity()}
             />
         </QueryClientProvider>,
     );
@@ -730,6 +763,7 @@ describe("Platform Organization drill-down", () => {
                             { selection: "7d", startDate: "2026-08-15", endDate: "2026-08-21" },
                         );
                     }}
+                    getPlatformOrganizationBillActivity={async () => successBillActivity()}
                 />
             </QueryClientProvider>,
         );
@@ -898,6 +932,7 @@ describe("Organization Inspection Workspace", () => {
             getPlatformOrganizationSale?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationSale"]>;
             getPlatformOrganizationCatalog?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationCatalog"]>;
             getPlatformOrganizationCatalogProduct?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationCatalogProduct"]>;
+            getPlatformOrganizationBillActivity?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationBillActivity"]>;
         } = {},
     ) => {
         window.history.replaceState(null, "", path);
@@ -917,6 +952,7 @@ describe("Organization Inspection Workspace", () => {
                             getPlatformOrganizationSale: options.getPlatformOrganizationSale ?? (async () => successSaleDetail()),
                             getPlatformOrganizationCatalog: options.getPlatformOrganizationCatalog ?? (async () => successCatalog()),
                             getPlatformOrganizationCatalogProduct: options.getPlatformOrganizationCatalogProduct ?? (async () => successCatalogProduct()),
+                            getPlatformOrganizationBillActivity: options.getPlatformOrganizationBillActivity ?? (async () => successBillActivity()),
                         }}
                     />
                 </ThemeProvider>
@@ -990,6 +1026,89 @@ describe("Organization Inspection Workspace", () => {
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.queryByText("Edit Organization")).toBeNull();
         expect(view.queryByText("Print")).toBeNull();
+    });
+
+    test("shows a bills-over-time graph on overview that defaults to today", async () => {
+        const today = kolkataCalendarDate(new Date());
+        const requested: PlatformBillActivityQueryJSON[] = [];
+        const view = renderConsole(organizationInspectionPath(mixedBistro.id), {
+            getPlatformOrganizationBillActivity: async (_organizationId, query = {}) => {
+                requested.push(query);
+                return successBillActivity();
+            },
+        });
+
+        expect(await view.findByRole("heading", { name: "Bills over time" })).toBeTruthy();
+        expect(view.getByText("No. of Bills")).toBeTruthy();
+        expect(view.getByText("Time frame")).toBeTruthy();
+        expect(view.getByLabelText("Bill activity time frame")).toBeTruthy();
+        expect(await view.findByText("2 bills in this time frame")).toBeTruthy();
+        await waitFor(() => {
+            expect(requested.some((query) => query.startDate === today && query.endDate === today)).toBe(true);
+        });
+    });
+
+    test("lets a Platform Administrator inspect yesterday and this week like Billing", async () => {
+        const today = kolkataCalendarDate(new Date());
+        const yesterday = addCalendarDays(today, -1);
+        const requested: PlatformBillActivityQueryJSON[] = [];
+        const view = renderConsole(organizationInspectionPath(mixedBistro.id), {
+            getPlatformOrganizationBillActivity: async (_organizationId, query = {}) => {
+                requested.push(query);
+                return successBillActivity({
+                    dateRange: {
+                        startDate: query.startDate ?? today,
+                        endDate: query.endDate ?? today,
+                        label: query.startDate === query.endDate ? (query.startDate ?? today) : `${query.startDate} to ${query.endDate}`,
+                        timezone: "Asia/Kolkata",
+                    },
+                    totalBillCount: query.startDate === yesterday ? 1 : 3,
+                    points: [{
+                        bucketKey: `${query.startDate ?? today}T10`,
+                        bucketStart: `${query.startDate ?? today}T10:00:00+05:30`,
+                        label: "10 am",
+                        billCount: query.startDate === yesterday ? 1 : 3,
+                    }],
+                });
+            },
+        });
+
+        expect(await view.findByRole("heading", { name: "Bills over time" })).toBeTruthy();
+        fireEvent.click(view.getByLabelText("Bill activity time frame"));
+        fireEvent.click(view.getByRole("button", { name: "Yesterday" }));
+        fireEvent.click(view.getByRole("button", { name: "Confirm" }));
+        await waitFor(() => {
+            expect(requested.some((query) => query.startDate === yesterday && query.endDate === yesterday)).toBe(true);
+        });
+
+        fireEvent.click(view.getByLabelText("Bill activity time frame"));
+        fireEvent.click(view.getByRole("button", { name: "Date range" }));
+        fireEvent.click(view.getByRole("button", { name: "This week" }));
+        fireEvent.click(view.getByRole("button", { name: "Confirm" }));
+        const [yearText, monthText, dayText] = today.split("-");
+        const weekday = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText), 12)).getUTCDay();
+        const weekStart = addCalendarDays(today, -((weekday + 6) % 7));
+        await waitFor(() => {
+            expect(requested.some((query) => query.startDate === weekStart && query.endDate === today)).toBe(true);
+        });
+        expect(view.queryByRole("button", { name: "All dates" })).toBeNull();
+    });
+
+    test("shows empty and loading bill activity without tenant mutation controls", async () => {
+        const emptyView = renderConsole(organizationInspectionPath(mixedBistro.id), {
+            getPlatformOrganizationBillActivity: async () => successBillActivity({
+                points: [],
+                totalBillCount: 0,
+            }),
+        });
+        expect(await emptyView.findByText("0 bills in this time frame")).toBeTruthy();
+        expect(emptyView.getByText("No bills in this time frame.")).toBeTruthy();
+        expect(emptyView.queryByText("Create Sale")).toBeNull();
+
+        const loadingView = renderConsole(organizationInspectionPath(mixedBistro.id), {
+            getPlatformOrganizationBillActivity: () => new Promise(() => {}),
+        });
+        expect(await loadingView.findByLabelText("Loading bill activity")).toBeTruthy();
     });
 
     test("links Stores and Billing workspace sections from their tabs", async () => {

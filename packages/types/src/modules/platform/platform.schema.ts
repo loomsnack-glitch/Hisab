@@ -571,6 +571,37 @@ export const PlatformReportInspectionDTOSchema = z.object({
     productSales: PlatformReportProductSalesDTOSchema,
 });
 
+export const PlatformBillActivityGranularitySchema = z.enum(["hour", "day"]);
+
+export const PlatformBillActivityQuerySchema = z
+    .object({
+        startDate: calendarDateSchema.optional(),
+        endDate: calendarDateSchema.optional(),
+    })
+    .superRefine((value, ctx) => {
+        if (value.startDate && value.endDate && value.startDate > value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Start date must be before or equal to end date",
+            });
+        }
+    });
+
+export const PlatformBillActivityPointDTOSchema = z.object({
+    bucketKey: z.string().trim().min(1),
+    bucketStart: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    billCount: nonNegativeIntSchema,
+});
+
+export const PlatformBillActivityDTOSchema = z.object({
+    dateRange: PlatformReportDateRangeDTOSchema,
+    granularity: PlatformBillActivityGranularitySchema,
+    points: z.array(PlatformBillActivityPointDTOSchema),
+    totalBillCount: nonNegativeIntSchema,
+});
+
 export const PlatformTableInspectionStateFilterSchema = z.enum([
     "all",
     ...ServiceTableStateSchema.options,
@@ -799,6 +830,83 @@ export const resolveBillingInspectionDateRange = (
 };
 
 export const resolveReportInspectionDateRange = resolveBillingInspectionDateRange;
+
+export const FUTURE_BILL_ACTIVITY_DATE_MESSAGE = FUTURE_BILLING_INSPECTION_DATE_MESSAGE;
+
+export const resolveBillActivityDateRange = (
+    query: Pick<z.output<typeof PlatformBillActivityQuerySchema>, "startDate" | "endDate">,
+    now: Date,
+): { ok: true; range: ResolvedBillingInspectionDateRange } | { ok: false; message: string } => {
+    const today = kolkataCalendarDate(now);
+    const startDate = query.startDate ?? query.endDate ?? today;
+    const endDate = query.endDate ?? query.startDate ?? today;
+    return resolveBillingInspectionDateRange({ startDate, endDate }, now);
+};
+
+const pad2 = (value: number) => String(value).padStart(2, "0");
+
+export const billActivityGranularityForRange = (startDate: string, endDate: string): "hour" | "day" =>
+    startDate === endDate ? "hour" : "day";
+
+export const formatBillActivityHourLabel = (hour: number): string => {
+    const period = hour < 12 ? "am" : "pm";
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    return `${hour12} ${period}`;
+};
+
+const BILL_ACTIVITY_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+export const formatBillActivityDayLabel = (calendarDate: string): string => {
+    const [yearText, monthText, dayText] = calendarDate.split("-");
+    const monthLabel = BILL_ACTIVITY_MONTH_LABELS[Number(monthText) - 1];
+    return `${dayText} ${monthLabel} ${yearText}`;
+};
+
+export type PlatformBillActivityCountBucket = {
+    bucketKey: string;
+    billCount: number;
+};
+
+export const buildPlatformBillActivitySeries = (
+    startDate: string,
+    endDate: string,
+    counts: PlatformBillActivityCountBucket[] = [],
+): {
+    granularity: z.infer<typeof PlatformBillActivityGranularitySchema>;
+    points: Array<z.infer<typeof PlatformBillActivityPointDTOSchema>>;
+    totalBillCount: number;
+} => {
+    const granularity = billActivityGranularityForRange(startDate, endDate);
+    const countByKey = new Map(counts.map((item) => [item.bucketKey, item.billCount]));
+    const points: Array<z.infer<typeof PlatformBillActivityPointDTOSchema>> = [];
+
+    if (granularity === "hour") {
+        for (let hour = 0; hour < 24; hour += 1) {
+            const bucketKey = `${startDate}T${pad2(hour)}`;
+            points.push({
+                bucketKey,
+                bucketStart: `${startDate}T${pad2(hour)}:00:00+05:30`,
+                label: formatBillActivityHourLabel(hour),
+                billCount: countByKey.get(bucketKey) ?? 0,
+            });
+        }
+    } else {
+        for (let calendarDate = startDate; calendarDate <= endDate; calendarDate = addCalendarDays(calendarDate, 1)) {
+            points.push({
+                bucketKey: calendarDate,
+                bucketStart: `${calendarDate}T00:00:00+05:30`,
+                label: formatBillActivityDayLabel(calendarDate),
+                billCount: countByKey.get(calendarDate) ?? 0,
+            });
+        }
+    }
+
+    return {
+        granularity,
+        points,
+        totalBillCount: points.reduce((sum, point) => sum + point.billCount, 0),
+    };
+};
 
 export const kolkataCalendarDate = (now: Date): string =>
     new Intl.DateTimeFormat("en-CA", { timeZone: PLATFORM_REPORTING_TIMEZONE }).format(now);

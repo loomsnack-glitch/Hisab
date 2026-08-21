@@ -20,6 +20,8 @@ import {
     PlatformCustomerInspectionQuerySchema,
     PlatformReportInspectionQuerySchema,
     PlatformReportInspectionDTOSchema,
+    PlatformBillActivityQuerySchema,
+    PlatformBillActivityDTOSchema,
     PlatformTableInspectionQuerySchema,
     PlatformTableInspectionListDTOSchema,
     PlatformTableInspectionDetailResponseSchema,
@@ -31,9 +33,11 @@ import {
     PlatformSaleInspectionListDTOSchema,
     FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
     FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
+    buildPlatformBillActivitySeries,
     kolkataCalendarDate,
     kolkataDayStartUtc,
     resolveActiveStoreWindow,
+    resolveBillActivityDateRange,
     resolvePlatformReportingPeriod,
 } from "./platform.schema";
 
@@ -740,6 +744,103 @@ describe("Platform Report inspection contracts", () => {
         expect(parsed.dateRange.label).toBe("2026-08-01 to 2026-08-21");
         expect(JSON.stringify(parsed)).not.toContain("Export");
         expect(JSON.stringify(parsed)).not.toContain("Configure");
+    });
+});
+
+describe("Platform bill activity contracts", () => {
+    test("accepts optional calendar dates and rejects inverted ranges", () => {
+        expect(PlatformBillActivityQuerySchema.parse({})).toEqual({});
+        expect(
+            PlatformBillActivityQuerySchema.parse({
+                startDate: "2026-08-21",
+                endDate: "2026-08-21",
+            }),
+        ).toEqual({
+            startDate: "2026-08-21",
+            endDate: "2026-08-21",
+        });
+        expect(
+            PlatformBillActivityQuerySchema.safeParse({
+                startDate: "2026-08-21",
+                endDate: "2026-08-01",
+            }).success,
+        ).toBe(false);
+    });
+
+    test("defaults omitted dates to today in Asia/Kolkata and rejects future dates", () => {
+        const now = new Date("2026-08-21T07:11:00.000Z");
+        const resolved = resolveBillActivityDateRange({}, now);
+
+        expect(resolved.ok).toBe(true);
+        if (!resolved.ok) return;
+        expect(resolved.range.startDate).toBe("2026-08-21");
+        expect(resolved.range.endDate).toBe("2026-08-21");
+        expect(resolved.range.startAt?.toISOString()).toBe("2026-08-20T18:30:00.000Z");
+        expect(resolved.range.endAt?.toISOString()).toBe("2026-08-21T18:30:00.000Z");
+
+        expect(resolveBillActivityDateRange({ startDate: "2026-08-22", endDate: "2026-08-22" }, now)).toEqual({
+            ok: false,
+            message: FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
+        });
+    });
+
+    test("builds hourly buckets for a single day and daily buckets for a range", () => {
+        const today = buildPlatformBillActivitySeries("2026-08-21", "2026-08-21", [
+            { bucketKey: "2026-08-21T15", billCount: 1 },
+            { bucketKey: "2026-08-21T23", billCount: 1 },
+        ]);
+        const week = buildPlatformBillActivitySeries("2026-08-17", "2026-08-21", [
+            { bucketKey: "2026-08-18", billCount: 1 },
+            { bucketKey: "2026-08-19", billCount: 1 },
+        ]);
+
+        expect(today.granularity).toBe("hour");
+        expect(today.points).toHaveLength(24);
+        expect(today.totalBillCount).toBe(2);
+        expect(today.points[0]).toEqual({
+            bucketKey: "2026-08-21T00",
+            bucketStart: "2026-08-21T00:00:00+05:30",
+            label: "12 am",
+            billCount: 0,
+        });
+        expect(today.points[15]).toEqual({
+            bucketKey: "2026-08-21T15",
+            bucketStart: "2026-08-21T15:00:00+05:30",
+            label: "3 pm",
+            billCount: 1,
+        });
+        expect(today.points[23]?.label).toBe("11 pm");
+        expect(week.granularity).toBe("day");
+        expect(week.points.map((point) => [point.bucketKey, point.billCount, point.label])).toEqual([
+            ["2026-08-17", 0, "17 Aug 2026"],
+            ["2026-08-18", 1, "18 Aug 2026"],
+            ["2026-08-19", 1, "19 Aug 2026"],
+            ["2026-08-20", 0, "20 Aug 2026"],
+            ["2026-08-21", 0, "21 Aug 2026"],
+        ]);
+        expect(week.totalBillCount).toBe(2);
+    });
+
+    test("accepts a read-only bill activity response", () => {
+        const parsed = PlatformBillActivityDTOSchema.parse({
+            dateRange: {
+                startDate: "2026-08-21",
+                endDate: "2026-08-21",
+                label: "2026-08-21",
+                timezone: "Asia/Kolkata",
+            },
+            granularity: "hour",
+            points: [{
+                bucketKey: "2026-08-21T15",
+                bucketStart: "2026-08-21T15:00:00+05:30",
+                label: "3 pm",
+                billCount: 2,
+            }],
+            totalBillCount: 2,
+        });
+
+        expect(parsed.totalBillCount).toBe(2);
+        expect(parsed.granularity).toBe("hour");
     });
 });
 

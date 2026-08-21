@@ -5,6 +5,9 @@ import {
     resolveBillingInspectionDateRange,
     resolvePlatformReportingPeriod,
     resolveReportInspectionDateRange,
+    resolveBillActivityDateRange,
+    buildPlatformBillActivitySeries,
+    billActivityGranularityForRange,
     formatPlatformReportDateRangeLabel,
     type PlatformBillingInspectionQuerySVC,
     type PlatformCatalogAddOnDetailResponse,
@@ -27,6 +30,8 @@ import {
     type PlatformPurchaseInspectionQuerySVC,
     type PlatformReportInspectionQuerySVC,
     type PlatformReportInspectionResponse,
+    type PlatformBillActivityQuerySVC,
+    type PlatformBillActivityResponse,
     type PlatformSaleInspectionDetailResponse,
     type PlatformSaleInspectionListResponse,
     type PlatformStoreDetailResponse,
@@ -59,6 +64,7 @@ type PlatformReportingRepository = Pick<
     | "listOrganizationCustomers"
     | "getOrganizationCustomerContext"
     | "getOrganizationReportContext"
+    | "listOrganizationBillActivity"
     | "listOrganizationTables"
     | "getOrganizationTableContext"
     | "listOrganizationPurchases"
@@ -956,6 +962,52 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                     productCount: products.length,
                     totalQuantitySold,
                 },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationBillActivity: async (
+        organizationId: string,
+        query: PlatformBillActivityQuerySVC,
+    ): Promise<ServiceResponse<PlatformBillActivityResponse | null>> => {
+        const now = dependencies.now();
+        const resolvedDates = resolveBillActivityDateRange(query, now);
+        if (!resolvedDates.ok) {
+            return reportingPeriodError(resolvedDates.message);
+        }
+
+        const startDate = resolvedDates.range.startDate ?? "";
+        const endDate = resolvedDates.range.endDate ?? "";
+        const granularity = billActivityGranularityForRange(startDate, endDate);
+        const metrics = await dependencies.repository.listOrganizationBillActivity({
+            organizationId,
+            startAt: resolvedDates.range.startAt ?? now,
+            endAt: resolvedDates.range.endAt ?? now,
+            granularity,
+        });
+
+        if (!metrics) {
+            return {
+                status: "error",
+                message: "Organization not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        const series = buildPlatformBillActivitySeries(startDate, endDate, metrics.buckets);
+        return {
+            status: "success",
+            message: "Platform Organization bill activity retrieved successfully",
+            data: {
+                dateRange: {
+                    startDate,
+                    endDate,
+                    label: formatPlatformReportDateRangeLabel(startDate, endDate),
+                    timezone: PLATFORM_REPORTING_TIMEZONE,
+                },
+                ...series,
             },
             code: STATUS_CODES.SUCCESS,
         };

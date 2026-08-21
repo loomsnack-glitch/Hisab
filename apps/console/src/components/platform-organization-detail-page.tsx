@@ -33,6 +33,7 @@ import {
     getPlatformOrganizationCustomers as getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer as getPlatformOrganizationCustomerRequest,
     getPlatformOrganizationReports as getPlatformOrganizationReportsRequest,
+    getPlatformOrganizationBillActivity as getPlatformOrganizationBillActivityRequest,
     getPlatformOrganizationTables as getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable as getPlatformOrganizationTableRequest,
     getPlatformOrganizationPurchases as getPlatformOrganizationPurchasesRequest,
@@ -74,6 +75,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@repo/ui/lib/utils";
 
 import ConsoleBillingInspection from "@/components/console-billing-inspection";
+import ConsoleBillActivityChart from "@/components/console-bill-activity-chart";
 import {
     billingInspectionSearchString,
     catalogInspectionPath,
@@ -82,19 +84,22 @@ import {
     parseBillingInspectionSearch,
     parseCatalogInspectionSearch,
     parseCustomerInspectionSearch,
+    parseOverviewBillActivitySearch,
+    parsePurchaseInspectionSearch,
     parseReportInspectionSearch,
     parseTableInspectionSearch,
-    parsePurchaseInspectionSearch,
     resolveBillingInspectionFilters,
+    resolveOverviewBillActivityFilters,
     toBillingInspectionApiQuery,
     type BillingInspectionFilters,
     type CatalogInspectionFilters,
+    type CatalogResourceKind,
     type CustomerInspectionFilters,
+    type OrganizationInspectionSection,
+    type OverviewBillActivityFilters,
+    type PurchaseInspectionFilters,
     type ReportInspectionFilters,
     type TableInspectionFilters,
-    type PurchaseInspectionFilters,
-    type CatalogResourceKind,
-    type OrganizationInspectionSection,
 } from "@/lib/organization-inspection-url";
 
 const organizationDetailQueryKey = ["platform-owner", "organization"] as const;
@@ -109,6 +114,7 @@ const organizationCatalogAddOnQueryKey = ["platform-owner", "organization-catalo
 const organizationCustomersQueryKey = ["platform-owner", "organization-customers"] as const;
 const organizationCustomerQueryKey = ["platform-owner", "organization-customer"] as const;
 const organizationReportsQueryKey = ["platform-owner", "organization-reports"] as const;
+const organizationBillActivityQueryKey = ["platform-owner", "organization-bill-activity"] as const;
 const organizationTablesQueryKey = ["platform-owner", "organization-tables"] as const;
 const organizationTableQueryKey = ["platform-owner", "organization-table"] as const;
 const organizationPurchasesQueryKey = ["platform-owner", "organization-purchases"] as const;
@@ -134,6 +140,7 @@ type PlatformOrganizationDetailPageProps = {
     getPlatformOrganizationCustomers?: typeof getPlatformOrganizationCustomersRequest;
     getPlatformOrganizationCustomer?: typeof getPlatformOrganizationCustomerRequest;
     getPlatformOrganizationReports?: typeof getPlatformOrganizationReportsRequest;
+    getPlatformOrganizationBillActivity?: typeof getPlatformOrganizationBillActivityRequest;
     getPlatformOrganizationTables?: typeof getPlatformOrganizationTablesRequest;
     getPlatformOrganizationTable?: typeof getPlatformOrganizationTableRequest;
     getPlatformOrganizationPurchases?: typeof getPlatformOrganizationPurchasesRequest;
@@ -443,6 +450,7 @@ const PlatformOrganizationDetailPage = ({
     getPlatformOrganizationCustomers = getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer = getPlatformOrganizationCustomerRequest,
     getPlatformOrganizationReports = getPlatformOrganizationReportsRequest,
+    getPlatformOrganizationBillActivity = getPlatformOrganizationBillActivityRequest,
     getPlatformOrganizationTables = getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable = getPlatformOrganizationTableRequest,
     getPlatformOrganizationPurchases = getPlatformOrganizationPurchasesRequest,
@@ -467,6 +475,11 @@ const PlatformOrganizationDetailPage = ({
     const [customerSearchInput, setCustomerSearchInput] = useState(customerFilters.search ?? "");
     const [reportFilters, setReportFilters] = useState<ReportInspectionFilters>(() =>
         parseReportInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+    );
+    const [overviewFilters, setOverviewFilters] = useState<OverviewBillActivityFilters>(() =>
+        resolveOverviewBillActivityFilters(
+            parseOverviewBillActivitySearch(typeof window === "undefined" ? "" : window.location.search),
+        ),
     );
     const [tableFilters, setTableFilters] = useState<TableInspectionFilters>(() =>
         parseTableInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
@@ -565,6 +578,13 @@ const PlatformOrganizationDetailPage = ({
         placeholderData: keepPreviousData,
         enabled: section === "reports",
     });
+    const billActivityQuery = useQuery({
+        queryKey: [...organizationBillActivityQueryKey, organizationId, overviewFilters],
+        queryFn: () => getPlatformOrganizationBillActivity(organizationId, overviewFilters),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "overview",
+    });
     const tablesQuery = useQuery({
         queryKey: [...organizationTablesQueryKey, organizationId, tableFilters],
         queryFn: () => getPlatformOrganizationTables(organizationId, tableFilters),
@@ -624,6 +644,8 @@ const PlatformOrganizationDetailPage = ({
     const customerDetail = customerResponse?.status === "success" ? customerResponse.data?.customer : undefined;
     const reportsResponse = reportsQuery.data;
     const reportsData = reportsResponse?.status === "success" ? reportsResponse.data : undefined;
+    const billActivityResponse = billActivityQuery.data;
+    const billActivity = billActivityResponse?.status === "success" ? billActivityResponse.data : undefined;
     const tablesResponse = tablesQuery.data;
     const tablesList = tablesResponse?.status === "success" ? tablesResponse.data : undefined;
     const tableResponse = tableQuery.data;
@@ -791,6 +813,16 @@ const PlatformOrganizationDetailPage = ({
                                     : errorMessage;
 
     useEffect(() => {
+        if (section !== "overview") return;
+        const syncOverviewFilters = () => {
+            setOverviewFilters(resolveOverviewBillActivityFilters(parseOverviewBillActivitySearch(window.location.search)));
+        };
+        syncOverviewFilters();
+        window.addEventListener("popstate", syncOverviewFilters);
+        return () => window.removeEventListener("popstate", syncOverviewFilters);
+    }, [section]);
+
+    useEffect(() => {
         if (section !== "reports") return;
         const syncReportFilters = () => {
             setReportFilters(parseReportInspectionSearch(window.location.search));
@@ -949,6 +981,13 @@ const PlatformOrganizationDetailPage = ({
         onNavigate?.(path);
     };
 
+    const navigateOverview = (nextFilters: OverviewBillActivityFilters) => {
+        const resolved = resolveOverviewBillActivityFilters(nextFilters);
+        const path = organizationInspectionPath(organizationId, "overview", undefined, resolved);
+        setOverviewFilters(resolved);
+        go(path);
+    };
+
     const followInspectionLink = (event: MouseEvent<HTMLAnchorElement>, path: string) => {
         event.preventDefault();
         go(path);
@@ -958,7 +997,9 @@ const PlatformOrganizationDetailPage = ({
         <nav aria-label="Organization inspection sections" className="border-b border-border/60">
             <div className="flex gap-1 overflow-x-auto pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {organizationInspectionSections.map((item) => {
-                    const href = item === "billing"
+                    const href = item === "overview"
+                        ? organizationInspectionPath(organizationId, item, undefined, overviewFilters)
+                        : item === "billing"
                         ? organizationInspectionPath(organizationId, item, undefined, resolveBillingInspectionFilters(billingFilters))
                         : item === "catalog"
                             ? catalogInspectionPath(organizationId, { view: "list", filters: catalogFilters })
@@ -1468,7 +1509,7 @@ const PlatformOrganizationDetailPage = ({
     const renderOverview = () => {
         if (!organization) return null;
         return (
-            <div className="space-y-2">
+            <div className="space-y-4">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                     <h2 className="text-sm font-semibold text-foreground">At a glance</h2>
                     <p className="text-xs text-muted-foreground">
@@ -1496,6 +1537,17 @@ const PlatformOrganizationDetailPage = ({
                         valueClassName="text-xs leading-snug"
                     />
                 </div>
+                <ConsoleBillActivityChart
+                    filters={overviewFilters}
+                    onUpdateFilters={navigateOverview}
+                    isLoading={billActivityQuery.isLoading}
+                    isError={billActivityQuery.isError || billActivityResponse?.status === "error"}
+                    errorMessage={
+                        (billActivityQuery.error as { message?: string } | null)?.message
+                            ?? (billActivityResponse?.status === "error" ? billActivityResponse.message : undefined)
+                    }
+                    activity={billActivity}
+                />
             </div>
         );
     };

@@ -44,6 +44,11 @@ export type CustomerInspectionFilters = PlatformCustomerInspectionQueryJSON;
 
 export type ReportInspectionFilters = PlatformReportInspectionQueryJSON;
 
+export type OverviewBillActivityFilters = {
+    startDate?: string;
+    endDate?: string;
+};
+
 export type TableInspectionFilters = PlatformTableInspectionQueryJSON;
 
 export type PurchaseInspectionFilters = PlatformPurchaseInspectionQueryJSON;
@@ -132,6 +137,48 @@ const billingFilterKeys = [
 ] as const;
 
 export const defaultBillingInspectionDate = () => kolkataCalendarDate(new Date());
+
+export const defaultOverviewBillActivityDate = defaultBillingInspectionDate;
+
+export const resolveOverviewBillActivityFilters = (
+    filters: OverviewBillActivityFilters = {},
+): OverviewBillActivityFilters => {
+    if (filters.startDate || filters.endDate) {
+        return {
+            startDate: filters.startDate ?? filters.endDate,
+            endDate: filters.endDate ?? filters.startDate,
+        };
+    }
+
+    const today = defaultOverviewBillActivityDate();
+    return { startDate: today, endDate: today };
+};
+
+const overviewFilterKeys = ["startDate", "endDate"] as const;
+
+export const parseOverviewBillActivitySearch = (search: string): OverviewBillActivityFilters => {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const filters: OverviewBillActivityFilters = {};
+
+    const startDate = params.get("startDate");
+    if (startDate) filters.startDate = startDate;
+
+    const endDate = params.get("endDate");
+    if (endDate) filters.endDate = endDate;
+
+    return filters;
+};
+
+export const overviewBillActivitySearchString = (filters: OverviewBillActivityFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const key of overviewFilterKeys) {
+        const value = filters[key];
+        if (value === undefined || value === null || value === "") continue;
+        params.set(key, String(value));
+    }
+    const serialized = params.toString();
+    return serialized ? `?${serialized}` : "";
+};
 
 export const resolveBillingInspectionFilters = (
     filters: BillingInspectionFilters = {},
@@ -409,7 +456,7 @@ export const organizationInspectionPath = (
     organizationId: string,
     section: OrganizationInspectionSection = "overview",
     resourceId?: string,
-    sectionFilters?: BillingInspectionFilters | CustomerInspectionFilters | ReportInspectionFilters | TableInspectionFilters | PurchaseInspectionFilters,
+    sectionFilters?: BillingInspectionFilters | CustomerInspectionFilters | ReportInspectionFilters | TableInspectionFilters | PurchaseInspectionFilters | OverviewBillActivityFilters,
 ) => {
     let pathname: string;
     if (section === "overview" && !resourceId) {
@@ -422,6 +469,14 @@ export const organizationInspectionPath = (
 
     if (section === "billing") {
         return `${pathname}${billingInspectionSearchString(resolveBillingInspectionFilters(sectionFilters as BillingInspectionFilters | undefined))}`;
+    }
+
+    if (section === "overview") {
+        const overviewFilters = sectionFilters as OverviewBillActivityFilters | undefined;
+        if (overviewFilters && (overviewFilters.startDate || overviewFilters.endDate)) {
+            return `${pathname}${overviewBillActivitySearchString(resolveOverviewBillActivityFilters(overviewFilters))}`;
+        }
+        return pathname;
     }
 
     if (section === "customers") {

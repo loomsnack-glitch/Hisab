@@ -13,6 +13,7 @@ import {
     getPlatformOrganizationCustomers as getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer as getPlatformOrganizationCustomerRequest,
     getPlatformOrganizationReports as getPlatformOrganizationReportsRequest,
+    getPlatformOrganizationBillActivity as getPlatformOrganizationBillActivityRequest,
     getPlatformOrganizationTables as getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable as getPlatformOrganizationTableRequest,
     getPlatformOrganizationPurchases as getPlatformOrganizationPurchasesRequest,
@@ -66,6 +67,7 @@ type PlatformOrganizationsPageProps = {
     getPlatformOrganizationCustomers?: typeof getPlatformOrganizationCustomersRequest;
     getPlatformOrganizationCustomer?: typeof getPlatformOrganizationCustomerRequest;
     getPlatformOrganizationReports?: typeof getPlatformOrganizationReportsRequest;
+    getPlatformOrganizationBillActivity?: typeof getPlatformOrganizationBillActivityRequest;
     getPlatformOrganizationTables?: typeof getPlatformOrganizationTablesRequest;
     getPlatformOrganizationTable?: typeof getPlatformOrganizationTableRequest;
     getPlatformOrganizationPurchases?: typeof getPlatformOrganizationPurchasesRequest;
@@ -154,6 +156,7 @@ const PlatformOrganizationsPage = ({
     getPlatformOrganizationCustomers = getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer = getPlatformOrganizationCustomerRequest,
     getPlatformOrganizationReports = getPlatformOrganizationReportsRequest,
+    getPlatformOrganizationBillActivity = getPlatformOrganizationBillActivityRequest,
     getPlatformOrganizationTables = getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable = getPlatformOrganizationTableRequest,
     getPlatformOrganizationPurchases = getPlatformOrganizationPurchasesRequest,
@@ -288,6 +291,7 @@ const PlatformOrganizationsPage = ({
                 getPlatformOrganizationCustomers={getPlatformOrganizationCustomers}
                 getPlatformOrganizationCustomer={getPlatformOrganizationCustomer}
                 getPlatformOrganizationReports={getPlatformOrganizationReports}
+                getPlatformOrganizationBillActivity={getPlatformOrganizationBillActivity}
                 getPlatformOrganizationTables={getPlatformOrganizationTables}
                 getPlatformOrganizationTable={getPlatformOrganizationTable}
                 getPlatformOrganizationPurchases={getPlatformOrganizationPurchases}

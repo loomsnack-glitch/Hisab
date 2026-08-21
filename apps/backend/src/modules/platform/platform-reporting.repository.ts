@@ -1873,6 +1873,59 @@ export const getOrganizationReportContext = async (
     };
 };
 
+export type PlatformOrganizationBillActivityMetricsQuery = {
+    organizationId: string;
+    startAt: Date;
+    endAt: Date;
+    granularity: "hour" | "day";
+};
+
+export type PlatformOrganizationBillActivityMetrics = {
+    buckets: Array<{ bucketKey: string; billCount: number }>;
+};
+
+export const listOrganizationBillActivity = async (
+    query: PlatformOrganizationBillActivityMetricsQuery,
+): Promise<PlatformOrganizationBillActivityMetrics | null> => {
+    const [organization] = await pg`
+        SELECT id
+        FROM organizations
+        WHERE id = ${query.organizationId}
+    `;
+    if (!organization?.id) {
+        return null;
+    }
+
+    const startAt = query.startAt.toISOString();
+    const endAt = query.endAt.toISOString();
+    const granularity = query.granularity;
+    const rows = await pg`
+        SELECT
+            CASE
+                WHEN ${granularity} = 'hour'
+                    THEN to_char(date_trunc('hour', committed_at AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD"T"HH24')
+                ELSE to_char((committed_at AT TIME ZONE 'Asia/Kolkata')::date, 'YYYY-MM-DD')
+            END AS bucket_key,
+            COUNT(*)::int AS bill_count
+        FROM sales
+        WHERE organization_id = ${query.organizationId}
+          AND status = 'completed'
+          AND committed_at IS NOT NULL
+          AND committed_at >= ${startAt}::timestamptz
+          AND committed_at < ${endAt}::timestamptz
+        GROUP BY 1
+        ORDER BY 1
+    `;
+
+    return {
+        buckets: rows.flatMap((row: Record<string, unknown>) => {
+            const bucketKey = row.bucket_key == null ? "" : String(row.bucket_key);
+            if (!bucketKey) return [];
+            return [{ bucketKey, billCount: asCount(row.bill_count) }];
+        }),
+    };
+};
+
 export type PlatformOrganizationTablesMetricsQuery = {
     organizationId: string;
     storeId?: string;

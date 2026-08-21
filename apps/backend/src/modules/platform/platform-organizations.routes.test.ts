@@ -20,6 +20,7 @@ import {
     type PlatformSaleInspectionDetailResponse,
     type PlatformSaleInspectionListResponse,
     type PlatformReportInspectionResponse,
+    type PlatformBillActivityResponse,
     type PlatformTableInspectionDetailResponse,
     type PlatformTableInspectionListResponse,
     type PlatformWhatsAppInspectionResponse,
@@ -971,6 +972,42 @@ const createReportingMetrics = (
         };
     };
 
+    const listOrganizationBillActivity = async (query: {
+        organizationId: string;
+        startAt: Date;
+        endAt: Date;
+        granularity: "hour" | "day";
+    }) => {
+        const organization = organizations.find((item) => item.id === query.organizationId);
+        if (!organization) return null;
+
+        const counts = new Map<string, number>();
+        for (const sale of sales) {
+            if (sale.organizationId !== organization.id) continue;
+            if (sale.status !== "completed" || !sale.committedAt) continue;
+            if (sale.committedAt.getTime() < query.startAt.getTime()) continue;
+            if (sale.committedAt.getTime() >= query.endAt.getTime()) continue;
+
+            const parts = new Intl.DateTimeFormat("en-GB", {
+                timeZone: "Asia/Kolkata",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                hourCycle: "h23",
+            }).formatToParts(sale.committedAt);
+            const lookup = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+            const calendarDate = `${lookup.year}-${lookup.month}-${lookup.day}`;
+            const hour = String(lookup.hour ?? "00").padStart(2, "0");
+            const bucketKey = query.granularity === "hour" ? `${calendarDate}T${hour}` : calendarDate;
+            counts.set(bucketKey, (counts.get(bucketKey) ?? 0) + 1);
+        }
+
+        return {
+            buckets: Array.from(counts.entries()).map(([bucketKey, billCount]) => ({ bucketKey, billCount })),
+        };
+    };
+
     const listOrganizationTables = async (
         query: {
             organizationId: string;
@@ -1167,6 +1204,7 @@ const createReportingMetrics = (
         listOrganizationCustomers,
         getOrganizationCustomerContext,
         getOrganizationReportContext,
+        listOrganizationBillActivity,
         listOrganizationTables,
         getOrganizationTableContext,
         listOrganizationPurchases,
@@ -1871,6 +1909,9 @@ const organizationCustomerDetail = (app: Hono, cookie: string, organizationId: s
 
 const organizationReports = (app: Hono, cookie: string, organizationId: string, query = "") =>
     app.request(`/platform/organizations/${organizationId}/reports${query}`, { headers: { cookie } });
+
+const organizationBillActivity = (app: Hono, cookie: string, organizationId: string, query = "") =>
+    app.request(`/platform/organizations/${organizationId}/bill-activity${query}`, { headers: { cookie } });
 
 const organizationTables = (app: Hono, cookie: string, organizationId: string, query = "") =>
     app.request(`/platform/organizations/${organizationId}/tables${query}`, { headers: { cookie } });
@@ -2794,6 +2835,95 @@ describe("Platform Report inspection API", () => {
         expect(future.status).toBe(400);
         expect(futureBody.message).toBe(FUTURE_REPORT_INSPECTION_DATE_MESSAGE);
         expect(JSON.stringify(missingOrgBody)).not.toContain("Masala Chai");
+    });
+});
+
+describe("Platform bill activity API", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("returns Organization bill activity only to an active Owner User", async () => {
+        const { app, setOwnerActive } = await createHarness();
+        const customerToken = await sign(
+            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
+            "customer-and-device-secret",
+        );
+        const ownerCookie = cookieFrom(await passwordLogin(app));
+
+        expect((await app.request(`/platform/organizations/${orgActive}/bill-activity`)).status).toBe(401);
+        expect((await app.request(`/platform/organizations/${orgActive}/bill-activity`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
+
+        setOwnerActive(false);
+        expect((await organizationBillActivity(app, ownerCookie, orgActive)).status).toBe(401);
+    });
+
+    test("defaults to today's completed bills by Asia/Kolkata hour and ignores drafts", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const today = await organizationBillActivity(app, cookie, orgActive);
+        const dashboardPeriod = await organizationDetail(app, cookie, orgActive, "?period=7d");
+        const body = await today.json() as ServiceResponse<PlatformBillActivityResponse>;
+        const dashboardBody = await dashboardPeriod.json() as ServiceResponse<PlatformOrganizationDetailResponse>;
+
+        expect(today.status).toBe(200);
+        expect(body.data?.dateRange).toEqual({
+            startDate: "2026-08-21",
+            endDate: "2026-08-21",
+            label: "2026-08-21",
+            timezone: "Asia/Kolkata",
+        });
+        expect(body.data?.granularity).toBe("hour");
+        expect(body.data?.points).toHaveLength(24);
+        expect(body.data?.totalBillCount).toBe(2);
+        expect(body.data?.points[15]).toEqual({
+            bucketKey: "2026-08-21T15",
+            bucketStart: "2026-08-21T15:00:00+05:30",
+            label: "3 pm",
+            billCount: 1,
+        });
+        expect(body.data?.points[23]?.billCount).toBe(1);
+        expect(dashboardBody.data?.reportingPeriod.selection).toBe("7d");
+        expect(dashboardBody.data?.organization.completedSaleCount).not.toBe(body.data?.totalBillCount);
+        expect(JSON.stringify(body.data)).not.toContain("deviceSecret");
+        expect(JSON.stringify(body.data)).not.toContain("password");
+        expect(JSON.stringify(body.data)).not.toContain("token");
+    });
+
+    test("counts completed bills by calendar day for an Inspection date range", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const response = await organizationBillActivity(app, cookie, orgMixed, "?startDate=2026-08-17&endDate=2026-08-21");
+        const body = await response.json() as ServiceResponse<PlatformBillActivityResponse>;
+
+        expect(response.status).toBe(200);
+        expect(body.data?.granularity).toBe("day");
+        expect(body.data?.totalBillCount).toBe(2);
+        expect(body.data?.points.map((point) => [point.bucketKey, point.billCount, point.label])).toEqual([
+            ["2026-08-17", 0, "17 Aug 2026"],
+            ["2026-08-18", 1, "18 Aug 2026"],
+            ["2026-08-19", 1, "19 Aug 2026"],
+            ["2026-08-20", 0, "20 Aug 2026"],
+            ["2026-08-21", 0, "21 Aug 2026"],
+        ]);
+    });
+
+    test("keeps Organization isolation and rejects missing Organizations and future dates", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const missingOrg = await organizationBillActivity(app, cookie, missingOrganizationId);
+        const otherOrgToday = await organizationBillActivity(app, cookie, orgMixed);
+        const future = await organizationBillActivity(app, cookie, orgActive, "?startDate=2026-08-22&endDate=2026-08-22");
+        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
+        const otherOrgBody = await otherOrgToday.json() as ServiceResponse<PlatformBillActivityResponse>;
+        const futureBody = await future.json() as { message: string };
+
+        expect(missingOrg.status).toBe(404);
+        expect(missingOrgBody.message).toBe("Organization not found");
+        expect(JSON.stringify(missingOrgBody)).not.toContain("Filter Coffee");
+        expect(otherOrgBody.data?.totalBillCount).toBe(0);
+        expect(future.status).toBe(400);
+        expect(futureBody.message).toBe(FUTURE_BILLING_INSPECTION_DATE_MESSAGE);
     });
 });
 

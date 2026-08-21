@@ -32,6 +32,8 @@ import type {
     PlatformCustomerInspectionSummaryDTOSchema,
     PlatformReportInspectionDTOSchema,
     PlatformReportInspectionQuerySchema,
+    PlatformBillActivityDTOSchema,
+    PlatformBillActivityQuerySchema,
     PlatformTableInspectionDetailDTOSchema,
     PlatformTableInspectionDetailResponseSchema,
     PlatformTableInspectionListDTOSchema,
@@ -145,6 +147,11 @@ export type PlatformReportInspectionQueryJSON = z.input<typeof PlatformReportIns
 export type PlatformReportInspectionQuerySVC = z.output<typeof PlatformReportInspectionQuerySchema>;
 export type PlatformReportInspectionDTO = z.infer<typeof PlatformReportInspectionDTOSchema>;
 export type PlatformReportInspectionResponse = PlatformReportInspectionDTO;
+
+export type PlatformBillActivityQueryJSON = z.input<typeof PlatformBillActivityQuerySchema>;
+export type PlatformBillActivityQuerySVC = z.output<typeof PlatformBillActivityQuerySchema>;
+export type PlatformBillActivityDTO = z.infer<typeof PlatformBillActivityDTOSchema>;
+export type PlatformBillActivityResponse = PlatformBillActivityDTO;
 
 export type PlatformTableInspectionQueryJSON = z.input<typeof PlatformTableInspectionQuerySchema>;
 export type PlatformTableInspectionQuerySVC = z.output<typeof PlatformTableInspectionQuerySchema>;
