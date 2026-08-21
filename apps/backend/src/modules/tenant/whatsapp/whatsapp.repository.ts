@@ -16,6 +16,13 @@ import { snakeToCamel } from "@/utils/case";
 
 type AccountRow = Record<string, unknown>;
 
+export class CloudTemplateRouteRequiredError extends Error {
+    constructor() {
+        super("Cloud WhatsApp accounts require the approved template send route");
+        this.name = "CloudTemplateRouteRequiredError";
+    }
+}
+
 export type InvoiceOutboxRecord = {
     messageId: string;
     outboxId: string;
@@ -494,12 +501,13 @@ export const getCustomerReminderOutbox = async (
 export const createInvoiceOutbox = async (params: InvoiceOutboxParams): Promise<InvoiceOutboxRecord> => {
     return pg.begin(async tx => {
         const [account] = await tx`
-            SELECT id
+            SELECT id, provider
             FROM whatsapp_accounts
             WHERE id = ${params.whatsappAccountId}
             FOR UPDATE
         `;
         if (!account) throw new Error("WhatsApp account not found");
+        if (account.provider === "cloud_api") throw new CloudTemplateRouteRequiredError();
         const [existingOutbox] = await tx`
             SELECT o.id
             FROM whatsapp_outbox o
@@ -953,12 +961,13 @@ export const createTextOutbox = async (
 ): Promise<InvoiceOutboxRecord> => {
     return pg.begin(async tx => {
         const [account] = await tx`
-            SELECT id
+            SELECT id, provider
             FROM whatsapp_accounts
             WHERE id = ${accountId}
             FOR UPDATE
         `;
         if (!account) throw new Error("WhatsApp account not found");
+        if (account.provider === "cloud_api") throw new CloudTemplateRouteRequiredError();
         const [queued] = await tx`
             SELECT COUNT(*) AS count
             FROM whatsapp_outbox
@@ -1024,9 +1033,10 @@ export const createCustomerTextOutbox = async (params: {
 }): Promise<InvoiceOutboxRecord> => {
     return pg.begin(async tx => {
         const [account] = await tx`
-            SELECT id FROM whatsapp_accounts WHERE id = ${params.accountId} FOR UPDATE
+            SELECT id, provider FROM whatsapp_accounts WHERE id = ${params.accountId} FOR UPDATE
         `;
         if (!account) throw new Error("WhatsApp account not found");
+        if (account.provider === "cloud_api") throw new CloudTemplateRouteRequiredError();
         const [queued] = await tx`
             SELECT COUNT(*) AS count FROM whatsapp_outbox
             WHERE whatsapp_account_id = ${params.accountId}

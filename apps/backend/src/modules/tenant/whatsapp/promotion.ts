@@ -145,6 +145,13 @@ export const createPromotion = async (
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
+  if (account.provider === "cloud_api")
+    return {
+      status: "error",
+      message: "Cloud WhatsApp promotions require an approved Cloud template route",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
   if (account.status !== "connected")
     return {
       status: "error",

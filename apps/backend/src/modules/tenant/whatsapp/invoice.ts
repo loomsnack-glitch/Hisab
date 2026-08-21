@@ -126,6 +126,14 @@ export const queueInvoiceForStore = async (
       code: STATUS_CODES.CONFLICT,
     };
   }
+  if (account.provider === "cloud_api") {
+    return {
+      status: "error",
+      message: "Cloud WhatsApp invoices require an approved Cloud template route",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
 
   const existing = await repository.getInvoiceOutbox(
     organizationId,

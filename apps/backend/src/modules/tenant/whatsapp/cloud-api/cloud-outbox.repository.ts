@@ -63,7 +63,7 @@ export const claimNextCloudOutbox = async (
       INNER JOIN whatsapp_business_accounts business
         ON business.id = account.whatsapp_business_account_id
        AND business.organization_id = account.organization_id
-      WHERE outbox.kind IN ('invoice', 'text', 'document', 'promotion', 'template')
+      WHERE outbox.kind = 'template'
         AND outbox.status IN ('pending', 'retryable')
         AND outbox.next_attempt_at <= NOW()
         AND account.provider = 'cloud_api'

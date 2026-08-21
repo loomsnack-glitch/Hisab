@@ -1,6 +1,6 @@
 # WhatsApp Cloud API-only migration plan
 
-Status: in progress — repository baseline audited; Cloud API migration not yet production-ready
+Status: in progress — implementation loop 1 complete; Cloud API migration not yet production-ready
 Date: 2026-08-21
 Owner: Hisab platform
 
@@ -167,10 +167,10 @@ The branch now also contains a Cloud API contract foundation:
 | --- | --- | --- |
 | Phase 0 Meta/product readiness | Readiness researched; external gate deferred | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions remain a release/integration gate. |
 | Phase 1 account/database foundation | Code-first foundation implemented; exit gate open | The injected credential-vault/key-version port, atomic WABA/sender persistence, credential-binding rotation seam, and read-only integrity verification script are implemented and fixture-tested. Applying the migration set to a production-shaped copy, wiring the real secret manager, and running the database/security exit checks remain. |
-| Phase 2A–2D Cloud contracts | Runtime seams implemented; provider gate open | Signed receipt replay is scheduled, Baileys claims are provider-scoped, Cloud outbox leasing/dispatch/media upload and uncertain-send reconciliation are implemented behind injected credential/storage ports, and focused fixtures pass. Live vault assembly, Meta verification, and production observation remain. |
+| Phase 2A–2D Cloud contracts | Webhook runtime implemented; Cloud outbox runtime gate open | Signed receipt replay is scheduled and focused fixtures pass. The Cloud outbox dispatcher and uncertain-send reconciliation exist as seams, but the backend scheduler and reconciliation worker still must be wired. Live vault assembly, Meta verification, and production observation remain. |
 | Phase 3A–3D onboarding contracts | Implemented | State, persistence, result validation, and server-side exchange seams are covered by focused fixtures. |
 | Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, refresh/revoke endpoints, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, durable provisioning-attempt execution, and production-shaped Store/inbound testing remain. |
-| Phase 4 templates/policy | 4C code-first complete; external gate open | Phase 4 is split into 4A Meta asset/binding sync, 4B auditable consent/suppression, and 4C send-time policy admission. Existing Hisab templates/promotions remain local until these seams are complete. |
+| Phase 4 templates/policy | Code-first admission complete; caller migration pending | Phase 4A–4C template, consent, and send-admission seams are implemented. Legacy invoice, due, promotion, and inbox callers are now blocked from sending through Cloud accounts until they migrate to the Cloud template route. |
 | Phase 5 quotas/usage/safety | Not started | Existing queue limits/cooldowns are not the append-only usage ledger, atomic quota reservation, Meta-limit sync, or reconciliation model required here. |
 | Phase 6 feature migration | Blocked | Must wait for the Phase 2–5 exit gates. |
 | Phase 7 Baileys retirement | Not started | Baileys code, auth state, UI, deployment, and port `8100` remain intentionally. |
@@ -737,6 +737,19 @@ Code-only contract and runtime work may proceed with the external Phase 0 gate
 deferred, but no live onboarding, provider send, or production cutover is
 authorized until the external gate passes.
 
+## Implementation loop state
+
+Last updated: 2026-08-22
+
+- Loop 1 — **complete**: fail closed at the legacy-to-Cloud boundary. Legacy
+  invoice, due-reminder, promotion, and inbox-text paths reject Cloud accounts,
+  and the Cloud dispatcher claims only Cloud template outbox rows.
+- Verification: Cloud-focused suite passes 87 tests; `git diff --check` passes.
+- Loop 2 — **next**: wire the Cloud runtime scheduler and implement durable
+  reconciliation for uncertain sends.
+- Rule: each loop must end with focused verification, a two-axis review, a
+  committed narrow diff, and this state update before the next loop starts.
+
 ## Current execution sequence
 
 The main-branch merge and the recent TypeScript/database alignment commit are
@@ -758,12 +771,11 @@ current branch, work proceeds in this order:
    migrations against a production-shaped database copy without exposing
    secrets. The atomic WABA/sender persistence and key-version rotation seams
    are already implemented.
-4. **Close the Phase 2 provider gate.** **Code-first runtime seams complete;
-   evidence open.** Bind the deployment credential vault and private-storage
-   adapter, run the Cloud receipt/outbox fixture and database checks, and
-   complete controlled Meta verification. The scheduler, Store-scoped
-   processor, provider-scoped outbox lease path, media upload, and uncertain
-   reconciliation seams are already implemented.
+4. **Close the Phase 2 provider gate.** **Webhook runtime complete; Cloud
+   outbox runtime work in progress.** Bind the deployment credential vault and
+   private-storage adapter, wire the Cloud runtime scheduler, implement
+   uncertain-send reconciliation, run the Cloud receipt/outbox fixture and
+   database checks, and complete controlled Meta verification.
 5. **Close the Phase 3 account-operations gate.** **Code-first implementation
    complete; evidence open.** The server-side exchange and provider discovery,
    idempotent WABA/sender persistence, WABA subscription, safe connect,
@@ -785,8 +797,9 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The next code slice is therefore Phase 5 quota and campaign safety—not direct
-Cloud feature migration from POS and not Baileys removal.
+The next code slice is therefore the Phase 2 runtime scheduler and uncertain
+send reconciliation. Phase 5 remains blocked until the provider/runtime gates
+are closed.
 
 ## Target architecture
 

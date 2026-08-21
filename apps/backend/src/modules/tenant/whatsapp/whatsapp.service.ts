@@ -850,6 +850,7 @@ const queueDueReminderForStore = async (
     if (reminderSales.length === 0) return { status: "error", message: "This bill has no remaining due amount", data: null, code: STATUS_CODES.CONFLICT };
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) return { status: "error", message: "Link the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
+    if (account.provider === "cloud_api") return { status: "error", message: "Cloud WhatsApp reminders require an approved Cloud template route", data: null, code: STATUS_CODES.CONFLICT };
     if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     const defaultTemplate = await messageTemplate.getDefaultTemplate(organizationId, storeId, "due_reminder");
     try {

@@ -98,6 +98,7 @@ const sendTextForScope = async (
     conversationId: string,
     data: WhatsAppSendConversationTextJSON,
 ): Promise<ServiceResponse<WhatsAppConversationMessagesResponse["messages"][number] | null>> => {
+    if (scope.account.provider === "cloud_api") return error("Cloud WhatsApp messages require an approved Cloud template route", STATUS_CODES.CONFLICT);
     if (scope.account.status !== "connected") return error("Connect the Store WhatsApp account before sending messages", STATUS_CODES.CONFLICT);
     const conversation = await repository.getConversation(scope.organizationId, scope.storeId, scope.account.id, conversationId);
     if (!conversation) return error("WhatsApp conversation not found", STATUS_CODES.NOT_FOUND);
