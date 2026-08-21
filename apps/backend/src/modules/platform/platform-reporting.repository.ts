@@ -2372,3 +2372,256 @@ export const getOrganizationPurchaseContext = async (
         }),
     };
 };
+
+export type PlatformWhatsAppAccountMetricsRow = {
+    id: string;
+    provider: "baileys" | "cloud_api";
+    phoneNumber: string;
+    status: "pending_qr" | "connecting" | "connected" | "disconnected" | "failed" | "revoked";
+    defaultStoreId: string | null;
+    defaultStoreName: string | null;
+    assignedStores: Array<{ id: string; name: string }>;
+    lastConnectedAt: string | null;
+    lastSeenAt: string | null;
+    lastErrorCode: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PlatformWhatsAppTemplateMetricsRow = {
+    storeId: string;
+    kind: "bill" | "due_reminder" | "promotion";
+    name: string;
+    isActive: boolean;
+    isDefault: boolean;
+};
+
+export type PlatformWhatsAppMessageLinkMetricsRow = {
+    key: string;
+    label: string;
+    type: "google_review" | "app_install" | "website" | "social" | "custom";
+    isActive: boolean;
+};
+
+export type PlatformWhatsAppStoreConfigMetricsRow = {
+    storeId: string;
+    storeName: string;
+    accountId: string | null;
+    accountStatus: PlatformWhatsAppAccountMetricsRow["status"] | null;
+    templates: PlatformWhatsAppTemplateMetricsRow[];
+    messageLinks: PlatformWhatsAppMessageLinkMetricsRow[];
+};
+
+export type PlatformOrganizationWhatsAppMetrics = {
+    accounts: PlatformWhatsAppAccountMetricsRow[];
+    storeConfigs: PlatformWhatsAppStoreConfigMetricsRow[];
+};
+
+const asWhatsAppAccountStatus = (
+    value: unknown,
+): PlatformWhatsAppAccountMetricsRow["status"] | null => {
+    if (
+        value === "pending_qr"
+        || value === "connecting"
+        || value === "connected"
+        || value === "disconnected"
+        || value === "failed"
+        || value === "revoked"
+    ) {
+        return value;
+    }
+    return null;
+};
+
+const asWhatsAppProvider = (value: unknown): PlatformWhatsAppAccountMetricsRow["provider"] | null => {
+    if (value === "baileys" || value === "cloud_api") return value;
+    return null;
+};
+
+const asWhatsAppTemplateKind = (value: unknown): PlatformWhatsAppTemplateMetricsRow["kind"] | null => {
+    if (value === "bill" || value === "due_reminder" || value === "promotion") return value;
+    return null;
+};
+
+const asMessageLinkType = (value: unknown): PlatformWhatsAppMessageLinkMetricsRow["type"] | null => {
+    if (
+        value === "google_review"
+        || value === "app_install"
+        || value === "website"
+        || value === "social"
+        || value === "custom"
+    ) {
+        return value;
+    }
+    return null;
+};
+
+const parseStoreMessageLinks = (value: unknown): PlatformWhatsAppMessageLinkMetricsRow[] => {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") return [];
+        const link = entry as Record<string, unknown>;
+        const key = typeof link.key === "string" ? link.key.trim() : "";
+        const label = typeof link.label === "string" ? link.label.trim() : "";
+        const type = asMessageLinkType(link.type);
+        if (!key || !label || !type) return [];
+        return [{
+            key,
+            label,
+            type,
+            isActive: link.isActive !== false,
+        }];
+    });
+};
+
+export const getOrganizationWhatsAppContext = async (
+    organizationId: string,
+): Promise<PlatformOrganizationWhatsAppMetrics | null> => {
+    const [organizationRow] = await pg`
+        SELECT id
+        FROM organizations
+        WHERE id = ${organizationId}
+        LIMIT 1
+    `;
+    if (!organizationRow?.id) {
+        return null;
+    }
+
+    const accountRows = await pg`
+        SELECT
+            account.id,
+            account.provider::text AS provider,
+            account.phone_number,
+            account.status::text AS status,
+            account.store_id AS default_store_id,
+            default_store.name AS default_store_name,
+            account.last_connected_at,
+            account.last_seen_at,
+            account.last_error_code,
+            account.created_at,
+            account.updated_at,
+            COALESCE(
+                (
+                    SELECT JSON_AGG(
+                        JSON_BUILD_OBJECT('id', store.id, 'name', store.name)
+                        ORDER BY store.name ASC, store.id ASC
+                    )
+                    FROM whatsapp_account_stores assignment
+                    INNER JOIN stores store
+                      ON store.id = assignment.store_id
+                     AND store.organization_id = assignment.organization_id
+                    WHERE assignment.whatsapp_account_id = account.id
+                      AND assignment.organization_id = account.organization_id
+                ),
+                '[]'::json
+            ) AS assigned_stores
+        FROM whatsapp_accounts account
+        LEFT JOIN stores default_store
+          ON default_store.id = account.store_id
+         AND default_store.organization_id = account.organization_id
+        WHERE account.organization_id = ${organizationId}
+        ORDER BY account.created_at DESC, account.id DESC
+    `;
+
+    const storeRows = await pg`
+        SELECT
+            store.id,
+            store.name,
+            store.whatsapp_links,
+            assignment.whatsapp_account_id,
+            account.status::text AS account_status
+        FROM stores store
+        LEFT JOIN whatsapp_account_stores assignment
+          ON assignment.store_id = store.id
+         AND assignment.organization_id = store.organization_id
+        LEFT JOIN whatsapp_accounts account
+          ON account.id = assignment.whatsapp_account_id
+         AND account.organization_id = store.organization_id
+        WHERE store.organization_id = ${organizationId}
+        ORDER BY store.name ASC, store.id ASC
+    `;
+
+    const templateRows = await pg`
+        SELECT
+            store_id,
+            kind::text AS kind,
+            name,
+            is_active,
+            is_default
+        FROM whatsapp_message_templates
+        WHERE organization_id = ${organizationId}
+        ORDER BY store_id ASC, kind ASC, is_default DESC, name ASC
+    `;
+
+    const templatesByStore = new Map<string, PlatformWhatsAppTemplateMetricsRow[]>();
+    for (const row of templateRows as Array<Record<string, unknown>>) {
+        const storeId = String(row.store_id);
+        const kind = asWhatsAppTemplateKind(row.kind);
+        const name = typeof row.name === "string" ? row.name.trim() : "";
+        if (!kind || !name) continue;
+        const templates = templatesByStore.get(storeId) ?? [];
+        templates.push({
+            storeId,
+            kind,
+            name,
+            isActive: Boolean(row.is_active),
+            isDefault: Boolean(row.is_default),
+        });
+        templatesByStore.set(storeId, templates);
+    }
+
+    const accounts = (accountRows as Array<Record<string, unknown>>).flatMap((row) => {
+        const id = String(row.id);
+        const provider = asWhatsAppProvider(row.provider);
+        const status = asWhatsAppAccountStatus(row.status);
+        const phoneNumber = typeof row.phone_number === "string" ? row.phone_number : "";
+        const createdAt = asTimestamp(row.created_at);
+        const updatedAt = asTimestamp(row.updated_at);
+        if (!provider || !status || !phoneNumber || !createdAt || !updatedAt) return [];
+
+        const assignedStoresRaw = row.assigned_stores;
+        const assignedStores = Array.isArray(assignedStoresRaw)
+            ? assignedStoresRaw.flatMap((entry) => {
+                if (!entry || typeof entry !== "object") return [];
+                const store = entry as Record<string, unknown>;
+                const storeId = typeof store.id === "string" ? store.id : "";
+                const storeName = typeof store.name === "string" ? store.name : "";
+                if (!storeId || !storeName) return [];
+                return [{ id: storeId, name: storeName }];
+            })
+            : [];
+
+        const defaultStoreId = row.default_store_id == null ? null : String(row.default_store_id);
+        const defaultStoreName = row.default_store_name == null ? null : String(row.default_store_name);
+
+        return [{
+            id,
+            provider,
+            phoneNumber,
+            status,
+            defaultStoreId,
+            defaultStoreName,
+            assignedStores,
+            lastConnectedAt: asTimestamp(row.last_connected_at),
+            lastSeenAt: asTimestamp(row.last_seen_at),
+            lastErrorCode: row.last_error_code == null ? null : String(row.last_error_code),
+            createdAt,
+            updatedAt,
+        }];
+    });
+
+    const storeConfigs = (storeRows as Array<Record<string, unknown>>).map((row) => {
+        const storeId = String(row.id);
+        const accountId = row.whatsapp_account_id == null ? null : String(row.whatsapp_account_id);
+        return {
+            storeId,
+            storeName: String(row.name),
+            accountId,
+            accountStatus: asWhatsAppAccountStatus(row.account_status),
+            templates: templatesByStore.get(storeId) ?? [],
+            messageLinks: parseStoreMessageLinks(row.whatsapp_links),
+        };
+    });
+
+    return { accounts, storeConfigs };
+};

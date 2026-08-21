@@ -22,6 +22,7 @@ import {
     type PlatformReportInspectionResponse,
     type PlatformTableInspectionDetailResponse,
     type PlatformTableInspectionListResponse,
+    type PlatformWhatsAppInspectionResponse,
     type PlatformStoreDetailResponse,
     type PlatformStoreListResponse,
     type ServiceResponse,
@@ -86,12 +87,13 @@ const customerCafeInactive = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaa2";
 const customerMixedActive = "cccccccc-1111-4111-8111-ccccccccccc1";
 const customerMixedDue = "cccccccc-2222-4222-8222-ccccccccccc2";
 const missingCustomerId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const tableMixedEngaged = "t1111111-1111-4111-8111-t11111111111";
-const tableMixedFree = "t2222222-2222-4222-8222-t22222222222";
+const tableMixedEngaged = "a1111111-1111-4111-8111-a11111111111";
+const tableMixedFree = "a2222222-2222-4222-8222-a22222222222";
 const missingTableId = "99999999-9999-4999-8999-999999999998";
-const purchaseMixedRecorded = "p1111111-1111-4111-8111-p11111111111";
-const purchaseMixedVoided = "p2222222-2222-4222-8222-p22222222222";
+const purchaseMixedRecorded = "a3333333-3333-4333-8333-a33333333333";
+const purchaseMixedVoided = "a4444444-4444-4444-8444-a44444444444";
 const missingPurchaseId = "99999999-9999-4999-8999-999999999997";
+const whatsappAccountMixed = "f1111111-1111-4111-8111-f11111111111";
 
 type SaleStatus = "draft" | "completed" | "voided";
 
@@ -261,6 +263,48 @@ type ReportingPurchase = {
     items: ReportingPurchaseItem[];
 };
 
+type ReportingWhatsAppAccount = {
+    id: string;
+    organizationId: string;
+    provider: "baileys" | "cloud_api";
+    phoneNumber: string;
+    status: "pending_qr" | "connecting" | "connected" | "disconnected" | "failed" | "revoked";
+    defaultStoreId: string | null;
+    defaultStoreName: string | null;
+    assignedStores: Array<{ id: string; name: string }>;
+    lastConnectedAt: Date | null;
+    lastSeenAt: Date | null;
+    lastErrorCode: string | null;
+    sessionReference: string;
+    apiAccessToken: string;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type ReportingWhatsAppTemplate = {
+    organizationId: string;
+    storeId: string;
+    kind: "bill" | "due_reminder" | "promotion";
+    name: string;
+    body: string;
+    isActive: boolean;
+    isDefault: boolean;
+};
+
+type ReportingWhatsAppStoreConfig = {
+    storeId: string;
+    organizationId: string;
+    accountId: string | null;
+    accountStatus: ReportingWhatsAppAccount["status"] | null;
+    messageLinks: Array<{
+        key: string;
+        label: string;
+        type: "google_review" | "app_install" | "website" | "social" | "custom";
+        isActive: boolean;
+        url: string;
+    }>;
+};
+
 const inWindow = (value: Date | null, startAt: Date | null, endAt: Date | null) => {
     if (!value) return false;
     if (startAt && value.getTime() < startAt.getTime()) return false;
@@ -285,6 +329,9 @@ const createReportingMetrics = (
     saleLines: ReportingSaleLine[] = [],
     tables: ReportingTable[] = [],
     purchases: ReportingPurchase[] = [],
+    whatsappAccounts: ReportingWhatsAppAccount[] = [],
+    whatsappTemplates: ReportingWhatsAppTemplate[] = [],
+    whatsappStoreConfigs: ReportingWhatsAppStoreConfig[] = [],
 ) => {
     const organizationRow = (
         query: PlatformDashboardMetricsQuery,
@@ -1046,6 +1093,55 @@ const createReportingMetrics = (
         };
     };
 
+    const getOrganizationWhatsAppContext = async (organizationId: string) => {
+        const organization = organizations.find((item) => item.id === organizationId);
+        if (!organization) return null;
+
+        const accounts = whatsappAccounts
+            .filter((account) => account.organizationId === organization.id)
+            .map((account) => ({
+                id: account.id,
+                provider: account.provider,
+                phoneNumber: account.phoneNumber,
+                status: account.status,
+                defaultStoreId: account.defaultStoreId,
+                defaultStoreName: account.defaultStoreName,
+                assignedStores: account.assignedStores,
+                lastConnectedAt: account.lastConnectedAt?.toISOString() ?? null,
+                lastSeenAt: account.lastSeenAt?.toISOString() ?? null,
+                lastErrorCode: account.lastErrorCode,
+                createdAt: account.createdAt.toISOString(),
+                updatedAt: account.updatedAt.toISOString(),
+                sessionReference: account.sessionReference,
+                apiAccessToken: account.apiAccessToken,
+            }));
+
+        const storeConfigs = stores
+            .filter((store) => store.organizationId === organization.id)
+            .map((store) => {
+                const config = whatsappStoreConfigs.find((item) => item.storeId === store.id && item.organizationId === organization.id);
+                return {
+                    storeId: store.id,
+                    storeName: store.name,
+                    accountId: config?.accountId ?? null,
+                    accountStatus: config?.accountStatus ?? null,
+                    templates: whatsappTemplates
+                        .filter((template) => template.organizationId === organization.id && template.storeId === store.id)
+                        .map((template) => ({
+                            storeId: template.storeId,
+                            kind: template.kind,
+                            name: template.name,
+                            isActive: template.isActive,
+                            isDefault: template.isDefault,
+                            body: template.body,
+                        })),
+                    messageLinks: config?.messageLinks ?? [],
+                };
+            });
+
+        return { accounts, storeConfigs };
+    };
+
     return {
         getDashboardMetrics,
         listOrganizations,
@@ -1065,6 +1161,7 @@ const createReportingMetrics = (
         getOrganizationTableContext,
         listOrganizationPurchases,
         getOrganizationPurchaseContext,
+        getOrganizationWhatsAppContext,
     };
 };
 
@@ -1433,7 +1530,7 @@ const platformFacts = () => {
             createdAt: new Date("2026-08-18T10:00:00.000Z"),
             updatedAt: new Date("2026-08-18T10:00:00.000Z"),
             items: [{
-                id: "pi111111-1111-4111-8111-p11111111111",
+                id: "11111111-1111-4111-8111-111111111111",
                 purchaseId: purchaseMixedRecorded,
                 itemName: "Tomatoes",
                 description: null,
@@ -1461,7 +1558,7 @@ const platformFacts = () => {
             createdAt: new Date("2026-08-10T10:00:00.000Z"),
             updatedAt: new Date("2026-08-11T10:00:00.000Z"),
             items: [{
-                id: "pi222222-2222-4222-8222-p22222222222",
+                id: "22222222-2222-4222-8222-222222222222",
                 purchaseId: purchaseMixedVoided,
                 itemName: "Napkins",
                 description: null,
@@ -1474,7 +1571,72 @@ const platformFacts = () => {
         },
     ];
 
-    return { organizations, stores, customers, sales, devices, categories, products, addOns, attachments, ledgerEntries, saleLines, tables, purchases };
+    const whatsappAccounts: ReportingWhatsAppAccount[] = [{
+        id: whatsappAccountMixed,
+        organizationId: orgMixed,
+        provider: "baileys",
+        phoneNumber: "+919811122233",
+        status: "connected",
+        defaultStoreId: storeMixedActive,
+        defaultStoreName: "Front Hall",
+        assignedStores: [{ id: storeMixedActive, name: "Front Hall" }],
+        lastConnectedAt: new Date("2026-08-19T10:00:00.000Z"),
+        lastSeenAt: new Date("2026-08-19T11:00:00.000Z"),
+        lastErrorCode: null,
+        sessionReference: "encrypted-session-ref-must-not-leak",
+        apiAccessToken: "cloud-api-token-must-not-leak",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-08-19T11:00:00.000Z"),
+    }];
+
+    const whatsappTemplates: ReportingWhatsAppTemplate[] = [{
+        organizationId: orgMixed,
+        storeId: storeMixedActive,
+        kind: "bill",
+        name: "Default bill",
+        body: "Thanks for your order {{sale_number}} with secret template body",
+        isActive: true,
+        isDefault: true,
+    }];
+
+    const whatsappStoreConfigs: ReportingWhatsAppStoreConfig[] = [{
+        storeId: storeMixedActive,
+        organizationId: orgMixed,
+        accountId: whatsappAccountMixed,
+        accountStatus: "connected",
+        messageLinks: [{
+            key: "google_review",
+            label: "Google review",
+            type: "google_review",
+            isActive: true,
+            url: "https://example.com/review?token=secret-link-token",
+        }],
+    }, {
+        storeId: storeMixedQuiet,
+        organizationId: orgMixed,
+        accountId: null,
+        accountStatus: null,
+        messageLinks: [],
+    }];
+
+    return {
+        organizations,
+        stores,
+        customers,
+        sales,
+        devices,
+        categories,
+        products,
+        addOns,
+        attachments,
+        ledgerEntries,
+        saleLines,
+        tables,
+        purchases,
+        whatsappAccounts,
+        whatsappTemplates,
+        whatsappStoreConfigs,
+    };
 };
 
 const activeOwner = async (): Promise<OwnerUserRecord> => ({
@@ -1521,6 +1683,9 @@ const createHarness = async () => {
             facts.saleLines,
             facts.tables,
             facts.purchases,
+            facts.whatsappAccounts,
+            facts.whatsappTemplates,
+            facts.whatsappStoreConfigs,
         ),
         billingRepository: {
             getSaleById: async (organizationId, storeId, saleId) => {
@@ -1708,6 +1873,9 @@ const organizationPurchases = (app: Hono, cookie: string, organizationId: string
 
 const organizationPurchaseDetail = (app: Hono, cookie: string, organizationId: string, purchaseId: string) =>
     app.request(`/platform/organizations/${organizationId}/purchases/${purchaseId}`, { headers: { cookie } });
+
+const organizationWhatsApp = (app: Hono, cookie: string, organizationId: string) =>
+    app.request(`/platform/organizations/${organizationId}/whatsapp`, { headers: { cookie } });
 
 const names = (rows: PlatformOrganizationListItemDTO[] | undefined) => rows?.map((row) => row.name);
 
@@ -2650,7 +2818,7 @@ describe("Platform Table inspection API", () => {
         const patioBody = await patioTables.json() as ServiceResponse<PlatformTableInspectionListResponse>;
 
         expect(allTables.status).toBe(200);
-        expect(allBody.data?.tables.map((table) => table.tableLabel)).toEqual(["T1", "Patio 2"]);
+        expect(allBody.data?.tables.map((table) => table.tableLabel)).toEqual(["Patio 2", "T1"]);
         expect(engagedBody.data?.tables.map((table) => table.tableLabel)).toEqual(["T1"]);
         expect(patioBody.data?.tables.map((table) => table.tableLabel)).toEqual(["Patio 2"]);
         expect(JSON.stringify(allBody.data)).not.toContain("password");
@@ -2768,5 +2936,97 @@ describe("Platform Purchase inspection API", () => {
         expect(future.status).toBe(400);
         expect(futureBody.message).toBe(FUTURE_BILLING_INSPECTION_DATE_MESSAGE);
         expect(JSON.stringify(missingPurchaseBody)).not.toContain("Fresh Produce Co");
+    });
+});
+
+describe("Platform WhatsApp inspection API", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("returns Organization WhatsApp metadata only to an active Owner User", async () => {
+        const { app, setOwnerActive } = await createHarness();
+        const customerToken = await sign(
+            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
+            "customer-and-device-secret",
+        );
+        const ownerCookie = cookieFrom(await passwordLogin(app));
+
+        expect((await app.request(`/platform/organizations/${orgMixed}/whatsapp`)).status).toBe(401);
+        expect((await app.request(`/platform/organizations/${orgMixed}/whatsapp`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
+
+        setOwnerActive(false);
+        expect((await organizationWhatsApp(app, ownerCookie, orgMixed)).status).toBe(401);
+    });
+
+    test("returns safe WhatsApp connection and configuration metadata without reusable secrets", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const response = await organizationWhatsApp(app, cookie, orgMixed);
+        const body = await response.json() as ServiceResponse<PlatformWhatsAppInspectionResponse>;
+
+        expect(response.status).toBe(200);
+        expect(body.data?.accounts).toEqual([{
+            id: whatsappAccountMixed,
+            provider: "baileys",
+            phoneNumber: "+919811122233",
+            status: "connected",
+            lastConnectedAt: "2026-08-19T10:00:00.000Z",
+            lastSeenAt: "2026-08-19T11:00:00.000Z",
+            lastErrorCode: null,
+            defaultStore: { id: storeMixedActive, name: "Front Hall" },
+            assignedStores: [{ id: storeMixedActive, name: "Front Hall" }],
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-08-19T11:00:00.000Z",
+        }]);
+        expect(body.data?.storeConfigs).toEqual([
+            {
+                store: { id: storeMixedActive, name: "Front Hall" },
+                accountId: whatsappAccountMixed,
+                accountStatus: "connected",
+                templates: [{
+                    kind: "bill",
+                    name: "Default bill",
+                    isActive: true,
+                    isDefault: true,
+                }],
+                messageLinks: [{
+                    key: "google_review",
+                    label: "Google review",
+                    type: "google_review",
+                    isActive: true,
+                }],
+            },
+            {
+                store: { id: storeMixedQuiet, name: "Garden Patio" },
+                accountId: null,
+                accountStatus: null,
+                templates: [],
+                messageLinks: [],
+            },
+        ]);
+
+        const serialized = JSON.stringify(body.data);
+        expect(serialized).not.toContain("sessionReference");
+        expect(serialized).not.toContain("encrypted-session-ref-must-not-leak");
+        expect(serialized).not.toContain("apiAccessToken");
+        expect(serialized).not.toContain("cloud-api-token-must-not-leak");
+        expect(serialized).not.toContain("deviceSecret");
+        expect(serialized).not.toContain("password");
+        expect(serialized).not.toContain("secret-link-token");
+        expect(serialized).not.toContain("secret template body");
+    });
+
+    test("hides missing Organizations and rejects invalid ids", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const missingOrg = await organizationWhatsApp(app, cookie, missingOrganizationId);
+        const invalidOrg = await app.request("/platform/organizations/not-a-uuid/whatsapp", { headers: { cookie } });
+        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
+
+        expect(missingOrg.status).toBe(404);
+        expect(missingOrgBody.message).toBe("Organization not found");
+        expect(invalidOrg.status).toBe(400);
+        expect(JSON.stringify(missingOrgBody)).not.toContain("Front Hall");
     });
 });

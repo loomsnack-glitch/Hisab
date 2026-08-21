@@ -26,6 +26,7 @@ import {
     PlatformPurchaseInspectionQuerySchema,
     PlatformPurchaseInspectionListDTOSchema,
     PlatformPurchaseInspectionDetailResponseSchema,
+    PlatformWhatsAppInspectionDTOSchema,
     PlatformSaleInspectionDetailResponseSchema,
     PlatformSaleInspectionListDTOSchema,
     FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
@@ -761,7 +762,7 @@ describe("Platform Table inspection contracts", () => {
         const list = PlatformTableInspectionListDTOSchema.parse({
             stores: [{ id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" }],
             tables: [{
-                id: "t1111111-1111-4111-8111-t11111111111",
+                id: "a1111111-1111-4111-8111-a11111111111",
                 tableLabel: "T1",
                 capacity: 4,
                 position: { x: 0.1, y: 0.2 },
@@ -824,7 +825,7 @@ describe("Platform Purchase inspection contracts", () => {
         const list = PlatformPurchaseInspectionListDTOSchema.parse({
             stores: [{ id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" }],
             purchases: [{
-                id: "p1111111-1111-4111-8111-p11111111111",
+                id: "a3333333-3333-4333-8333-a33333333333",
                 purchaseDate: "2026-08-18",
                 supplierName: "Fresh Produce Co",
                 invoiceNumber: "INV-100",
@@ -846,8 +847,8 @@ describe("Platform Purchase inspection contracts", () => {
             purchase: {
                 ...list.purchases[0]!,
                 items: [{
-                    id: "pi111111-1111-4111-8111-p11111111111",
-                    purchaseId: "p1111111-1111-4111-8111-p11111111111",
+                    id: "11111111-1111-4111-8111-111111111111",
+                    purchaseId: "a3333333-3333-4333-8333-a33333333333",
                     itemName: "Tomatoes",
                     description: null,
                     quantity: 10,
@@ -861,5 +862,49 @@ describe("Platform Purchase inspection contracts", () => {
 
         expect(detail.purchase.items[0]?.itemName).toBe("Tomatoes");
         expect(JSON.stringify(list)).not.toContain("Void purchase");
+    });
+});
+
+describe("Platform WhatsApp inspection contracts", () => {
+    test("accepts read-only WhatsApp inspection data without credential fields", () => {
+        const parsed = PlatformWhatsAppInspectionDTOSchema.parse({
+            accounts: [{
+                id: "f1111111-1111-4111-8111-f11111111111",
+                provider: "baileys",
+                phoneNumber: "+919876543210",
+                status: "connected",
+                lastConnectedAt: "2026-08-19T10:00:00.000Z",
+                lastSeenAt: "2026-08-19T11:00:00.000Z",
+                lastErrorCode: null,
+                defaultStore: { id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" },
+                assignedStores: [{ id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" }],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-08-19T11:00:00.000Z",
+            }],
+            storeConfigs: [{
+                store: { id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" },
+                accountId: "f1111111-1111-4111-8111-f11111111111",
+                accountStatus: "connected",
+                templates: [{
+                    kind: "bill",
+                    name: "Default bill",
+                    isActive: true,
+                    isDefault: true,
+                }],
+                messageLinks: [{
+                    key: "google_review",
+                    label: "Google review",
+                    type: "google_review",
+                    isActive: true,
+                }],
+            }],
+        });
+
+        expect(parsed.accounts[0]?.status).toBe("connected");
+        expect(JSON.stringify(parsed)).not.toContain("sessionReference");
+        expect(JSON.stringify(parsed)).not.toContain("deviceSecret");
+        expect(JSON.stringify(parsed)).not.toContain("password");
+        expect(JSON.stringify(parsed)).not.toContain("apiKey");
+        expect(JSON.stringify(parsed)).not.toContain("token");
     });
 });

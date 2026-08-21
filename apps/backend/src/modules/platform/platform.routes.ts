@@ -554,6 +554,27 @@ export const createPlatformRoutes = (
         }
     });
 
+    router.get("/organizations/:organizationId/whatsapp", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await reportingService.getOrganizationWhatsApp(organizationId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformOrganizationWhatsApp", c, error);
+        }
+    });
+
     router.get("/owner-users", async (c) => {
         try {
             return handleServiceResponse(c, await ownerUserService.list());

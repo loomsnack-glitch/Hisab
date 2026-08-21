@@ -22,8 +22,13 @@ import {
     ProductStatusSchema,
     ProductTypeSchema,
 } from "../catalog/catalog.schema";
-import { StoreDeviceStatusSchema } from "../organization/organization.schema";
+import { StoreDeviceStatusSchema, StoreMessageLinkTypeSchema } from "../organization/organization.schema";
 import { PurchaseItemDTOSchema, PurchaseStatusSchema } from "../purchase/purchase.schema";
+import {
+    WhatsAppAccountStatusSchema,
+    WhatsAppMessageTemplateKindSchema,
+    WhatsAppProviderSchema,
+} from "../../services/whatsapp.schema";
 import { ServiceTablePositionSchema, ServiceTableStateSchema } from "../table-service/table-service.schema";
 
 const ownerPhoneSchema = z
@@ -689,6 +694,52 @@ export const PlatformPurchaseInspectionDetailDTOSchema = PlatformPurchaseInspect
 
 export const PlatformPurchaseInspectionDetailResponseSchema = z.object({
     purchase: PlatformPurchaseInspectionDetailDTOSchema,
+});
+
+export const PlatformWhatsAppInspectionStoreDTOSchema = z.object({
+    id: z.uuid("Invalid store id"),
+    name: z.string().trim().min(1),
+});
+
+export const PlatformWhatsAppAccountInspectionDTOSchema = z.object({
+    id: z.uuid("Invalid WhatsApp account id"),
+    provider: WhatsAppProviderSchema,
+    phoneNumber: phoneSchema,
+    status: WhatsAppAccountStatusSchema,
+    lastConnectedAt: dtoDateSchema.nullable(),
+    lastSeenAt: dtoDateSchema.nullable(),
+    lastErrorCode: z.string().nullable(),
+    defaultStore: PlatformWhatsAppInspectionStoreDTOSchema.nullable(),
+    assignedStores: z.array(PlatformWhatsAppInspectionStoreDTOSchema),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformWhatsAppTemplateInspectionDTOSchema = z.object({
+    kind: WhatsAppMessageTemplateKindSchema,
+    name: z.string().trim().min(1),
+    isActive: z.boolean(),
+    isDefault: z.boolean(),
+});
+
+export const PlatformWhatsAppMessageLinkInspectionDTOSchema = z.object({
+    key: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    type: StoreMessageLinkTypeSchema,
+    isActive: z.boolean(),
+});
+
+export const PlatformWhatsAppStoreConfigInspectionDTOSchema = z.object({
+    store: PlatformWhatsAppInspectionStoreDTOSchema,
+    accountId: z.uuid("Invalid WhatsApp account id").nullable(),
+    accountStatus: WhatsAppAccountStatusSchema.nullable(),
+    templates: z.array(PlatformWhatsAppTemplateInspectionDTOSchema),
+    messageLinks: z.array(PlatformWhatsAppMessageLinkInspectionDTOSchema),
+});
+
+export const PlatformWhatsAppInspectionDTOSchema = z.object({
+    accounts: z.array(PlatformWhatsAppAccountInspectionDTOSchema),
+    storeConfigs: z.array(PlatformWhatsAppStoreConfigInspectionDTOSchema),
 });
 
 export const formatPlatformReportDateRangeLabel = (

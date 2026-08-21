@@ -35,6 +35,7 @@ import {
     type PlatformTableInspectionDetailResponse,
     type PlatformTableInspectionListResponse,
     type PlatformTableInspectionQuerySVC,
+    type PlatformWhatsAppInspectionResponse,
     type SaleDetailDTO,
     type ServiceResponse,
 } from "@repo/types";
@@ -62,6 +63,7 @@ type PlatformReportingRepository = Pick<
     | "getOrganizationTableContext"
     | "listOrganizationPurchases"
     | "getOrganizationPurchaseContext"
+    | "getOrganizationWhatsAppContext"
 >;
 
 type BillingReadRepository = Pick<
@@ -1175,6 +1177,60 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                         updatedAt: item.updatedAt,
                     })),
                 },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationWhatsApp: async (
+        organizationId: string,
+    ): Promise<ServiceResponse<PlatformWhatsAppInspectionResponse | null>> => {
+        const whatsapp = await dependencies.repository.getOrganizationWhatsAppContext(organizationId);
+        if (!whatsapp) {
+            return {
+                status: "error",
+                message: "Organization not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization WhatsApp retrieved successfully",
+            data: {
+                accounts: whatsapp.accounts.map((account) => ({
+                    id: account.id,
+                    provider: account.provider,
+                    phoneNumber: account.phoneNumber,
+                    status: account.status,
+                    lastConnectedAt: account.lastConnectedAt,
+                    lastSeenAt: account.lastSeenAt,
+                    lastErrorCode: account.lastErrorCode,
+                    defaultStore: account.defaultStoreId && account.defaultStoreName
+                        ? { id: account.defaultStoreId, name: account.defaultStoreName }
+                        : null,
+                    assignedStores: account.assignedStores,
+                    createdAt: account.createdAt,
+                    updatedAt: account.updatedAt,
+                })),
+                storeConfigs: whatsapp.storeConfigs.map((config) => ({
+                    store: { id: config.storeId, name: config.storeName },
+                    accountId: config.accountId,
+                    accountStatus: config.accountStatus,
+                    templates: config.templates.map((template) => ({
+                        kind: template.kind,
+                        name: template.name,
+                        isActive: template.isActive,
+                        isDefault: template.isDefault,
+                    })),
+                    messageLinks: config.messageLinks.map((link) => ({
+                        key: link.key,
+                        label: link.label,
+                        type: link.type,
+                        isActive: link.isActive,
+                    })),
+                })),
             },
             code: STATUS_CODES.SUCCESS,
         };

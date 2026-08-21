@@ -26,6 +26,7 @@ import type {
     PlatformPurchaseInspectionDetailResponse,
     PlatformPurchaseInspectionListResponse,
     PlatformPurchaseInspectionQueryJSON,
+    PlatformWhatsAppInspectionResponse,
     PlatformSaleInspectionDetailResponse,
     PlatformSaleInspectionListResponse,
     PlatformStoreDetailResponse,
@@ -156,11 +157,11 @@ const addOnMixed = "e1111111-1111-4111-8111-e11111111111";
 const attachmentMixed = "f1111111-1111-4111-8111-f11111111111";
 const customerMixedActive = "cccccccc-1111-4111-8111-ccccccccccc1";
 const customerMixedDue = "cccccccc-2222-4222-8222-ccccccccccc2";
-const tableMixedEngaged = "t1111111-1111-4111-8111-t11111111111";
-const tableMixedFree = "t2222222-2222-4222-8222-t22222222222";
+const tableMixedEngaged = "a1111111-1111-4111-8111-a11111111111";
+const tableMixedFree = "a2222222-2222-4222-8222-a22222222222";
 const saleMixedReceivable = "b6666666-6666-4666-8666-b66666666666";
-const purchaseMixedRecorded = "p1111111-1111-4111-8111-p11111111111";
-const purchaseMixedVoided = "p2222222-2222-4222-8222-p22222222222";
+const purchaseMixedRecorded = "a3333333-3333-4333-8333-a33333333333";
+const purchaseMixedVoided = "a4444444-4444-4444-8444-a44444444444";
 
 const successCatalog = (
     overrides: Partial<PlatformCatalogListResponse> = {},
@@ -285,10 +286,6 @@ const successReports = (
         },
         ...overrides,
     },
-    message: "Platform Organization Reports retrieved successfully",
-    code: 200,
-});
-
     message: "Platform Organization Reports retrieved successfully",
     code: 200,
 });
@@ -429,7 +426,7 @@ const successPurchaseDetail = (): ServiceResponse<PlatformPurchaseInspectionDeta
             updatedAt: "2026-08-18T10:00:00.000Z",
             store: { id: mixedStores[0]!.id, name: "Front Hall" },
             items: [{
-                id: "pi111111-1111-4111-8111-p11111111111",
+                id: "pi111111-1111-4111-8111-111111111111",
                 purchaseId: purchaseMixedRecorded,
                 itemName: "Tomatoes",
                 description: null,
@@ -442,6 +439,47 @@ const successPurchaseDetail = (): ServiceResponse<PlatformPurchaseInspectionDeta
         },
     },
     message: "Platform Organization Purchase retrieved successfully",
+    code: 200,
+});
+
+const successWhatsApp = (
+    overrides: Partial<PlatformWhatsAppInspectionResponse> = {},
+): ServiceResponse<PlatformWhatsAppInspectionResponse> => ({
+    status: "success",
+    data: {
+        accounts: [{
+            id: "f1111111-1111-4111-8111-f11111111111",
+            provider: "baileys",
+            phoneNumber: "+919811122233",
+            status: "connected",
+            lastConnectedAt: "2026-08-19T10:00:00.000Z",
+            lastSeenAt: "2026-08-19T11:00:00.000Z",
+            lastErrorCode: null,
+            defaultStore: { id: mixedStores[0]!.id, name: "Front Hall" },
+            assignedStores: [{ id: mixedStores[0]!.id, name: "Front Hall" }],
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-08-19T11:00:00.000Z",
+        }],
+        storeConfigs: [{
+            store: { id: mixedStores[0]!.id, name: "Front Hall" },
+            accountId: "f1111111-1111-4111-8111-f11111111111",
+            accountStatus: "connected",
+            templates: [{
+                kind: "bill",
+                name: "Default bill",
+                isActive: true,
+                isDefault: true,
+            }],
+            messageLinks: [{
+                key: "google_review",
+                label: "Google review",
+                type: "google_review",
+                isActive: true,
+            }],
+        }],
+        ...overrides,
+    },
+    message: "Platform Organization WhatsApp retrieved successfully",
     code: 200,
 });
 
@@ -1593,5 +1631,71 @@ describe("Organization Purchase inspection", () => {
         );
         expect(await missingView.findByText("Purchase was not found")).toBeTruthy();
         expect(missingView.queryByText("Fresh Produce Co")).toBeNull();
+    });
+});
+
+describe("Organization WhatsApp inspection", () => {
+    const renderWhatsAppSection = (
+        path: string,
+        options: {
+            getPlatformOrganization?: LoadOrganization;
+            getPlatformOrganizationWhatsApp?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationWhatsApp"]>;
+        } = {},
+    ) => {
+        window.history.replaceState(null, "", path);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        return render(
+            <QueryClientProvider client={client}>
+                <PlatformOrganizationDetailPage
+                    organizationId={mixedBistro.id}
+                    section="whatsapp"
+                    onBack={() => {}}
+                    getPlatformOrganization={options.getPlatformOrganization ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales))}
+                    getPlatformOrganizationWhatsApp={options.getPlatformOrganizationWhatsApp ?? (async () => successWhatsApp())}
+                />
+            </QueryClientProvider>,
+        );
+    };
+
+    test("shows read-only WhatsApp connection and configuration status without credential or messaging controls", async () => {
+        const view = renderWhatsAppSection(organizationInspectionPath(mixedBistro.id, "whatsapp"));
+
+        expect(await view.findByRole("heading", { name: "WhatsApp" })).toBeTruthy();
+        expect(view.getByText(/Credentials, session secrets, and messaging controls are never shown/)).toBeTruthy();
+        expect(view.getByText("+91 98111 22233")).toBeTruthy();
+        expect(view.getAllByText("Connected").length).toBeGreaterThan(0);
+        expect(view.getByText("Default bill")).toBeTruthy();
+        expect(view.getByText("Google review")).toBeTruthy();
+        expect(view.queryByText("Connect")).toBeNull();
+        expect(view.queryByText("Disconnect")).toBeNull();
+        expect(view.queryByText("Send message")).toBeNull();
+        expect(view.queryByText("Create campaign")).toBeNull();
+        expect(view.queryByText("Edit template")).toBeNull();
+        expect(view.queryByText("Reveal secret")).toBeNull();
+        expect(view.queryByText("sessionReference")).toBeNull();
+        expect(view.queryByText("apiAccessToken")).toBeNull();
+        expect(view.queryByText("deviceSecret")).toBeNull();
+        expect(view.queryByText("password")).toBeNull();
+    });
+
+    test("shows empty, loading, and not-found WhatsApp states without exposing secrets from other Organizations", async () => {
+        const emptyView = renderWhatsAppSection(organizationInspectionPath(mixedBistro.id, "whatsapp"), {
+            getPlatformOrganizationWhatsApp: async () => successWhatsApp({ accounts: [], storeConfigs: [] }),
+        });
+        expect(await emptyView.findByText("No WhatsApp accounts")).toBeTruthy();
+
+        const loadingView = renderWhatsAppSection(organizationInspectionPath(mixedBistro.id, "whatsapp"), {
+            getPlatformOrganizationWhatsApp: () => new Promise(() => {}),
+        });
+        expect(await loadingView.findByLabelText("Loading WhatsApp")).toBeTruthy();
+
+        const missingView = renderWhatsAppSection(organizationInspectionPath(mixedBistro.id, "whatsapp"), {
+            getPlatformOrganizationWhatsApp: async () => {
+                throw { code: 404, message: "Organization not found", data: null, status: "error" };
+            },
+        });
+        expect(await missingView.findByText("WhatsApp data was not found")).toBeTruthy();
+        expect(missingView.queryByText("+91 98111 22233")).toBeNull();
+        expect(missingView.queryByText("encrypted-session-ref-must-not-leak")).toBeNull();
     });
 });

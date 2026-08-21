@@ -35,6 +35,7 @@ import {
     getPlatformOrganizationTable as getPlatformOrganizationTableRequest,
     getPlatformOrganizationPurchases as getPlatformOrganizationPurchasesRequest,
     getPlatformOrganizationPurchase as getPlatformOrganizationPurchaseRequest,
+    getPlatformOrganizationWhatsApp as getPlatformOrganizationWhatsAppRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
 import {
@@ -49,7 +50,6 @@ import {
     type PlatformDashboardQueryJSON,
     type PlatformOrganizationDetailQueryJSON,
     type PlatformPurchaseInspectionDetailDTO,
-    type PlatformPurchaseInspectionQueryJSON,
     type PlatformRecentSaleDTO,
     type PlatformSaleInspectionDetailDTO,
     type PlatformSaleInspectionSummaryDTO,
@@ -57,7 +57,8 @@ import {
     type PlatformStoreDetailDTO,
     type PlatformStoreDeviceInspectionDTO,
     type PlatformTableInspectionDetailDTO,
-    type PlatformTableInspectionQueryJSON,
+    type PlatformWhatsAppAccountInspectionDTO,
+    type PlatformWhatsAppStoreConfigInspectionDTO,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Input } from "@repo/ui/components/input";
@@ -106,6 +107,7 @@ const organizationTablesQueryKey = ["platform-owner", "organization-tables"] as 
 const organizationTableQueryKey = ["platform-owner", "organization-table"] as const;
 const organizationPurchasesQueryKey = ["platform-owner", "organization-purchases"] as const;
 const organizationPurchaseQueryKey = ["platform-owner", "organization-purchase"] as const;
+const organizationWhatsAppQueryKey = ["platform-owner", "organization-whatsapp"] as const;
 
 type PlatformOrganizationDetailPageProps = {
     organizationId: string;
@@ -130,6 +132,7 @@ type PlatformOrganizationDetailPageProps = {
     getPlatformOrganizationTable?: typeof getPlatformOrganizationTableRequest;
     getPlatformOrganizationPurchases?: typeof getPlatformOrganizationPurchasesRequest;
     getPlatformOrganizationPurchase?: typeof getPlatformOrganizationPurchaseRequest;
+    getPlatformOrganizationWhatsApp?: typeof getPlatformOrganizationWhatsAppRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
 };
@@ -169,6 +172,23 @@ const serviceTableStateLabel = (state: PlatformTableInspectionDetailDTO["state"]
 
 const purchaseStatusLabel = (status: PlatformPurchaseInspectionDetailDTO["status"]) =>
     status === "voided" ? "Voided" : "Recorded";
+
+const whatsappAccountStatusLabel = (status: PlatformWhatsAppAccountInspectionDTO["status"]) => {
+    if (status === "pending_qr") return "Pending QR";
+    if (status === "connecting") return "Connecting";
+    if (status === "connected") return "Connected";
+    if (status === "disconnected") return "Disconnected";
+    if (status === "failed") return "Failed";
+    return "Revoked";
+};
+
+const whatsappTemplateKindLabel = (
+    kind: PlatformWhatsAppStoreConfigInspectionDTO["templates"][number]["kind"],
+) => {
+    if (kind === "bill") return "Bill";
+    if (kind === "due_reminder") return "Due reminder";
+    return "Promotion";
+};
 
 const reportingPeriodLabel = (query: PlatformDashboardQueryJSON) => {
     const period = query.period ?? "all-time";
@@ -283,6 +303,7 @@ const PlatformOrganizationDetailPage = ({
     getPlatformOrganizationTable = getPlatformOrganizationTableRequest,
     getPlatformOrganizationPurchases = getPlatformOrganizationPurchasesRequest,
     getPlatformOrganizationPurchase = getPlatformOrganizationPurchaseRequest,
+    getPlatformOrganizationWhatsApp = getPlatformOrganizationWhatsAppRequest,
     onNavigate,
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
@@ -422,6 +443,13 @@ const PlatformOrganizationDetailPage = ({
         placeholderData: keepPreviousData,
         enabled: section === "purchases" && Boolean(resourceId),
     });
+    const whatsappQuery = useQuery({
+        queryKey: [...organizationWhatsAppQueryKey, organizationId],
+        queryFn: () => getPlatformOrganizationWhatsApp(organizationId),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "whatsapp",
+    });
     const response = detailQuery.data;
     const organization = response?.status === "success" ? response.data?.organization : undefined;
     const storesResponse = storesQuery.data;
@@ -454,6 +482,8 @@ const PlatformOrganizationDetailPage = ({
     const purchasesList = purchasesResponse?.status === "success" ? purchasesResponse.data : undefined;
     const purchaseResponse = purchaseQuery.data;
     const purchaseDetail = purchaseResponse?.status === "success" ? purchaseResponse.data?.purchase : undefined;
+    const whatsappResponse = whatsappQuery.data;
+    const whatsappData = whatsappResponse?.status === "success" ? whatsappResponse.data : undefined;
     const errorCode = (detailQuery.error as { code?: number } | null)?.code ?? (response?.status === "error" ? response.code : undefined);
     const storesErrorCode = (storesQuery.error as { code?: number } | null)?.code
         ?? (storesResponse?.status === "error" ? storesResponse.code : undefined);
@@ -485,6 +515,8 @@ const PlatformOrganizationDetailPage = ({
         ?? (purchasesResponse?.status === "error" ? purchasesResponse.code : undefined);
     const purchaseErrorCode = (purchaseQuery.error as { code?: number } | null)?.code
         ?? (purchaseResponse?.status === "error" ? purchaseResponse.code : undefined);
+    const whatsappErrorCode = (whatsappQuery.error as { code?: number } | null)?.code
+        ?? (whatsappResponse?.status === "error" ? whatsappResponse.code : undefined);
     const catalogDetailErrorCode = catalogResourceKind === "products"
         ? catalogProductErrorCode
         : catalogResourceKind === "categories"
@@ -518,6 +550,8 @@ const PlatformOrganizationDetailPage = ({
                                                     ? purchaseErrorCode ?? errorCode
                                                     : section === "purchases"
                                                         ? purchasesErrorCode ?? errorCode
+                                                        : section === "whatsapp"
+                                                            ? whatsappErrorCode ?? errorCode
                                     : errorCode;
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
@@ -564,6 +598,9 @@ const PlatformOrganizationDetailPage = ({
     const purchaseErrorMessage =
         (purchaseQuery.error as { message?: string } | null)?.message
         ?? (purchaseResponse?.status === "error" ? purchaseResponse.message : undefined);
+    const whatsappErrorMessage =
+        (whatsappQuery.error as { message?: string } | null)?.message
+        ?? (whatsappResponse?.status === "error" ? whatsappResponse.message : undefined);
     const catalogDetailErrorMessage = catalogResourceKind === "products"
         ? catalogProductErrorMessage
         : catalogResourceKind === "categories"
@@ -599,6 +636,8 @@ const PlatformOrganizationDetailPage = ({
                                                     ? purchaseErrorMessage ?? errorMessage
                                                     : section === "purchases"
                                                         ? purchasesErrorMessage ?? errorMessage
+                                                        : section === "whatsapp"
+                                                            ? whatsappErrorMessage ?? errorMessage
                                     : errorMessage;
 
     useEffect(() => {
@@ -2836,7 +2875,7 @@ const PlatformOrganizationDetailPage = ({
                                 value={tableFilters.storeId ?? "all"}
                                 onValueChange={(value) =>
                                     updateTableFilters({
-                                        storeId: value === "all" ? undefined : value,
+                                        storeId: value === "all" || !value ? undefined : value,
                                         page: 1,
                                     })}
                             >
@@ -3123,7 +3162,7 @@ const PlatformOrganizationDetailPage = ({
                                 value={purchaseFilters.storeId ?? "all"}
                                 onValueChange={(value) =>
                                     updatePurchaseFilters({
-                                        storeId: value === "all" ? undefined : value,
+                                        storeId: value === "all" || !value ? undefined : value,
                                         page: 1,
                                     })}
                             >
@@ -3258,6 +3297,208 @@ const PlatformOrganizationDetailPage = ({
         );
     };
 
+    const renderWhatsAppInspection = () => {
+        if (whatsappQuery.isLoading) {
+            return (
+                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading WhatsApp">
+                    <Spinner className="size-6 text-primary" />
+                </div>
+            );
+        }
+        if (whatsappErrorCode === 404 || whatsappErrorMessage === "Organization not found") {
+            return (
+                <Alert role="alert">
+                    <AlertTitle>WhatsApp data was not found</AlertTitle>
+                    <AlertDescription>
+                        This organization is not available. Return to the organizations list to continue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (whatsappQuery.isError || whatsappResponse?.status === "error") {
+            return (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>WhatsApp could not be loaded</AlertTitle>
+                    <AlertDescription>{whatsappErrorMessage ?? "The WhatsApp inspection data is unavailable."}</AlertDescription>
+                </Alert>
+            );
+        }
+        if (!whatsappData) return null;
+
+        return (
+            <div className="space-y-4">
+                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                    <CardHeader className="gap-1">
+                        <h2 className="font-display text-xl font-semibold tracking-tight">WhatsApp</h2>
+                        <CardDescription>
+                            Read-only connection and configuration status. Credentials, session secrets, and messaging controls are never shown in Console.
+                        </CardDescription>
+                    </CardHeader>
+                </Card>
+
+                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                    <CardHeader className="gap-1">
+                        <h3 className="font-display text-lg font-semibold tracking-tight">Organization accounts</h3>
+                        <CardDescription>Connection state for each organization WhatsApp account.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {whatsappData.accounts.length === 0 ? (
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <MessageCircle />
+                                    </EmptyMedia>
+                                    <EmptyTitle>No WhatsApp accounts</EmptyTitle>
+                                    <EmptyDescription>This organization has not configured WhatsApp yet.</EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        ) : (
+                            <div className="overflow-x-auto rounded-xl border border-border/60">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Phone</TableHead>
+                                            <TableHead>Provider</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Default store</TableHead>
+                                            <TableHead>Assigned stores</TableHead>
+                                            <TableHead>Last connected</TableHead>
+                                            <TableHead>Last seen</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {whatsappData.accounts.map((account) => (
+                                            <TableRow key={account.id}>
+                                                <TableCell className="font-medium whitespace-nowrap">
+                                                    {formatPhoneDisplay(account.phoneNumber)}
+                                                </TableCell>
+                                                <TableCell>{account.provider === "cloud_api" ? "Cloud API" : "Baileys"}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="rounded-full">
+                                                        {whatsappAccountStatusLabel(account.status)}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>{account.defaultStore?.name ?? "—"}</TableCell>
+                                                <TableCell>
+                                                    {account.assignedStores.length > 0
+                                                        ? account.assignedStores.map((store) => store.name).join(", ")
+                                                        : "—"}
+                                                </TableCell>
+                                                <TableCell className="whitespace-nowrap text-muted-foreground">
+                                                    {formatLastCompletedSale(account.lastConnectedAt)}
+                                                </TableCell>
+                                                <TableCell className="whitespace-nowrap text-muted-foreground">
+                                                    {formatLastCompletedSale(account.lastSeenAt)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                    <CardHeader className="gap-1">
+                        <h3 className="font-display text-lg font-semibold tracking-tight">Store configuration</h3>
+                        <CardDescription>Safe template and message-link metadata per store.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {whatsappData.storeConfigs.length === 0 ? (
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <Store />
+                                    </EmptyMedia>
+                                    <EmptyTitle>No stores yet</EmptyTitle>
+                                    <EmptyDescription>Store WhatsApp configuration appears once stores exist.</EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        ) : (
+                            whatsappData.storeConfigs.map((config) => (
+                                <Card key={config.store.id} className="border-border/60 bg-background/60">
+                                    <CardHeader className="gap-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h4 className="font-medium">{config.store.name}</h4>
+                                            {config.accountStatus ? (
+                                                <Badge variant="outline" className="rounded-full">
+                                                    {whatsappAccountStatusLabel(config.accountStatus)}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="rounded-full">No account linked</Badge>
+                                            )}
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div>
+                                            <p className="mb-2 text-sm font-medium">Templates</p>
+                                            {config.templates.length === 0 ? (
+                                                <p className="text-sm text-muted-foreground">No templates configured.</p>
+                                            ) : (
+                                                <div className="overflow-x-auto rounded-xl border border-border/60">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Kind</TableHead>
+                                                                <TableHead>Name</TableHead>
+                                                                <TableHead>Default</TableHead>
+                                                                <TableHead>Status</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {config.templates.map((template) => (
+                                                                <TableRow key={`${config.store.id}-${template.kind}-${template.name}`}>
+                                                                    <TableCell>{whatsappTemplateKindLabel(template.kind)}</TableCell>
+                                                                    <TableCell className="font-medium">{template.name}</TableCell>
+                                                                    <TableCell>{template.isDefault ? "Yes" : "No"}</TableCell>
+                                                                    <TableCell>{template.isActive ? "Active" : "Inactive"}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="mb-2 text-sm font-medium">Message links</p>
+                                            {config.messageLinks.length === 0 ? (
+                                                <p className="text-sm text-muted-foreground">No message links configured.</p>
+                                            ) : (
+                                                <div className="overflow-x-auto rounded-xl border border-border/60">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Label</TableHead>
+                                                                <TableHead>Key</TableHead>
+                                                                <TableHead>Type</TableHead>
+                                                                <TableHead>Status</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {config.messageLinks.map((link) => (
+                                                                <TableRow key={`${config.store.id}-${link.key}`}>
+                                                                    <TableCell className="font-medium">{link.label}</TableCell>
+                                                                    <TableCell>{link.key}</TableCell>
+                                                                    <TableCell>{link.type.replaceAll("_", " ")}</TableCell>
+                                                                    <TableCell>{link.isActive ? "Active" : "Inactive"}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    };
+
     const renderLaterSection = () => {
         const config = sectionConfig[section];
         const Icon = config.icon;
@@ -3351,7 +3592,7 @@ const PlatformOrganizationDetailPage = ({
 
             {renderSectionNav()}
 
-            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" ? (
+            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && section !== "whatsapp" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
                     <Spinner className="size-6 text-primary" />
                 </div>
@@ -3362,19 +3603,19 @@ const PlatformOrganizationDetailPage = ({
                         {activeSectionErrorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && section !== "whatsapp" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
                 <Alert role="alert">
                     <AlertTitle>Organization was not found</AlertTitle>
                     <AlertDescription>
                         This organization is not available. Return to the organizations list to continue.
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && (detailQuery.isError || response?.status === "error") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && section !== "whatsapp" && (detailQuery.isError || response?.status === "error") ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Organization could not be loaded</AlertTitle>
                     <AlertDescription>{errorMessage ?? "The organization detail is unavailable."}</AlertDescription>
                 </Alert>
-            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || section === "reports" || section === "tables" || section === "purchases" || organization ? (
+            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || section === "reports" || section === "tables" || section === "purchases" || section === "whatsapp" || organization ? (
                 section === "overview" && organization
                     ? renderOverview()
                     : section === "stores"
@@ -3391,6 +3632,8 @@ const PlatformOrganizationDetailPage = ({
                                             ? renderTableInspection()
                                             : section === "purchases"
                                                 ? renderPurchaseInspection()
+                                                : section === "whatsapp"
+                                                    ? renderWhatsAppInspection()
                                     : organization
                                         ? renderLaterSection()
                                         : null
