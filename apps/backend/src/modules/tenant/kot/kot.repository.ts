@@ -310,16 +310,16 @@ export const getKotItemsByKotId = async (
     tx?: Bun.TransactionSQL,
 ): Promise<KotItemDTO[]> => {
     const db = tx || pg;
-    const [itemResults, addOnResults, bundleComponentResults] = await Promise.all([
-        db`
-            SELECT *
-            FROM kot_items
-            WHERE kot_id = ${kotId}
-            ORDER BY created_at ASC
-        `,
-        getKotItemAddOnsByKotId(kotId, tx),
-        getKotItemBundleComponentsByKotId(kotId, tx),
-    ]);
+    // Bun's postgres driver hangs until idleTimeout if more than one query
+    // is in flight on the same reserved transaction connection.
+    const itemResults = await db`
+        SELECT *
+        FROM kot_items
+        WHERE kot_id = ${kotId}
+        ORDER BY created_at ASC
+    `;
+    const addOnResults = await getKotItemAddOnsByKotId(kotId, tx);
+    const bundleComponentResults = await getKotItemBundleComponentsByKotId(kotId, tx);
 
     const addOnsByItemId = new Map<string, KotItemAddOnDTO[]>();
     for (const addOn of addOnResults) {

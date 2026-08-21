@@ -948,15 +948,13 @@ export const getSaleItemBundleComponentsBySaleId = async (
     tx?: Bun.TransactionSQL,
 ): Promise<SaleItemBundleComponentDTO[]> => {
     const db = tx || pg;
-    const [componentResults, addOnResults] = await Promise.all([
-        db`
-            SELECT *
-            FROM sale_item_bundle_components
-            WHERE sale_id = ${saleId}
-            ORDER BY created_at ASC
-        `,
-        getSaleItemBundleComponentAddOnsBySaleId(saleId, tx),
-    ]);
+    const componentResults = await db`
+        SELECT *
+        FROM sale_item_bundle_components
+        WHERE sale_id = ${saleId}
+        ORDER BY created_at ASC
+    `;
+    const addOnResults = await getSaleItemBundleComponentAddOnsBySaleId(saleId, tx);
 
     const addOnsByComponentId = new Map<string, SaleItemBundleComponentAddOnDTO[]>();
     for (const addOn of addOnResults) {
@@ -976,16 +974,16 @@ export const getSaleItemBundleComponentsBySaleId = async (
 
 export const getSaleItemsBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<SaleItemDTO[]> => {
     const db = tx || pg;
-    const [itemResults, addOnResults, bundleComponentResults] = await Promise.all([
-        db`
-            SELECT *
-            FROM sale_items
-            WHERE sale_id = ${saleId}
-            ORDER BY created_at ASC
-        `,
-        getSaleItemAddOnsBySaleId(saleId, tx),
-        getSaleItemBundleComponentsBySaleId(saleId, tx),
-    ]);
+    // Bun's postgres driver hangs until idleTimeout if more than one query
+    // is in flight on the same reserved transaction connection.
+    const itemResults = await db`
+        SELECT *
+        FROM sale_items
+        WHERE sale_id = ${saleId}
+        ORDER BY created_at ASC
+    `;
+    const addOnResults = await getSaleItemAddOnsBySaleId(saleId, tx);
+    const bundleComponentResults = await getSaleItemBundleComponentsBySaleId(saleId, tx);
 
     const addOnsBySaleItemId = new Map<string, SaleItemAddOnDTO[]>();
     for (const addOn of addOnResults) {

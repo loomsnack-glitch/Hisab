@@ -26,6 +26,11 @@ const defaultPosition = { x: 0.05, y: 0.05 } as const;
 const isActiveDraftTableState = (state: ServiceTableDTO["state"]) =>
   state === "engaged" || state === "ready_to_bill";
 
+const isLeftoverDraftTableWorkspace = (table: ServiceTableDTO) =>
+  isActiveDraftTableState(table.state) &&
+  Boolean(table.currentSaleId) &&
+  !table.currentTableOrderId;
+
 const usesKotTableOrders = async (session: DeviceSessionDTO) => {
   const store = await organizationRepository.getStoreById(
     session.organization.id,
@@ -313,22 +318,31 @@ export const getServiceTableOrderForDevice = async (
   session: DeviceSessionDTO,
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
-  if (await usesKotTableOrders(session)) {
-    return kotService.getActiveTableOrderForDevice(session, tableId);
-  }
-
   const table = await tableRepository.getServiceTableById(
     session.organization.id,
     session.store.id,
     tableId,
   );
-  if (!table)
+  if (await usesKotTableOrders(session)) {
+    if (!table) {
+      return {
+        status: "error",
+        message: "Service table not found",
+        data: null,
+        code: STATUS_CODES.NOT_FOUND,
+      };
+    }
+    if (!isLeftoverDraftTableWorkspace(table)) {
+      return kotService.getActiveTableOrderForDevice(session, tableId);
+    }
+  } else if (!table) {
     return {
       status: "error",
       message: "Service table not found",
       data: null,
       code: STATUS_CODES.NOT_FOUND,
     };
+  }
   if (!table.currentSaleId || !isActiveDraftTableState(table.state)) {
     return {
       status: "error",
@@ -369,7 +383,22 @@ export const cancelServiceTableOrderForDevice = async (
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
   if (await usesKotTableOrders(session)) {
-    return kotService.discardActiveTableOrderForDevice(session, tableId);
+    const table = await tableRepository.getServiceTableById(
+      session.organization.id,
+      session.store.id,
+      tableId,
+    );
+    if (!table) {
+      return {
+        status: "error",
+        message: "Service table not found",
+        data: null,
+        code: STATUS_CODES.NOT_FOUND,
+      };
+    }
+    if (!isLeftoverDraftTableWorkspace(table)) {
+      return kotService.discardActiveTableOrderForDevice(session, tableId);
+    }
   }
   const result = await pg.begin(async (tx) => {
     const table = await tableRepository.lockServiceTableForDevice(

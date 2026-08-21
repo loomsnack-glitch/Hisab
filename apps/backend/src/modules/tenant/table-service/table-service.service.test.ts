@@ -639,6 +639,79 @@ describe("Service Table application service", () => {
     );
   });
 
+  test("opens a leftover Draft Sale after Table Orders are enabled", async () => {
+    getStoreById.mockResolvedValueOnce({
+      ...store,
+      kotSystemEnabled: true,
+      tableManagementEnabled: true,
+    });
+    getServiceTableById.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentTableOrderId: null,
+      currentSaleTotal: 42,
+    });
+
+    const response = await tableService.getServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: {
+        table: { state: "engaged", currentSaleId: "sale-id" },
+        sale: { id: "sale-id", status: "draft" },
+      },
+    });
+    expect(getActiveTableOrderForDevice).not.toHaveBeenCalled();
+    expect(getSaleDetailsForDevice).toHaveBeenCalledWith(
+      deviceSession,
+      "sale-id",
+    );
+  });
+
+  test("cancels a leftover Draft Sale after Table Orders are enabled", async () => {
+    getStoreById.mockResolvedValueOnce({
+      ...store,
+      kotSystemEnabled: true,
+      tableManagementEnabled: true,
+    });
+    getServiceTableById.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentTableOrderId: null,
+      currentSaleTotal: 42,
+    });
+    lockServiceTableForDevice.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentTableOrderId: null,
+      currentSaleTotal: 0,
+    });
+
+    const response = await tableService.cancelServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: { table: { state: "free", currentSaleId: null } },
+    });
+    expect(discardActiveTableOrderForDevice).not.toHaveBeenCalled();
+    expect(clearDraftSale).toHaveBeenCalled();
+    expect(deleteDraftSale).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      "sale-id",
+      expect.anything(),
+    );
+  });
+
   test("lets concurrent start attempts produce only one active table draft", async () => {
     let lockAttempts = 0;
     lockServiceTableForDevice.mockImplementation(async () => {

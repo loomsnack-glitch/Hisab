@@ -38,3 +38,27 @@ describe("KOT Number sequence allocation", () => {
         expect(allocated.kotPeriodKey).toBe("20260821");
     });
 });
+
+describe("KOT item reads on a reserved connection", () => {
+    test("does not start a second query while another is in flight", async () => {
+        let inFlight = 0;
+        let maxInFlight = 0;
+        const tx = (_strings: TemplateStringsArray) => {
+            inFlight += 1;
+            maxInFlight = Math.max(maxInFlight, inFlight);
+            return new Promise((resolve) => {
+                queueMicrotask(() => {
+                    inFlight -= 1;
+                    resolve([]);
+                });
+            });
+        };
+
+        await kotRepository.getKotItemsByKotId(
+            "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            tx as never,
+        );
+
+        expect(maxInFlight).toBe(1);
+    });
+});

@@ -572,10 +572,8 @@ const buildSaleDetails = async (
     return null;
   }
 
-  const [items, payments] = await Promise.all([
-    billingRepository.getSaleItemsBySaleId(saleId, tx),
-    billingRepository.getPaymentsBySaleId(saleId, tx),
-  ]);
+  const items = await billingRepository.getSaleItemsBySaleId(saleId, tx);
+  const payments = await billingRepository.getPaymentsBySaleId(saleId, tx);
   const lineDiscountTotal = getSaleLineDiscountTotal(items);
 
   return {
