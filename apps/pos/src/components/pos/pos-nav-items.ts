@@ -1,5 +1,6 @@
 import {
     Armchair,
+    BarChart3,
     ReceiptText,
     Settings2,
     Store,
@@ -23,10 +24,11 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "tables", label: "Tables", icon: Armchair, path: getPosPanelPath("tables"), tab: "tables" },
     { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
     { id: "bills", label: "Bills", icon: ReceiptText, path: getPosPanelPath("bills"), tab: "bills" },
+    { id: "reports", label: "Reports", icon: BarChart3, path: getPosPanelPath("reports"), tab: "reports" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
 ];
 
-export const posPrimaryMobileNavIds = ["products", "bills"] as const;
+export const posPrimaryMobileNavIds = ["products", "bills", "reports"] as const;
 
 export const posPrimaryMobileDestinations = posWorkspaceDestinations.filter((destination) =>
     (posPrimaryMobileNavIds as readonly string[]).includes(destination.id),

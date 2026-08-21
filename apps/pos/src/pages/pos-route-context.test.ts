@@ -15,10 +15,12 @@ describe("POS route context", () => {
         expect(getPosPanelPath("tables")).toBe("/tables");
         expect(getPosPanelPath("customers")).toBe("/customers");
         expect(getPosPanelPath("bills")).toBe("/bills");
+        expect(getPosPanelPath("reports")).toBe("/reports");
         expect(posPanelConfig.products.path).toBe("/");
         expect(posPanelConfig.tables.path).toBe("/tables");
         expect(posPanelConfig.customers.path).toBe("/customers");
         expect(posPanelConfig.bills.path).toBe("/bills");
+        expect(posPanelConfig.reports.path).toBe("/reports");
     });
 
     test("falls back to products for the POS root and unknown paths", () => {
@@ -26,6 +28,7 @@ describe("POS route context", () => {
         expect(getPosPanelTabFromPath("/tables")).toBe("tables");
         expect(getPosPanelTabFromPath("/customers")).toBe("customers");
         expect(getPosPanelTabFromPath("/bills")).toBe("bills");
+        expect(getPosPanelTabFromPath("/reports")).toBe("reports");
         expect(getPosPanelTabFromPath("/unknown")).toBe("products");
     });
 
@@ -34,6 +37,7 @@ describe("POS route context", () => {
         expect(getPosLoginPath("/tables")).toBe("/login?returnTo=%2Ftables");
         expect(getPosLoginPath("/customers")).toBe("/login?returnTo=%2Fcustomers");
         expect(getPosLoginPath("/bills")).toBe("/login?returnTo=%2Fbills");
+        expect(getPosLoginPath("/reports")).toBe("/login?returnTo=%2Freports");
         expect(getPosLoginPath("/appearance")).toBe("/login?returnTo=%2Fappearance");
     });
 
@@ -41,6 +45,7 @@ describe("POS route context", () => {
         expect(getPosReturnPath("/tables")).toBe("/tables");
         expect(getPosReturnPath("/customers")).toBe("/customers");
         expect(getPosReturnPath("/bills")).toBe("/bills");
+        expect(getPosReturnPath("/reports")).toBe("/reports");
         expect(getPosReturnPath("/appearance")).toBe("/appearance");
         expect(getPosReturnPath("https://example.com")).toBe("/");
         expect(getPosReturnPath("/login")).toBe("/");
@@ -54,14 +59,18 @@ describe("POS route context", () => {
             "tables",
             "customers",
             "bills",
+            "reports",
             "appearance",
         ]);
         const tablesDestination = posWorkspaceDestinations.find((destination) => destination.id === "tables");
         expect(tablesDestination).toMatchObject({ label: "Tables", path: "/tables", tab: "tables" });
         const customersDestination = posWorkspaceDestinations.find((destination) => destination.id === "customers");
         expect(customersDestination).toMatchObject({ label: "Customers", path: "/customers", tab: "customers" });
+        const reportsDestination = posWorkspaceDestinations.find((destination) => destination.id === "reports");
+        expect(reportsDestination).toMatchObject({ label: "Reports", path: "/reports", tab: "reports" });
         expect(isPosMoreDestinationActive("/tables")).toBe(true);
         expect(isPosMoreDestinationActive("/customers")).toBe(true);
+        expect(isPosMoreDestinationActive("/reports")).toBe(false);
         expect(isPosMoreDestinationActive("/appearance")).toBe(true);
     });
 

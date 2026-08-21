@@ -75,7 +75,10 @@ const PosPage = () => {
         return <Navigate to={getPosLoginPath(returnTo)} replace />;
     }
 
-    if (location.pathname === "/" && (legacyPanel === "bills" || legacyPanel === "customers" || legacyPanel === "purchases")) {
+    if (
+        location.pathname === "/" &&
+        (legacyPanel === "bills" || legacyPanel === "customers" || legacyPanel === "reports" || legacyPanel === "purchases")
+    ) {
         return <Navigate to={getPosPanelPath(legacyPanel as PosPanelTab)} replace />;
     }
 
