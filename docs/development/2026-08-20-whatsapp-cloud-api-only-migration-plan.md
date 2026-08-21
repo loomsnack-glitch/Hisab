@@ -167,7 +167,7 @@ The branch now also contains a Cloud API contract foundation:
 | --- | --- | --- |
 | Phase 0 Meta/product readiness | Readiness researched; external gate deferred | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions remain a release/integration gate. |
 | Phase 1 account/database foundation | Code-first foundation implemented; exit gate open | The injected credential-vault/key-version port, atomic WABA/sender persistence, credential-binding rotation seam, and read-only integrity verification script are implemented and fixture-tested. Applying the migration set to a production-shaped copy, wiring the real secret manager, and running the database/security exit checks remain. |
-| Phase 2A–2D Cloud contracts | Webhook runtime implemented; Cloud outbox runtime gate open | Signed receipt replay is scheduled and focused fixtures pass. The Cloud outbox dispatcher and uncertain-send reconciliation exist as seams, but the backend scheduler and reconciliation worker still must be wired. Live vault assembly, Meta verification, and production observation remain. |
+| Phase 2A–2D Cloud contracts | Webhook and gated outbox runtime implemented; provider exit gate open | Signed receipt replay, gated outbox dispatch, and callback-based reconciliation for uncertain sends are wired and focused fixtures pass. A real credential-vault/private-storage assembly, migration execution, Meta verification, and production observation remain. |
 | Phase 3A–3D onboarding contracts | Implemented | State, persistence, result validation, and server-side exchange seams are covered by focused fixtures. |
 | Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, refresh/revoke endpoints, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, durable provisioning-attempt execution, and production-shaped Store/inbound testing remain. |
 | Phase 4 templates/policy | Code-first admission complete; caller migration pending | Phase 4A–4C template, consent, and send-admission seams are implemented. Legacy invoice, due, promotion, and inbox callers are now blocked from sending through Cloud accounts until they migrate to the Cloud template route. |
@@ -747,7 +747,14 @@ Last updated: 2026-08-22
 - Verification: Cloud-focused suite passes 87 tests; `git diff --check` passes.
 - Loop 2A — **complete**: wire the Cloud outbox scheduler behind the explicit
   `WHATSAPP_CLOUD_OUTBOX_ENABLED` gate and prevent overlapping dispatch cycles.
-- Loop 2B — **next**: implement durable reconciliation for uncertain sends.
+- Loop 2B — **complete**: carry the message idempotency key as bounded provider
+  callback data, correlate a later status to an uncertain message without
+  recipient/time heuristics, and atomically settle its `reconciling` outbox row.
+- Verification: Cloud-focused suite passes 89 tests; backend TypeScript still
+  reports the repository's existing unrelated test-contract errors; no errors
+  remain in the changed Cloud files.
+- Loop 3 — **next**: make template enqueue idempotent and complete provider
+  template pagination/validation before migrating any caller.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 
@@ -772,11 +779,12 @@ current branch, work proceeds in this order:
    migrations against a production-shaped database copy without exposing
    secrets. The atomic WABA/sender persistence and key-version rotation seams
    are already implemented.
-4. **Close the Phase 2 provider gate.** **Webhook runtime complete; Cloud
-   outbox runtime work in progress.** Bind the deployment credential vault and
-   private-storage adapter, wire the Cloud runtime scheduler, implement
-   uncertain-send reconciliation, run the Cloud receipt/outbox fixture and
-   database checks, and complete controlled Meta verification.
+4. **Close the Phase 2 provider gate.** **Code-first runtime complete; evidence
+   open.** Bind the deployment credential vault and private-storage adapter,
+   apply and verify the migrations, run the Cloud receipt/outbox fixture and
+   database checks, and complete controlled Meta verification. Uncertain sends
+   now carry a bounded callback token and settle from a later provider status;
+   unresolved rows still require an operational timeout/dead-letter policy.
 5. **Close the Phase 3 account-operations gate.** **Code-first implementation
    complete; evidence open.** The server-side exchange and provider discovery,
    idempotent WABA/sender persistence, WABA subscription, safe connect,
@@ -798,9 +806,9 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The next code slice is therefore the Phase 2 runtime scheduler and uncertain
-send reconciliation. Phase 5 remains blocked until the provider/runtime gates
-are closed.
+The next code slice is therefore Loop 3 template idempotency, pagination, and
+strict provider-template validation. Phase 5 remains blocked until the
+provider/runtime gates are closed.
 
 ## Target architecture
 

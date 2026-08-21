@@ -216,6 +216,49 @@ describe("processCloudWebhookEvent", () => {
     expect(state.calls.completed).toBe(1);
   });
 
+  test("passes provider callback data to status reconciliation", async () => {
+    const state = deps();
+    const result = await processCloudWebhookEvent(
+      claim({
+        payload: {
+          entry: [
+            {
+              id: "waba-1",
+              changes: [
+                {
+                  value: {
+                    metadata: { phone_number_id: "phone-1" },
+                    statuses: [
+                      {
+                        id: "wamid-1",
+                        biz_opaque_callback_data: "message-idempotency-key",
+                        status: "sent",
+                        timestamp: "1700000000",
+                        recipient_id: "919876543210",
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+      state.injected,
+    );
+
+    expect(result).toEqual({ status: "completed", processed: 1, ignored: 0 });
+    expect(state.calls.statuses[0]).toEqual([
+      "account-1",
+      "wamid-1",
+      "message-idempotency-key",
+      "sent",
+      "2023-11-14T22:13:20.000Z",
+      null,
+      null,
+    ]);
+  });
+
   test("reports exhausted processing attempts as dead letters", async () => {
     const state = deps();
     state.injected.ingestMessage = async () => {

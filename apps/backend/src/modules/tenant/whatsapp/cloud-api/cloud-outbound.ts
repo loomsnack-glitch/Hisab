@@ -22,18 +22,20 @@ export type CloudTemplateComponent = {
 };
 
 export type CloudOutboundMessage =
-  | { type: "text"; body: string; previewUrl?: boolean }
+  | { type: "text"; body: string; previewUrl?: boolean; callbackData?: string }
   | {
       type: "template";
       name: string;
       languageCode: string;
       components?: CloudTemplateComponent[];
+      callbackData?: string;
     }
   | {
       type: "image" | "document";
       mediaId: string;
       caption?: string;
       fileName?: string;
+      callbackData?: string;
     };
 
 export type CloudOutboundPayload = {
@@ -49,6 +51,7 @@ export type CloudOutboundPayload = {
   };
   image?: { id: string; caption?: string };
   document?: { id: string; caption?: string; filename?: string };
+  biz_opaque_callback_data?: string;
 };
 
 export type CloudDispatchOutcome =
@@ -83,6 +86,15 @@ const requireIdentifier = (value: string, label: string): string => {
   return normalized;
 };
 
+const callbackData = (value: string | undefined): string | undefined => {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 512 || /[\r\n]/.test(normalized)) {
+    throw new Error("WhatsApp callback data is invalid");
+  }
+  return normalized;
+};
+
 const requirePhoneNumberId = (value: string): string => {
   const normalized = value.trim();
   if (!/^\d{1,255}$/.test(normalized)) {
@@ -102,11 +114,15 @@ export const buildCloudOutboundPayload = (
   to: string,
   message: CloudOutboundMessage,
 ): CloudOutboundPayload => {
+  const messageCallbackData = callbackData(message.callbackData);
   const base = {
     messaging_product: "whatsapp" as const,
     recipient_type: "individual" as const,
     to: recipient(to),
     type: message.type,
+    ...(messageCallbackData
+      ? { biz_opaque_callback_data: messageCallbackData }
+      : {}),
   };
   if (message.type === "text") {
     return {

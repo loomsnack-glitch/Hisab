@@ -215,6 +215,7 @@ describe("WhatsApp Cloud webhook normalization", () => {
                   statuses: [
                     {
                       id: "wamid.failed-1",
+                      biz_opaque_callback_data: "message-idempotency-key",
                       status: "failed",
                       timestamp: "1760000000",
                       recipient_id: "919812345678",
@@ -238,6 +239,7 @@ describe("WhatsApp Cloud webhook normalization", () => {
       recipientPhoneNumber: "+919812345678",
       failureCode: "131026",
       failureMessage: "Message undeliverable",
+      callbackData: "message-idempotency-key",
       occurredAt: "2025-10-09T08:53:20.000Z",
     });
   });

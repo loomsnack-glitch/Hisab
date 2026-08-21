@@ -8,6 +8,7 @@ export type CloudOutboxJob = {
   accountId: string;
   outboxId: string;
   messageId: string;
+  idempotencyKey: string;
   phoneNumber: string;
   phoneNumberId: string;
   credentialReference: string;
@@ -122,6 +123,7 @@ export const claimNextCloudOutbox = async (
         business.credential_reference,
         business.credential_key_version,
         message.message_type,
+        message.idempotency_key,
         message.body,
         message.caption,
         message.attachment_storage_key,
@@ -149,6 +151,7 @@ export const claimNextCloudOutbox = async (
       accountId: String(job.whatsapp_account_id),
       outboxId: String(job.outbox_id),
       messageId: String(job.message_id),
+      idempotencyKey: String(job.idempotency_key),
       phoneNumber: String(job.contact_phone_number),
       phoneNumberId: String(job.cloud_phone_number_id),
       credentialReference: String(job.credential_reference),

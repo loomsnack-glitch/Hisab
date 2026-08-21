@@ -1479,20 +1479,33 @@ export const updateInvoiceMessageStatus = async (
 export const updateCloudMessageStatus = async (
     accountId: string,
     providerMessageId: string,
+    callbackData: string | null,
     status: "sent" | "delivered" | "read" | "failed",
     occurredAt: string,
     failureCode: string | null,
     failureMessage: string | null,
 ): Promise<"updated" | "stale" | "missing"> => {
-    const [existing] = await pg`
-        SELECT id
-        FROM whatsapp_messages
-        WHERE whatsapp_account_id = ${accountId}
-          AND provider_message_id = ${providerMessageId}
-          AND direction = 'outbound'
-    `;
-    if (!existing) return "missing";
-    const [row] = await pg`
+    return pg.begin(async tx => {
+        const [existing] = await tx`
+            SELECT message.id, outbox.id AS outbox_id, outbox.status AS outbox_status
+            FROM whatsapp_messages message
+            LEFT JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+            WHERE message.whatsapp_account_id = ${accountId}
+              AND message.direction = 'outbound'
+              AND (
+                message.provider_message_id = ${providerMessageId}
+                OR (
+                  message.provider_message_id IS NULL
+                  AND ${callbackData} IS NOT NULL
+                  AND message.idempotency_key = ${callbackData}
+                )
+              )
+            ORDER BY CASE WHEN message.provider_message_id = ${providerMessageId} THEN 0 ELSE 1 END
+            LIMIT 1
+            FOR UPDATE OF message
+        `;
+        if (!existing) return "missing";
+        const [row] = await tx`
         UPDATE whatsapp_messages
         SET status = CASE
                 WHEN ${status} = 'read' THEN 'read'::whatsapp_message_status_enum
@@ -1523,14 +1536,43 @@ export const updateCloudMessageStatus = async (
                 WHEN ${status} = 'read' OR status IN ('delivered', 'read') THEN NULL
                 WHEN ${status} = 'failed' THEN ${failureMessage}
                 ELSE failure_message
-            END
-        WHERE whatsapp_account_id = ${accountId}
-          AND provider_message_id = ${providerMessageId}
-          AND direction = 'outbound'
+            END,
+            provider_message_id = ${providerMessageId}
+        WHERE id = ${existing.id}
           AND (cloud_status_at IS NULL OR cloud_status_at <= ${occurredAt}::timestamptz)
         RETURNING id
-    `;
-    return row ? "updated" : "stale";
+        `;
+        if (!row) return "stale";
+
+        if (existing.outbox_id && existing.outbox_status === "reconciling") {
+            if (status === "failed") {
+                await tx`
+                    UPDATE whatsapp_outbox
+                    SET status = 'dead_letter',
+                        lease_owner = NULL,
+                        lease_expires_at = NULL,
+                        last_error_code = LEFT(${failureCode ?? "cloud_delivery_failed"}, 100),
+                        last_error_message = LEFT(${failureMessage ?? "Cloud provider reported delivery failure"}, 1_000),
+                        updated_at = NOW()
+                    WHERE id = ${existing.outbox_id}
+                      AND status = 'reconciling'
+                `;
+            } else {
+                await tx`
+                    UPDATE whatsapp_outbox
+                    SET status = 'sent',
+                        lease_owner = NULL,
+                        lease_expires_at = NULL,
+                        last_error_code = NULL,
+                        last_error_message = NULL,
+                        updated_at = NOW()
+                    WHERE id = ${existing.outbox_id}
+                      AND status = 'reconciling'
+                `;
+            }
+        }
+        return "updated";
+    });
 };
 
 export const retryInvoiceOutbox = async (

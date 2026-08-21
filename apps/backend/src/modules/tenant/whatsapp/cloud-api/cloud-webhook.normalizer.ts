@@ -33,6 +33,7 @@ export type CloudNormalizedStatusEvent = {
   wabaId: string;
   phoneNumberId: string;
   providerMessageId: string;
+  callbackData: string | null;
   recipientPhoneNumber: string;
   status: Exclude<CloudMessageStatus, "queued" | "sending">;
   occurredAt: string;
@@ -316,6 +317,7 @@ const normalizeStatus = (
       wabaId: entryId,
       phoneNumberId: metadata.phoneNumberId,
       providerMessageId,
+      callbackData: boundedString(status.biz_opaque_callback_data, 512),
       recipientPhoneNumber,
       status: rawStatus as CloudNormalizedStatusEvent["status"],
       occurredAt: timestampToIso(status.timestamp),

@@ -59,6 +59,7 @@ const messageFor = async (
       name: job.templateSnapshot.name,
       languageCode: job.templateSnapshot.languageCode,
       components: job.templateSnapshot.components,
+      callbackData: job.idempotencyKey,
     };
   }
   if (job.messageType === "text") {

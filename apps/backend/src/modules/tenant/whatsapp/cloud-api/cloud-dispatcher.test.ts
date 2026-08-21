@@ -7,6 +7,7 @@ const job: CloudOutboxJob = {
   accountId: "22222222-2222-4222-8222-222222222222",
   outboxId: "33333333-3333-4333-8333-333333333333",
   messageId: "44444444-4444-4444-8444-444444444444",
+  idempotencyKey: "cloud-message-idempotency-key",
   phoneNumber: "+919876543210",
   phoneNumberId: "9876543210",
   credentialReference: "secret://whatsapp/cloud/account-1",

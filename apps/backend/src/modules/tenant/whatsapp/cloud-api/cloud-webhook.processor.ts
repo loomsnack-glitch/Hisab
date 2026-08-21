@@ -26,6 +26,7 @@ export type CloudWebhookProcessorDependencies = {
   updateStatus: (
     accountId: string,
     providerMessageId: string,
+    callbackData: string | null,
     status: "sent" | "delivered" | "read" | "failed",
     occurredAt: string,
     failureCode: string | null,
@@ -173,6 +174,7 @@ export const processCloudWebhookEvent = async (
       const updated = await deps.updateStatus(
         accountId,
         event.providerMessageId,
+        event.callbackData,
         event.status,
         event.occurredAt,
         event.failureCode,

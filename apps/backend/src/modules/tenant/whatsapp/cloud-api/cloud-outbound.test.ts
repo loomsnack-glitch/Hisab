@@ -41,6 +41,19 @@ describe("WhatsApp Cloud outbound transport", () => {
     });
   });
 
+  test("includes bounded provider callback data when supplied", () => {
+    expect(
+      buildCloudOutboundPayload("+919876543210", {
+        type: "template",
+        name: "bill_ready",
+        languageCode: "en_US",
+        callbackData: "message-idempotency-key",
+      }),
+    ).toMatchObject({
+      biz_opaque_callback_data: "message-idempotency-key",
+    });
+  });
+
   test("rejects invalid outbound input before a client call", async () => {
     let calls = 0;
     const result = await dispatchCloudOutboundMessage(
