@@ -13,6 +13,7 @@ export const SaleNumberResetPeriodSchema = z.enum([
 ]);
 
 export const TokenNumberResetPeriodSchema = SaleNumberResetPeriodSchema;
+export const KotNumberResetPeriodSchema = SaleNumberResetPeriodSchema;
 
 export const SaleNumberSettingsDTOSchema = z.object({
   storeId: z.uuid("Invalid store id"),
@@ -21,6 +22,7 @@ export const SaleNumberSettingsDTOSchema = z.object({
   timezone: z.string().min(1).max(64),
   tokenNumberEnabled: z.boolean(),
   tokenNumberResetPeriod: TokenNumberResetPeriodSchema,
+  kotNumberResetPeriod: KotNumberResetPeriodSchema,
   createdAt: dtoDateSchema,
   updatedAt: dtoDateSchema,
 });
@@ -29,6 +31,7 @@ export const UpdateSaleNumberSettingsSchema = z.object({
   resetPeriod: SaleNumberResetPeriodSchema,
   tokenNumberEnabled: z.boolean(),
   tokenNumberResetPeriod: TokenNumberResetPeriodSchema,
+  kotNumberResetPeriod: KotNumberResetPeriodSchema.default("daily"),
 });
 
 const nameSchema = z

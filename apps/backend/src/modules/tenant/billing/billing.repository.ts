@@ -1105,6 +1105,7 @@ export const getSaleNumberSettings = async (
             sale_number_timezone AS timezone,
             token_number_enabled AS token_number_enabled,
             token_number_reset_period AS token_number_reset_period,
+            kot_number_reset_period AS kot_number_reset_period,
             created_at,
             updated_at
         FROM store_billing_settings
@@ -1122,6 +1123,7 @@ export const upsertSaleNumberSettings = async (
     timezone: string,
     tokenNumberEnabled = false,
     tokenNumberResetPeriod: SaleNumberSettingsDTO["tokenNumberResetPeriod"] = "daily",
+    kotNumberResetPeriod: SaleNumberSettingsDTO["kotNumberResetPeriod"] = "daily",
 ): Promise<SaleNumberSettingsDTO | null> => {
     const [result] = await pg`
         INSERT INTO store_billing_settings (
@@ -1130,14 +1132,16 @@ export const upsertSaleNumberSettings = async (
             sale_number_reset_period,
             sale_number_timezone,
             token_number_enabled,
-            token_number_reset_period
+            token_number_reset_period,
+            kot_number_reset_period
         ) VALUES (
             ${storeId},
             ${organizationId},
             ${resetPeriod},
             ${timezone},
             ${tokenNumberEnabled},
-            ${tokenNumberResetPeriod}
+            ${tokenNumberResetPeriod},
+            ${kotNumberResetPeriod}
         )
         ON CONFLICT (store_id)
         DO UPDATE SET
@@ -1145,6 +1149,7 @@ export const upsertSaleNumberSettings = async (
             sale_number_timezone = EXCLUDED.sale_number_timezone,
             token_number_enabled = EXCLUDED.token_number_enabled,
             token_number_reset_period = EXCLUDED.token_number_reset_period,
+            kot_number_reset_period = EXCLUDED.kot_number_reset_period,
             updated_at = NOW()
         RETURNING
             store_id,
@@ -1153,6 +1158,7 @@ export const upsertSaleNumberSettings = async (
             sale_number_timezone AS timezone,
             token_number_enabled,
             token_number_reset_period,
+            kot_number_reset_period,
             created_at,
             updated_at
     `;
@@ -1181,6 +1187,7 @@ export const allocateSaleNumber = async (
             timezone: DEFAULT_SALE_NUMBER_TIMEZONE,
             tokenNumberEnabled: false,
             tokenNumberResetPeriod: "daily",
+            kotNumberResetPeriod: "daily",
         } as const);
     const periodKey = getSaleNumberPeriodKey(settings.resetPeriod, committedAt, settings.timezone);
     const [result] = await db`

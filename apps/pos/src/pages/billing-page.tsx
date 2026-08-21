@@ -6,6 +6,7 @@ import {
     commitSale,
     commitPosSale,
     completePosSale,
+    createPosParcelKot,
     createDraftSale,
     createPosDraftSale,
     createCustomer,
@@ -37,6 +38,7 @@ import type {
     CommitSaleJSON,
     ReplaceSaleJSON,
     CompleteSaleJSON,
+    CreateParcelKotJSON,
     CreateCustomerJSON,
     CreateDraftSaleJSON,
     DeviceSessionDTO,
@@ -138,6 +140,7 @@ import {
     type ScanDiagnostic,
 } from "@/lib/barcode-scanning";
 import { safeRandomUUID } from "@/lib/uuid";
+import { isParcelKotActionVisible, PosParcelKotAction } from "@/lib/pos-parcel-kot";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
 type ComposerAddOn = CustomizeAddOnSelection;
@@ -462,6 +465,10 @@ const BillingPage = ({
     const salesScrollContainerRef = useRef<HTMLDivElement | null>(null);
     const salesLoadMoreRef = useRef<HTMLDivElement | null>(null);
     const completionRequestRef = useRef<{
+        requestId: string;
+        fingerprint: string;
+    } | null>(null);
+    const parcelKotRequestRef = useRef<{
         requestId: string;
         fingerprint: string;
     } | null>(null);
@@ -1836,6 +1843,51 @@ const BillingPage = ({
             toast.error(error?.message || "Failed to complete bill");
         },
     });
+
+    const parcelKotMutation = useMutation({
+        mutationFn: async ({ requestId }: { requestId: string }) => {
+            if (!selectedStoreId) {
+                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
+            }
+
+            if (items.length === 0) {
+                throw new Error("Add at least one product before generating a Parcel KOT");
+            }
+
+            if (hasInvalidDiscount) {
+                throw new Error(discountValidationMessage || "Enter a valid discount");
+            }
+
+            const payload: CreateParcelKotJSON = {
+                requestId,
+                ...buildDraftPayload(),
+            };
+            const response = await createPosParcelKot(payload);
+            if (response.status !== "success" || !response.data?.kot || !response.data.sale) {
+                throw new Error(response.message || "Failed to generate Parcel KOT");
+            }
+
+            return response.data;
+        },
+        onSuccess: (data) => {
+            parcelKotRequestRef.current = null;
+            invalidateBillingQueries();
+            setMobileCartOpen(false);
+            resetComposer();
+            toast.success(`Parcel ${data.kot.kotNumber} placed`);
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error?.message || "Failed to generate Parcel KOT");
+        },
+    });
+
+    const submitParcelKot = () => {
+        const fingerprint = JSON.stringify(buildDraftPayload());
+        const existingRequest = parcelKotRequestRef.current;
+        const requestId = existingRequest?.fingerprint === fingerprint ? existingRequest.requestId : safeRandomUUID();
+        parcelKotRequestRef.current = { requestId, fingerprint };
+        parcelKotMutation.mutate({ requestId });
+    };
 
     const submitCompleteSale = () => {
         const shouldPrint = invoiceActions.includes("print");
@@ -3316,6 +3368,23 @@ const BillingPage = ({
                                         ) : null}
                                     </div>
 
+                                    <PosParcelKotAction
+                                        available={isParcelKotActionVisible({
+                                            isDeviceMode,
+                                            kotSystemEnabled: session?.store.kotSystemEnabled === true,
+                                            isReplacingSale,
+                                        })}
+                                        disabled={
+                                            parcelKotMutation.isPending ||
+                                            completeSaleMutation.isPending ||
+                                            saveDraftMutation.isPending ||
+                                            items.length === 0 ||
+                                            hasInvalidDiscount
+                                        }
+                                        isPending={parcelKotMutation.isPending}
+                                        onGenerate={submitParcelKot}
+                                    />
+
                                     <div className="grid grid-cols-2 gap-2">
                                         {isReplacingSale ? (
                                             <Button
@@ -3335,6 +3404,7 @@ const BillingPage = ({
                                                 disabled={
                                                     saveDraftMutation.isPending ||
                                                     completeSaleMutation.isPending ||
+                                                    parcelKotMutation.isPending ||
                                                     items.length === 0 ||
                                                     hasInvalidDiscount
                                                 }
@@ -3352,6 +3422,7 @@ const BillingPage = ({
                                             className="h-9 rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
                                             disabled={
                                                 completeSaleMutation.isPending ||
+                                                parcelKotMutation.isPending ||
                                                 saveDraftMutation.isPending ||
                                                 items.length === 0
                                             }

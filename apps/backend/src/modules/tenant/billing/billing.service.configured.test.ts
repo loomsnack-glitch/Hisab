@@ -31,7 +31,7 @@ const deviceSession = {
         status: "active",
         lastSeenAt: null,
     },
-    store: { ...store, address: null },
+    store: { ...store, address: null, kotSystemEnabled: false, tableManagementEnabled: false },
     organization: { ...organization, username: "demo", tagline: null },
 } satisfies DeviceSessionDTO;
 

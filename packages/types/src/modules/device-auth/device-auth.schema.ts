@@ -42,6 +42,8 @@ export const DeviceSessionStoreDTOSchema = StoreDTOSchema.pick({
     organizationId: true,
     name: true,
     address: true,
+    kotSystemEnabled: true,
+    tableManagementEnabled: true,
 });
 
 export const DeviceSessionOrganizationDTOSchema = OrganizationDTOSchema.pick({

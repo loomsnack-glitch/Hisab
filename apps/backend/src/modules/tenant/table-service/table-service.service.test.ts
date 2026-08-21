@@ -50,7 +50,14 @@ const deviceSession: DeviceSessionDTO = {
     status: "active",
     lastSeenAt: null,
   },
-  store: { id: storeId, organizationId, name: "Main Store", address: null },
+  store: {
+    id: storeId,
+    organizationId,
+    name: "Main Store",
+    address: null,
+    kotSystemEnabled: false,
+    tableManagementEnabled: true,
+  },
   organization: {
     id: organizationId,
     name: "Demo Org",

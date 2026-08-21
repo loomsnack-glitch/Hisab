@@ -12,6 +12,7 @@ export {
 export * from "./modules/billing";
 export * from "./modules/purchase";
 export * from "./modules/table-service";
+export * from "./modules/kot";
 export * from "./modules/auth";
 export * from "./modules/device-auth";
 export * from "./modules/organization";

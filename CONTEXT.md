@@ -111,6 +111,10 @@ _Avoid_: Settlement row, transaction row
 A human-friendly bill identifier assigned when a Sale is committed. It is unique within a Store.
 _Avoid_: UUID, internal id
 
+**KOT Number**:
+A human-friendly identifier assigned when a KOT is generated. Table and Parcel KOTs share one Store-local sequence that is separate from Sale Numbers; it defaults to a daily reset, and the Store configures it using the existing bill and token reset-period choices.
+_Avoid_: Sale Number, UUID, separate table and parcel sequences
+
 **Sale Status**:
 The lifecycle state of a Sale. In billing v1, a Sale may be draft, completed, or voided.
 _Avoid_: Payment status, order state
@@ -187,17 +191,33 @@ _Avoid_: Floor section, zone, room, named layout region
 A Service Table that does not belong to any Service Area. It can be assigned to a Service Area only while unassigned; moving it to another area requires unassigning it first.
 _Avoid_: Unallocated table when referring to area membership, free-floating table
 
-**Active Table Sale**:
-The single Draft Sale currently linked to a Service Table. A Service Table may have at most one Active Table Sale at a time, and that Sale is its current order.
-_Avoid_: Parallel table drafts, duplicate current bill, table cart
+**Active Table Order**:
+The single open Table Order currently linked to a Service Table. It groups that table's KOTs and becomes one Sale only at checkout.
+_Avoid_: Active Table Sale, parallel table drafts, duplicate current bill, table cart
 
 **Allocated Service Table**:
-A Service Table that has been occupied by guests but has no Active Table Sale yet. Allocation reserves the physical table without creating a Draft Sale.
+A Service Table that has been occupied by guests but has no Active Table Order yet. Allocation reserves the physical table without creating a Sale.
 _Avoid_: Empty draft, free seated table, unstarted order
 
-**Discarded Table Draft**:
-An Active Table Sale intentionally abandoned before checkout because the guests left or the order is no longer wanted. Discarding it removes the uncommitted draft and frees its Service Table without creating a financial bill.
-_Avoid_: Void completed sale, unpaid cancellation, retained abandoned cart
+**Discarded Table Order**:
+An Active Table Order intentionally abandoned before checkout because the guests left or the order is no longer wanted. Discarding it removes its uncommitted KOTs and frees its Service Table without creating a financial bill.
+_Avoid_: Discarded Table Draft, void completed sale, unpaid cancellation, retained abandoned cart
+
+**KOT System**:
+An optional Store feature that enables parcel KOTs; table KOTs are available only when the Store also enables Table Management.
+_Avoid_: Table Management, required restaurant workflow, table-only KOT feature
+
+**Table Order**:
+The non-financial parent record for a seated party's service, which collects one or more KOTs before checkout. A Table Order belongs to exactly one Service Table and produces at most one final Sale.
+_Avoid_: Draft Sale, table cart, parallel table bill
+
+**Kitchen Order Ticket (KOT)**:
+An editable, non-financial kitchen work order for food or drink items, associated either with a Table Order or a parcel order. Each KOT item retains the trusted product configuration and price at KOT generation; editing a KOT does not require a change printout for the kitchen, and only its remaining items at checkout contribute to the final Sale.
+_Avoid_: Final bill, completed sale, immutable kitchen ticket
+
+**Parcel KOT**:
+A KOT for a takeaway order that has no Table Order. Generating it immediately creates the final Sale with a pending payment status.
+_Avoid_: Table KOT, unpaid draft sale, tableless table order
 
 **Table-Linked Sale**:
 A Sale associated with a Service Table as the setting in which it was ordered. The association may remain as historical context after the table is released for another guest.

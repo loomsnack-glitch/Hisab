@@ -470,6 +470,7 @@ export const getSaleNumberSettings = async (
       DEFAULT_SALE_NUMBER_TIMEZONE,
       false,
       "daily",
+      "daily",
     ));
 
   if (!settings) {
@@ -511,6 +512,7 @@ export const updateSaleNumberSettings = async (
     DEFAULT_SALE_NUMBER_TIMEZONE,
     settingsData.tokenNumberEnabled,
     settingsData.tokenNumberResetPeriod,
+    settingsData.kotNumberResetPeriod,
   );
 
   if (!settings) {

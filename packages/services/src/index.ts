@@ -9,6 +9,7 @@ export {
   collectPosPayment,
   commitPosSale,
   completePosSale,
+  createPosParcelKot,
   createPosCustomer,
   createPosDraftSale,
   deletePosDraftSale,

@@ -5,6 +5,8 @@ import type {
   ComboProductsListResponse,
   CommitSaleJSON,
   CompleteSaleJSON,
+  CreateParcelKotJSON,
+  ParcelKotResponse,
   ReplaceSaleJSON,
   CreateCustomerJSON,
   CreateDraftSaleJSON,
@@ -365,6 +367,17 @@ export const completePosSale = async (
 ): Promise<ServiceResponse<SaleResponse | null>> => {
   try {
     const response = await api.post("/pos/sales/complete", data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const createPosParcelKot = async (
+  data: CreateParcelKotJSON,
+): Promise<ServiceResponse<ParcelKotResponse | null>> => {
+  try {
+    const response = await api.post("/pos/kots/parcel", data);
     return response.data;
   } catch (error) {
     return handleApiError(error);

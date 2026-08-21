@@ -109,6 +109,7 @@ const renderStoreDetail = (path: string) => {
                 timezone: "Asia/Kolkata",
                 tokenNumberEnabled: false,
                 tokenNumberResetPeriod: "daily",
+                kotNumberResetPeriod: "daily",
                 createdAt: now,
                 updatedAt: now,
             },
@@ -169,7 +170,7 @@ describe("Store detail page", () => {
         expect(markup).not.toContain("Bill numbering");
     });
 
-    test("shows bill and token numbering controls on settings", () => {
+    test("shows bill, token, and KOT numbering controls on settings", () => {
         const markup = renderStoreDetail(`/organizations/${organizationId}/stores/${storeId}/settings`);
 
         expect(markup).toContain("Bill numbering");
@@ -178,6 +179,8 @@ describe("Store detail page", () => {
         expect(markup).toContain("Table management");
         expect(markup).toContain("Reset period");
         expect(markup).toContain("Token numbering");
+        expect(markup).toContain("Reset KOT number");
+        expect(markup).toContain("KOT-001");
         expect(markup).toContain("Save settings");
         expect(markup).not.toContain("Add device");
         expect(markup).not.toContain("Counter 1");

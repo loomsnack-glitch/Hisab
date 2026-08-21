@@ -68,6 +68,7 @@ describe("Configured sale billing contracts", () => {
             timezone: "Asia/Kolkata",
             tokenNumberEnabled: false,
             tokenNumberResetPeriod: "daily",
+            kotNumberResetPeriod: "daily",
             createdAt: new Date("2026-08-07T12:00:00.000Z"),
             updatedAt: new Date("2026-08-07T12:00:00.000Z"),
         };
@@ -93,6 +94,29 @@ describe("Configured sale billing contracts", () => {
                     }).success,
                 ).toBe(true);
             }
+            for (const kotNumberResetPeriod of periods) {
+                expect(
+                    UpdateSaleNumberSettingsSchema.safeParse({
+                        resetPeriod,
+                        tokenNumberEnabled: false,
+                        tokenNumberResetPeriod: "daily",
+                        kotNumberResetPeriod,
+                    }).success,
+                ).toBe(true);
+            }
+        }
+    });
+
+    test("KOT Number settings default to a daily reset period", () => {
+        const result = UpdateSaleNumberSettingsSchema.safeParse({
+            resetPeriod: "never",
+            tokenNumberEnabled: false,
+            tokenNumberResetPeriod: "weekly",
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.kotNumberResetPeriod).toBe("daily");
         }
     });
 

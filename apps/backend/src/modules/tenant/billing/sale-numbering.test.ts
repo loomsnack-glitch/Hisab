@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+    formatKotNumber,
     formatTokenNumber,
     formatSaleNumber,
+    getKotNumberPeriodKey,
     getSaleNumberPeriodKey,
     getTokenNumberPeriodKey,
     isValidSaleNumberTimezone,
@@ -45,6 +47,20 @@ describe("sale numbering periods", () => {
         expect(getTokenNumberPeriodKey("never", date, "Asia/Kolkata")).toBe("continuous");
         expect(formatTokenNumber(1)).toBe("001");
         expect(formatTokenNumber(1000)).toBe("1000");
+    });
+
+    test("formats Store-local KOT Numbers independently of Sale and token numbers", () => {
+        expect(getKotNumberPeriodKey("daily", date, "Asia/Kolkata")).toBe("20260807");
+        expect(getKotNumberPeriodKey("daily", date, "America/New_York")).toBe("20260806");
+        expect(getKotNumberPeriodKey("weekly", date, "Asia/Kolkata")).toBe("2026-W32");
+        expect(getKotNumberPeriodKey("monthly", date, "Asia/Kolkata")).toBe("2026-08");
+        expect(getKotNumberPeriodKey("financial_yearly", date, "Asia/Kolkata")).toBe("FY26-27");
+        expect(getKotNumberPeriodKey("never", date, "Asia/Kolkata")).toBe("continuous");
+        expect(formatKotNumber(1)).toBe("KOT-001");
+        expect(formatKotNumber(12)).toBe("KOT-012");
+        expect(formatKotNumber(1000)).toBe("KOT-1000");
+        expect(formatKotNumber(1)).not.toBe(formatSaleNumber("never", "continuous", 1));
+        expect(formatKotNumber(1)).not.toBe(formatTokenNumber(1));
     });
 
     test("validates IANA timezones", () => {

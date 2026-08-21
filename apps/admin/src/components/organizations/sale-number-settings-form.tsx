@@ -5,6 +5,7 @@ import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import { getSaleNumberSettings, updateSaleNumberSettings } from "@repo/services";
 import {
     UpdateSaleNumberSettingsSchema,
+    type KotNumberResetPeriod,
     type SaleNumberResetPeriod,
     type StoreDTO,
     type TokenNumberResetPeriod,
@@ -37,9 +38,12 @@ const resetPeriodOptions: Array<{ value: SaleNumberResetPeriod; label: string; e
 
 const tokenResetPeriodOptions: Array<{ value: TokenNumberResetPeriod; label: string; example: string }> =
     resetPeriodOptions.map(({ value, label }) => ({ value, label, example: "001" }));
+const kotResetPeriodOptions: Array<{ value: KotNumberResetPeriod; label: string; example: string }> =
+    resetPeriodOptions.map(({ value, label }) => ({ value, label, example: "KOT-001" }));
 
 const resetPeriodSelectOptions = resetPeriodOptions.map(({ value, label }) => ({ value, label }));
 const tokenResetPeriodSelectOptions = tokenResetPeriodOptions.map(({ value, label }) => ({ value, label }));
+const kotResetPeriodSelectOptions = kotResetPeriodOptions.map(({ value, label }) => ({ value, label }));
 const tokenNumberEnabledOptions = [
     { value: false, label: "Disabled" },
     { value: true, label: "Enabled" },
@@ -53,6 +57,7 @@ const defaultValues: UpdateSaleNumberSettingsJSON = {
     resetPeriod: "never",
     tokenNumberEnabled: false,
     tokenNumberResetPeriod: "daily",
+    kotNumberResetPeriod: "daily",
 };
 
 const SaleNumberSettingsForm = ({ organizationId, store }: SaleNumberSettingsFormProps) => {
@@ -67,6 +72,9 @@ const SaleNumberSettingsForm = ({ organizationId, store }: SaleNumberSettingsFor
     const tokenNumberResetPeriod = form.watch("tokenNumberResetPeriod");
     const selectedTokenOption =
         tokenResetPeriodOptions.find((option) => option.value === tokenNumberResetPeriod) ?? tokenResetPeriodOptions[0];
+    const kotNumberResetPeriod = form.watch("kotNumberResetPeriod");
+    const selectedKotOption =
+        kotResetPeriodOptions.find((option) => option.value === kotNumberResetPeriod) ?? kotResetPeriodOptions[0];
 
     const settingsQuery = useQuery({
         queryKey: billingKeys.saleNumberSettings(organizationId, store.id),
@@ -80,6 +88,7 @@ const SaleNumberSettingsForm = ({ organizationId, store }: SaleNumberSettingsFor
                 resetPeriod: settings.resetPeriod,
                 tokenNumberEnabled: settings.tokenNumberEnabled,
                 tokenNumberResetPeriod: settings.tokenNumberResetPeriod,
+                kotNumberResetPeriod: settings.kotNumberResetPeriod,
             });
         }
     }, [form, settingsQuery.data]);
@@ -112,7 +121,7 @@ const SaleNumberSettingsForm = ({ organizationId, store }: SaleNumberSettingsFor
                     <div>
                         <CardTitle className="font-display text-xl">Bill numbering</CardTitle>
                         <CardDescription>
-                            Choose how Sale Numbers and token numbers reset for this store.
+                            Choose how Sale Numbers, token numbers, and KOT Numbers reset for this store.
                         </CardDescription>
                     </div>
                 </div>
@@ -196,6 +205,30 @@ const SaleNumberSettingsForm = ({ organizationId, store }: SaleNumberSettingsFor
                             </Field>
                         ) : null}
 
+                        <Field data-invalid={!!form.formState.errors.kotNumberResetPeriod}>
+                            <FieldLabel>Reset KOT number</FieldLabel>
+                            <FieldContent>
+                                <Controller
+                                    control={form.control}
+                                    name="kotNumberResetPeriod"
+                                    render={({ field }) => (
+                                        <ReactSelect
+                                            options={kotResetPeriodSelectOptions}
+                                            value={
+                                                kotResetPeriodSelectOptions.find(
+                                                    (option) => option.value === field.value,
+                                                ) ?? null
+                                            }
+                                            onChange={(option) => field.onChange(option?.value ?? "daily")}
+                                            placeholder="Select KOT reset period"
+                                            classNames={selectControlClassNames}
+                                        />
+                                    )}
+                                />
+                                <FieldError errors={[form.formState.errors.kotNumberResetPeriod]} />
+                            </FieldContent>
+                        </Field>
+
                         <div className="rounded-xl border border-border/50 bg-muted/30 p-3 text-sm">
                             <p className="font-medium text-foreground">Next bill example</p>
                             <p className="mt-1 font-mono text-primary">{selectedOption.example}</p>
@@ -205,8 +238,10 @@ const SaleNumberSettingsForm = ({ organizationId, store }: SaleNumberSettingsFor
                                     <p className="mt-1 font-mono text-primary">{selectedTokenOption.example}</p>
                                 </>
                             ) : null}
+                            <p className="mt-3 font-medium text-foreground">Next KOT example</p>
+                            <p className="mt-1 font-mono text-primary">{selectedKotOption.example}</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                                This applies to the next committed Sale. Existing bills keep their numbers.
+                                This applies to the next committed Sale and generated KOT. Existing bills and tickets keep their numbers.
                             </p>
                         </div>
 

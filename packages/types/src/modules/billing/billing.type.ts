@@ -35,6 +35,7 @@ import type {
   SaleNumberResetPeriodSchema,
   SaleNumberSettingsDTOSchema,
   TokenNumberResetPeriodSchema,
+  KotNumberResetPeriodSchema,
   SaleSummaryDTOSchema,
   SalesListPageInfoSchema,
   SalesListSummarySchema,
@@ -66,6 +67,7 @@ export type SaleNumberResetPeriod = z.infer<typeof SaleNumberResetPeriodSchema>;
 export type TokenNumberResetPeriod = z.infer<
   typeof TokenNumberResetPeriodSchema
 >;
+export type KotNumberResetPeriod = z.infer<typeof KotNumberResetPeriodSchema>;
 export type SaleNumberSettingsDTO = z.infer<typeof SaleNumberSettingsDTOSchema>;
 export type ParentScopedAddOnSalesRollupDTO = z.infer<
   typeof ParentScopedAddOnSalesRollupDTOSchema

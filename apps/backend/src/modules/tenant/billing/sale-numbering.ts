@@ -1,4 +1,4 @@
-import type { SaleNumberResetPeriod, TokenNumberResetPeriod } from "@repo/types";
+import type { KotNumberResetPeriod, SaleNumberResetPeriod, TokenNumberResetPeriod } from "@repo/types";
 
 export const DEFAULT_SALE_NUMBER_TIMEZONE = "Asia/Kolkata";
 
@@ -99,3 +99,11 @@ export const getTokenNumberPeriodKey = (
 ): string => getSaleNumberPeriodKey(resetPeriod, date, timezone);
 
 export const formatTokenNumber = (sequenceNumber: number) => String(sequenceNumber).padStart(3, "0");
+
+export const getKotNumberPeriodKey = (
+    resetPeriod: KotNumberResetPeriod,
+    date: Date,
+    timezone: string,
+): string => getSaleNumberPeriodKey(resetPeriod, date, timezone);
+
+export const formatKotNumber = (sequenceNumber: number) => `KOT-${String(sequenceNumber).padStart(3, "0")}`;

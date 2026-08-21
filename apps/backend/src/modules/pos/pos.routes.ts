@@ -22,6 +22,7 @@ import {
   WhatsAppAttachConversationCustomerSchema,
   WhatsAppSendConversationTextSchema,
   WhatsAppDueReminderRequestSchema,
+  CreateParcelKotSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { deviceAuthMiddleware } from "@/middlewares/device-auth.middleware";
@@ -32,6 +33,7 @@ import * as catalogService from "@/modules/tenant/catalog/catalog.service";
 import * as purchaseService from "@/modules/tenant/purchase/purchase.service";
 import * as organizationService from "@/modules/tenant/organization/organization.service";
 import * as tableService from "@/modules/tenant/table-service/table-service.service";
+import * as kotService from "@/modules/tenant/kot/kot.service";
 import * as whatsappService from "@/modules/tenant/whatsapp/whatsapp.service";
 
 const FILE_NAME = "pos.routes";
@@ -781,6 +783,22 @@ router.post(
       return handleServiceResponse(c, serviceResponse);
     } catch (error) {
       return handleError(FILE_NAME, "completeSaleForDevice", c, error);
+    }
+  },
+);
+
+router.post(
+  "/kots/parcel",
+  validateSchema("json", CreateParcelKotSchema),
+  async (c) => {
+    try {
+      const serviceResponse = await kotService.createParcelKotForDevice(
+        c.get("authDevice"),
+        c.req.valid("json"),
+      );
+      return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+      return handleError(FILE_NAME, "createParcelKotForDevice", c, error);
     }
   },
 );
