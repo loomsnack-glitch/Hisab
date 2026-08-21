@@ -1054,7 +1054,6 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                     id: table.id,
                     tableLabel: table.tableLabel,
                     capacity: table.capacity,
-                    position: table.position,
                     state: table.state,
                     store: { id: table.storeId, name: table.storeName },
                     serviceArea: table.serviceAreaId && table.serviceAreaTitle
@@ -1097,7 +1096,6 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                     id: table.id,
                     tableLabel: table.tableLabel,
                     capacity: table.capacity,
-                    position: table.position,
                     state: table.state,
                     store: { id: table.storeId, name: table.storeName },
                     serviceArea: table.serviceAreaId && table.serviceAreaTitle

@@ -1940,7 +1940,6 @@ export type PlatformOrganizationTableSummaryMetricsRow = {
     id: string;
     tableLabel: string;
     capacity: number | null;
-    position: { x: number; y: number };
     state: "free" | "allocated" | "engaged" | "ready_to_bill" | "payment_due" | "paid";
     storeId: string;
     storeName: string;
@@ -1980,10 +1979,6 @@ const mapTableSummaryRow = (row: Record<string, unknown>): PlatformOrganizationT
         id: String(row.id),
         tableLabel: String(row.table_label),
         capacity: row.capacity == null ? null : Number(row.capacity),
-        position: {
-            x: Number(row.position_x),
-            y: Number(row.position_y),
-        },
         state,
         storeId: String(row.store_id),
         storeName: String(row.store_name),
@@ -2048,8 +2043,6 @@ export const listOrganizationTables = async (
             st.id,
             st.table_label,
             st.capacity,
-            st.position_x,
-            st.position_y,
             st.state::text AS state,
             st.service_area_id,
             st.current_sale_id,
@@ -2116,8 +2109,6 @@ export const getOrganizationTableContext = async (
             st.id,
             st.table_label,
             st.capacity,
-            st.position_x,
-            st.position_y,
             st.state::text AS state,
             st.service_area_id,
             st.current_sale_id,

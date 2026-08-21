@@ -50,7 +50,6 @@ const table = (state: ServiceTableDTO["state"]): ServiceTableDTO => ({
   storeId,
   tableLabel: "A1",
   capacity: 4,
-  position: { x: 0.05, y: 0.05 },
   state,
   currentSaleId: null,
   currentTableOrderId: null,
@@ -158,12 +157,10 @@ describe("POS Service Table behavior", () => {
     expect(markup).not.toContain("under-development");
   });
 
-  test("defaults to the simple aligned grid instead of the floor canvas", () => {
+  test("renders the aligned table grid", () => {
     const markup = renderTableFloor([table("free")]);
 
     expect(markup).toContain("service-table-simple-grid");
-    expect(markup).toContain("Simple view");
-    expect(markup).toContain("Floor layout");
     expect(markup).not.toContain("floor-canvas");
     expect(markup).not.toContain("Live service area");
     expect(markup).not.toContain("Manage the current floor");

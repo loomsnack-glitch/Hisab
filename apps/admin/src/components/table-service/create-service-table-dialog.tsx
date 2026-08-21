@@ -5,7 +5,6 @@ import { createServiceTable } from "@repo/services";
 import {
   CreateServiceTableSchema,
   type CreateServiceTableJSON,
-  type ServiceTablePosition,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -32,14 +31,12 @@ const defaultValues: FormValues = { tableLabel: "", capacity: "" };
 type CreateServiceTableDialogProps = {
   organizationId: string;
   storeId: string;
-  nextPosition?: ServiceTablePosition;
   trigger?: React.ReactElement;
 };
 
 const CreateServiceTableDialog = ({
   organizationId,
   storeId,
-  nextPosition,
   trigger,
 }: CreateServiceTableDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -77,7 +74,6 @@ const CreateServiceTableDialog = ({
     const result = CreateServiceTableSchema.safeParse({
       tableLabel: values.tableLabel,
       capacity,
-      ...(nextPosition ? { position: nextPosition } : {}),
     });
     if (!result.success) {
       const issue = result.error.issues[0];
@@ -89,7 +85,6 @@ const CreateServiceTableDialog = ({
     mutation.mutate({
       tableLabel: result.data.tableLabel,
       capacity: result.data.capacity ?? null,
-      ...(result.data.position ? { position: result.data.position } : {}),
     });
   };
 
@@ -109,7 +104,7 @@ const CreateServiceTableDialog = ({
         <DialogHeader
           icon={<Armchair className="size-5" />}
           title="Add Service Table"
-          subtitle="Use the same Table no that staff see on the floor."
+          subtitle="Use the same Table no that staff see in POS."
         />
         <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
           <Field data-invalid={Boolean(form.formState.errors.tableLabel)}>

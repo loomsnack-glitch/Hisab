@@ -872,7 +872,6 @@ describe("Platform Table inspection contracts", () => {
                 id: "a1111111-1111-4111-8111-a11111111111",
                 tableLabel: "T1",
                 capacity: 4,
-                position: { x: 0.1, y: 0.2 },
                 state: "engaged",
                 store: { id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" },
                 serviceArea: null,

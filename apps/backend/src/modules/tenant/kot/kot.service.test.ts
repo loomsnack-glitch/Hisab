@@ -92,7 +92,6 @@ let serviceTable = {
     serviceAreaId: null,
     tableLabel: "A1",
     capacity: 4,
-    position: { x: 0.05, y: 0.05 },
     state: "allocated" as const,
     currentSaleId: null as string | null,
     currentTableOrderId: null as string | null,

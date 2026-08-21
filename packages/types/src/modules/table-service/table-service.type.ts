@@ -13,7 +13,6 @@ import type { TableOrderDTO } from "../kot";
 
 export type ServiceTableDTO = z.infer<typeof ServiceTableDTOSchema>;
 export type ServiceTableState = ServiceTableDTO["state"];
-export type ServiceTablePosition = ServiceTableDTO["position"];
 
 export type CreateServiceTableJSON = z.infer<typeof CreateServiceTableSchema>;
 export type CreateServiceTableSVC = CreateServiceTableJSON;
@@ -27,7 +26,6 @@ export type CreateServiceTableREPO = Pick<
   | "storeId"
   | "tableLabel"
   | "capacity"
-  | "position"
   | "createdBy"
 >;
 
@@ -37,7 +35,6 @@ export type UpdateServiceTableREPO = Pick<
 > & {
   tableLabel?: string;
   capacity?: number | null;
-  position?: ServiceTablePosition;
   updatedBy: string;
 };
 

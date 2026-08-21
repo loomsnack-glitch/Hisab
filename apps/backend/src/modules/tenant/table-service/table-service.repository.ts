@@ -4,7 +4,6 @@ import type {
   CreateServiceTableREPO,
   ServiceAreaDTO,
   ServiceTableDTO,
-  ServiceTablePosition,
   ServiceTableState,
   UpdateServiceAreaREPO,
   UpdateServiceTableREPO,
@@ -36,10 +35,6 @@ const mapRow = (row: Record<string, unknown>): ServiceTableDTO => ({
     row.capacity === null || row.capacity === undefined
       ? null
       : Number(row.capacity),
-  position: {
-    x: Number(row.position_x),
-    y: Number(row.position_y),
-  },
   state: row.state as ServiceTableDTO["state"],
   currentSaleId: (row.current_sale_id as string | null | undefined) ?? null,
   currentTableOrderId:
@@ -56,7 +51,7 @@ const mapRow = (row: Record<string, unknown>): ServiceTableDTO => ({
 
 const selectColumns = `
   id, organization_id, store_id, service_area_id, table_label, capacity,
-  position_x, position_y, state, current_sale_id, current_table_order_id,
+  state, current_sale_id, current_table_order_id,
   created_by, updated_by, created_at, updated_at
 `;
 
@@ -67,8 +62,6 @@ const selectColumnsWithSaleTotal = `
   service_tables.service_area_id,
   service_tables.table_label,
   service_tables.capacity,
-  service_tables.position_x,
-  service_tables.position_y,
   service_tables.state,
   service_tables.current_sale_id,
   service_tables.current_table_order_id,
@@ -111,7 +104,7 @@ export const getServiceTables = async (
      AND current_sale.status IN ('draft', 'completed')
     WHERE service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
-    ORDER BY position_y ASC, position_x ASC, created_at ASC, id ASC
+    ORDER BY LOWER(TRIM(service_tables.table_label)) ASC, service_tables.created_at ASC, service_tables.id ASC
   `;
   return rows.map((row: Record<string, unknown>) => mapRow(row));
 };
@@ -165,11 +158,10 @@ export const createServiceTable = async (
   const db: Db = tx || pg;
   const [row] = await db`
     INSERT INTO service_tables (
-      id, organization_id, store_id, table_label, capacity,
-      position_x, position_y, created_by
+      id, organization_id, store_id, table_label, capacity, created_by
     ) VALUES (
       ${table.id}, ${table.organizationId}, ${table.storeId}, ${table.tableLabel}, ${table.capacity},
-      ${table.position.x}, ${table.position.y}, ${table.createdBy}
+      ${table.createdBy}
     )
     RETURNING ${db.unsafe(selectColumns)}
   `;
@@ -189,13 +181,10 @@ export const updateServiceTable = async (
   const nextLabel = table.tableLabel ?? current.tableLabel;
   const nextCapacity =
     table.capacity === undefined ? current.capacity : table.capacity;
-  const nextPosition = table.position ?? current.position;
   const [row] = await pg`
     UPDATE service_tables
     SET table_label = ${nextLabel},
         capacity = ${nextCapacity},
-        position_x = ${nextPosition.x},
-        position_y = ${nextPosition.y},
         updated_by = ${table.updatedBy},
         updated_at = NOW()
     WHERE id = ${table.id}
@@ -571,13 +560,6 @@ export const unassignServiceTableFromArea = async (
   `;
   return row ? mapRow(row) : null;
 };
-
-export const normalizePosition = (
-  position: ServiceTablePosition,
-): ServiceTablePosition => ({
-  x: Math.min(1, Math.max(0, position.x)),
-  y: Math.min(1, Math.max(0, position.y)),
-});
 
 const mapAreaRow = (row: Record<string, unknown>): ServiceAreaDTO => ({
   id: row.id as string,

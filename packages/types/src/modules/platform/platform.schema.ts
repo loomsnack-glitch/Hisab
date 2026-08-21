@@ -30,7 +30,7 @@ import {
     WhatsAppMessageTemplateKindSchema,
     WhatsAppProviderSchema,
 } from "../../services/whatsapp.schema";
-import { ServiceTablePositionSchema, ServiceTableStateSchema } from "../table-service/table-service.schema";
+import { ServiceTableStateSchema } from "../table-service/table-service.schema";
 
 const ownerPhoneSchema = z
     .string()
@@ -641,7 +641,6 @@ export const PlatformTableInspectionSummaryDTOSchema = z.object({
     id: z.uuid("Invalid table id"),
     tableLabel: z.string().trim().min(1),
     capacity: z.number().int().positive().nullable(),
-    position: ServiceTablePositionSchema,
     state: ServiceTableStateSchema,
     store: PlatformSaleInspectionStoreDTOSchema,
     serviceArea: PlatformTableInspectionAreaDTOSchema.nullable(),

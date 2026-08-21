@@ -21,8 +21,6 @@ import * as billingService from "@/modules/tenant/billing/billing.service";
 import * as kotService from "@/modules/tenant/kot/kot.service";
 import * as tableRepository from "./table-service.repository";
 
-const defaultPosition = { x: 0.05, y: 0.05 } as const;
-
 const isActiveDraftTableState = (state: ServiceTableDTO["state"]) =>
   state === "engaged" || state === "ready_to_bill";
 
@@ -652,7 +650,6 @@ export const createServiceTable = async (
           storeId,
           tableLabel,
           capacity: data.capacity ?? null,
-          position: data.position ?? defaultPosition,
           createdBy: userId,
         },
         tx,
@@ -724,7 +721,6 @@ export const updateServiceTable = async (
       storeId,
       ...(nextLabel ? { tableLabel: nextLabel } : {}),
       ...(data.capacity !== undefined ? { capacity: data.capacity } : {}),
-      ...(data.position ? { position: data.position } : {}),
       updatedBy: userId,
     });
     if (!table)

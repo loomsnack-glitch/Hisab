@@ -19,7 +19,6 @@ const table: ServiceTableDTO = {
   serviceAreaId: null,
   tableLabel: "A1",
   capacity: 4,
-  position: { x: 0.05, y: 0.05 },
   state: "free",
   currentSaleId: null,
   currentTableOrderId: null,
@@ -89,14 +88,13 @@ const createServiceTableRepo = mock(
     storeId: string;
     tableLabel: string;
     capacity: number | null;
-    position: { x: number; y: number };
     createdBy: string;
   }) => ({ ...table, ...data }),
 );
 const updateServiceTableRepo = mock(
-  async (data: { position?: { x: number; y: number } }) => ({
+  async (data: { capacity?: number | null; tableLabel?: string }) => ({
     ...table,
-    position: data.position ?? table.position,
+    ...data,
     updatedBy: userId,
   }),
 );
@@ -403,7 +401,6 @@ describe("Service Table application service", () => {
         storeId,
         tableLabel: "Patio-2",
         capacity: null,
-        position: { x: 0.05, y: 0.05 },
         createdBy: userId,
       }),
       expect.anything(),
@@ -439,7 +436,7 @@ describe("Service Table application service", () => {
       otherStoreId,
       tableId,
       {
-        position: { x: 0.8, y: 0.8 },
+        capacity: 6,
       },
     );
 
@@ -449,14 +446,14 @@ describe("Service Table application service", () => {
     expect(updateServiceTableRepo).not.toHaveBeenCalled();
   });
 
-  test("updates only the normalized floor position through the Store-scoped table", async () => {
+  test("updates table capacity through the Store-scoped table", async () => {
     const response = await tableService.updateServiceTable(
       userId,
       organizationId,
       storeId,
       tableId,
       {
-        position: { x: 0.74, y: 0.31 },
+        capacity: 6,
       },
     );
 
@@ -466,7 +463,7 @@ describe("Service Table application service", () => {
         id: tableId,
         organizationId,
         storeId,
-        position: { x: 0.74, y: 0.31 },
+        capacity: 6,
         updatedBy: userId,
       }),
     );

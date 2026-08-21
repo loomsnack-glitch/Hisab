@@ -48,25 +48,6 @@ describe("Service Table contracts", () => {
     }
   });
 
-  test("accepts normalized positions and rejects coordinates outside the floor", () => {
-    expect(
-      CreateServiceTableSchema.safeParse({
-        tableLabel: "A1",
-        position: { x: 0, y: 1 },
-      }).success,
-    ).toBe(true);
-    expect(
-      CreateServiceTableSchema.safeParse({
-        tableLabel: "A1",
-        position: { x: -0.01, y: 0.5 },
-      }).success,
-    ).toBe(false);
-    expect(
-      UpdateServiceTableSchema.safeParse({ position: { x: 0.5, y: 1.01 } })
-        .success,
-    ).toBe(false);
-  });
-
   test("does not allow clients to write state or cross-store identifiers", () => {
     expect(UpdateServiceTableSchema.safeParse({ state: "paid" }).success).toBe(
       false,
@@ -74,7 +55,7 @@ describe("Service Table contracts", () => {
     expect(
       UpdateServiceTableSchema.safeParse({
         storeId,
-        position: { x: 0.2, y: 0.2 },
+        capacity: 4,
       }).success,
     ).toBe(false);
     expect(
@@ -85,7 +66,6 @@ describe("Service Table contracts", () => {
         serviceAreaId: null,
         tableLabel: "A1",
         capacity: 4,
-        position: { x: 0.1, y: 0.2 },
         state: "free",
         currentSaleId: null,
         currentSaleTotal: null,

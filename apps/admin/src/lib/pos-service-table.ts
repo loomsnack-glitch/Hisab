@@ -11,8 +11,6 @@ export type PosServiceTableLegendItem = {
 
 const engagedSimpleToneClassName =
   "border-yellow-200/90 bg-yellow-50/90 text-yellow-950 border-l-yellow-400 dark:border-yellow-800/70 dark:bg-yellow-950/25 dark:text-yellow-50 dark:border-l-yellow-400";
-const engagedFloorToneClassName =
-  "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
 const engagedStatusDotClassName = "bg-yellow-400 ring-yellow-500/30";
 
 export const getPosServiceTableAction = (
@@ -75,17 +73,6 @@ export const posServiceTableLegendItems: PosServiceTableLegendItem[] = [
     swatchClassName: posServiceTableStatusDotClassName.paid,
   },
 ];
-
-export const posServiceTableFloorToneClassName: Record<ServiceTableState, string> = {
-  free: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  allocated:
-    "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  engaged: engagedFloorToneClassName,
-  ready_to_bill: engagedFloorToneClassName,
-  payment_due:
-    "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-  paid: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-};
 
 export const getPosServiceTableStateLabel = (state: ServiceTableState) => {
   switch (state) {

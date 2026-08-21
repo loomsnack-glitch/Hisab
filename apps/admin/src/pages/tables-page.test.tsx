@@ -18,7 +18,6 @@ const table: ServiceTableDTO = {
   serviceAreaId: null,
   tableLabel: "T2",
   capacity: 4,
-  position: { x: 0.4, y: 0.2 },
   state: "free",
   currentSaleId: null,
   currentSaleTotal: null,
@@ -114,8 +113,6 @@ describe("Admin Service Table setup", () => {
     const markup = renderAdminTables([table]);
 
     expect(markup).toContain("Add table");
-    expect(markup).toContain("Simple view");
-    expect(markup).toContain("Floor layout");
     expect(markup).toContain("service-table-simple-grid");
     expect(markup).toContain("Table T2");
     expect(markup).toContain("Areas");

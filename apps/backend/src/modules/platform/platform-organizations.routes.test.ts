@@ -223,7 +223,6 @@ type ReportingTable = {
     storeId: string;
     tableLabel: string;
     capacity: number | null;
-    position: { x: number; y: number };
     state: "free" | "allocated" | "engaged" | "ready_to_bill" | "payment_due" | "paid";
     serviceAreaId: string | null;
     serviceAreaTitle: string | null;
@@ -1534,7 +1533,6 @@ const platformFacts = () => {
             storeId: storeMixedActive,
             tableLabel: "T1",
             capacity: 4,
-            position: { x: 0.1, y: 0.2 },
             state: "engaged",
             serviceAreaId: null,
             serviceAreaTitle: null,
@@ -1549,7 +1547,6 @@ const platformFacts = () => {
             storeId: storeMixedQuiet,
             tableLabel: "Patio 2",
             capacity: 2,
-            position: { x: 0.4, y: 0.5 },
             state: "free",
             serviceAreaId: null,
             serviceAreaTitle: "Garden",
