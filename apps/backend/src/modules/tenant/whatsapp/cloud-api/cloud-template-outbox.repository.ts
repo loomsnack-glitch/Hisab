@@ -21,6 +21,7 @@ export type CloudTemplateOutboxRequest = {
   snapshot: CloudTemplateSendSnapshot;
   messageId: string;
   idempotencyKey: string;
+  campaignKey?: string | null;
 };
 
 const idempotencyKeyFor = (value: string): string => {
@@ -120,6 +121,7 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
     storeId: params.storeId,
     customerId: params.customerId,
     idempotencyKey,
+    campaignKey: params.campaignKey,
   });
   if (quota.status === "released") {
     throw new Error("Cloud template idempotency key was already released; use a new key");

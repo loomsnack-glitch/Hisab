@@ -673,7 +673,7 @@ migration execution, and controlled provider tests remain external gates.
 
 ### Phase 5: Quotas, usage, and campaign safety
 
-Status: **not started**. Existing promotion cooldowns, pending-outbox limits,
+Status: **sub-phased; 5B code-first complete; external gate open**. Existing promotion cooldowns, pending-outbox limits,
 and campaign counters are useful local safeguards but do not satisfy the
 append-only ledger and atomic reservation requirements below.
 
@@ -774,9 +774,17 @@ Last updated: 2026-08-22
 - Loop 5A — **complete**: add an atomic Organization quota reservation,
   append-only usage/cost ledger, reservation settlement/release on direct and
   uncertain sends, and repair the Cloud template message-content constraint.
-- Loop 5B — **next**: add rolling recipient windows, customer cooldown and
-  campaign duplicate admission, stop-campaign behavior, and reconciliation
-  reporting on top of the ledger.
+- Loop 5B — **complete**: add configurable rolling account windows, account
+  pacing, customer cooldown, campaign-recipient uniqueness, atomic stop for
+  pending/retryable Cloud campaign rows, and ledger reconciliation reporting.
+- Loop 5B verification: Cloud-focused suite passes 96 tests; `git diff
+  --check` passes; the full backend TypeScript check still reports only the
+  repository's pre-existing unrelated test-contract errors; `dbmate up`
+  applied the delivery-safety migration successfully against the configured
+  local database.
+- Loop 6 — **next**: expose policy/reconciliation controls and complete the
+  provider limit/quality snapshot seam before migrating bill, due-reminder,
+  and promotion callers.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 

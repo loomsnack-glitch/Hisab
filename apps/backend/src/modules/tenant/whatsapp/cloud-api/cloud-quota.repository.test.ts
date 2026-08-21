@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { assertCloudQuotaCapacity, CloudQuotaExceededError } from "./cloud-quota.repository";
+import {
+  assertCloudQuotaCapacity,
+  CloudDuplicateCampaignRecipientError,
+  CloudQuotaExceededError,
+} from "./cloud-quota.repository";
 
 describe("Cloud quota admission", () => {
   const base = {
@@ -36,5 +40,10 @@ describe("Cloud quota admission", () => {
       monthlyMessageLimit: null,
       monthlyBudgetMinor: null,
     })).not.toThrow();
+  });
+
+  test("keeps campaign recipient duplicates as a distinct safety error", () => {
+    expect(new CloudDuplicateCampaignRecipientError()).toBeInstanceOf(Error);
+    expect(new CloudQuotaExceededError("customer_cooldown").message).toContain("cooldown");
   });
 });

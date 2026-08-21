@@ -10,10 +10,20 @@ export type CloudQuotaCapacity = {
 };
 
 export class CloudQuotaExceededError extends Error {
-  readonly quota: "messages" | "budget";
+  readonly quota: "messages" | "budget" | "recipient_window" | "customer_cooldown" | "account_send_interval";
 
-  constructor(quota: "messages" | "budget") {
-    super(quota === "messages" ? "WhatsApp Cloud monthly message quota reached" : "WhatsApp Cloud monthly budget reached");
+  constructor(quota: CloudQuotaExceededError["quota"]) {
+    super(
+      quota === "messages"
+        ? "WhatsApp Cloud monthly message quota reached"
+        : quota === "budget"
+          ? "WhatsApp Cloud monthly budget reached"
+          : quota === "recipient_window"
+            ? "WhatsApp Cloud recipient window limit reached"
+            : quota === "customer_cooldown"
+              ? "WhatsApp customer cooldown is active"
+              : "WhatsApp Cloud account send interval is active",
+    );
     this.name = "CloudQuotaExceededError";
     this.quota = quota;
   }
@@ -40,6 +50,22 @@ export type CloudQuotaReservation = {
   status: "reserved" | "settled" | "released";
 };
 
+export class CloudDuplicateCampaignRecipientError extends Error {
+  constructor() {
+    super("This customer is already included in the Cloud campaign");
+    this.name = "CloudDuplicateCampaignRecipientError";
+  }
+}
+
+const campaignKeyFor = (value: string | null | undefined): string | null => {
+  if (value == null) return null;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 255 || /[\r\n]/.test(normalized)) {
+    throw new Error("Cloud campaign key is invalid");
+  }
+  return normalized;
+};
+
 export const reserveCloudQuota = async (
   tx: Bun.TransactionSQL,
   input: {
@@ -48,21 +74,79 @@ export const reserveCloudQuota = async (
     storeId: string;
     customerId: string;
     idempotencyKey: string;
+    campaignKey?: string | null;
   },
 ): Promise<CloudQuotaReservation> => {
   const costMinor = estimatedCostMinor();
+  const campaignKey = campaignKeyFor(input.campaignKey);
   await tx`
     INSERT INTO whatsapp_cloud_quota_policies (organization_id)
     VALUES (${input.organizationId})
     ON CONFLICT (organization_id) DO NOTHING
   `;
   const [policy] = await tx`
-    SELECT monthly_message_limit, monthly_budget_minor
+    SELECT monthly_message_limit, monthly_budget_minor,
+           account_send_interval_seconds, recipient_window_seconds,
+           recipient_window_limit, customer_cooldown_seconds
     FROM whatsapp_cloud_quota_policies
     WHERE organization_id = ${input.organizationId}
     FOR UPDATE
   `;
   if (!policy) throw new Error("WhatsApp Cloud quota policy could not be loaded");
+
+  if (campaignKey) {
+    const [duplicate] = await tx`
+      SELECT id
+      FROM whatsapp_cloud_quota_reservations
+      WHERE organization_id = ${input.organizationId}
+        AND campaign_key = ${campaignKey}
+        AND customer_id = ${input.customerId}
+      FOR UPDATE
+    `;
+    if (duplicate) throw new CloudDuplicateCampaignRecipientError();
+  }
+
+  const [recentAccountSend] = await tx`
+    SELECT id
+    FROM whatsapp_cloud_quota_reservations
+    WHERE organization_id = ${input.organizationId}
+      AND whatsapp_account_id = ${input.accountId}
+      AND status <> 'released'
+      AND created_at >= NOW() - make_interval(secs => ${Number(policy.account_send_interval_seconds ?? 0)})
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  if (recentAccountSend && Number(policy.account_send_interval_seconds ?? 0) > 0) {
+    throw new CloudQuotaExceededError("account_send_interval");
+  }
+
+  const [recentCustomerSend] = await tx`
+    SELECT id
+    FROM whatsapp_cloud_quota_reservations
+    WHERE organization_id = ${input.organizationId}
+      AND customer_id = ${input.customerId}
+      AND status <> 'released'
+      AND created_at >= NOW() - make_interval(secs => ${Number(policy.customer_cooldown_seconds ?? 0)})
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  if (recentCustomerSend && Number(policy.customer_cooldown_seconds ?? 0) > 0) {
+    throw new CloudQuotaExceededError("customer_cooldown");
+  }
+
+  if (policy.recipient_window_limit != null) {
+    const [window] = await tx`
+      SELECT COUNT(*) AS count
+      FROM whatsapp_cloud_quota_reservations
+      WHERE organization_id = ${input.organizationId}
+        AND whatsapp_account_id = ${input.accountId}
+        AND status <> 'released'
+        AND created_at >= NOW() - make_interval(secs => ${Number(policy.recipient_window_seconds)})
+    `;
+    if (Number(window?.count ?? 0) >= Number(policy.recipient_window_limit)) {
+      throw new CloudQuotaExceededError("recipient_window");
+    }
+  }
 
   const [usage] = await tx`
     SELECT COALESCE(SUM(units_delta), 0) AS used_units,
@@ -85,10 +169,10 @@ export const reserveCloudQuota = async (
   const [reservation] = await tx`
     INSERT INTO whatsapp_cloud_quota_reservations (
       organization_id, whatsapp_account_id, store_id, customer_id,
-      idempotency_key, period_start, units, estimated_cost_minor, status
+      idempotency_key, campaign_key, period_start, units, estimated_cost_minor, status
     ) VALUES (
       ${input.organizationId}, ${input.accountId}, ${input.storeId}, ${input.customerId},
-      ${input.idempotencyKey}, date_trunc('month', NOW()), ${requestedUnits}, ${requestedCostMinor}, 'reserved'
+      ${input.idempotencyKey}, ${campaignKey}, date_trunc('month', NOW()), ${requestedUnits}, ${requestedCostMinor}, 'reserved'
     )
     ON CONFLICT (organization_id, idempotency_key) DO NOTHING
     RETURNING id, units, estimated_cost_minor, status
@@ -176,4 +260,89 @@ export const getCloudQuotaLedgerSummary = async (organizationId: string): Promis
       AND period_start = date_trunc('month', NOW())
   `;
   return { units: Number(row?.units ?? 0), costMinor: Number(row?.cost_minor ?? 0) };
+};
+
+export const cancelCloudCampaign = async (
+  organizationId: string,
+  campaignKey: string,
+): Promise<number> => pg.begin(async tx => {
+  const normalizedCampaignKey = campaignKeyFor(campaignKey);
+  if (!normalizedCampaignKey) throw new Error("Cloud campaign key is invalid");
+  const rows = await tx`
+    SELECT outbox.id AS outbox_id, outbox.message_id, reservation.id AS reservation_id
+    FROM whatsapp_outbox outbox
+    INNER JOIN whatsapp_cloud_quota_reservations reservation
+      ON reservation.id = outbox.cloud_quota_reservation_id
+     AND reservation.organization_id = outbox.organization_id
+    WHERE outbox.organization_id = ${organizationId}
+      AND reservation.campaign_key = ${normalizedCampaignKey}
+      AND outbox.status IN ('pending', 'retryable')
+    FOR UPDATE OF outbox, reservation
+  `;
+  for (const row of rows) {
+    await tx`
+      UPDATE whatsapp_outbox
+      SET status = 'cancelled',
+          next_attempt_at = NOW(),
+          lease_owner = NULL,
+          lease_expires_at = NULL,
+          last_error_code = 'campaign_cancelled',
+          last_error_message = 'Cloud campaign was stopped before dispatch',
+          updated_at = NOW()
+      WHERE id = ${row.outbox_id}
+    `;
+    await tx`
+      UPDATE whatsapp_messages
+      SET status = 'failed',
+          failure_code = 'campaign_cancelled',
+          failure_message = 'Cloud campaign was stopped before dispatch'
+      WHERE id = ${row.message_id}
+    `;
+    await releaseCloudQuota(tx, String(row.reservation_id));
+  }
+  return rows.length;
+});
+
+export const getCloudQuotaReconciliation = async (organizationId: string): Promise<{
+  reservationCount: number;
+  ledgerEventCount: number;
+  missingReservedEvents: number;
+  missingSettlementEvents: number;
+  missingReleaseEvents: number;
+}> => {
+  const [row] = await pg`
+    SELECT
+      COUNT(reservation.id) AS reservation_count,
+      COUNT(ledger.id) AS ledger_event_count,
+      COUNT(*) FILTER (
+        WHERE reservation.status IN ('reserved', 'settled', 'released')
+          AND reserved_event.id IS NULL
+      ) AS missing_reserved_events,
+      COUNT(*) FILTER (
+        WHERE reservation.status = 'settled' AND settled_event.id IS NULL
+      ) AS missing_settlement_events,
+      COUNT(*) FILTER (
+        WHERE reservation.status = 'released' AND released_event.id IS NULL
+      ) AS missing_release_events
+    FROM whatsapp_cloud_quota_reservations reservation
+    LEFT JOIN whatsapp_cloud_usage_ledger ledger
+      ON ledger.reservation_id = reservation.id
+    LEFT JOIN whatsapp_cloud_usage_ledger reserved_event
+      ON reserved_event.reservation_id = reservation.id
+     AND reserved_event.event_type = 'reserved'
+    LEFT JOIN whatsapp_cloud_usage_ledger settled_event
+      ON settled_event.reservation_id = reservation.id
+     AND settled_event.event_type = 'settled'
+    LEFT JOIN whatsapp_cloud_usage_ledger released_event
+      ON released_event.reservation_id = reservation.id
+     AND released_event.event_type = 'released'
+    WHERE reservation.organization_id = ${organizationId}
+  `;
+  return {
+    reservationCount: Number(row?.reservation_count ?? 0),
+    ledgerEventCount: Number(row?.ledger_event_count ?? 0),
+    missingReservedEvents: Number(row?.missing_reserved_events ?? 0),
+    missingSettlementEvents: Number(row?.missing_settlement_events ?? 0),
+    missingReleaseEvents: Number(row?.missing_release_events ?? 0),
+  };
 };
