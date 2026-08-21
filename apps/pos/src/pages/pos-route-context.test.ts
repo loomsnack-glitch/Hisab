@@ -81,10 +81,10 @@ describe("POS route context", () => {
         expect(reportsDestination).toMatchObject({ label: "Reports", path: "/reports", tab: "reports" });
         const purchasesDestination = posWorkspaceDestinations.find((destination) => destination.id === "purchases");
         expect(purchasesDestination).toMatchObject({ label: "Purchases", path: "/purchases", tab: "purchases" });
-        expect(isPosMoreDestinationActive("/tables")).toBe(true);
+        expect(isPosMoreDestinationActive("/tables")).toBe(false);
         expect(isPosMoreDestinationActive("/customers")).toBe(true);
         expect(isPosMoreDestinationActive("/purchases")).toBe(true);
-        expect(isPosMoreDestinationActive("/reports")).toBe(false);
+        expect(isPosMoreDestinationActive("/reports")).toBe(true);
         expect(isPosMoreDestinationActive("/appearance")).toBe(true);
     });
 

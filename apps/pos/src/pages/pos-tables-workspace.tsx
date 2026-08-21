@@ -25,7 +25,6 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Armchair, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 
-import PosDeviceSidebar from "@/components/pos/pos-device-sidebar";
 import PosServiceTableCard from "@/components/table-service/pos-service-table-card";
 import PosServiceTableLegend from "@/components/table-service/pos-service-table-legend";
 import ServiceTableAreaSections from "@/components/table-service/service-table-area-sections";
@@ -46,6 +45,9 @@ import type { PosRouteContext } from "@/pages/pos-route-context";
 
 type TableOperation = { tableId: string; action: PosServiceTableAction };
 type OrderOperation = { tableId: string; mode: "start" | "resume" };
+
+const panelMaxHeight =
+  "calc(100dvh - var(--pos-header-height, 3.5rem) - env(safe-area-inset-top, 0px) - var(--pos-mobile-nav-height, 0px))";
 
 const PosTablesWorkspace = () => {
   const { session, onPanelTabChange } = useOutletContext<PosRouteContext>();
@@ -274,11 +276,13 @@ const PosTablesWorkspace = () => {
 
   return (
     <div
-      className="flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] flex-col max-lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden lg:flex-row"
+      className="flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] flex-col max-lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden"
       data-testid="pos-tables-page"
     >
-      <PosDeviceSidebar activePanelTab="tables" />
-      <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pb-8 sm:p-4 lg:p-6">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-[pan-y_pinch-zoom] p-3 max-lg:pb-2 sm:p-4 lg:p-6 lg:pb-6"
+        style={{ maxHeight: panelMaxHeight }}
+      >
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h1 className="sr-only">Tables</h1>
@@ -356,7 +360,7 @@ const PosTablesWorkspace = () => {
             </div>
           )}
         </div>
-      </section>
+      </div>
     </div>
   );
 };

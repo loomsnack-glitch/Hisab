@@ -30,7 +30,7 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
 ];
 
-export const posPrimaryMobileNavIds = ["products", "bills", "reports"] as const;
+export const posPrimaryMobileNavIds = ["products", "tables", "bills"] as const;
 
 export const posPrimaryMobileDestinations = posWorkspaceDestinations.filter((destination) =>
     (posPrimaryMobileNavIds as readonly string[]).includes(destination.id),
@@ -42,5 +42,5 @@ export const isPosMoreDestinationActive = (pathname: string) => {
     }
 
     const tab = posWorkspaceDestinations.find((destination) => destination.path === pathname)?.tab;
-    return tab === "tables" || tab === "customers" || tab === "purchases";
+    return tab === "reports" || tab === "customers" || tab === "purchases";
 };

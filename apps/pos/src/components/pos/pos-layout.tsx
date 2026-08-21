@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { connectPosWhatsAppAccount, deviceLogout, getPosWhatsAppAccount } from "@repo/services";
@@ -24,6 +24,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Expand, LoaderCircle, LogOut, Minimize, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@repo/ui/lib/utils";
 
 import { formatLongDate } from "@/lib/format";
 import { deviceAuthKeys } from "@/lib/query-keys";
@@ -31,6 +32,7 @@ import { getPosPanelPath } from "@/pages/pos-route-context";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import PosMobileBottomNav from "@/components/pos/pos-mobile-bottom-nav";
+import PosSidebar, { persistPosSidebarCollapsed, readPosSidebarCollapsed } from "@/components/pos/pos-sidebar";
 import { usePosMobileNav } from "@/components/pos/pos-mobile-nav-context";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
@@ -133,6 +135,7 @@ const PosLayout = ({
 }: PosLayoutProps) => {
     const navigate = useNavigate();
     const { billsCount } = usePosMobileNav();
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readPosSidebarCollapsed);
     const queryClient = useQueryClient();
     const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
     const posPrinter = useOptionalPosPrinter();
@@ -206,6 +209,14 @@ const PosLayout = ({
     const whatsappButtonDisabled = whatsappConnectMutation.isPending || whatsappIsInitialLoading;
     const whatsappQrVisible = whatsappQrOpen && whatsappStatus !== "connected";
 
+    const toggleSidebar = useCallback(() => {
+        setIsSidebarCollapsed((previous) => {
+            const next = !previous;
+            persistPosSidebarCollapsed(next);
+            return next;
+        });
+    }, []);
+
     const handleFullscreenToggle = async () => {
         try {
             await toggleFullscreen();
@@ -255,13 +266,29 @@ const PosLayout = ({
     };
 
     return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground [--pos-header-height:6.5rem] [--pos-mobile-nav-height:calc(3.375rem+env(safe-area-inset-bottom,0px))] sm:[--pos-header-height:3.5rem] lg:h-dvh lg:[--pos-mobile-nav-height:0px] lg:overflow-hidden">
+    <div className="flex min-h-dvh flex-col bg-background text-foreground [--pos-header-height:6.5rem] [--pos-mobile-nav-height:calc(3.375rem+env(safe-area-inset-bottom,0px))] sm:[--pos-header-height:3.5rem] lg:h-dvh lg:flex-row lg:[--pos-mobile-nav-height:0px] lg:overflow-hidden">
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.1),_transparent_28%)]" />
             </div>
 
+            <aside
+                className={cn(
+                    "sidebar-shell relative z-30 hidden shrink-0 overflow-visible lg:block",
+                    isSidebarCollapsed ? "w-[68px]" : "w-[220px]",
+                )}
+            >
+                <div className="sticky top-0 h-dvh overflow-visible">
+                    <PosSidebar
+                        isCollapsed={isSidebarCollapsed}
+                        onToggle={toggleSidebar}
+                        billsCount={billsCount}
+                    />
+                </div>
+            </aside>
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col max-lg:h-dvh max-lg:overflow-hidden">
       <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-2 border-b border-border/50 bg-background/90 px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-2 backdrop-blur-xl sm:flex-nowrap sm:px-6">
-                <Link to="/" className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90">
+                <Link to="/" className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90 lg:hidden">
                     <WorkspaceBrand workspace="pos" />
                 </Link>
 
@@ -462,6 +489,7 @@ const PosLayout = ({
             <main className="min-h-0 w-full flex-1 overflow-hidden px-0">{children}</main>
 
             <PosMobileBottomNav billsCount={billsCount} />
+            </div>
         </div>
     );
 };

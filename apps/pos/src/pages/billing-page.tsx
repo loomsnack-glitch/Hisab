@@ -105,7 +105,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import PosDeviceSidebar from "@/components/pos/pos-device-sidebar";
 import { usePosMobileNav } from "@/components/pos/pos-mobile-nav-context";
 import CustomerDirectory from "@/components/customers/customer-directory";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
@@ -2137,14 +2136,6 @@ const BillingPage = ({
 
             {/* ─── Main Two-Panel Layout ─── */}
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-                {isDeviceMode ? (
-                    <PosDeviceSidebar
-                        activePanelTab={leftPanelTab}
-                        billsCount={sales.length}
-                        onPanelTabChange={changePanelTab}
-                    />
-                ) : null}
-
                 {/* ─── LEFT PANEL: Product Grid ─── */}
                 <div
                     ref={salesScrollContainerRef}
