@@ -45,8 +45,18 @@ import {
     listCloudTemplateBindingsForStore,
 } from "./cloud-api/cloud-template.service";
 import * as consentService from "./cloud-api/customer-consent.service";
+import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
 
 const uuidSchema = z.uuid("Invalid id");
+const cloudQuotaPolicySchema = z.object({
+    monthlyMessageLimit: z.number().int().nonnegative().nullable(),
+    monthlyBudgetMinor: z.number().int().nonnegative().nullable(),
+    currencyCode: z.string().regex(/^[A-Z]{3}$/),
+    accountSendIntervalSeconds: z.number().int().min(0).max(86_400),
+    recipientWindowSeconds: z.number().int().min(60).max(2_592_000),
+    recipientWindowLimit: z.number().int().positive().nullable(),
+    customerCooldownSeconds: z.number().int().min(0).max(2_592_000),
+}).strict();
 const userRouter = new Hono<{ Variables: AppVariables }>();
 
 const invalidUuid = (value: string, message: string) => {
@@ -170,6 +180,51 @@ userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/templates", 
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await listCloudTemplatesForAccount(c.get("authUser").id, organizationId, accountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.get("/:organizationId/whatsapp/cloud/safety", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.getCloudSafety(c.get("authUser").id, organizationId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.patch(
+    "/:organizationId/whatsapp/cloud/safety/quota-policy",
+    validateSchema("json", cloudQuotaPolicySchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await cloudSafetyService.saveCloudQuotaPolicy(
+                c.get("authUser").id,
+                organizationId,
+                c.req.valid("json"),
+            ));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.post("/:organizationId/whatsapp/cloud/campaigns/:campaignKey/stop", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.stopCloudCampaign(
+            c.get("authUser").id,
+            organizationId,
+            c.req.param("campaignKey"),
+        ));
     } catch (error) {
         return unexpectedError(c, error);
     }

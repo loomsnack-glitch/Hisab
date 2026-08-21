@@ -782,9 +782,16 @@ Last updated: 2026-08-22
   repository's pre-existing unrelated test-contract errors; `dbmate up`
   applied the delivery-safety migration successfully against the configured
   local database.
-- Loop 6 — **next**: expose policy/reconciliation controls and complete the
-  provider limit/quality snapshot seam before migrating bill, due-reminder,
-  and promotion callers.
+- Loop 6 — **complete**: expose authenticated quota-policy, usage,
+  reconciliation, and Cloud campaign-stop controls, and populate provider
+  quality/limit snapshots during Cloud provisioning and refresh.
+- Loop 6 verification: Cloud-focused suite passes 96 tests; `git diff
+  --check` passes; the full backend TypeScript check still reports only the
+  repository's pre-existing unrelated test-contract errors; database status
+  remains fully applied with no pending migrations.
+- Loop 7 — **next**: migrate bill, due-reminder, promotion/media, and inbound
+  feature callers behind the Cloud feature flag; keep legacy paths fail-closed
+  until the controlled provider acceptance run passes.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 

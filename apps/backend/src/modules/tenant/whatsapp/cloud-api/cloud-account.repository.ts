@@ -21,6 +21,8 @@ export type ProvisionCloudAccountInput = {
   phoneNumberId: string;
   phoneNumber: string;
   verifiedName: string | null;
+  qualityRating: string | null;
+  messagingLimit: number | null;
 };
 
 export type CloudCredentialBindingRecord = CloudCredentialBinding & {
@@ -50,6 +52,12 @@ const nullableText = (value: string | null, maxLength: number): string | null =>
     throw new Error("WhatsApp Cloud account metadata is invalid");
   }
   return normalized;
+};
+
+const nullableLimit = (value: number | null): number | null => {
+  if (value === null) return null;
+  if (!Number.isInteger(value) || value < 0) throw new Error("WhatsApp Cloud messaging limit is invalid");
+  return value;
 };
 
 /**
@@ -144,6 +152,8 @@ export const persistProvisionedCloudAccount = async (
   const credential = normalizeCloudCredentialBinding(input.credential);
   const displayName = nullableText(input.displayName, 255);
   const verifiedName = nullableText(input.verifiedName, 255);
+  const qualityRating = nullableText(input.qualityRating, 32);
+  const messagingLimit = nullableLimit(input.messagingLimit);
 
   return pg.begin(async (tx) => {
     const [business] = await tx`
@@ -193,6 +203,9 @@ export const persistProvisionedCloudAccount = async (
         whatsapp_business_account_id,
         cloud_phone_number_id,
         cloud_verified_name,
+        cloud_quality_rating,
+        cloud_messaging_limit,
+        cloud_limit_synced_at,
         cloud_status,
         created_by,
         updated_by
@@ -207,6 +220,9 @@ export const persistProvisionedCloudAccount = async (
         ${business.id},
         ${phoneNumberId},
         ${verifiedName},
+        ${qualityRating},
+        ${messagingLimit},
+        NOW(),
         'connected',
         ${input.createdBy},
         ${input.createdBy}
@@ -218,6 +234,9 @@ export const persistProvisionedCloudAccount = async (
         phone_number_normalized = EXCLUDED.phone_number_normalized,
         status = 'connected',
         cloud_verified_name = EXCLUDED.cloud_verified_name,
+        cloud_quality_rating = EXCLUDED.cloud_quality_rating,
+        cloud_messaging_limit = EXCLUDED.cloud_messaging_limit,
+        cloud_limit_synced_at = EXCLUDED.cloud_limit_synced_at,
         cloud_status = 'connected',
         updated_by = EXCLUDED.updated_by,
         updated_at = NOW()
@@ -294,6 +313,8 @@ export const refreshCloudAccountMetadata = async (input: {
   phoneNumberId: string;
   phoneNumber: string;
   verifiedName: string | null;
+  qualityRating: string | null;
+  messagingLimit: number | null;
   updatedBy: string;
 }): Promise<WhatsAppCloudAccountSnapshot | null> => {
   const wabaId = providerId(input.wabaId, "WABA ID");
@@ -330,6 +351,9 @@ export const refreshCloudAccountMetadata = async (input: {
           phone_number_normalized = ${phoneNumber},
           cloud_phone_number_id = ${phoneNumberId},
           cloud_verified_name = ${nullableText(input.verifiedName, 255)},
+          cloud_quality_rating = ${nullableText(input.qualityRating, 32)},
+          cloud_messaging_limit = ${nullableLimit(input.messagingLimit)},
+          cloud_limit_synced_at = NOW(),
           cloud_status = 'connected',
           status = 'connected',
           cloud_last_graph_api_at = NOW(),

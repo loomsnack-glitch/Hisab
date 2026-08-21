@@ -58,6 +58,8 @@ describe("Cloud account persistence boundary", () => {
         phoneNumberId: "9876543210",
         phoneNumber: "+919876543210",
         verifiedName: "Ganatri",
+        qualityRating: null,
+        messagingLimit: null,
       }),
     ).rejects.toThrow("Invalid WhatsApp Cloud WABA ID");
   });
@@ -76,6 +78,8 @@ describe("Cloud account persistence boundary", () => {
         phoneNumberId: "9876543210",
         phoneNumber: "not-a-phone",
         verifiedName: "Ganatri",
+        qualityRating: null,
+        messagingLimit: null,
       }),
     ).rejects.toThrow("Invalid WhatsApp Cloud phone number");
   });

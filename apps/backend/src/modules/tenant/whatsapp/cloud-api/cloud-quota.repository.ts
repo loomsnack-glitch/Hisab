@@ -50,6 +50,79 @@ export type CloudQuotaReservation = {
   status: "reserved" | "settled" | "released";
 };
 
+export type CloudQuotaPolicy = {
+  monthlyMessageLimit: number | null;
+  monthlyBudgetMinor: number | null;
+  currencyCode: string;
+  accountSendIntervalSeconds: number;
+  recipientWindowSeconds: number;
+  recipientWindowLimit: number | null;
+  customerCooldownSeconds: number;
+};
+
+const defaultCloudQuotaPolicy: CloudQuotaPolicy = {
+  monthlyMessageLimit: null,
+  monthlyBudgetMinor: null,
+  currencyCode: "INR",
+  accountSendIntervalSeconds: 0,
+  recipientWindowSeconds: 86_400,
+  recipientWindowLimit: null,
+  customerCooldownSeconds: 0,
+};
+
+const mapPolicy = (row: Record<string, unknown> | undefined): CloudQuotaPolicy => row ? {
+  monthlyMessageLimit: row.monthly_message_limit == null ? null : Number(row.monthly_message_limit),
+  monthlyBudgetMinor: row.monthly_budget_minor == null ? null : Number(row.monthly_budget_minor),
+  currencyCode: String(row.currency_code),
+  accountSendIntervalSeconds: Number(row.account_send_interval_seconds),
+  recipientWindowSeconds: Number(row.recipient_window_seconds),
+  recipientWindowLimit: row.recipient_window_limit == null ? null : Number(row.recipient_window_limit),
+  customerCooldownSeconds: Number(row.customer_cooldown_seconds),
+} : { ...defaultCloudQuotaPolicy };
+
+export const getCloudQuotaPolicy = async (organizationId: string): Promise<CloudQuotaPolicy> => {
+  const [row] = await pg`
+    SELECT monthly_message_limit, monthly_budget_minor, currency_code,
+           account_send_interval_seconds, recipient_window_seconds,
+           recipient_window_limit, customer_cooldown_seconds
+    FROM whatsapp_cloud_quota_policies
+    WHERE organization_id = ${organizationId}
+  `;
+  return mapPolicy(row as Record<string, unknown> | undefined);
+};
+
+export const updateCloudQuotaPolicy = async (
+  organizationId: string,
+  policy: CloudQuotaPolicy,
+): Promise<CloudQuotaPolicy> => {
+  if (!/^[A-Z]{3}$/.test(policy.currencyCode)) throw new Error("Cloud quota currency must be an ISO 4217 code");
+  const [row] = await pg`
+    INSERT INTO whatsapp_cloud_quota_policies (
+      organization_id, monthly_message_limit, monthly_budget_minor, currency_code,
+      account_send_interval_seconds, recipient_window_seconds,
+      recipient_window_limit, customer_cooldown_seconds
+    ) VALUES (
+      ${organizationId}, ${policy.monthlyMessageLimit}, ${policy.monthlyBudgetMinor}, ${policy.currencyCode},
+      ${policy.accountSendIntervalSeconds}, ${policy.recipientWindowSeconds},
+      ${policy.recipientWindowLimit}, ${policy.customerCooldownSeconds}
+    )
+    ON CONFLICT (organization_id) DO UPDATE SET
+      monthly_message_limit = EXCLUDED.monthly_message_limit,
+      monthly_budget_minor = EXCLUDED.monthly_budget_minor,
+      currency_code = EXCLUDED.currency_code,
+      account_send_interval_seconds = EXCLUDED.account_send_interval_seconds,
+      recipient_window_seconds = EXCLUDED.recipient_window_seconds,
+      recipient_window_limit = EXCLUDED.recipient_window_limit,
+      customer_cooldown_seconds = EXCLUDED.customer_cooldown_seconds,
+      updated_at = NOW()
+    RETURNING monthly_message_limit, monthly_budget_minor, currency_code,
+              account_send_interval_seconds, recipient_window_seconds,
+              recipient_window_limit, customer_cooldown_seconds
+  `;
+  if (!row) throw new Error("Cloud quota policy could not be saved");
+  return mapPolicy(row as Record<string, unknown>);
+};
+
 export class CloudDuplicateCampaignRecipientError extends Error {
   constructor() {
     super("This customer is already included in the Cloud campaign");

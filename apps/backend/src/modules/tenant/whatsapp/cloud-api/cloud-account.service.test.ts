@@ -42,6 +42,8 @@ describe("Cloud account provisioning service", () => {
                   id: "9876543210",
                   display_phone_number: "+919876543210",
                   verified_name: "Ganatri",
+                  quality_rating: "GREEN",
+                  messaging_limit: 1_000,
                 },
               ],
             };
@@ -156,12 +158,14 @@ describe("Cloud account provisioning service", () => {
       },
       createClient: () => ({
         async getBusinessAccount() { return { id: snapshot.wabaId!, name: "Ganatri" }; },
-        async getPhoneNumbers() { return { data: [{ id: snapshot.phoneNumberId!, display_phone_number: "+919876543210", verified_name: "New name" }] }; },
+        async getPhoneNumbers() { return { data: [{ id: snapshot.phoneNumberId!, display_phone_number: "+919876543210", verified_name: "New name", quality_rating: "GREEN", messaging_limit: 1_000 }] }; },
         async subscribeBusinessAccount() {},
       }),
       refreshMetadata: async input => {
         expect(input.updatedBy).toBe(userId);
         expect(input.phoneNumber).toBe("+919876543210");
+        expect(input.qualityRating).toBe("GREEN");
+        expect(input.messagingLimit).toBe(1_000);
         return refreshed;
       },
     });

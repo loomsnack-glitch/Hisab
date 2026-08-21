@@ -43,6 +43,8 @@ type CloudPhoneRecord = {
   id: string;
   display_phone_number: string;
   verified_name?: string;
+  quality_rating?: string;
+  messaging_limit?: number;
 };
 
 type CloudProvisioningClient = {
@@ -121,6 +123,10 @@ const phoneFromProvider = (value: Record<string, unknown>): CloudPhoneRecord => 
   id: stringField(value.id, "Phone Number ID"),
   display_phone_number: stringField(value.display_phone_number, "Display phone number"),
   verified_name: typeof value.verified_name === "string" ? value.verified_name.trim() : undefined,
+  quality_rating: typeof value.quality_rating === "string" ? value.quality_rating.trim() : undefined,
+  messaging_limit: typeof value.messaging_limit === "number" && Number.isInteger(value.messaging_limit) && value.messaging_limit >= 0
+    ? value.messaging_limit
+    : undefined,
 });
 
 const providerError = (error: unknown): string =>
@@ -236,6 +242,8 @@ export const completeCloudAccountProvisioning = async (
       phoneNumberId: phone.id,
       phoneNumber: phone.display_phone_number,
       verifiedName: phone.verified_name ?? null,
+      qualityRating: phone.quality_rating ?? null,
+      messagingLimit: phone.messaging_limit ?? null,
     });
     if (!state.completedSteps.includes("templates_synced")) {
       const sync = await deps.syncTemplates(userId, organizationId, account.id, deps.vault);
@@ -346,6 +354,8 @@ export const refreshCloudAccountForOrganization = async (
       phoneNumberId: phone.id,
       phoneNumber: phone.display_phone_number,
       verifiedName: phone.verified_name ?? null,
+      qualityRating: phone.quality_rating ?? null,
+      messagingLimit: phone.messaging_limit ?? null,
       updatedBy: userId,
     });
     return refreshed
