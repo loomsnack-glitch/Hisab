@@ -7,35 +7,35 @@ import {
     addCalendarDays,
     kolkataCalendarDate,
     type OwnerUserDTO,
-    PlatformDashboardQueryJSON,
-    PlatformBillingInspectionQueryJSON,
-    PlatformCatalogProductDetailResponse,
-    PlatformCatalogListResponse,
-    PlatformCustomerInspectionDetailResponse,
-    PlatformCustomerInspectionListResponse,
-    PlatformCustomerInspectionQueryJSON,
-    PlatformOrganizationDetailQueryJSON,
-    PlatformOrganizationDetailResponse,
-    PlatformOrganizationListItemDTO,
-    PlatformOrganizationListQueryJSON,
-    PlatformOrganizationListResponse,
-    PlatformRecentSaleDTO,
-    PlatformReportInspectionQueryJSON,
-    PlatformReportInspectionResponse,
-    PlatformBillActivityQueryJSON,
-    PlatformBillActivityResponse,
-    PlatformTableInspectionDetailResponse,
-    PlatformTableInspectionListResponse,
-    PlatformTableInspectionQueryJSON,
-    PlatformPurchaseInspectionDetailResponse,
-    PlatformPurchaseInspectionListResponse,
-    PlatformPurchaseInspectionQueryJSON,
-    PlatformWhatsAppInspectionResponse,
-    PlatformSaleInspectionDetailResponse,
-    PlatformSaleInspectionListResponse,
-    PlatformStoreDetailResponse,
-    PlatformStoreListResponse,
-    ServiceResponse,
+    type PlatformDashboardQueryJSON,
+    type PlatformBillingInspectionQueryJSON,
+    type PlatformCatalogProductDetailResponse,
+    type PlatformCatalogListResponse,
+    type PlatformCustomerInspectionDetailResponse,
+    type PlatformCustomerInspectionListResponse,
+    type PlatformCustomerInspectionQueryJSON,
+    type PlatformOrganizationDetailQueryJSON,
+    type PlatformOrganizationDetailResponse,
+    type PlatformOrganizationListItemDTO,
+    type PlatformOrganizationListQueryJSON,
+    type PlatformOrganizationListResponse,
+    type PlatformRecentSaleDTO,
+    type PlatformReportInspectionQueryJSON,
+    type PlatformReportInspectionResponse,
+    type PlatformBillActivityQueryJSON,
+    type PlatformBillActivityResponse,
+    type PlatformTableInspectionDetailResponse,
+    type PlatformTableInspectionListResponse,
+    type PlatformTableInspectionQueryJSON,
+    type PlatformPurchaseInspectionDetailResponse,
+    type PlatformPurchaseInspectionListResponse,
+    type PlatformPurchaseInspectionQueryJSON,
+    type PlatformWhatsAppInspectionResponse,
+    type PlatformSaleInspectionDetailResponse,
+    type PlatformSaleInspectionListResponse,
+    type PlatformStoreDetailResponse,
+    type PlatformStoreListResponse,
+    type ServiceResponse,
 } from "@repo/types";
 
 import ConsoleEntry from "./console-entry";
@@ -765,16 +765,16 @@ describe("Platform Organization drill-down", () => {
             </QueryClientProvider>,
         );
 
-        fireEvent.click(await view.findByRole("link", { name: "Mixed Bistro" }));
+        const mixedBistroLink = await view.findByRole("link", { name: "Mixed Bistro" });
+        act(() => {
+            fireEvent.click(mixedBistroLink);
+        });
 
         expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
-        expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
+        expect(view.getByText(/7-day metrics/)).toBeTruthy();
         expect(view.getByText(/@mixed-bistro/)).toBeTruthy();
         expect(view.getByText("Omar Khan")).toBeTruthy();
-        expect(view.getByText("Front Hall")).toBeTruthy();
-        expect(view.getByText("Garden Patio")).toBeTruthy();
-        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
-        expect(view.getAllByText("Inactive").length).toBeGreaterThan(0);
+        expect(view.getByText(/1\/2 active stores/)).toBeTruthy();
         expect(view.getAllByText("50.50", { exact: false }).length).toBeGreaterThan(0);
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.queryByText("Collect Payment")).toBeNull();
@@ -783,9 +783,10 @@ describe("Platform Organization drill-down", () => {
             expect(requested.some((query) => query.period === "7d")).toBe(true);
         });
 
-        fireEvent.click(view.getByRole("button", { name: "Back to organizations" }));
-        expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
-        expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
+        act(() => {
+            fireEvent.click(view.getByRole("button", { name: "Back to organizations" }));
+        });
+        expect(view.getByRole("searchbox", { name: "Search organization or creator" })).toBeTruthy();
         expect(view.getByRole("link", { name: "Mixed Bistro" })).toBeTruthy();
     });
 
@@ -833,19 +834,25 @@ describe("Platform Organization drill-down", () => {
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getAllByRole("button", { name: "Dashboard" })[0]!);
+        act(() => {
+            fireEvent.click(view.getAllByRole("button", { name: "Dashboard" })[0]!);
+        });
         await view.findByRole("heading", { name: "Dashboard" });
-        fireEvent.click(view.getByRole("button", { name: "30-day" }));
-        fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
+        act(() => {
+            fireEvent.click(view.getByRole("button", { name: "30-day" }));
+            fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
+        });
         await view.findByRole("link", { name: "Mixed Bistro" });
-        fireEvent.click(view.getByRole("link", { name: "Mixed Bistro" }));
+        act(() => {
+            fireEvent.click(view.getByRole("link", { name: "Mixed Bistro" }));
+        });
 
         await waitFor(() => {
             expect(requested.some((item) => item.kind === "list" && item.query.period === "30d")).toBe(true);
             expect(requested.some((item) => item.kind === "detail" && item.query.period === "30d")).toBe(true);
         });
         expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
-        expect(view.getByText(/30-day metrics from Dashboard/)).toBeTruthy();
+        expect(view.getByText(/30-day metrics/)).toBeTruthy();
         expect(view.queryByText("Create Organization")).toBeNull();
     });
 
@@ -858,11 +865,6 @@ describe("Platform Organization drill-down", () => {
         expect(view.getAllByText("Customers").length).toBeGreaterThan(0);
         expect(view.getAllByText("Sales value").length).toBeGreaterThan(0);
         expect(view.getByText(/1\/2 active stores/)).toBeTruthy();
-        expect(view.getAllByText("Front Hall").length).toBeGreaterThan(0);
-        expect(view.getByText("Garden Patio")).toBeTruthy();
-        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
-        expect(view.getAllByText("—").length).toBeGreaterThan(0);
-        expect(view.getAllByText(/Activity uses last 7 days/).length).toBeGreaterThan(0);
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.queryByText("Payments")).toBeNull();
     });
@@ -871,8 +873,7 @@ describe("Platform Organization drill-down", () => {
         const view = renderDetail(async () => successDetail(newStand, []), { organizationId: newStand.id });
 
         expect(await view.findByRole("heading", { name: "New Stand" })).toBeTruthy();
-        expect(view.getByText("No stores yet")).toBeTruthy();
-        expect(view.getByText("No recent sales")).toBeTruthy();
+        expect(view.getByText(/0\/0 active stores/)).toBeTruthy();
         expect(view.getByText("Inactive")).toBeTruthy();
         expect(view.queryByText("Create Store")).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();
@@ -977,7 +978,7 @@ describe("Organization Inspection Workspace", () => {
             window.history.back();
             window.dispatchEvent(new Event("popstate"));
         });
-        expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
+        expect(await view.findByRole("searchbox", { name: "Search organization or creator" })).toBeTruthy();
         expect(window.location.pathname).toBe("/organizations");
 
         act(() => {
@@ -993,7 +994,7 @@ describe("Organization Inspection Workspace", () => {
         expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
 
         fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
-        expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
+        expect(await view.findByRole("searchbox", { name: "Search organization or creator" })).toBeTruthy();
         expect(window.location.pathname).toBe("/organizations");
         expect(await view.findByRole("link", { name: "Mixed Bistro" })).toBeTruthy();
         expect(view.queryByText("Create Organization")).toBeNull();

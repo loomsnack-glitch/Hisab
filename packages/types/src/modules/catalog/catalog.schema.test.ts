@@ -359,6 +359,7 @@ describe("Product Code catalog contracts", () => {
       organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       categoryId,
       name: "Burger",
+      sortOrder: 0,
       price: 100,
       discount: 0,
       productType: "single" as const,
@@ -444,13 +445,18 @@ describe("Label Template catalog contracts", () => {
   });
 
   test("rejects unknown Label Element bindings", () => {
+    const firstElement = A4_SHEET_LABEL_TEMPLATE.elements[0];
+    if (!firstElement || firstElement.type !== "text") {
+      throw new Error("The seeded A4 template must start with a text element");
+    }
+
     const result = CreateLabelTemplateSchema.safeParse({
       ...A4_SHEET_LABEL_TEMPLATE,
       elements: [
         {
-          ...A4_SHEET_LABEL_TEMPLATE.elements[0],
+          ...firstElement,
           text: {
-            ...A4_SHEET_LABEL_TEMPLATE.elements[0]?.text,
+            ...firstElement.text,
             binding: "product.unknownField",
           },
         },

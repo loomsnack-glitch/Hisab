@@ -2,10 +2,7 @@ import axios, { AxiosError } from "axios";
 import { getAuthToken } from "./auth-token";
 import { getDeviceId } from "./device-id";
 
-// const FALLBACK_BASE_API_URL = "https://ganatri.in/api";
-// Local LAN (physical phone against this PC): "http://192.168.29.221:8001/api"
-const FALLBACK_BASE_API_URL = "http://192.168.29.221:8001/api";
-// Previous production host, kept live until cutover: "https://ganatri.loomsnack.com/api"
+const FALLBACK_BASE_API_URL = "https://ganatri.in/api";
 
 const sanitizeBaseUrl = (value?: string | null): string | undefined => {
     if (!value) return undefined;

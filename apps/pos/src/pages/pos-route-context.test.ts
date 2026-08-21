@@ -72,8 +72,8 @@ describe("POS route context", () => {
         expect(posWorkspaceDestinations.map((destination) => destination.id)).toEqual([
             "products",
             "tables",
-            "customers",
             "bills",
+            "customers",
             "reports",
             "purchases",
             "appearance",
