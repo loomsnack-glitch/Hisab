@@ -1,4 +1,5 @@
 import {
+    Armchair,
     ReceiptText,
     Settings2,
     Store,
@@ -18,16 +19,22 @@ export type PosNavDestination = {
 
 export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "products", label: "Products", mobileLabel: "POS", icon: Store, path: getPosPanelPath("products"), tab: "products" },
+    { id: "tables", label: "Tables", icon: Armchair, path: getPosPanelPath("tables"), tab: "tables" },
     { id: "bills", label: "Bills", icon: ReceiptText, path: getPosPanelPath("bills"), tab: "bills" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
 ];
 
-export const posPrimaryMobileNavIds = ["products", "bills", "appearance"] as const;
+export const posPrimaryMobileNavIds = ["products", "bills"] as const;
 
 export const posPrimaryMobileDestinations = posWorkspaceDestinations.filter((destination) =>
     (posPrimaryMobileNavIds as readonly string[]).includes(destination.id),
 );
 
 export const isPosMoreDestinationActive = (pathname: string) => {
-    return pathname === "/appearance" || pathname === "/settings";
+    if (pathname === "/appearance" || pathname === "/settings") {
+        return true;
+    }
+
+    const tab = posWorkspaceDestinations.find((destination) => destination.path === pathname)?.tab;
+    return tab === "tables";
 };

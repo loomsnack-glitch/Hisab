@@ -63,6 +63,7 @@ describe("Ganatri POS identity", () => {
         expect(appSource).not.toContain("userAuthenticate");
         expect(appSource).toContain('path="/login"');
         expect(appSource).toContain("<PosProductsPage />");
+        expect(appSource).toContain('path="tables"');
         expect(appSource).toContain('path="bills"');
         expect(appSource).toContain('path="appearance"');
         expect(appSource).toContain('path="settings"');
