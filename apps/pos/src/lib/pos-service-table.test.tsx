@@ -12,6 +12,7 @@ import {
 import { serviceAreaKeys, serviceTableKeys } from "./query-keys";
 import PosTablesPage from "@/pages/pos-tables-page";
 import PosTablesWorkspace from "@/pages/pos-tables-workspace";
+import PosServiceTableLegend from "@/components/table-service/pos-service-table-legend";
 import type { PosRouteContext } from "@/pages/pos-route-context";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -230,12 +231,16 @@ describe("POS Service Table behavior", () => {
   test("shows a color legend for simple-view table states", () => {
     const markup = renderTableFloor([table("free")]);
 
-    expect(markup).toContain("pos-table-state-legend");
-    expect(markup).toContain("Available to seat");
-    expect(markup).toContain("Seated, no order yet");
-    expect(markup).toContain("Order in progress");
-    expect(markup).toContain("Bill still outstanding");
-    expect(markup).toContain("Paid, waiting to clear");
+    expect(markup).toContain("View table status colors");
+    expect(markup).not.toContain("pos-table-state-legend");
+
+    const legendMarkup = renderToStaticMarkup(<PosServiceTableLegend />);
+    expect(legendMarkup).toContain("pos-table-state-legend");
+    expect(legendMarkup).toContain("Available to seat");
+    expect(legendMarkup).toContain("Seated, no order yet");
+    expect(legendMarkup).toContain("Order in progress");
+    expect(legendMarkup).toContain("Bill still outstanding");
+    expect(legendMarkup).toContain("Paid, waiting to clear");
   });
 
   test("renders billing, collection, and release actions for committed table states", () => {

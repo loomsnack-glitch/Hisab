@@ -1,19 +1,29 @@
 import { posServiceTableLegendItems } from "@/lib/pos-service-table";
 import { cn } from "@repo/ui/lib/utils";
 
-const PosServiceTableLegend = () => (
+type PosServiceTableLegendProps = {
+  showTitle?: boolean;
+  className?: string;
+};
+
+const PosServiceTableLegend = ({
+  showTitle = true,
+  className,
+}: PosServiceTableLegendProps) => (
   <div
     data-testid="pos-table-state-legend"
-    className="rounded-lg border border-border/60 bg-background/80 px-2.5 py-2"
+    className={cn("rounded-lg border border-border/60 bg-background/80 px-2.5 py-2", className)}
   >
-    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-      Status colors
-    </p>
-    <ul aria-label="Table status colors" className="flex flex-wrap gap-1.5">
+    {showTitle ? (
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Status colors
+      </p>
+    ) : null}
+    <ul aria-label="Table status colors" className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-1.5">
       {posServiceTableLegendItems.map((item) => (
         <li
           key={item.key}
-          className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1"
+          className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 sm:py-1"
         >
           <span
             aria-hidden="true"

@@ -22,7 +22,15 @@ import {
   EmptyTitle,
 } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
-import { Armchair, LayoutGrid } from "lucide-react";
+import { Button } from "@repo/ui/components/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@repo/ui/components/dialog";
+import { Armchair, BookOpen, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 
 import PosServiceTableCard from "@/components/table-service/pos-service-table-card";
@@ -55,6 +63,7 @@ const PosTablesWorkspace = () => {
   const [viewMode, setViewMode] = useState<ServiceTableViewMode>(() =>
     readServiceTableViewMode("pos"),
   );
+  const [legendOpen, setLegendOpen] = useState(false);
   const tablesQuery = useQuery({
     queryKey: serviceTableKeys.pos(session.organization.id, session.store.id),
     queryFn: getPosServiceTables,
@@ -284,17 +293,39 @@ const PosTablesWorkspace = () => {
               value={viewMode}
               onChange={handleViewModeChange}
             />
-            <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card/70 px-2.5 py-1.5 text-xs text-muted-foreground sm:text-sm">
-              <LayoutGrid className="size-3.5 text-primary sm:size-4" />
-              <span>
-                {tables.length} {tables.length === 1 ? "table" : "tables"}
-              </span>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card/70 px-2.5 py-1.5 text-xs text-muted-foreground sm:text-sm">
+                <LayoutGrid className="size-3.5 text-primary sm:size-4" />
+                <span>
+                  {tables.length} {tables.length === 1 ? "table" : "tables"}
+                </span>
+              </div>
+              {viewMode === "simple" && tables.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  className="size-8 rounded-lg border-border/60 bg-card/70"
+                  aria-label="View table status colors"
+                  onClick={() => setLegendOpen(true)}
+                >
+                  <BookOpen className="size-3.5 text-primary sm:size-4" />
+                </Button>
+              ) : null}
             </div>
           </div>
 
-          {viewMode === "simple" && tables.length > 0 ? (
-            <PosServiceTableLegend />
-          ) : null}
+          <Dialog open={legendOpen} onOpenChange={setLegendOpen}>
+            <DialogContent className="max-w-md rounded-2xl p-5">
+              <DialogHeader>
+                <DialogTitle>Table status colors</DialogTitle>
+                <DialogDescription>
+                  What each color means in the simple table view.
+                </DialogDescription>
+              </DialogHeader>
+              <PosServiceTableLegend showTitle={false} className="border-0 bg-transparent px-0 py-0" />
+            </DialogContent>
+          </Dialog>
 
           {tablesQuery.isPending || simpleViewAreasPending ? (
             <div className="flex min-h-64 items-center justify-center sm:min-h-80">
