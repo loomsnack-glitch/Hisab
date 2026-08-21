@@ -3,6 +3,7 @@ import type {
     PaymentStatus,
     PlatformBillingInspectionQueryJSON,
     PlatformCustomerInspectionQueryJSON,
+    PlatformReportInspectionQueryJSON,
     SaleStatus,
     SalesSort,
 } from "@repo/types";
@@ -35,6 +36,8 @@ export type OrganizationInspectionLocation =
 export type BillingInspectionFilters = PlatformBillingInspectionQueryJSON;
 
 export type CustomerInspectionFilters = PlatformCustomerInspectionQueryJSON;
+
+export type ReportInspectionFilters = PlatformReportInspectionQueryJSON;
 
 export type CatalogInspectionTab = "products" | "categories" | "add-ons";
 
@@ -226,6 +229,35 @@ export const customerInspectionSearchString = (filters: CustomerInspectionFilter
     return serialized ? `?${serialized}` : "";
 };
 
+const reportFilterKeys = ["storeId", "startDate", "endDate"] as const;
+
+export const parseReportInspectionSearch = (search: string): ReportInspectionFilters => {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const filters: ReportInspectionFilters = {};
+
+    const storeId = params.get("storeId");
+    if (storeId) filters.storeId = storeId;
+
+    const startDate = params.get("startDate");
+    if (startDate) filters.startDate = startDate;
+
+    const endDate = params.get("endDate");
+    if (endDate) filters.endDate = endDate;
+
+    return filters;
+};
+
+export const reportInspectionSearchString = (filters: ReportInspectionFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const key of reportFilterKeys) {
+        const value = filters[key];
+        if (value === undefined || value === null || value === "") continue;
+        params.set(key, String(value));
+    }
+    const serialized = params.toString();
+    return serialized ? `?${serialized}` : "";
+};
+
 export const isOrganizationsPath = (pathname: string) =>
     pathname === ORGANIZATIONS_PREFIX || pathname.startsWith(`${ORGANIZATIONS_PREFIX}/`);
 
@@ -235,7 +267,7 @@ export const organizationInspectionPath = (
     organizationId: string,
     section: OrganizationInspectionSection = "overview",
     resourceId?: string,
-    sectionFilters?: BillingInspectionFilters | CustomerInspectionFilters,
+    sectionFilters?: BillingInspectionFilters | CustomerInspectionFilters | ReportInspectionFilters,
 ) => {
     let pathname: string;
     if (section === "overview" && !resourceId) {
@@ -252,6 +284,10 @@ export const organizationInspectionPath = (
 
     if (section === "customers") {
         return `${pathname}${customerInspectionSearchString(sectionFilters as CustomerInspectionFilters | undefined)}`;
+    }
+
+    if (section === "reports") {
+        return `${pathname}${reportInspectionSearchString(sectionFilters as ReportInspectionFilters | undefined)}`;
     }
 
     return pathname;

@@ -4,6 +4,7 @@ import { sign } from "hono/jwt";
 import {
     FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
     FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
+    FUTURE_REPORT_INSPECTION_DATE_MESSAGE,
     type OwnerUserRecord,
     type PlatformOrganizationDetailResponse,
     type PlatformOrganizationListItemDTO,
@@ -16,6 +17,7 @@ import {
     type PlatformCustomerInspectionListResponse,
     type PlatformSaleInspectionDetailResponse,
     type PlatformSaleInspectionListResponse,
+    type PlatformReportInspectionResponse,
     type PlatformStoreDetailResponse,
     type PlatformStoreListResponse,
     type ServiceResponse,
@@ -107,6 +109,16 @@ type ReportingSale = {
     paymentMethods?: string | null;
     itemCount?: number;
     itemsSummary?: string | null;
+};
+
+type ReportingSaleLine = {
+    saleId: string;
+    organizationId: string;
+    storeId: string;
+    productId: string;
+    productName: string;
+    categoryName: string | null;
+    quantity: number;
 };
 
 type ReportingCustomer = {
@@ -213,6 +225,7 @@ const createReportingMetrics = (
     addOns: ReportingAddOn[] = [],
     attachments: ReportingAttachment[] = [],
     ledgerEntries: ReportingLedgerEntry[] = [],
+    saleLines: ReportingSaleLine[] = [],
 ) => {
     const organizationRow = (
         query: PlatformDashboardMetricsQuery,
@@ -832,6 +845,16 @@ const createReportingMetrics = (
         };
     };
 
+    const getOrganizationReportContext = async (organizationId: string) => {
+        const organization = organizations.find((item) => item.id === organizationId);
+        if (!organization) return null;
+        return {
+            stores: stores
+                .filter((store) => store.organizationId === organizationId)
+                .map((store) => ({ id: store.id, name: store.name })),
+        };
+    };
+
     return {
         getDashboardMetrics,
         listOrganizations,
@@ -846,6 +869,7 @@ const createReportingMetrics = (
         getOrganizationSaleContext,
         listOrganizationCustomers,
         getOrganizationCustomerContext,
+        getOrganizationReportContext,
     };
 };
 
@@ -977,7 +1001,7 @@ const platformFacts = () => {
             status: "completed",
             saleNumber: "2",
             grandTotal: 11,
-            committedAt: new Date("2026-08-21T18:30:00.000Z"),
+            committedAt: new Date("2026-08-21T10:00:00.000Z"),
             customerId: customerCafeActive,
         },
         {
@@ -1133,8 +1157,37 @@ const platformFacts = () => {
             status: "active",
         },
     ];
+    const saleLines: ReportingSaleLine[] = [
+        {
+            saleId: saleMixedCompleted,
+            organizationId: orgMixed,
+            storeId: storeMixedActive,
+            productId: productMixed,
+            productName: "Masala Chai",
+            categoryName: "Beverages",
+            quantity: 2,
+        },
+        {
+            saleId: "c2222222-2222-4222-8222-c22222222222",
+            organizationId: orgActive,
+            storeId: storeActive,
+            productId: "prod-active-coffee",
+            productName: "Filter Coffee",
+            categoryName: "Beverages",
+            quantity: 3,
+        },
+        {
+            saleId: "c4444444-4444-4444-8444-c44444444444",
+            organizationId: orgActive,
+            storeId: storeActive,
+            productId: "prod-active-coffee",
+            productName: "Filter Coffee",
+            categoryName: "Beverages",
+            quantity: 1,
+        },
+    ];
 
-    return { organizations, stores, customers, sales, devices, categories, products, addOns, attachments, ledgerEntries };
+    return { organizations, stores, customers, sales, devices, categories, products, addOns, attachments, ledgerEntries, saleLines };
 };
 
 const activeOwner = async (): Promise<OwnerUserRecord> => ({
@@ -1178,6 +1231,7 @@ const createHarness = async () => {
             facts.addOns,
             facts.attachments,
             facts.ledgerEntries,
+            facts.saleLines,
         ),
         billingRepository: {
             getSaleById: async (organizationId, storeId, saleId) => {
@@ -1249,6 +1303,46 @@ const createHarness = async () => {
                     updatedAt: "2026-08-19T10:00:00.000Z",
                 }];
             },
+            getProductSalesSummary: async (organizationId, storeId, query) => {
+                const createdFrom = query.createdFrom ? new Date(query.createdFrom) : null;
+                const createdTo = query.createdTo ? new Date(query.createdTo) : null;
+                const eligibleSaleIds = new Set(
+                    facts.sales
+                        .filter((sale) =>
+                            sale.organizationId === organizationId
+                            && sale.status === "completed"
+                            && (!storeId || sale.storeId === storeId)
+                            && inWindow(sale.committedAt ?? sale.createdAt ?? null, createdFrom, createdTo))
+                        .map((sale) => sale.id),
+                );
+                const aggregated = new Map<string, {
+                    productId: string;
+                    productName: string;
+                    categoryName: string | null;
+                    quantitySold: number;
+                }>();
+                for (const line of facts.saleLines) {
+                    if (line.organizationId !== organizationId) continue;
+                    if (storeId && line.storeId !== storeId) continue;
+                    if (!eligibleSaleIds.has(line.saleId)) continue;
+                    const existing = aggregated.get(line.productId);
+                    if (existing) {
+                        existing.quantitySold += line.quantity;
+                        continue;
+                    }
+                    aggregated.set(line.productId, {
+                        productId: line.productId,
+                        productName: line.productName,
+                        categoryName: line.categoryName,
+                        quantitySold: line.quantity,
+                    });
+                }
+                return Array.from(aggregated.values()).sort(
+                    (left, right) =>
+                        right.quantitySold - left.quantitySold
+                        || left.productName.localeCompare(right.productName),
+                );
+            },
         },
         now: () => now,
     });
@@ -1310,6 +1404,9 @@ const organizationCustomers = (app: Hono, cookie: string, organizationId: string
 
 const organizationCustomerDetail = (app: Hono, cookie: string, organizationId: string, customerId: string) =>
     app.request(`/platform/organizations/${organizationId}/customers/${customerId}`, { headers: { cookie } });
+
+const organizationReports = (app: Hono, cookie: string, organizationId: string, query = "") =>
+    app.request(`/platform/organizations/${organizationId}/reports${query}`, { headers: { cookie } });
 
 const names = (rows: PlatformOrganizationListItemDTO[] | undefined) => rows?.map((row) => row.name);
 
@@ -2134,5 +2231,89 @@ describe("Platform Customer inspection API", () => {
         expect(missingCustomer.status).toBe(404);
         expect(missingCustomerBody.message).toBe("Customer not found");
         expect(JSON.stringify(missingCustomerBody)).not.toContain("Dev Patel");
+    });
+});
+
+describe("Platform Report inspection API", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("returns Organization product sales only to an active Owner User", async () => {
+        const { app, setOwnerActive } = await createHarness();
+        const customerToken = await sign(
+            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
+            "customer-and-device-secret",
+        );
+        const ownerCookie = cookieFrom(await passwordLogin(app));
+
+        expect((await app.request(`/platform/organizations/${orgMixed}/reports`)).status).toBe(401);
+        expect((await app.request(`/platform/organizations/${orgMixed}/reports`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
+
+        setOwnerActive(false);
+        expect((await organizationReports(app, ownerCookie, orgMixed)).status).toBe(401);
+    });
+
+    test("returns product sales for an explicit report range without using the Dashboard reporting period", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const reportRange = await organizationReports(app, cookie, orgActive, "?startDate=2026-08-21&endDate=2026-08-21");
+        const dashboardPeriod = await organizationDetail(app, cookie, orgActive, "?period=7d");
+        const reportBody = await reportRange.json() as ServiceResponse<PlatformReportInspectionResponse>;
+        const dashboardBody = await dashboardPeriod.json() as ServiceResponse<PlatformOrganizationDetailResponse>;
+
+        expect(reportRange.status).toBe(200);
+        expect(reportBody.data?.dateRange).toMatchObject({
+            startDate: "2026-08-21",
+            endDate: "2026-08-21",
+            label: "2026-08-21",
+            timezone: "Asia/Kolkata",
+        });
+        expect(reportBody.data?.productSales.products).toEqual([
+            {
+                productId: "prod-active-coffee",
+                productName: "Filter Coffee",
+                categoryName: "Beverages",
+                quantitySold: 3,
+            },
+        ]);
+        expect(dashboardBody.data?.reportingPeriod.selection).toBe("7d");
+        expect(dashboardBody.data?.organization.completedSaleCount).not.toBe(reportBody.data?.productSales.totalQuantitySold);
+        expect(JSON.stringify(reportBody.data)).not.toContain("deviceSecret");
+        expect(JSON.stringify(reportBody.data)).not.toContain("password");
+        expect(JSON.stringify(reportBody.data)).not.toContain("token");
+    });
+
+    test("filters product sales by Store and keeps Organization isolation", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const mixedReport = await organizationReports(app, cookie, orgMixed);
+        const otherOrgReport = await organizationReports(app, cookie, orgActive, `?storeId=${storeMixedActive}`);
+        const mixedBody = await mixedReport.json() as ServiceResponse<PlatformReportInspectionResponse>;
+        const otherOrgBody = await otherOrgReport.json() as ServiceResponse<null>;
+
+        expect(mixedBody.data?.productSales.products[0]).toMatchObject({
+            productName: "Masala Chai",
+            quantitySold: 2,
+        });
+        expect(otherOrgBody.message).toBe("Store not found");
+        expect(otherOrgReport.status).toBe(404);
+    });
+
+    test("rejects missing Organizations, invalid store ids, and future-invalid report dates", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const missingOrg = await organizationReports(app, cookie, missingOrganizationId);
+        const invalidStore = await organizationReports(app, cookie, orgMixed, `?storeId=${storeActive}`);
+        const future = await organizationReports(app, cookie, orgMixed, "?startDate=2026-08-21&endDate=2026-08-22");
+        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
+        const futureBody = await future.json() as { message: string };
+
+        expect(missingOrg.status).toBe(404);
+        expect(missingOrgBody.message).toBe("Organization not found");
+        expect(invalidStore.status).toBe(404);
+        expect(future.status).toBe(400);
+        expect(futureBody.message).toBe(FUTURE_REPORT_INSPECTION_DATE_MESSAGE);
+        expect(JSON.stringify(missingOrgBody)).not.toContain("Masala Chai");
     });
 });

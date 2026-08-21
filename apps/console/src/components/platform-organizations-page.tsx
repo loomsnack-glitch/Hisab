@@ -12,6 +12,7 @@ import {
     getPlatformOrganizationCatalogAddOn as getPlatformOrganizationCatalogAddOnRequest,
     getPlatformOrganizationCustomers as getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer as getPlatformOrganizationCustomerRequest,
+    getPlatformOrganizationReports as getPlatformOrganizationReportsRequest,
     getPlatformOrganizations as getPlatformOrganizationsRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
@@ -59,6 +60,7 @@ type PlatformOrganizationsPageProps = {
     getPlatformOrganizationCatalogAddOn?: typeof getPlatformOrganizationCatalogAddOnRequest;
     getPlatformOrganizationCustomers?: typeof getPlatformOrganizationCustomersRequest;
     getPlatformOrganizationCustomer?: typeof getPlatformOrganizationCustomerRequest;
+    getPlatformOrganizationReports?: typeof getPlatformOrganizationReportsRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
     initialSort?: DirectorySort;
@@ -139,6 +141,7 @@ const PlatformOrganizationsPage = ({
     getPlatformOrganizationCatalogAddOn = getPlatformOrganizationCatalogAddOnRequest,
     getPlatformOrganizationCustomers = getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer = getPlatformOrganizationCustomerRequest,
+    getPlatformOrganizationReports = getPlatformOrganizationReportsRequest,
     initialSearch = "",
     initialActivity = "all",
     initialSort = "recent_activity",
@@ -263,6 +266,7 @@ const PlatformOrganizationsPage = ({
                 getPlatformOrganizationCatalogAddOn={getPlatformOrganizationCatalogAddOn}
                 getPlatformOrganizationCustomers={getPlatformOrganizationCustomers}
                 getPlatformOrganizationCustomer={getPlatformOrganizationCustomer}
+                getPlatformOrganizationReports={getPlatformOrganizationReports}
             />
         );
     }

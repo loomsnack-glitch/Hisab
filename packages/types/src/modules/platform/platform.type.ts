@@ -30,6 +30,8 @@ import type {
     PlatformCustomerInspectionListDTOSchema,
     PlatformCustomerInspectionQuerySchema,
     PlatformCustomerInspectionSummaryDTOSchema,
+    PlatformReportInspectionDTOSchema,
+    PlatformReportInspectionQuerySchema,
     PlatformSaleInspectionDetailDTOSchema,
     PlatformSaleInspectionDetailResponseSchema,
     PlatformSaleInspectionListDTOSchema,
@@ -123,3 +125,8 @@ export type PlatformCustomerInspectionListDTO = z.infer<typeof PlatformCustomerI
 export type PlatformCustomerInspectionListResponse = PlatformCustomerInspectionListDTO;
 export type PlatformCustomerInspectionDetailDTO = z.infer<typeof PlatformCustomerInspectionDetailDTOSchema>;
 export type PlatformCustomerInspectionDetailResponse = z.infer<typeof PlatformCustomerInspectionDetailResponseSchema>;
+
+export type PlatformReportInspectionQueryJSON = z.input<typeof PlatformReportInspectionQuerySchema>;
+export type PlatformReportInspectionQuerySVC = z.output<typeof PlatformReportInspectionQuerySchema>;
+export type PlatformReportInspectionDTO = z.infer<typeof PlatformReportInspectionDTOSchema>;
+export type PlatformReportInspectionResponse = PlatformReportInspectionDTO;

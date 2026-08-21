@@ -18,6 +18,8 @@ import type {
     PlatformOrganizationListQueryJSON,
     PlatformOrganizationListResponse,
     PlatformRecentSaleDTO,
+    PlatformReportInspectionQueryJSON,
+    PlatformReportInspectionResponse,
     PlatformSaleInspectionDetailResponse,
     PlatformSaleInspectionListResponse,
     PlatformStoreDetailResponse,
@@ -245,6 +247,34 @@ const successCustomers = (
         ...overrides,
     },
     message: "Platform Organization Customers retrieved successfully",
+    code: 200,
+});
+
+const successReports = (
+    overrides: Partial<PlatformReportInspectionResponse> = {},
+): ServiceResponse<PlatformReportInspectionResponse> => ({
+    status: "success",
+    data: {
+        dateRange: {
+            startDate: "2026-08-19",
+            endDate: "2026-08-19",
+            label: "2026-08-19",
+            timezone: "Asia/Kolkata",
+        },
+        stores: mixedStores.map((store) => ({ id: store.id, name: store.name })),
+        productSales: {
+            products: [{
+                productId: productMixed,
+                productName: "Masala Chai",
+                categoryName: "Beverages",
+                quantitySold: 2,
+            }],
+            productCount: 1,
+            totalQuantitySold: 2,
+        },
+        ...overrides,
+    },
+    message: "Platform Organization Reports retrieved successfully",
     code: 200,
 });
 
@@ -1127,5 +1157,88 @@ describe("Organization Customer inspection", () => {
         );
         expect(await missingView.findByText("Customer was not found")).toBeTruthy();
         expect(missingView.queryByText("Dev Patel")).toBeNull();
+    });
+});
+
+describe("Organization Report inspection", () => {
+    const renderReportSection = (
+        path: string,
+        options: {
+            getPlatformOrganization?: LoadOrganization;
+            getPlatformOrganizationReports?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationReports"]>;
+            reportingQuery?: PlatformDashboardQueryJSON;
+        } = {},
+    ) => {
+        window.history.replaceState(null, "", path);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        return render(
+            <QueryClientProvider client={client}>
+                <PlatformOrganizationDetailPage
+                    organizationId={mixedBistro.id}
+                    section="reports"
+                    reportingQuery={options.reportingQuery}
+                    onNavigate={(nextPath) => {
+                        window.history.pushState(null, "", nextPath);
+                    }}
+                    onBack={() => {}}
+                    getPlatformOrganization={options.getPlatformOrganization ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales))}
+                    getPlatformOrganizationReports={options.getPlatformOrganizationReports ?? (async () => successReports())}
+                />
+            </QueryClientProvider>,
+        );
+    };
+
+    test("shows read-only product sales with explicit report range controls independent of the Dashboard reporting period", async () => {
+        const requested: PlatformReportInspectionQueryJSON[] = [];
+        const view = renderReportSection(
+            organizationInspectionPath(mixedBistro.id, "reports", undefined, {
+                startDate: "2026-08-19",
+                endDate: "2026-08-19",
+                storeId: mixedStores[0]!.id,
+            }),
+            {
+                reportingQuery: { period: "7d" },
+                getPlatformOrganizationReports: async (_organizationId, query = {}) => {
+                    requested.push(query);
+                    return successReports();
+                },
+            },
+        );
+
+        expect(await view.findByRole("heading", { name: "Reports" })).toBeTruthy();
+        expect(view.getByRole("heading", { name: "Product sales" })).toBeTruthy();
+        expect(view.getByText("Masala Chai")).toBeTruthy();
+        expect(view.getByText("2026-08-19")).toBeTruthy();
+        expect(view.getByText(/not the Dashboard reporting period/)).toBeTruthy();
+        expect(view.queryByText("Export")).toBeNull();
+        expect(view.queryByText("Configure report")).toBeNull();
+        await waitFor(() => {
+            expect(requested.some((query) =>
+                query.startDate === "2026-08-19"
+                && query.endDate === "2026-08-19"
+                && query.storeId === mixedStores[0]!.id)).toBe(true);
+        });
+    });
+
+    test("shows empty, loading, and unavailable report states without exposing other Organizations", async () => {
+        const emptyView = renderReportSection(organizationInspectionPath(mixedBistro.id, "reports"), {
+            getPlatformOrganizationReports: async () => successReports({
+                productSales: { products: [], productCount: 0, totalQuantitySold: 0 },
+            }),
+        });
+        expect(await emptyView.findByText("No product sales found")).toBeTruthy();
+
+        const loadingView = renderReportSection(organizationInspectionPath(mixedBistro.id, "reports"), {
+            getPlatformOrganizationReports: () => new Promise(() => {}),
+        });
+        expect(await loadingView.findByLabelText("Loading reports")).toBeTruthy();
+
+        const unavailableView = renderReportSection(organizationInspectionPath(mixedBistro.id, "reports"), {
+            getPlatformOrganizationReports: async () => {
+                throw { code: 404, message: "Store not found", data: null, status: "error" };
+            },
+        });
+        expect(await unavailableView.findByText("Report data was not found")).toBeTruthy();
+        expect(unavailableView.queryByText("Masala Chai")).toBeNull();
     });
 });

@@ -1,8 +1,11 @@
 import {
+    PLATFORM_REPORTING_TIMEZONE,
     STATUS_CODES,
     resolveActiveStoreWindow,
     resolveBillingInspectionDateRange,
     resolvePlatformReportingPeriod,
+    resolveReportInspectionDateRange,
+    formatPlatformReportDateRangeLabel,
     type PlatformBillingInspectionQuerySVC,
     type PlatformCatalogAddOnDetailResponse,
     type PlatformCatalogCategoryDetailResponse,
@@ -19,6 +22,8 @@ import {
     type PlatformOrganizationListItemDTO,
     type PlatformOrganizationListQuerySVC,
     type PlatformOrganizationListResponse,
+    type PlatformReportInspectionQuerySVC,
+    type PlatformReportInspectionResponse,
     type PlatformSaleInspectionDetailResponse,
     type PlatformSaleInspectionListResponse,
     type PlatformStoreDetailResponse,
@@ -46,11 +51,12 @@ type PlatformReportingRepository = Pick<
     | "getOrganizationSaleContext"
     | "listOrganizationCustomers"
     | "getOrganizationCustomerContext"
+    | "getOrganizationReportContext"
 >;
 
 type BillingReadRepository = Pick<
     typeof billingRepository,
-    "getSaleById" | "getSaleItemsBySaleId" | "getPaymentsBySaleId"
+    "getSaleById" | "getSaleItemsBySaleId" | "getPaymentsBySaleId" | "getProductSalesSummary"
 >;
 
 type PlatformReportingDependencies = {
@@ -873,6 +879,69 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                         createdAt: entry.createdAt,
                     })),
                     sales: customer.sales.map(toSaleInspectionSummary),
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationReports: async (
+        organizationId: string,
+        query: PlatformReportInspectionQuerySVC,
+    ): Promise<ServiceResponse<PlatformReportInspectionResponse | null>> => {
+        const now = dependencies.now();
+        const resolvedDates = resolveReportInspectionDateRange(query, now);
+        if (!resolvedDates.ok) {
+            return reportingPeriodError(resolvedDates.message);
+        }
+
+        const baseContext = await dependencies.repository.getOrganizationReportContext(organizationId);
+        if (!baseContext) {
+            return {
+                status: "error",
+                message: "Organization not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        if (query.storeId && !baseContext.stores.some((store) => store.id === query.storeId)) {
+            return {
+                status: "error",
+                message: "Store not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        const products = await dependencies.billingRepository.getProductSalesSummary(
+            organizationId,
+            query.storeId,
+            {
+                createdFrom: resolvedDates.range.startAt?.toISOString(),
+                createdTo: resolvedDates.range.endAt?.toISOString(),
+            },
+        );
+        const totalQuantitySold = products.reduce((sum, product) => sum + product.quantitySold, 0);
+
+        return {
+            status: "success",
+            message: "Platform Organization Reports retrieved successfully",
+            data: {
+                dateRange: {
+                    startDate: resolvedDates.range.startDate,
+                    endDate: resolvedDates.range.endDate,
+                    label: formatPlatformReportDateRangeLabel(
+                        resolvedDates.range.startDate,
+                        resolvedDates.range.endDate,
+                    ),
+                    timezone: PLATFORM_REPORTING_TIMEZONE,
+                },
+                stores: baseContext.stores,
+                productSales: {
+                    products,
+                    productCount: products.length,
+                    totalQuantitySold,
                 },
             },
             code: STATUS_CODES.SUCCESS,

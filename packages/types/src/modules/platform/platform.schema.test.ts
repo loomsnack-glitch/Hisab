@@ -18,6 +18,8 @@ import {
     PlatformCustomerInspectionDetailResponseSchema,
     PlatformCustomerInspectionListDTOSchema,
     PlatformCustomerInspectionQuerySchema,
+    PlatformReportInspectionQuerySchema,
+    PlatformReportInspectionDTOSchema,
     PlatformSaleInspectionDetailResponseSchema,
     PlatformSaleInspectionListDTOSchema,
     FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
@@ -669,5 +671,61 @@ describe("Platform Catalog inspection contracts", () => {
         expect(JSON.stringify({ list, detail })).not.toContain("password");
         expect(JSON.stringify({ list, detail })).not.toContain("token");
         expect(JSON.stringify({ list, detail })).not.toContain("deviceSecret");
+    });
+});
+
+describe("Platform Report inspection contracts", () => {
+    test("defaults report filters to all dates with no Dashboard reporting period", () => {
+        expect(PlatformReportInspectionQuerySchema.parse({})).toEqual({});
+    });
+
+    test("accepts store and explicit report date ranges", () => {
+        expect(
+            PlatformReportInspectionQuerySchema.parse({
+                storeId: "77777777-7777-4777-8777-777777777777",
+                startDate: "2026-08-01",
+                endDate: "2026-08-21",
+            }),
+        ).toEqual({
+            storeId: "77777777-7777-4777-8777-777777777777",
+            startDate: "2026-08-01",
+            endDate: "2026-08-21",
+        });
+    });
+
+    test("rejects invalid store ids and inverted report date ranges", () => {
+        expect(PlatformReportInspectionQuerySchema.safeParse({ storeId: "not-a-uuid" }).success).toBe(false);
+        expect(
+            PlatformReportInspectionQuerySchema.safeParse({
+                startDate: "2026-08-21",
+                endDate: "2026-08-01",
+            }).success,
+        ).toBe(false);
+    });
+
+    test("accepts a read-only product sales report response with an unambiguous date range label", () => {
+        const parsed = PlatformReportInspectionDTOSchema.parse({
+            dateRange: {
+                startDate: "2026-08-01",
+                endDate: "2026-08-21",
+                label: "2026-08-01 to 2026-08-21",
+                timezone: "Asia/Kolkata",
+            },
+            stores: [{ id: "77777777-7777-4777-8777-777777777777", name: "Front Hall" }],
+            productSales: {
+                products: [{
+                    productId: "d1111111-1111-4111-8111-d11111111111",
+                    productName: "Masala Chai",
+                    categoryName: "Beverages",
+                    quantitySold: 2,
+                }],
+                productCount: 1,
+                totalQuantitySold: 2,
+            },
+        });
+
+        expect(parsed.dateRange.label).toBe("2026-08-01 to 2026-08-21");
+        expect(JSON.stringify(parsed)).not.toContain("Export");
+        expect(JSON.stringify(parsed)).not.toContain("Configure");
     });
 });

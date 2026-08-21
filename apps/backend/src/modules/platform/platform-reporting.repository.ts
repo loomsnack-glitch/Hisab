@@ -1808,3 +1808,34 @@ export const getOrganizationCustomerContext = async (
         }),
     };
 };
+
+export type PlatformOrganizationReportContextMetrics = {
+    stores: Array<{ id: string; name: string }>;
+};
+
+export const getOrganizationReportContext = async (
+    organizationId: string,
+): Promise<PlatformOrganizationReportContextMetrics | null> => {
+    const [organization] = await pg`
+        SELECT id
+        FROM organizations
+        WHERE id = ${organizationId}
+    `;
+    if (!organization?.id) {
+        return null;
+    }
+
+    const storeRows = await pg`
+        SELECT id, name
+        FROM stores
+        WHERE organization_id = ${organizationId}
+        ORDER BY name ASC, id ASC
+    `;
+
+    return {
+        stores: storeRows.map((row: Record<string, unknown>) => ({
+            id: String(row.id),
+            name: String(row.name),
+        })),
+    };
+};

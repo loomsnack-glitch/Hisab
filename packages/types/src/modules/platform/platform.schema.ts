@@ -8,6 +8,7 @@ import {
     PaymentDTOSchema,
     PaymentMethodSchema,
     PaymentStatusSchema,
+    ProductSalesSummaryDTOSchema,
     SaleDeviceAuditDTOSchema,
     SaleItemDTOSchema,
     SaleStatusSchema,
@@ -526,6 +527,51 @@ export const PlatformCustomerInspectionDetailResponseSchema = z.object({
     customer: PlatformCustomerInspectionDetailDTOSchema,
 });
 
+export const PlatformReportInspectionQuerySchema = z
+    .object({
+        storeId: z.uuid("Invalid store id").optional(),
+        startDate: calendarDateSchema.optional(),
+        endDate: calendarDateSchema.optional(),
+    })
+    .superRefine((value, ctx) => {
+        if (value.startDate && value.endDate && value.startDate > value.endDate) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["startDate"],
+                message: "Start date must be before or equal to end date",
+            });
+        }
+    });
+
+export const PlatformReportDateRangeDTOSchema = z.object({
+    startDate: z.string().date().nullable(),
+    endDate: z.string().date().nullable(),
+    label: z.string().trim().min(1),
+    timezone: z.literal(PLATFORM_REPORTING_TIMEZONE),
+});
+
+export const PlatformReportProductSalesDTOSchema = z.object({
+    products: z.array(ProductSalesSummaryDTOSchema),
+    productCount: nonNegativeIntSchema,
+    totalQuantitySold: nonNegativeIntSchema,
+});
+
+export const PlatformReportInspectionDTOSchema = z.object({
+    dateRange: PlatformReportDateRangeDTOSchema,
+    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
+    productSales: PlatformReportProductSalesDTOSchema,
+});
+
+export const formatPlatformReportDateRangeLabel = (
+    startDate: string | null,
+    endDate: string | null,
+): string => {
+    if (!startDate && !endDate) return "All dates";
+    if (startDate && endDate && startDate === endDate) return startDate;
+    if (startDate && endDate) return `${startDate} to ${endDate}`;
+    return startDate ?? endDate ?? "All dates";
+};
+
 export const FUTURE_BILLING_INSPECTION_DATE_MESSAGE = "Billing inspection dates cannot be in the future";
 
 export type ResolvedBillingInspectionDateRange = {
@@ -535,8 +581,13 @@ export type ResolvedBillingInspectionDateRange = {
     endAt: Date | null;
 };
 
+export const FUTURE_REPORT_INSPECTION_DATE_MESSAGE = FUTURE_BILLING_INSPECTION_DATE_MESSAGE;
+
 export const resolveBillingInspectionDateRange = (
-    query: Pick<z.output<typeof PlatformBillingInspectionQuerySchema>, "startDate" | "endDate">,
+    query: Pick<
+        z.output<typeof PlatformBillingInspectionQuerySchema | typeof PlatformReportInspectionQuerySchema>,
+        "startDate" | "endDate"
+    >,
     now: Date,
 ): { ok: true; range: ResolvedBillingInspectionDateRange } | { ok: false; message: string } => {
     if (!query.startDate && !query.endDate) {
@@ -564,6 +615,8 @@ export const resolveBillingInspectionDateRange = (
         },
     };
 };
+
+export const resolveReportInspectionDateRange = resolveBillingInspectionDateRange;
 
 export const kolkataCalendarDate = (now: Date): string =>
     new Intl.DateTimeFormat("en-CA", { timeZone: PLATFORM_REPORTING_TIMEZONE }).format(now);

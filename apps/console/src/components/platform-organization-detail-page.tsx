@@ -30,6 +30,7 @@ import {
     getPlatformOrganizationCatalogAddOn as getPlatformOrganizationCatalogAddOnRequest,
     getPlatformOrganizationCustomers as getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer as getPlatformOrganizationCustomerRequest,
+    getPlatformOrganizationReports as getPlatformOrganizationReportsRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
 import {
@@ -68,9 +69,11 @@ import {
     parseBillingInspectionSearch,
     parseCatalogInspectionSearch,
     parseCustomerInspectionSearch,
+    parseReportInspectionSearch,
     type BillingInspectionFilters,
     type CatalogInspectionFilters,
     type CustomerInspectionFilters,
+    type ReportInspectionFilters,
     type CatalogResourceKind,
     type OrganizationInspectionSection,
 } from "@/lib/organization-inspection-url";
@@ -86,6 +89,7 @@ const organizationCatalogCategoryQueryKey = ["platform-owner", "organization-cat
 const organizationCatalogAddOnQueryKey = ["platform-owner", "organization-catalog-add-on"] as const;
 const organizationCustomersQueryKey = ["platform-owner", "organization-customers"] as const;
 const organizationCustomerQueryKey = ["platform-owner", "organization-customer"] as const;
+const organizationReportsQueryKey = ["platform-owner", "organization-reports"] as const;
 
 type PlatformOrganizationDetailPageProps = {
     organizationId: string;
@@ -105,6 +109,7 @@ type PlatformOrganizationDetailPageProps = {
     getPlatformOrganizationCatalogAddOn?: typeof getPlatformOrganizationCatalogAddOnRequest;
     getPlatformOrganizationCustomers?: typeof getPlatformOrganizationCustomersRequest;
     getPlatformOrganizationCustomer?: typeof getPlatformOrganizationCustomerRequest;
+    getPlatformOrganizationReports?: typeof getPlatformOrganizationReportsRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
 };
@@ -241,6 +246,7 @@ const PlatformOrganizationDetailPage = ({
     getPlatformOrganizationCatalogAddOn = getPlatformOrganizationCatalogAddOnRequest,
     getPlatformOrganizationCustomers = getPlatformOrganizationCustomersRequest,
     getPlatformOrganizationCustomer = getPlatformOrganizationCustomerRequest,
+    getPlatformOrganizationReports = getPlatformOrganizationReportsRequest,
     onNavigate,
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
@@ -256,6 +262,9 @@ const PlatformOrganizationDetailPage = ({
         parseCustomerInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
     );
     const [customerSearchInput, setCustomerSearchInput] = useState(customerFilters.search ?? "");
+    const [reportFilters, setReportFilters] = useState<ReportInspectionFilters>(() =>
+        parseReportInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+    );
     const detailQueryInput = toDetailQuery(reportingQuery);
     const periodLabel = reportingPeriodLabel(reportingQuery);
     const detailQuery = useQuery({
@@ -334,6 +343,13 @@ const PlatformOrganizationDetailPage = ({
         placeholderData: keepPreviousData,
         enabled: section === "customers" && Boolean(resourceId),
     });
+    const reportsQuery = useQuery({
+        queryKey: [...organizationReportsQueryKey, organizationId, reportFilters],
+        queryFn: () => getPlatformOrganizationReports(organizationId, reportFilters),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "reports",
+    });
     const response = detailQuery.data;
     const organization = response?.status === "success" ? response.data?.organization : undefined;
     const storesResponse = storesQuery.data;
@@ -356,6 +372,8 @@ const PlatformOrganizationDetailPage = ({
     const customersList = customersResponse?.status === "success" ? customersResponse.data : undefined;
     const customerResponse = customerQuery.data;
     const customerDetail = customerResponse?.status === "success" ? customerResponse.data?.customer : undefined;
+    const reportsResponse = reportsQuery.data;
+    const reportsData = reportsResponse?.status === "success" ? reportsResponse.data : undefined;
     const errorCode = (detailQuery.error as { code?: number } | null)?.code ?? (response?.status === "error" ? response.code : undefined);
     const storesErrorCode = (storesQuery.error as { code?: number } | null)?.code
         ?? (storesResponse?.status === "error" ? storesResponse.code : undefined);
@@ -377,6 +395,8 @@ const PlatformOrganizationDetailPage = ({
         ?? (customersResponse?.status === "error" ? customersResponse.code : undefined);
     const customerErrorCode = (customerQuery.error as { code?: number } | null)?.code
         ?? (customerResponse?.status === "error" ? customerResponse.code : undefined);
+    const reportsErrorCode = (reportsQuery.error as { code?: number } | null)?.code
+        ?? (reportsResponse?.status === "error" ? reportsResponse.code : undefined);
     const catalogDetailErrorCode = catalogResourceKind === "products"
         ? catalogProductErrorCode
         : catalogResourceKind === "categories"
@@ -400,6 +420,8 @@ const PlatformOrganizationDetailPage = ({
                                 ? customerErrorCode ?? errorCode
                                 : section === "customers"
                                     ? customersErrorCode ?? errorCode
+                                    : section === "reports"
+                                        ? reportsErrorCode ?? errorCode
                                     : errorCode;
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
@@ -457,7 +479,21 @@ const PlatformOrganizationDetailPage = ({
                                 ? customerErrorMessage ?? errorMessage
                                 : section === "customers"
                                     ? customersErrorMessage ?? errorMessage
+                                    : section === "reports"
+                                        ? (reportsQuery.error as { message?: string } | null)?.message
+                                            ?? (reportsResponse?.status === "error" ? reportsResponse.message : undefined)
+                                            ?? errorMessage
                                     : errorMessage;
+
+    useEffect(() => {
+        if (section !== "reports") return;
+        const syncReportFilters = () => {
+            setReportFilters(parseReportInspectionSearch(window.location.search));
+        };
+        syncReportFilters();
+        window.addEventListener("popstate", syncReportFilters);
+        return () => window.removeEventListener("popstate", syncReportFilters);
+    }, [section]);
 
     useEffect(() => {
         if (section !== "customers") return;
@@ -531,6 +567,16 @@ const PlatformOrganizationDetailPage = ({
 
     const updateCustomerFilters = (patch: Partial<CustomerInspectionFilters>, nextResourceId?: string) => {
         navigateCustomers({ ...customerFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
+    };
+
+    const navigateReports = (nextFilters: ReportInspectionFilters) => {
+        const path = organizationInspectionPath(organizationId, "reports", undefined, nextFilters);
+        setReportFilters(nextFilters);
+        go(path);
+    };
+
+    const updateReportFilters = (patch: Partial<ReportInspectionFilters>) => {
+        navigateReports({ ...reportFilters, ...patch });
     };
 
     useEffect(() => {
@@ -2315,6 +2361,164 @@ const PlatformOrganizationDetailPage = ({
         return renderCustomerList();
     };
 
+    const renderReportInspection = () => {
+        if (reportsQuery.isLoading) {
+            return (
+                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading reports">
+                    <Spinner className="size-6 text-primary" />
+                </div>
+            );
+        }
+        if (reportsErrorCode === 404) {
+            return (
+                <Alert role="alert">
+                    <AlertTitle>Report data was not found</AlertTitle>
+                    <AlertDescription>
+                        This organization or store is not available. Adjust the report filters to continue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (reportsQuery.isError || reportsResponse?.status === "error") {
+            return (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>Reports could not be loaded</AlertTitle>
+                    <AlertDescription>
+                        {(reportsQuery.error as { message?: string } | null)?.message
+                            ?? reportsResponse?.message
+                            ?? "The report data is unavailable."}
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (!reportsData) return null;
+
+        const selectedStoreName = reportFilters.storeId
+            ? reportsData.stores.find((storeOption) => storeOption.id === reportFilters.storeId)?.name ?? "Selected store"
+            : "All stores";
+        const products = reportsData.productSales.products;
+
+        return (
+            <div className="space-y-6">
+                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                    <CardHeader className="gap-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
+                                Read-only inspection
+                            </Badge>
+                        </div>
+                        <h2 className="font-display text-xl font-semibold tracking-tight">Reports</h2>
+                        <CardDescription>
+                            Organization-scoped product sales for the selected report range.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <section className="space-y-2" aria-label="Selected report range">
+                            <p className="text-sm font-medium text-foreground">
+                                {reportsData.dateRange.label}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                {reportsData.dateRange.startDate && reportsData.dateRange.endDate
+                                    ? `Calendar dates ${reportsData.dateRange.startDate} to ${reportsData.dateRange.endDate} in ${reportsData.dateRange.timezone}.`
+                                    : `All completed sales in ${reportsData.dateRange.timezone}.`}
+                            </p>
+                        </section>
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            <Select
+                                value={reportFilters.storeId ?? "all"}
+                                onValueChange={(value) =>
+                                    updateReportFilters({ storeId: value === "all" ? undefined : value || undefined })}
+                            >
+                                <SelectTrigger aria-label="Report store filter">
+                                    <SelectValue placeholder="All stores" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All stores</SelectItem>
+                                    {reportsData.stores.map((storeOption) => (
+                                        <SelectItem key={storeOption.id} value={storeOption.id}>{storeOption.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Input
+                                type="date"
+                                aria-label="Report start date"
+                                value={reportFilters.startDate ?? ""}
+                                onChange={(event) => updateReportFilters({ startDate: event.target.value || undefined })}
+                            />
+                            <Input
+                                type="date"
+                                aria-label="Report end date"
+                                value={reportFilters.endDate ?? ""}
+                                onChange={(event) => updateReportFilters({ endDate: event.target.value || undefined })}
+                            />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full"
+                                onClick={() => updateReportFilters({ startDate: undefined, endDate: undefined, storeId: reportFilters.storeId })}
+                            >
+                                All dates
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Report filters use this page&apos;s own date and store controls, not the Dashboard reporting period.
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                    <CardHeader className="gap-1">
+                        <h3 className="font-display text-lg font-semibold tracking-tight">Product sales</h3>
+                        <CardDescription>
+                            {`Units sold for ${selectedStoreName}, sorted highest first.`}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <MetricCard label="Products sold" value={String(reportsData.productSales.productCount)} />
+                            <MetricCard label="Total units sold" value={String(reportsData.productSales.totalQuantitySold)} />
+                        </div>
+                        {products.length === 0 ? (
+                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <Package2 />
+                                    </EmptyMedia>
+                                    <EmptyTitle>No product sales found</EmptyTitle>
+                                    <EmptyDescription>Try another report date range or store.</EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        ) : (
+                            <div className="overflow-x-auto rounded-xl border border-border/60">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Product</TableHead>
+                                            <TableHead>Category</TableHead>
+                                            <TableHead className="text-right">Quantity sold</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {products.map((product) => (
+                                            <TableRow key={product.productId}>
+                                                <TableCell className="font-medium">{product.productName}</TableCell>
+                                                <TableCell>{product.categoryName ?? "Uncategorized"}</TableCell>
+                                                <TableCell className="text-right font-semibold">{product.quantitySold}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    };
+
     const renderLaterSection = () => {
         const config = sectionConfig[section];
         const Icon = config.icon;
@@ -2408,7 +2612,7 @@ const PlatformOrganizationDetailPage = ({
 
             {renderSectionNav()}
 
-            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" ? (
+            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
                     <Spinner className="size-6 text-primary" />
                 </div>
@@ -2419,19 +2623,19 @@ const PlatformOrganizationDetailPage = ({
                         {activeSectionErrorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
                 <Alert role="alert">
                     <AlertTitle>Organization was not found</AlertTitle>
                     <AlertDescription>
                         This organization is not available. Return to the organizations list to continue.
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && (detailQuery.isError || response?.status === "error") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && (detailQuery.isError || response?.status === "error") ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Organization could not be loaded</AlertTitle>
                     <AlertDescription>{errorMessage ?? "The organization detail is unavailable."}</AlertDescription>
                 </Alert>
-            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || organization ? (
+            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || section === "reports" || organization ? (
                 section === "overview" && organization
                     ? renderOverview()
                     : section === "stores"
@@ -2442,6 +2646,8 @@ const PlatformOrganizationDetailPage = ({
                                 ? renderCatalogInspection()
                                 : section === "customers"
                                     ? renderCustomerInspection()
+                                    : section === "reports"
+                                        ? renderReportInspection()
                                     : organization
                                         ? renderLaterSection()
                                         : null
