@@ -24,6 +24,9 @@ import type {
     WhatsAppCloudAccountSnapshot,
     WhatsAppCloudOnboardingStateResponseDTO,
     WhatsAppCloudOnboardingResultDTO,
+    WhatsAppCloudTemplateAssetDTO,
+    WhatsAppCloudTemplateBindingDTO,
+    WhatsAppCreateCloudTemplateBindingJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -32,6 +35,9 @@ type WhatsAppAccountsResponse = ServiceResponse<WhatsAppAccountsResponseDTO | nu
 type WhatsAppCloudAccountsResponse = ServiceResponse<{ accounts: WhatsAppCloudAccountSnapshot[] } | null>;
 type WhatsAppCloudAccountResponse = ServiceResponse<WhatsAppCloudAccountSnapshot | null>;
 type WhatsAppCloudOnboardingResponse = ServiceResponse<WhatsAppCloudOnboardingStateResponseDTO | null>;
+type WhatsAppCloudTemplatesResponse = ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>;
+type WhatsAppCloudBindingsResponse = ServiceResponse<{ bindings: WhatsAppCloudTemplateBindingDTO[] } | null>;
+type WhatsAppCloudBindingResponse = ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>;
 type WhatsAppInvoiceResponse = ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
 type WhatsAppReminderResponse = ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
 type WhatsAppPromotionDashboardResponse = ServiceResponse<WhatsAppPromotionDashboardResponseDTO | null>;
@@ -91,6 +97,50 @@ export const refreshWhatsAppCloudAccount = async (organizationId: string, accoun
 export const revokeWhatsAppCloudAccount = async (organizationId: string, accountId: string): Promise<ServiceResponse<null>> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/revoke`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const syncWhatsAppCloudTemplates = async (organizationId: string, accountId: string): Promise<WhatsAppCloudTemplatesResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/templates/sync`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppCloudTemplates = async (organizationId: string, accountId: string): Promise<WhatsAppCloudTemplatesResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/templates`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createWhatsAppCloudTemplateBinding = async (
+    organizationId: string,
+    storeId: string,
+    data: WhatsAppCreateCloudTemplateBindingJSON,
+): Promise<WhatsAppCloudBindingResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/cloud/template-bindings`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppCloudTemplateBindings = async (
+    organizationId: string,
+    storeId: string,
+    whatsappBusinessAccountId?: string,
+): Promise<WhatsAppCloudBindingsResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/whatsapp/cloud/template-bindings`, { params: whatsappBusinessAccountId ? { whatsappBusinessAccountId } : undefined });
         return response.data;
     } catch (error) {
         return handleApiError(error);

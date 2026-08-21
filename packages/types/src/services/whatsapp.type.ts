@@ -49,6 +49,11 @@ import {
     WhatsAppCloudAccountStatusSchema,
     WhatsAppCloudProvisioningStatusSchema,
     WhatsAppCloudProvisioningStepSchema,
+    WhatsAppCloudTemplateStatusSchema,
+    WhatsAppCloudTemplateCategorySchema,
+    WhatsAppCloudTemplateAssetSchema,
+    WhatsAppCloudTemplateBindingSchema,
+    WhatsAppCreateCloudTemplateBindingSchema,
     WhatsAppCloudAccountSnapshotSchema,
     WhatsAppCloudProvisioningAttemptSchema,
     WhatsAppCloudOnboardingStateResponseSchema,
@@ -81,6 +86,11 @@ export type WhatsAppOutboxStatus = z.infer<typeof WhatsAppOutboxStatusSchema>;
 export type WhatsAppCloudAccountStatus = z.infer<typeof WhatsAppCloudAccountStatusSchema>;
 export type WhatsAppCloudProvisioningStatus = z.infer<typeof WhatsAppCloudProvisioningStatusSchema>;
 export type WhatsAppCloudProvisioningStep = z.infer<typeof WhatsAppCloudProvisioningStepSchema>;
+export type WhatsAppCloudTemplateStatus = z.infer<typeof WhatsAppCloudTemplateStatusSchema>;
+export type WhatsAppCloudTemplateCategory = z.infer<typeof WhatsAppCloudTemplateCategorySchema>;
+export type WhatsAppCloudTemplateAssetDTO = z.infer<typeof WhatsAppCloudTemplateAssetSchema>;
+export type WhatsAppCloudTemplateBindingDTO = z.infer<typeof WhatsAppCloudTemplateBindingSchema>;
+export type WhatsAppCreateCloudTemplateBindingJSON = z.infer<typeof WhatsAppCreateCloudTemplateBindingSchema>;
 export type WhatsAppCloudAccountSnapshot = z.infer<typeof WhatsAppCloudAccountSnapshotSchema>;
 export type WhatsAppCloudProvisioningAttempt = z.infer<typeof WhatsAppCloudProvisioningAttemptSchema>;
 export type WhatsAppCloudOnboardingStateResponseDTO = z.infer<typeof WhatsAppCloudOnboardingStateResponseSchema>;

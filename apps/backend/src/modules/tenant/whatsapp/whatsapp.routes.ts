@@ -19,6 +19,7 @@ import {
     WhatsAppWorkerInvoiceResultSchema,
     WhatsAppWorkerMessageStatusSchema,
     WhatsAppWorkerStatusUpdateSchema,
+    WhatsAppCreateCloudTemplateBindingSchema,
 } from "@repo/types";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { handleServiceResponse } from "@/helpers/service.helper";
@@ -35,6 +36,12 @@ import {
     refreshCloudAccountForOrganization,
     revokeCloudAccountForOrganization,
 } from "./cloud-api/cloud-account.service";
+import {
+    listCloudTemplatesForAccount,
+    syncCloudTemplatesForAccount,
+    createCloudTemplateBindingForStore,
+    listCloudTemplateBindingsForStore,
+} from "./cloud-api/cloud-template.service";
 
 const uuidSchema = z.uuid("Invalid id");
 const userRouter = new Hono<{ Variables: AppVariables }>();
@@ -136,6 +143,61 @@ userRouter.get("/:organizationId/whatsapp/accounts/:accountId", async c => {
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid account id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.getOrganizationAccountStatus(c.get("authUser").id, organizationId, accountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/accounts/:accountId/templates/sync", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const accountId = c.req.param("accountId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await syncCloudTemplatesForAccount(c.get("authUser").id, organizationId, accountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/templates", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const accountId = c.req.param("accountId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await listCloudTemplatesForAccount(c.get("authUser").id, organizationId, accountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post(
+    "/:organizationId/stores/:storeId/whatsapp/cloud/template-bindings",
+    validateSchema("json", WhatsAppCreateCloudTemplateBindingSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await createCloudTemplateBindingForStore(c.get("authUser").id, organizationId, storeId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/cloud/template-bindings", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const whatsappBusinessAccountId = c.req.query("whatsappBusinessAccountId");
+        const invalidAccount = whatsappBusinessAccountId ? invalidUuid(whatsappBusinessAccountId, "Invalid WABA id") : null;
+        if (invalidAccount) return c.json(invalidAccount, invalidAccount.code);
+        return handleServiceResponse(c, await listCloudTemplateBindingsForStore(c.get("authUser").id, organizationId, storeId, whatsappBusinessAccountId));
     } catch (error) {
         return unexpectedError(c, error);
     }

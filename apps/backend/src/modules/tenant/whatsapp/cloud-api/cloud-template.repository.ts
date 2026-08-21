@@ -1,0 +1,308 @@
+import {
+  WhatsAppCloudTemplateAssetSchema,
+  WhatsAppCloudTemplateBindingSchema,
+  type WhatsAppCloudTemplateAssetDTO,
+  type WhatsAppCloudTemplateBindingDTO,
+  type WhatsAppMessageTemplateKind,
+} from "@repo/types";
+import { pg } from "@/config/db";
+import { snakeToCamel } from "@/utils/case";
+
+export type CloudTemplateAssetInput = {
+  organizationId: string;
+  whatsappBusinessAccountId: string;
+  metaTemplateId: string;
+  name: string;
+  languageCode: string;
+  category: "marketing" | "utility" | "authentication" | "unknown";
+  status: "approved" | "rejected" | "paused" | "disabled" | "pending" | "unknown";
+  components: unknown[];
+  rejectionReason: string | null;
+  providerUpdatedAt: string | null;
+};
+
+export type CloudTemplateBindingSnapshot = {
+  binding: WhatsAppCloudTemplateBindingDTO;
+  asset: WhatsAppCloudTemplateAssetDTO;
+};
+
+const boundedText = (value: unknown, label: string, maxLength: number): string => {
+  if (typeof value !== "string") throw new Error(`Cloud template ${label} is invalid`);
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLength || /[\r\n]/.test(normalized)) {
+    throw new Error(`Cloud template ${label} is invalid`);
+  }
+  return normalized;
+};
+
+const nullableBoundedText = (value: unknown, maxLength: number): string | null => {
+  if (value === null || value === undefined) return null;
+  return boundedText(value, "rejection reason", maxLength);
+};
+
+const normalizeStatus = (value: unknown): CloudTemplateAssetInput["status"] => {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "approved" || normalized === "rejected" || normalized === "paused" || normalized === "disabled" || normalized === "pending") return normalized;
+  return "unknown";
+};
+
+const normalizeCategory = (value: unknown): CloudTemplateAssetInput["category"] => {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "marketing" || normalized === "utility" || normalized === "authentication") return normalized;
+  return "unknown";
+};
+
+const normalizeLanguageCode = (value: unknown): string => {
+  if (typeof value === "string") return boundedText(value, "language", 64);
+  if (value && typeof value === "object" && "code" in value) return boundedText((value as { code?: unknown }).code, "language", 64);
+  throw new Error("Cloud template language is invalid");
+};
+
+/** Normalize provider data before it reaches SQL or the public DTO. */
+export const normalizeCloudTemplateAsset = (
+  organizationId: string,
+  whatsappBusinessAccountId: string,
+  providerTemplate: Record<string, unknown>,
+): CloudTemplateAssetInput => ({
+  organizationId,
+  whatsappBusinessAccountId,
+  metaTemplateId: boundedText(providerTemplate.id, "id", 255),
+  name: boundedText(providerTemplate.name, "name", 512),
+  languageCode: normalizeLanguageCode(providerTemplate.language),
+  category: normalizeCategory(providerTemplate.category),
+  status: normalizeStatus(providerTemplate.status),
+  components: Array.isArray(providerTemplate.components) ? providerTemplate.components : [],
+  rejectionReason: nullableBoundedText(providerTemplate.rejected_reason ?? providerTemplate.rejection_reason, 1000),
+  providerUpdatedAt: typeof providerTemplate.updated_at === "string" ? providerTemplate.updated_at : null,
+});
+
+const mapAsset = (row: Record<string, unknown>): WhatsAppCloudTemplateAssetDTO => {
+  const mapped = snakeToCamel(row) as Record<string, unknown>;
+  return WhatsAppCloudTemplateAssetSchema.parse({
+    id: mapped.id,
+    organizationId: mapped.organizationId,
+    whatsappBusinessAccountId: mapped.whatsappBusinessAccountId,
+    metaTemplateId: mapped.metaTemplateId,
+    name: mapped.name,
+    languageCode: mapped.languageCode,
+    category: mapped.category,
+    status: mapped.status,
+    components: Array.isArray(mapped.components) ? mapped.components : [],
+    rejectionReason: mapped.rejectionReason ?? null,
+    providerUpdatedAt: mapped.providerUpdatedAt ?? null,
+    lastSyncedAt: mapped.lastSyncedAt,
+    version: Number(mapped.version),
+  });
+};
+
+const mapBinding = (row: Record<string, unknown>): WhatsAppCloudTemplateBindingDTO => {
+  const mapped = snakeToCamel(row) as Record<string, unknown>;
+  return WhatsAppCloudTemplateBindingSchema.parse({
+    id: mapped.id,
+    organizationId: mapped.organizationId,
+    storeId: mapped.storeId,
+    localTemplateId: mapped.localTemplateId,
+    cloudTemplateId: mapped.cloudTemplateId,
+    whatsappBusinessAccountId: mapped.whatsappBusinessAccountId,
+    kind: mapped.kind,
+    isDefault: Boolean(mapped.isDefault),
+    isActive: Boolean(mapped.isActive),
+    createdAt: mapped.createdAt,
+    updatedAt: mapped.updatedAt,
+  });
+};
+
+export const upsertCloudTemplateAssets = async (
+  assets: CloudTemplateAssetInput[],
+): Promise<WhatsAppCloudTemplateAssetDTO[]> => {
+  if (assets.length === 0) return [];
+  return pg.begin(async tx => {
+    const result: WhatsAppCloudTemplateAssetDTO[] = [];
+    for (const asset of assets) {
+      const [row] = await tx`
+        INSERT INTO whatsapp_cloud_templates (
+          organization_id, whatsapp_business_account_id, meta_template_id, name,
+          language_code, category, status, components, rejection_reason,
+          provider_updated_at, last_synced_at
+        ) VALUES (
+          ${asset.organizationId}, ${asset.whatsappBusinessAccountId}, ${asset.metaTemplateId}, ${asset.name},
+          ${asset.languageCode}, ${asset.category}, ${asset.status}, ${JSON.stringify(asset.components)}::jsonb,
+          ${asset.rejectionReason}, ${asset.providerUpdatedAt}, NOW()
+        )
+        ON CONFLICT (whatsapp_business_account_id, meta_template_id)
+        DO UPDATE SET
+          name = EXCLUDED.name,
+          language_code = EXCLUDED.language_code,
+          category = EXCLUDED.category,
+          status = EXCLUDED.status,
+          components = EXCLUDED.components,
+          rejection_reason = EXCLUDED.rejection_reason,
+          provider_updated_at = EXCLUDED.provider_updated_at,
+          last_synced_at = NOW(),
+          version = CASE
+            WHEN whatsapp_cloud_templates.name IS DISTINCT FROM EXCLUDED.name
+              OR whatsapp_cloud_templates.language_code IS DISTINCT FROM EXCLUDED.language_code
+              OR whatsapp_cloud_templates.category IS DISTINCT FROM EXCLUDED.category
+              OR whatsapp_cloud_templates.status IS DISTINCT FROM EXCLUDED.status
+              OR whatsapp_cloud_templates.components IS DISTINCT FROM EXCLUDED.components
+              OR whatsapp_cloud_templates.rejection_reason IS DISTINCT FROM EXCLUDED.rejection_reason
+            THEN whatsapp_cloud_templates.version + 1
+            ELSE whatsapp_cloud_templates.version
+          END,
+          updated_at = NOW()
+        RETURNING *
+      `;
+      if (row) result.push(mapAsset(row as Record<string, unknown>));
+    }
+    return result;
+  });
+};
+
+export const listCloudTemplateAssets = async (
+  organizationId: string,
+  whatsappBusinessAccountId: string,
+): Promise<WhatsAppCloudTemplateAssetDTO[]> => {
+  const rows = await pg`
+    SELECT *
+    FROM whatsapp_cloud_templates
+    WHERE organization_id = ${organizationId}
+      AND whatsapp_business_account_id = ${whatsappBusinessAccountId}
+    ORDER BY LOWER(name), language_code
+  `;
+  return rows.map((row: Record<string, unknown>) => mapAsset(row));
+};
+
+export const createCloudTemplateBinding = async (input: {
+  organizationId: string;
+  storeId: string;
+  localTemplateId: string;
+  cloudTemplateId: string;
+  whatsappBusinessAccountId: string;
+  kind: WhatsAppMessageTemplateKind;
+  isDefault: boolean;
+  createdBy: string;
+}): Promise<WhatsAppCloudTemplateBindingDTO> => pg.begin(async tx => {
+  const [localTemplate] = await tx`
+    SELECT id, kind
+    FROM whatsapp_message_templates
+    WHERE id = ${input.localTemplateId}
+      AND organization_id = ${input.organizationId}
+      AND store_id = ${input.storeId}
+      AND kind = ${input.kind}
+      AND is_active = TRUE
+  `;
+  if (!localTemplate) throw new Error("Local WhatsApp template is unavailable");
+  const [asset] = await tx`
+    SELECT id
+    FROM whatsapp_cloud_templates
+    WHERE id = ${input.cloudTemplateId}
+      AND organization_id = ${input.organizationId}
+      AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+  `;
+  if (!asset) throw new Error("Cloud WhatsApp template is unavailable");
+  const [assignment] = await tx`
+    SELECT 1
+    FROM whatsapp_account_stores assignments
+    INNER JOIN whatsapp_accounts accounts
+      ON accounts.id = assignments.whatsapp_account_id
+     AND accounts.organization_id = assignments.organization_id
+    WHERE assignments.organization_id = ${input.organizationId}
+      AND assignments.store_id = ${input.storeId}
+      AND accounts.provider = 'cloud_api'
+      AND accounts.whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+    LIMIT 1
+  `;
+  if (!assignment) throw new Error("Cloud WhatsApp account is not assigned to this Store");
+  if (input.isDefault) {
+    await tx`
+      UPDATE whatsapp_cloud_template_bindings
+      SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
+      WHERE organization_id = ${input.organizationId}
+        AND store_id = ${input.storeId}
+        AND kind = ${input.kind}
+    `;
+  }
+  const [row] = await tx`
+    INSERT INTO whatsapp_cloud_template_bindings (
+      organization_id, store_id, local_template_id, cloud_template_id,
+      whatsapp_business_account_id, kind, is_default, created_by, updated_by
+    ) VALUES (
+      ${input.organizationId}, ${input.storeId}, ${input.localTemplateId}, ${asset.id},
+      ${input.whatsappBusinessAccountId}, ${input.kind}, ${input.isDefault}, ${input.createdBy}, ${input.createdBy}
+    )
+    ON CONFLICT (organization_id, store_id, local_template_id, cloud_template_id)
+    DO UPDATE SET
+      whatsapp_business_account_id = EXCLUDED.whatsapp_business_account_id,
+      kind = EXCLUDED.kind,
+      is_default = EXCLUDED.is_default,
+      is_active = TRUE,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()
+    RETURNING *
+  `;
+  if (!row) throw new Error("Cloud WhatsApp template binding could not be saved");
+  return mapBinding(row as Record<string, unknown>);
+});
+
+export const listCloudTemplateBindings = async (
+  organizationId: string,
+  storeId: string,
+  whatsappBusinessAccountId?: string,
+): Promise<WhatsAppCloudTemplateBindingDTO[]> => {
+  const rows = whatsappBusinessAccountId
+    ? await pg`
+        SELECT * FROM whatsapp_cloud_template_bindings
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND whatsapp_business_account_id = ${whatsappBusinessAccountId}
+        ORDER BY kind, is_default DESC, updated_at DESC
+      `
+    : await pg`
+        SELECT * FROM whatsapp_cloud_template_bindings
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+        ORDER BY kind, is_default DESC, updated_at DESC
+      `;
+  return rows.map((row: Record<string, unknown>) => mapBinding(row));
+};
+
+export const getCloudTemplateBindingSnapshot = async (
+  organizationId: string,
+  bindingId: string,
+): Promise<CloudTemplateBindingSnapshot | null> => {
+  const [row] = await pg`
+    SELECT bindings.*, assets.id AS asset_id, assets.organization_id AS asset_organization_id,
+           assets.whatsapp_business_account_id AS asset_whatsapp_business_account_id,
+           assets.meta_template_id, assets.name AS asset_name, assets.language_code,
+           assets.category AS asset_category, assets.status AS asset_status,
+           assets.components, assets.rejection_reason, assets.provider_updated_at,
+           assets.last_synced_at, assets.version
+    FROM whatsapp_cloud_template_bindings bindings
+    INNER JOIN whatsapp_cloud_templates assets
+      ON assets.id = bindings.cloud_template_id
+     AND assets.organization_id = bindings.organization_id
+    WHERE bindings.organization_id = ${organizationId}
+      AND bindings.id = ${bindingId}
+      AND bindings.is_active = TRUE
+  `;
+  if (!row) return null;
+  const raw = row as Record<string, unknown>;
+  return {
+    binding: mapBinding(raw),
+    asset: mapAsset({
+      id: raw.assetId,
+      organization_id: raw.assetOrganizationId,
+      whatsapp_business_account_id: raw.assetWhatsappBusinessAccountId,
+      meta_template_id: raw.metaTemplateId,
+      name: raw.assetName,
+      language_code: raw.languageCode,
+      category: raw.assetCategory,
+      status: raw.assetStatus,
+      components: raw.components,
+      rejection_reason: raw.rejectionReason,
+      provider_updated_at: raw.providerUpdatedAt,
+      last_synced_at: raw.lastSyncedAt,
+      version: raw.version,
+    }),
+  };
+};

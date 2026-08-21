@@ -170,7 +170,7 @@ The branch now also contains a Cloud API contract foundation:
 | Phase 2A–2D Cloud contracts | Runtime seams implemented; provider gate open | Signed receipt replay is scheduled, Baileys claims are provider-scoped, Cloud outbox leasing/dispatch/media upload and uncertain-send reconciliation are implemented behind injected credential/storage ports, and focused fixtures pass. Live vault assembly, Meta verification, and production observation remain. |
 | Phase 3A–3D onboarding contracts | Implemented | State, persistence, result validation, and server-side exchange seams are covered by focused fixtures. |
 | Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, refresh/revoke endpoints, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, durable provisioning-attempt execution, and production-shaped Store/inbound testing remain. |
-| Phase 4 templates/policy | Not started | Existing Hisab templates/promotions are Baileys/local-template features; Meta template approval/binding/sync and policy admission are absent. |
+| Phase 4 templates/policy | 4A code-first complete; 4B next | Phase 4 is split into 4A Meta asset/binding sync, 4B auditable consent/suppression, and 4C send-time policy admission. Existing Hisab templates/promotions remain local until these seams are complete. |
 | Phase 5 quotas/usage/safety | Not started | Existing queue limits/cooldowns are not the append-only usage ledger, atomic quota reservation, Meta-limit sync, or reconciliation model required here. |
 | Phase 6 feature migration | Blocked | Must wait for the Phase 2–5 exit gates. |
 | Phase 7 Baileys retirement | Not started | Baileys code, auth state, UI, deployment, and port `8100` remain intentionally. |
@@ -577,9 +577,9 @@ database run prove the full flow.
 
 ### Phase 4: Templates and policy enforcement
 
-Status: **not started**. The existing local Hisab template manager and
-promotion UI must not be treated as Meta template approval or policy
-enforcement.
+Status: **sub-phased; 4A code-first complete; 4B next**. The existing local Hisab template
+manager and promotion UI must not be treated as Meta template approval or
+policy enforcement.
 
 Dependencies: Phases 2–3 and approved test WABA.
 
@@ -595,6 +595,61 @@ Deliverables:
 Exit gate: a controlled test proves that approved templates send, invalid
 templates are blocked, approval changes are reflected, and marketing cannot
 send without consent.
+
+#### Phase 4A: Meta template assets, bindings, and sync
+
+Review result: the existing `whatsapp_message_templates` table is a Store-local
+preset table. It cannot represent a WABA-level Meta asset, approval/rejection
+state, language/category, binding history, or the immutable template snapshot
+required by queued messages.
+
+Implementation boundary:
+
+- add separate WABA-level Meta template assets and Store/preset bindings;
+- normalize provider status, category, language, components, and rejection data;
+- add a server-side Graph sync seam with idempotent upserts;
+- snapshot the selected binding/version on Cloud outbox rows;
+- keep live Graph and Meta approval verification outside the code-only gate.
+
+Review result: the migration provides WABA/org-scoped assets, Store/preset
+bindings, one active default per Store/kind, and org-scoped outbox snapshot
+foreign keys. The service and repository seams are implemented and the focused
+Cloud suite passes 82 tests. Live migration execution, authenticated Graph
+pagination, a real test WABA, and an integration fixture proving the database
+constraints plus enqueue-time snapshot write remain open; the latter is wired
+in Phase 4C with send-time admission.
+
+Exit gate for this code-first slice: provider rows normalize safely, sync is
+idempotent by WABA/provider template identity, bindings are authenticated and
+Store/account scoped, and the outbox schema can retain the selected snapshot.
+
+#### Phase 4B: Auditable consent and suppression
+
+Implementation boundary:
+
+- add explicit marketing and utility consent state, source, wording/version,
+  timestamps, opt-out reason, and suppression precedence;
+- preserve current opt-out behavior while making default migration policy
+  explicit;
+- expose bounded customer consent commands for Admin/POS use.
+
+Exit gate: consent history is append-only/auditable, suppression wins over
+campaign selection, and existing customers are not silently treated as opted
+in.
+
+#### Phase 4C: Send-time policy admission
+
+Implementation boundary:
+
+- require an approved Cloud binding for Cloud template sends;
+- enforce category/intent compatibility, required variables, consent, and the
+  rolling 24-hour customer-service window;
+- return safe operator-facing reasons and wire template status/consent UI;
+- leave quota/budget reservation to Phase 5.
+
+Exit gate: fixture tests prove approved utility sends, rejected/pending/paused
+templates, missing consent, invalid variables, and expired 24-hour windows are
+blocked before an outbox row is created.
 
 ### Phase 5: Quotas, usage, and campaign safety
 
@@ -696,9 +751,10 @@ current branch, work proceeds in this order:
    remaining work is deployment-selected secret-manager assembly, durable
    provisioning-attempt execution, Meta test-WABA verification, and the
    production-shaped reload/reconnect/inbound acceptance run.
-6. **Implement Phase 4.** Separate Hisab presets from Meta-approved bindings,
-   synchronize approval/rejection/paused status, and enforce consent,
-   suppression, template variables, message category, and the 24-hour window.
+6. **Implement Phase 4 in sub-phases.** Complete 4A Meta asset/binding sync,
+   then 4B auditable consent/suppression, then 4C send-time template/category,
+   variable, consent, and 24-hour admission. Keep quota/budget reservation in
+   Phase 5 and do not route production POS sends until the Phase 4 exit gate.
 7. **Implement Phase 5.** Add the append-only usage ledger, atomic quota and
    budget reservations, Meta limit/quality snapshots, rolling recipient
    windows, cooldown/duplicate admission, campaign stop, and reconciliation.

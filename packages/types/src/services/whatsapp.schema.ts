@@ -53,6 +53,60 @@ export const WhatsAppCloudProvisioningStepSchema = z.enum([
     "completed",
 ]);
 
+export const WhatsAppCloudTemplateStatusSchema = z.enum([
+    "approved",
+    "rejected",
+    "paused",
+    "disabled",
+    "pending",
+    "unknown",
+]);
+
+export const WhatsAppCloudTemplateCategorySchema = z.enum([
+    "marketing",
+    "utility",
+    "authentication",
+    "unknown",
+]);
+
+export const WhatsAppCloudTemplateAssetSchema = z.object({
+    id: z.uuid("Invalid Cloud template id"),
+    organizationId: z.uuid("Invalid organization id"),
+    whatsappBusinessAccountId: z.uuid("Invalid WABA id"),
+    metaTemplateId: z.string().trim().min(1).max(255),
+    name: z.string().trim().min(1).max(512),
+    languageCode: z.string().trim().min(1).max(64),
+    category: WhatsAppCloudTemplateCategorySchema,
+    status: WhatsAppCloudTemplateStatusSchema,
+    components: z.array(z.unknown()),
+    rejectionReason: z.string().trim().min(1).max(1000).nullable(),
+    providerUpdatedAt: dtoDateSchema.nullable(),
+    lastSyncedAt: dtoDateSchema,
+    version: z.number().int().min(1),
+});
+
+export const WhatsAppCloudTemplateBindingSchema = z.object({
+    id: z.uuid("Invalid template binding id"),
+    organizationId: z.uuid("Invalid organization id"),
+    storeId: z.uuid("Invalid store id"),
+    localTemplateId: z.uuid("Invalid local template id"),
+    cloudTemplateId: z.uuid("Invalid Cloud template id"),
+    whatsappBusinessAccountId: z.uuid("Invalid WABA id"),
+    kind: WhatsAppMessageTemplateKindSchema,
+    isDefault: z.boolean(),
+    isActive: z.boolean(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const WhatsAppCreateCloudTemplateBindingSchema = z.object({
+    localTemplateId: z.uuid("Invalid local template id"),
+    cloudTemplateId: z.uuid("Invalid Cloud template id"),
+    whatsappBusinessAccountId: z.uuid("Invalid WABA id"),
+    kind: WhatsAppMessageTemplateKindSchema,
+    isDefault: z.boolean().optional(),
+});
+
 export const WhatsAppCloudAccountSnapshotSchema = z.object({
     id: z.uuid("Invalid WhatsApp account id"),
     organizationId: z.uuid("Invalid organization id"),
