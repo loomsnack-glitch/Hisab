@@ -745,8 +745,9 @@ Last updated: 2026-08-22
   invoice, due-reminder, promotion, and inbox-text paths reject Cloud accounts,
   and the Cloud dispatcher claims only Cloud template outbox rows.
 - Verification: Cloud-focused suite passes 87 tests; `git diff --check` passes.
-- Loop 2 — **next**: wire the Cloud runtime scheduler and implement durable
-  reconciliation for uncertain sends.
+- Loop 2A — **complete**: wire the Cloud outbox scheduler behind the explicit
+  `WHATSAPP_CLOUD_OUTBOX_ENABLED` gate and prevent overlapping dispatch cycles.
+- Loop 2B — **next**: implement durable reconciliation for uncertain sends.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 
