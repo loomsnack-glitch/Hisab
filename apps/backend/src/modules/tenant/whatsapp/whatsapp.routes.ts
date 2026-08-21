@@ -28,6 +28,13 @@ import type { AppVariables } from "@/types/hono";
 import * as service from "./whatsapp.service";
 import { registerCloudOnboardingRoutes } from "./cloud-api/cloud-onboarding.routes";
 import { startCloudOnboarding } from "./cloud-api/cloud-onboarding.service";
+import {
+    completeCloudAccountProvisioning,
+    getCloudAccountForOrganization,
+    listCloudAccountsForOrganization,
+    refreshCloudAccountForOrganization,
+    revokeCloudAccountForOrganization,
+} from "./cloud-api/cloud-account.service";
 
 const uuidSchema = z.uuid("Invalid id");
 const userRouter = new Hono<{ Variables: AppVariables }>();
@@ -61,7 +68,13 @@ const workerPartitionFromQuery = (c: Context): { count: number; index: number } 
 };
 
 userRouter.use("*", authMiddleware);
-registerCloudOnboardingRoutes(userRouter, startCloudOnboarding);
+registerCloudOnboardingRoutes(userRouter, startCloudOnboarding, {
+    complete: completeCloudAccountProvisioning,
+    list: listCloudAccountsForOrganization,
+    get: getCloudAccountForOrganization,
+    refresh: refreshCloudAccountForOrganization,
+    revoke: revokeCloudAccountForOrganization,
+});
 
 userRouter.get("/:organizationId/whatsapp/accounts", async c => {
     try {

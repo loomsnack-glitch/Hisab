@@ -278,3 +278,117 @@ export const rotateCloudCredentialBinding = async (input: {
   `;
   return rows.count === 1;
 };
+
+export const refreshCloudAccountMetadata = async (input: {
+  organizationId: string;
+  accountId: string;
+  wabaId: string;
+  displayName: string | null;
+  phoneNumberId: string;
+  phoneNumber: string;
+  verifiedName: string | null;
+  updatedBy: string;
+}): Promise<WhatsAppCloudAccountSnapshot | null> => {
+  const wabaId = providerId(input.wabaId, "WABA ID");
+  const phoneNumberId = providerId(input.phoneNumberId, "Phone Number ID");
+  const phoneNumber = normalizePhoneNumber(input.phoneNumber);
+  if (!phoneNumber) throw new Error("Invalid WhatsApp Cloud phone number");
+
+  return pg.begin(async tx => {
+    const [business] = await tx`
+      UPDATE whatsapp_business_accounts business
+      SET waba_id = ${wabaId},
+          display_name = ${nullableText(input.displayName, 255)},
+          status = 'connected',
+          last_error_code = NULL,
+          last_error_message = NULL,
+          last_graph_api_at = NOW(),
+          updated_by = ${input.updatedBy},
+          updated_at = NOW()
+      WHERE business.id = (
+        SELECT account.whatsapp_business_account_id
+        FROM whatsapp_accounts account
+        WHERE account.id = ${input.accountId}
+          AND account.organization_id = ${input.organizationId}
+          AND account.provider = 'cloud_api'
+      )
+        AND business.organization_id = ${input.organizationId}
+      RETURNING business.id
+    `;
+    if (!business) return null;
+
+    const [account] = await tx`
+      UPDATE whatsapp_accounts
+      SET phone_number = ${phoneNumber},
+          phone_number_normalized = ${phoneNumber},
+          cloud_phone_number_id = ${phoneNumberId},
+          cloud_verified_name = ${nullableText(input.verifiedName, 255)},
+          cloud_status = 'connected',
+          status = 'connected',
+          cloud_last_graph_api_at = NOW(),
+          cloud_last_error_code = NULL,
+          cloud_last_error_message = NULL,
+          updated_by = ${input.updatedBy},
+          updated_at = NOW()
+      WHERE id = ${input.accountId}
+        AND organization_id = ${input.organizationId}
+        AND provider = 'cloud_api'
+        AND whatsapp_business_account_id = ${business.id}
+      RETURNING id
+    `;
+    if (!account) return null;
+
+    const [snapshot] = await tx.unsafe(
+      `
+        SELECT ${cloudAccountSnapshotColumns("account")}
+        FROM whatsapp_accounts account
+        LEFT JOIN whatsapp_business_accounts business
+          ON business.id = account.whatsapp_business_account_id
+         AND business.organization_id = account.organization_id
+        WHERE account.organization_id = $1
+          AND account.id = $2
+          AND account.provider = 'cloud_api'
+      `,
+      [input.organizationId, input.accountId],
+    );
+    return snapshot ? mapCloudAccountSnapshot(snapshot as CloudAccountSnapshotRow) : null;
+  });
+};
+
+export const revokeCloudAccount = async (input: {
+  organizationId: string;
+  accountId: string;
+  updatedBy: string;
+}): Promise<boolean> => {
+  return pg.begin(async tx => {
+    const [account] = await tx`
+      SELECT whatsapp_business_account_id
+      FROM whatsapp_accounts
+      WHERE id = ${input.accountId}
+        AND organization_id = ${input.organizationId}
+        AND provider = 'cloud_api'
+      FOR UPDATE
+    `;
+    if (!account) return false;
+
+    await tx`
+      UPDATE whatsapp_business_accounts
+      SET status = 'revoked',
+          updated_by = ${input.updatedBy},
+          updated_at = NOW()
+      WHERE id = ${account.whatsapp_business_account_id}
+        AND organization_id = ${input.organizationId}
+    `;
+    await tx`
+      UPDATE whatsapp_accounts
+      SET cloud_status = 'revoked',
+          status = 'revoked',
+          updated_by = ${input.updatedBy},
+          updated_at = NOW()
+      WHERE id = ${input.accountId}
+        AND organization_id = ${input.organizationId}
+        AND provider = 'cloud_api'
+    `;
+    return true;
+  });
+};

@@ -151,11 +151,15 @@ The branch now also contains a Cloud API contract foundation:
 - the public webhook route is mounted at `/webhooks/whatsapp`, and the
   authenticated onboarding-start route is mounted with the existing WhatsApp
   routes;
-- no Cloud account is created from the onboarding result, no Meta WABA/phone
-  provisioning is wired to the Graph client, and no Cloud dispatcher claims
-  the existing outbox;
-- no Admin Cloud account/template/usage UI is wired; the current account UI and
-  `apps/whatsapp-worker` still serve the Baileys flow.
+- Cloud account provisioning now exchanges the Embedded Signup code server-side,
+  validates the WABA and sender against Graph, subscribes the WABA, stores only
+  an opaque credential binding, and persists a safe account snapshot;
+- Cloud refresh/revoke endpoints and a provider-aware Admin account surface are
+  wired, including Meta Embedded Signup launch, status display, refresh, revoke,
+  and reconnect actions; the existing Baileys account surface remains available
+  until Phase 7;
+- the real secret-manager adapter, Meta App configuration, live Graph exchange,
+  and production webhook verification remain external release gates.
 
 ### Verified implementation status (2026-08-22)
 
@@ -164,8 +168,8 @@ The branch now also contains a Cloud API contract foundation:
 | Phase 0 Meta/product readiness | Readiness researched; external gate deferred | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions remain a release/integration gate. |
 | Phase 1 account/database foundation | Code-first foundation implemented; exit gate open | The injected credential-vault/key-version port, atomic WABA/sender persistence, credential-binding rotation seam, and read-only integrity verification script are implemented and fixture-tested. Applying the migration set to a production-shaped copy, wiring the real secret manager, and running the database/security exit checks remain. |
 | Phase 2A–2D Cloud contracts | Runtime seams implemented; provider gate open | Signed receipt replay is scheduled, Baileys claims are provider-scoped, Cloud outbox leasing/dispatch/media upload and uncertain-send reconciliation are implemented behind injected credential/storage ports, and focused fixtures pass. Live vault assembly, Meta verification, and production observation remain. |
-| Phase 3A–3D onboarding contracts | Contract slices implemented | State, persistence, result validation, and exchange seams exist. Embedded Signup UI, live exchange, WABA discovery, phone registration, webhook subscription, credential binding, and Store assignment remain. |
-| Phase 3 account operations | Not started | No connected Cloud account lifecycle is exposed end to end. |
+| Phase 3A–3D onboarding contracts | Implemented | State, persistence, result validation, and server-side exchange seams are covered by focused fixtures. |
+| Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, refresh/revoke endpoints, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, durable provisioning-attempt execution, and production-shaped Store/inbound testing remain. |
 | Phase 4 templates/policy | Not started | Existing Hisab templates/promotions are Baileys/local-template features; Meta template approval/binding/sync and policy admission are absent. |
 | Phase 5 quotas/usage/safety | Not started | Existing queue limits/cooldowns are not the append-only usage ledger, atomic quota reservation, Meta-limit sync, or reconciliation model required here. |
 | Phase 6 feature migration | Blocked | Must wait for the Phase 2–5 exit gates. |
@@ -548,9 +552,11 @@ gate.
 
 ### Phase 3: Embedded Signup and account operations
 
-Status: **contract slices implemented; account operations not started**. The
-3A–3D state, persistence, result, and exchange contracts exist, but they stop
-before provider discovery and account creation.
+Status: **code-first account operations implemented; external verification open**.
+The 3A–3D state, persistence, result, and exchange contracts now flow through
+server-side Graph discovery, sender validation, WABA subscription, credential
+binding, account persistence, refresh/revoke operations, and the Admin Cloud
+account surface. Baileys remains available for the later controlled migration.
 
 Dependencies: Phases 0–2.
 
@@ -564,9 +570,10 @@ Deliverables:
 - Store assignment and default inbound Store UI.
 
 Exit gate: one test Organization can connect, reload, reconnect, assign the
-account to multiple Stores, and receive a deterministic inbound message.
-This is the next major implementation gate after the current repository
-baseline is reconciled.
+account to multiple Stores, and receive a deterministic inbound message. The
+code path is implemented and fixture-verified; the gate is still open until a
+configured secret manager, Meta test WABA, HTTPS webhook, and production-shaped
+database run prove the full flow.
 
 ### Phase 4: Templates and policy enforcement
 
@@ -682,11 +689,13 @@ current branch, work proceeds in this order:
    complete controlled Meta verification. The scheduler, Store-scoped
    processor, provider-scoped outbox lease path, media upload, and uncertain
    reconciliation seams are already implemented.
-5. **Finish Phase 3 account operations.** Implement server-side exchange and
-   provider discovery, create/reuse WABA and sender records idempotently,
-   subscribe the WABA webhook, synchronize account snapshots, expose safe
-   connect/reconnect/revoke/refresh actions, and add Store assignment/default
-   inbound routing UI.
+5. **Close the Phase 3 account-operations gate.** **Code-first implementation
+   complete; evidence open.** The server-side exchange and provider discovery,
+   idempotent WABA/sender persistence, WABA subscription, safe connect,
+   reconnect, revoke, refresh, and Store assignment paths are implemented. The
+   remaining work is deployment-selected secret-manager assembly, durable
+   provisioning-attempt execution, Meta test-WABA verification, and the
+   production-shaped reload/reconnect/inbound acceptance run.
 6. **Implement Phase 4.** Separate Hisab presets from Meta-approved bindings,
    synchronize approval/rejection/paused status, and enforce consent,
    suppression, template variables, message category, and the 24-hour window.

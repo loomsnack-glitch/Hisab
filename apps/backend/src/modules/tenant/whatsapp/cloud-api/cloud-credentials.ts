@@ -5,7 +5,7 @@ export type CloudCredentialBinding = {
 
 export type StoreCloudCredentialInput = {
   organizationId: string;
-  businessAccountId: string;
+  ownerKey: string;
   accessToken: string;
 };
 

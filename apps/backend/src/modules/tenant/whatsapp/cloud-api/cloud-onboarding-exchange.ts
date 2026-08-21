@@ -16,8 +16,12 @@ export type CloudOnboardingTokenExchange = {
 export class CloudOnboardingExchangeError extends Error {
   readonly code: "exchange_failed" | "invalid_provider_token";
 
-  constructor(code: CloudOnboardingExchangeError["code"], message: string) {
-    super(message);
+  constructor(
+    code: CloudOnboardingExchangeError["code"],
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
     this.name = "CloudOnboardingExchangeError";
     this.code = code;
   }

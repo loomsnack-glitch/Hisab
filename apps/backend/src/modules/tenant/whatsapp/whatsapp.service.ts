@@ -37,6 +37,16 @@ const accountResponse = (
     qrImageDataUrl,
 });
 
+const cloudAccountResponse = (
+    account: WhatsAppAccountDTO,
+    message = "WhatsApp Cloud account status fetched successfully",
+): ServiceResponse<WhatsAppAccountStatusResponseDTO> => ({
+    status: "success",
+    message,
+    data: accountResponse(account, null),
+    code: STATUS_CODES.SUCCESS,
+});
+
 const scopeStore = async (userId: string, organizationId: string, storeId: string): Promise<StoreScope> => {
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { error: "Organization not found", code: STATUS_CODES.NOT_FOUND };
@@ -127,6 +137,8 @@ export const getAccount = async (
         };
     }
 
+    if (account.provider === "cloud_api") return cloudAccountResponse(account);
+
     try {
         const snapshot = await workerClient.getAccountStatus(account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -162,6 +174,7 @@ export const getOrganizationAccountStatus = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scoped = await getOrganizationAccount(userId, organizationId, accountId);
     if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    if (scoped.account.provider === "cloud_api") return cloudAccountResponse(scoped.account);
     try {
         const snapshot = await workerClient.getAccountStatus(scoped.account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -245,6 +258,14 @@ export const connectOrganizationAccount = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scoped = await getOrganizationAccount(userId, organizationId, accountId);
     if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    if (scoped.account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "Use the WhatsApp Cloud connect flow to reconnect this account",
+            data: accountResponse(scoped.account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
     try {
         const snapshot = await workerClient.connectAccount(scoped.account.id, scoped.account.phoneNumber);
         const response = await saveWorkerSnapshot(snapshot);
@@ -261,6 +282,17 @@ export const disconnectOrganizationAccount = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scoped = await getOrganizationAccount(userId, organizationId, accountId);
     if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    if (scoped.account.provider === "cloud_api") {
+        const account = await repository.updateCloudAccountStatus(
+            organizationId,
+            accountId,
+            "disconnected",
+            userId,
+        );
+        return account
+            ? cloudAccountResponse(account, "WhatsApp Cloud account disconnected")
+            : { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
     try {
         const snapshot = await workerClient.disconnectAccount(scoped.account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -278,6 +310,14 @@ export const changeOrganizationAccountNumber = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scoped = await getOrganizationAccount(userId, organizationId, accountId);
     if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    if (scoped.account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "Change the Cloud phone number through Meta Embedded Signup",
+            data: accountResponse(scoped.account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
 
     const phoneNumber = normalizePhoneNumber(data.phoneNumber);
     if (!phoneNumber) return { status: "error", message: "Enter a valid phone number with country code", data: null, code: STATUS_CODES.BAD_REQUEST };
@@ -450,6 +490,15 @@ export const connectAccount = async (
         return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
     }
 
+    if (account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "Use the WhatsApp Cloud connect flow to reconnect this account",
+            data: accountResponse(account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
     try {
         const snapshot = await workerClient.connectAccount(account.id, account.phoneNumber);
         const response = await saveWorkerSnapshot(snapshot);
@@ -475,6 +524,18 @@ export const disconnectAccount = async (
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) {
         return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+
+    if (account.provider === "cloud_api") {
+        const updated = await repository.updateCloudAccountStatus(
+            organizationId,
+            account.id,
+            "disconnected",
+            userId,
+        );
+        return updated
+            ? cloudAccountResponse(updated, "WhatsApp Cloud account disconnected")
+            : { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
     }
 
     try {
@@ -602,6 +663,9 @@ export const removeAccount = async (
 };
 
 const syncAccountForScope = async (account: WhatsAppAccountDTO): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO>> => {
+    if (account.provider === "cloud_api") {
+        return cloudAccountResponse(account, "WhatsApp Cloud account status is managed by Meta");
+    }
     try {
         const snapshot = await workerClient.syncAccount(account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -641,6 +705,8 @@ export const getAccountForDevice = async (
     const account = await repository.getAccount(session.organization.id, session.store.id);
     if (!account) return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
 
+    if (account.provider === "cloud_api") return cloudAccountResponse(account);
+
     try {
         const snapshot = await workerClient.getAccountStatus(account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -657,6 +723,15 @@ export const connectAccountForDevice = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const account = await repository.getAccount(session.organization.id, session.store.id);
     if (!account) return { status: "error", message: "WhatsApp account is not linked. Open the POS WhatsApp page to link it first.", data: null, code: STATUS_CODES.NOT_FOUND };
+
+    if (account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "This Store uses WhatsApp Cloud API; reconnect it from the Admin Cloud account manager",
+            data: accountResponse(account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
 
     try {
         const snapshot = await workerClient.connectAccount(account.id, account.phoneNumber);

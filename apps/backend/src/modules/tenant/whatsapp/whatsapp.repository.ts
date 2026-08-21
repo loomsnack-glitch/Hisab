@@ -1939,6 +1939,31 @@ export const updateAccountStatus = async (
     return row ? getAccountById(accountId) : null;
 };
 
+export const updateCloudAccountStatus = async (
+    organizationId: string,
+    accountId: string,
+    status: "connected" | "disconnected" | "needs_action" | "revoked" | "failed",
+    userId: string,
+): Promise<WhatsAppAccountDTO | null> => {
+    const [row] = await pg`
+        UPDATE whatsapp_accounts
+        SET cloud_status = ${status},
+            status = CASE
+                WHEN ${status} = 'connected' THEN 'connected'::whatsapp_account_status_enum
+                WHEN ${status} = 'revoked' THEN 'revoked'::whatsapp_account_status_enum
+                WHEN ${status} = 'failed' THEN 'failed'::whatsapp_account_status_enum
+                ELSE 'disconnected'::whatsapp_account_status_enum
+            END,
+            updated_by = ${userId},
+            updated_at = NOW()
+        WHERE id = ${accountId}
+          AND organization_id = ${organizationId}
+          AND provider = 'cloud_api'
+        RETURNING id
+    `;
+    return row ? getAccountById(accountId) : null;
+};
+
 export const updateAccountPhoneNumber = async (
     accountId: string,
     phoneNumber: string,
