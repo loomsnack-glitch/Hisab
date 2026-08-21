@@ -14,6 +14,11 @@ import type {
     PlatformOrganizationListQuerySchema,
     PlatformRecentSaleDTOSchema,
     PlatformStoreActivityDTOSchema,
+    PlatformStoreDetailDTOSchema,
+    PlatformStoreDetailResponseSchema,
+    PlatformStoreDeviceInspectionDTOSchema,
+    PlatformStoreInspectionQuerySchema,
+    PlatformStoreListDTOSchema,
 } from "./platform.schema";
 
 export type OwnerUserDTO = z.infer<typeof OwnerUserDTOSchema>;
@@ -69,3 +74,11 @@ export type PlatformStoreActivityDTO = z.infer<typeof PlatformStoreActivityDTOSc
 export type PlatformRecentSaleDTO = z.infer<typeof PlatformRecentSaleDTOSchema>;
 export type PlatformOrganizationDetailDTO = z.infer<typeof PlatformOrganizationDetailDTOSchema>;
 export type PlatformOrganizationDetailResponse = PlatformOrganizationDetailDTO;
+
+export type PlatformStoreInspectionQueryJSON = z.input<typeof PlatformStoreInspectionQuerySchema>;
+export type PlatformStoreInspectionQuerySVC = z.output<typeof PlatformStoreInspectionQuerySchema>;
+export type PlatformStoreListDTO = z.infer<typeof PlatformStoreListDTOSchema>;
+export type PlatformStoreListResponse = PlatformStoreListDTO;
+export type PlatformStoreDeviceInspectionDTO = z.infer<typeof PlatformStoreDeviceInspectionDTOSchema>;
+export type PlatformStoreDetailDTO = z.infer<typeof PlatformStoreDetailDTOSchema>;
+export type PlatformStoreDetailResponse = z.infer<typeof PlatformStoreDetailResponseSchema>;

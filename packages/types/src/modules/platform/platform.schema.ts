@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { dtoDateSchema, normalizePhoneNumber, phoneSchema } from "../../common";
 import { SaleStatusSchema } from "../billing/billing.schema";
+import { StoreDeviceStatusSchema } from "../organization/organization.schema";
 
 const ownerPhoneSchema = z
     .string()
@@ -236,6 +237,44 @@ export const PlatformOrganizationDetailDTOSchema = z.object({
         stores: z.array(PlatformStoreActivityDTOSchema),
         recentSales: z.array(PlatformRecentSaleDTOSchema),
     }),
+});
+
+export const PlatformStoreInspectionQuerySchema = PlatformOrganizationDetailQuerySchema;
+
+export const PlatformStoreListDTOSchema = z.object({
+    reportingPeriod: PlatformReportingPeriodDTOSchema,
+    stores: z.array(PlatformStoreActivityDTOSchema),
+});
+
+export const PlatformStoreDeviceInspectionDTOSchema = z.object({
+    id: z.uuid("Invalid device id"),
+    name: z.string().trim().min(1),
+    loginUsername: z.string().trim().min(1),
+    status: StoreDeviceStatusSchema,
+    lastSeenAt: dtoDateSchema.nullable(),
+    createdAt: dtoDateSchema,
+});
+
+export const PlatformStoreDetailDTOSchema = z.object({
+    id: z.uuid("Invalid store id"),
+    organizationId: z.uuid("Invalid organization id"),
+    name: z.string().trim().min(1),
+    address: z.string().nullable(),
+    kotSystemEnabled: z.boolean(),
+    tableManagementEnabled: z.boolean(),
+    createdAt: dtoDateSchema,
+    isActive: z.boolean(),
+    customerCount: nonNegativeIntSchema,
+    completedSaleCount: nonNegativeIntSchema,
+    completedSalesValue: nonNegativeMoneySchema,
+    lastCompletedSaleAt: dtoDateSchema.nullable(),
+    devices: z.array(PlatformStoreDeviceInspectionDTOSchema),
+    recentSales: z.array(PlatformRecentSaleDTOSchema),
+});
+
+export const PlatformStoreDetailResponseSchema = z.object({
+    reportingPeriod: PlatformReportingPeriodDTOSchema,
+    store: PlatformStoreDetailDTOSchema,
 });
 
 export const kolkataCalendarDate = (now: Date): string =>

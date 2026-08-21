@@ -9,6 +9,7 @@ import {
     PlatformOrganizationDetailDTOSchema,
     PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListQuerySchema,
+    PlatformStoreDetailResponseSchema,
     FUTURE_PLATFORM_REPORTING_PERIOD_MESSAGE,
     kolkataCalendarDate,
     kolkataDayStartUtc,
@@ -303,6 +304,56 @@ describe("Platform Organization detail contracts", () => {
                 },
             },
         ]);
+        expect(JSON.stringify(parsed)).not.toContain("deviceSecret");
+        expect(JSON.stringify(parsed)).not.toContain("password");
+        expect(JSON.stringify(parsed)).not.toContain("token");
+    });
+});
+
+describe("Platform Store inspection contracts", () => {
+    test("accepts a read-only store list and detail with safe device metadata and no credential fields", () => {
+        const parsed = PlatformStoreDetailResponseSchema.parse({
+            reportingPeriod: { selection: "all-time", startDate: null, endDate: null },
+            store: {
+                id: "77777777-7777-4777-8777-777777777777",
+                organizationId: "33333333-3333-4333-8333-333333333333",
+                name: "Front Hall",
+                address: "12 Market Road",
+                kotSystemEnabled: true,
+                tableManagementEnabled: false,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                isActive: true,
+                customerCount: 0,
+                completedSaleCount: 1,
+                completedSalesValue: 50.5,
+                lastCompletedSaleAt: "2026-08-19T10:00:00.000Z",
+                devices: [
+                    {
+                        id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                        name: "Counter POS",
+                        loginUsername: "front-hall-pos",
+                        status: "active",
+                        lastSeenAt: "2026-08-19T09:00:00.000Z",
+                        createdAt: "2026-01-15T00:00:00.000Z",
+                    },
+                ],
+                recentSales: [
+                    {
+                        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+                        saleNumber: "12",
+                        status: "completed",
+                        grandTotal: 50.5,
+                        occurredAt: "2026-08-19T10:00:00.000Z",
+                        store: {
+                            id: "77777777-7777-4777-8777-777777777777",
+                            name: "Front Hall",
+                        },
+                    },
+                ],
+            },
+        });
+
+        expect(parsed.store.devices[0]?.loginUsername).toBe("front-hall-pos");
         expect(JSON.stringify(parsed)).not.toContain("deviceSecret");
         expect(JSON.stringify(parsed)).not.toContain("password");
         expect(JSON.stringify(parsed)).not.toContain("token");

@@ -14,6 +14,9 @@ import type {
     PlatformOrganizationDetailResponse,
     PlatformOrganizationListQueryJSON,
     PlatformOrganizationListResponse,
+    PlatformStoreInspectionQueryJSON,
+    PlatformStoreDetailResponse,
+    PlatformStoreListResponse,
     ServiceResponse,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
@@ -111,6 +114,31 @@ export const getPlatformOrganization = async (
 ): Promise<ServiceResponse<PlatformOrganizationDetailResponse | null>> => {
     try {
         const response = await api.get(`/platform/organizations/${organizationId}`, { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationStores = async (
+    organizationId: string,
+    query: PlatformStoreInspectionQueryJSON = {},
+): Promise<ServiceResponse<PlatformStoreListResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/stores`, { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformStore = async (
+    organizationId: string,
+    storeId: string,
+    query: PlatformStoreInspectionQueryJSON = {},
+): Promise<ServiceResponse<PlatformStoreDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/stores/${storeId}`, { params: query });
         return response.data;
     } catch (error) {
         return handleApiError(error);

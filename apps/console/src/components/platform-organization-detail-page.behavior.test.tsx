@@ -12,6 +12,8 @@ import type {
     PlatformOrganizationListQueryJSON,
     PlatformOrganizationListResponse,
     PlatformRecentSaleDTO,
+    PlatformStoreDetailResponse,
+    PlatformStoreListResponse,
     ServiceResponse,
 } from "@repo/types";
 
@@ -20,7 +22,7 @@ import PlatformOrganizationDetailPage, {
     type PlatformOrganizationDetailPageProps,
 } from "./platform-organization-detail-page";
 import PlatformOrganizationsPage from "./platform-organizations-page";
-import { organizationInspectionPath } from "@/lib/organization-inspection-url";
+import { organizationInspectionPath, parseOrganizationInspectionPath } from "@/lib/organization-inspection-url";
 
 afterEach(() => {
     cleanup();
@@ -131,6 +133,54 @@ const mixedRecentSales: PlatformRecentSaleDTO[] = [
         },
     },
 ];
+
+const successStores = (
+    stores: PlatformOrganizationDetailResponse["organization"]["stores"] = mixedStores,
+): ServiceResponse<PlatformStoreListResponse> => ({
+    status: "success",
+    data: {
+        reportingPeriod: { selection: "all-time", startDate: null, endDate: null },
+        stores,
+    },
+    message: "Platform Organization Stores retrieved successfully",
+    code: 200,
+});
+
+const successStoreDetail = (
+    store = {
+        id: mixedStores[0]!.id,
+        organizationId: mixedBistro.id,
+        name: "Front Hall",
+        address: "12 Market Road",
+        kotSystemEnabled: true,
+        tableManagementEnabled: false,
+        createdAt: "2026-01-10T00:00:00.000Z",
+        isActive: true,
+        customerCount: 0,
+        completedSaleCount: 1,
+        completedSalesValue: 50.5,
+        lastCompletedSaleAt: "2026-08-19T10:00:00.000Z",
+        devices: [
+            {
+                id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                name: "Counter POS",
+                loginUsername: "front-hall-pos",
+                status: "active" as const,
+                lastSeenAt: "2026-08-19T09:00:00.000Z",
+                createdAt: "2026-01-15T00:00:00.000Z",
+            },
+        ],
+        recentSales: mixedRecentSales,
+    },
+): ServiceResponse<PlatformStoreDetailResponse> => ({
+    status: "success",
+    data: {
+        reportingPeriod: { selection: "all-time", startDate: null, endDate: null },
+        store,
+    },
+    message: "Platform Store retrieved successfully",
+    code: 200,
+});
 
 type LoadOrganization = NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganization"]>;
 
@@ -332,6 +382,8 @@ describe("Organization Inspection Workspace", () => {
         options: {
             getPlatformOrganizations?: NonNullable<Parameters<typeof PlatformOrganizationsPage>[0]["getPlatformOrganizations"]>;
             getPlatformOrganization?: LoadOrganization;
+            getPlatformOrganizationStores?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationStores"]>;
+            getPlatformStore?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformStore"]>;
         } = {},
     ) => {
         window.history.replaceState(null, "", path);
@@ -345,6 +397,8 @@ describe("Organization Inspection Workspace", () => {
                             getPlatformOrganizations: options.getPlatformOrganizations ?? (async () => successList([mixedBistro])),
                             getPlatformOrganization: options.getPlatformOrganization
                                 ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales)),
+                            getPlatformOrganizationStores: options.getPlatformOrganizationStores ?? (async () => successStores()),
+                            getPlatformStore: options.getPlatformStore ?? (async () => successStoreDetail()),
                         }}
                     />
                 </ThemeProvider>
@@ -428,7 +482,7 @@ describe("Organization Inspection Workspace", () => {
 
         fireEvent.click(view.getAllByRole("link", { name: "Front Hall" })[0]!);
         expect(window.location.pathname).toBe(organizationInspectionPath(mixedBistro.id, "stores", mixedStores[0]!.id));
-        expect(await view.findByRole("heading", { name: "Stores" })).toBeTruthy();
+        expect(await view.findByRole("heading", { name: "Front Hall" })).toBeTruthy();
         expect(view.getByRole("link", { name: "Stores" }).getAttribute("aria-current")).toBe("page");
         expect(view.getByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
         expect(view.queryByText("Create Store")).toBeNull();
@@ -449,5 +503,82 @@ describe("Organization Inspection Workspace", () => {
         expect(view.queryByText("Front Hall")).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.getAllByRole("button", { name: "Organizations" }).length).toBeGreaterThan(0);
+    });
+});
+
+describe("Organization Store inspection", () => {
+    const renderStoresSection = (
+        path: string,
+        options: {
+            getPlatformOrganization?: LoadOrganization;
+            getPlatformOrganizationStores?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationStores"]>;
+            getPlatformStore?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformStore"]>;
+        } = {},
+    ) => {
+        window.history.replaceState(null, "", path);
+        const inspection = parseOrganizationInspectionPath(path);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        return render(
+            <QueryClientProvider client={client}>
+                <PlatformOrganizationDetailPage
+                    organizationId={mixedBistro.id}
+                    section="stores"
+                    resourceId={inspection?.kind === "workspace" ? inspection.resourceId : undefined}
+                    onBack={() => {}}
+                    getPlatformOrganization={options.getPlatformOrganization ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales))}
+                    getPlatformOrganizationStores={options.getPlatformOrganizationStores ?? (async () => successStores())}
+                    getPlatformStore={options.getPlatformStore ?? (async () => successStoreDetail())}
+                />
+            </QueryClientProvider>,
+        );
+    };
+
+    test("shows a read-only Store list with activity metrics and no tenant write controls", async () => {
+        const view = renderStoresSection(organizationInspectionPath(mixedBistro.id, "stores"));
+
+        expect(await view.findByRole("heading", { name: "Stores" })).toBeTruthy();
+        expect(view.getByText("Front Hall")).toBeTruthy();
+        expect(view.getByText("Garden Patio")).toBeTruthy();
+        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Inactive").length).toBeGreaterThan(0);
+        expect(view.queryByText("Create Store")).toBeNull();
+        expect(view.queryByText("Add device")).toBeNull();
+        expect(view.queryByText("device secret")).toBeNull();
+    });
+
+    test("opens individual Store inspection with safe device metadata and billing links", async () => {
+        const view = renderStoresSection(organizationInspectionPath(mixedBistro.id, "stores", mixedStores[0]!.id));
+
+        expect(await view.findByRole("heading", { name: "Front Hall" })).toBeTruthy();
+        expect(view.getByText(/12 Market Road/)).toBeTruthy();
+        expect(view.getByText("Counter POS")).toBeTruthy();
+        expect(view.getByText("front-hall-pos")).toBeTruthy();
+        expect(view.getByText("Store devices")).toBeTruthy();
+        expect(view.getByText(/Device secrets are never shown/)).toBeTruthy();
+        expect(view.getByRole("link", { name: "12" })).toBeTruthy();
+        expect(view.getByRole("button", { name: "Back to stores" })).toBeTruthy();
+        expect(view.queryByText("Add device")).toBeNull();
+        expect(view.queryByText("Reveal secret")).toBeNull();
+        expect(view.queryByText("Open POS")).toBeNull();
+    });
+
+    test("shows empty, loading, and not-found Store states without exposing other Stores", async () => {
+        const emptyView = renderStoresSection(organizationInspectionPath(mixedBistro.id, "stores"), {
+            getPlatformOrganizationStores: async () => successStores([]),
+        });
+        expect(await emptyView.findByText("No stores yet")).toBeTruthy();
+
+        const loadingView = renderStoresSection(organizationInspectionPath(mixedBistro.id, "stores"), {
+            getPlatformOrganizationStores: () => new Promise(() => {}),
+        });
+        expect(await loadingView.findByLabelText("Loading stores")).toBeTruthy();
+
+        const missingView = renderStoresSection(organizationInspectionPath(mixedBistro.id, "stores", mixedStores[0]!.id), {
+            getPlatformStore: async () => {
+                throw { code: 404, message: "Store not found", data: null, status: "error" };
+            },
+        });
+        expect(await missingView.findByText("Store was not found")).toBeTruthy();
+        expect(missingView.queryByText("Counter POS")).toBeNull();
     });
 });

@@ -7,6 +7,7 @@ import {
     LayoutDashboard,
     LayoutGrid,
     MessageCircle,
+    MonitorSmartphone,
     Package2,
     Phone,
     Receipt,
@@ -15,7 +16,7 @@ import {
     Users,
     type LucideIcon,
 } from "lucide-react";
-import { getPlatformOrganization as getPlatformOrganizationRequest } from "@repo/services";
+import { getPlatformOrganization as getPlatformOrganizationRequest, getPlatformOrganizationStores as getPlatformOrganizationStoresRequest, getPlatformStore as getPlatformStoreRequest } from "@repo/services";
 import {
     PLATFORM_REPORTING_TIMEZONE,
     formatPhoneDisplay,
@@ -23,6 +24,8 @@ import {
     type PlatformOrganizationDetailQueryJSON,
     type PlatformRecentSaleDTO,
     type PlatformStoreActivityDTO,
+    type PlatformStoreDetailDTO,
+    type PlatformStoreDeviceInspectionDTO,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Badge } from "@repo/ui/components/badge";
@@ -40,6 +43,8 @@ import {
 } from "@/lib/organization-inspection-url";
 
 const organizationDetailQueryKey = ["platform-owner", "organization"] as const;
+const organizationStoresQueryKey = ["platform-owner", "organization-stores"] as const;
+const platformStoreQueryKey = ["platform-owner", "store"] as const;
 
 type PlatformOrganizationDetailPageProps = {
     organizationId: string;
@@ -48,6 +53,8 @@ type PlatformOrganizationDetailPageProps = {
     resourceId?: string;
     reportingQuery?: PlatformDashboardQueryJSON;
     getPlatformOrganization?: typeof getPlatformOrganizationRequest;
+    getPlatformOrganizationStores?: typeof getPlatformOrganizationStoresRequest;
+    getPlatformStore?: typeof getPlatformStoreRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
 };
@@ -100,6 +107,12 @@ const saleStatusLabel = (status: PlatformRecentSaleDTO["status"]) => {
     return "Completed";
 };
 
+const deviceStatusLabel = (status: PlatformStoreDeviceInspectionDTO["status"]) => {
+    if (status === "revoked") return "Revoked";
+    if (status === "inactive") return "Inactive";
+    return "Active";
+};
+
 const MetricCard = ({ label, value }: { label: string; value: string }) => (
     <div className="rounded-xl border border-border/60 bg-background/80 p-4">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -114,6 +127,8 @@ const PlatformOrganizationDetailPage = ({
     resourceId,
     reportingQuery = { period: "all-time" },
     getPlatformOrganization = getPlatformOrganizationRequest,
+    getPlatformOrganizationStores = getPlatformOrganizationStoresRequest,
+    getPlatformStore = getPlatformStoreRequest,
     onNavigate,
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
@@ -125,16 +140,54 @@ const PlatformOrganizationDetailPage = ({
         retry: false,
         placeholderData: keepPreviousData,
     });
+    const storesQuery = useQuery({
+        queryKey: [...organizationStoresQueryKey, organizationId, detailQueryInput],
+        queryFn: () => getPlatformOrganizationStores(organizationId, detailQueryInput),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "stores" && !resourceId,
+    });
+    const storeQuery = useQuery({
+        queryKey: [...platformStoreQueryKey, organizationId, resourceId, detailQueryInput],
+        queryFn: () => getPlatformStore(organizationId, resourceId!, detailQueryInput),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "stores" && Boolean(resourceId),
+    });
     const response = detailQuery.data;
     const organization = response?.status === "success" ? response.data?.organization : undefined;
+    const storesResponse = storesQuery.data;
+    const stores = storesResponse?.status === "success" ? storesResponse.data?.stores : undefined;
+    const storeResponse = storeQuery.data;
+    const store = storeResponse?.status === "success" ? storeResponse.data?.store : undefined;
     const errorCode = (detailQuery.error as { code?: number } | null)?.code ?? (response?.status === "error" ? response.code : undefined);
+    const storesErrorCode = (storesQuery.error as { code?: number } | null)?.code
+        ?? (storesResponse?.status === "error" ? storesResponse.code : undefined);
+    const storeErrorCode = (storeQuery.error as { code?: number } | null)?.code
+        ?? (storeResponse?.status === "error" ? storeResponse.code : undefined);
+    const activeSectionErrorCode = section === "stores" && resourceId
+        ? storeErrorCode ?? errorCode
+        : section === "stores"
+            ? storesErrorCode ?? errorCode
+            : errorCode;
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
         ?? (response?.status === "error" ? response.message : undefined);
+    const storesErrorMessage =
+        (storesQuery.error as { message?: string } | null)?.message
+        ?? (storesResponse?.status === "error" ? storesResponse.message : undefined);
+    const storeErrorMessage =
+        (storeQuery.error as { message?: string } | null)?.message
+        ?? (storeResponse?.status === "error" ? storeResponse.message : undefined);
+    const activeSectionErrorMessage = section === "stores" && resourceId
+        ? storeErrorMessage ?? errorMessage
+        : section === "stores"
+            ? storesErrorMessage ?? errorMessage
+            : errorMessage;
 
     useEffect(() => {
-        if (errorCode === 401) void onUnauthorized?.();
-    }, [errorCode, onUnauthorized]);
+        if (activeSectionErrorCode === 401) void onUnauthorized?.();
+    }, [activeSectionErrorCode, onUnauthorized]);
 
     const go = (path: string) => {
         onNavigate?.(path);
@@ -175,14 +228,14 @@ const PlatformOrganizationDetailPage = ({
         </nav>
     );
 
-    const renderStorePerformance = (stores: PlatformStoreActivityDTO[]) => (
+    const renderStoreTable = (storeRows: PlatformStoreActivityDTO[], heading: string, description: string) => (
         <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
             <CardHeader className="gap-1">
-                <h2 className="font-display text-xl font-semibold tracking-tight">Store performance</h2>
-                <CardDescription>{`${periodLabel} sales metrics · store status from last 7 days`}</CardDescription>
+                <h2 className="font-display text-xl font-semibold tracking-tight">{heading}</h2>
+                <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent>
-                {stores.length === 0 ? (
+                {storeRows.length === 0 ? (
                     <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
                         <EmptyHeader>
                             <EmptyMedia variant="icon">
@@ -206,32 +259,32 @@ const PlatformOrganizationDetailPage = ({
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {stores.map((store) => {
-                                    const href = organizationInspectionPath(organizationId, "stores", store.id);
+                                {storeRows.map((storeRow) => {
+                                    const href = organizationInspectionPath(organizationId, "stores", storeRow.id);
                                     return (
-                                        <TableRow key={store.id}>
+                                        <TableRow key={storeRow.id}>
                                             <TableCell className="font-medium">
                                                 <a
                                                     href={href}
                                                     className="text-primary underline-offset-4 hover:underline"
                                                     onClick={(event) => followInspectionLink(event, href)}
                                                 >
-                                                    {store.name}
+                                                    {storeRow.name}
                                                 </a>
                                             </TableCell>
                                             <TableCell>
                                                 <Badge
-                                                    variant={store.isActive ? "secondary" : "outline"}
+                                                    variant={storeRow.isActive ? "secondary" : "outline"}
                                                     className="rounded-full"
                                                 >
-                                                    {store.isActive ? "Active" : "Inactive"}
+                                                    {storeRow.isActive ? "Active" : "Inactive"}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell>{store.customerCount}</TableCell>
-                                            <TableCell>{store.completedSaleCount}</TableCell>
-                                            <TableCell>{formatCompletedSalesValue(store.completedSalesValue)}</TableCell>
+                                            <TableCell>{storeRow.customerCount}</TableCell>
+                                            <TableCell>{storeRow.completedSaleCount}</TableCell>
+                                            <TableCell>{formatCompletedSalesValue(storeRow.completedSalesValue)}</TableCell>
                                             <TableCell className="whitespace-nowrap text-muted-foreground">
-                                                {formatLastCompletedSale(store.lastCompletedSaleAt)}
+                                                {formatLastCompletedSale(storeRow.lastCompletedSaleAt)}
                                             </TableCell>
                                         </TableRow>
                                     );
@@ -242,6 +295,255 @@ const PlatformOrganizationDetailPage = ({
                 )}
             </CardContent>
         </Card>
+    );
+
+    const renderStoreRecentSales = (recentSales: PlatformRecentSaleDTO[], storeName: string) => (
+        <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+            <CardHeader className="gap-1">
+                <h2 className="font-display text-xl font-semibold tracking-tight">Recent sales</h2>
+                <CardDescription>{`Latest sales for ${storeName}, not limited by reporting period`}</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {recentSales.length === 0 ? (
+                    <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                                <Receipt />
+                            </EmptyMedia>
+                            <EmptyTitle>No recent sales</EmptyTitle>
+                            <EmptyDescription>Sales will appear here once this store starts billing.</EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                ) : (
+                    <div className="overflow-x-auto rounded-xl border border-border/60">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Sale</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Value</TableHead>
+                                    <TableHead>When</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {recentSales.map((sale) => {
+                                    const href = organizationInspectionPath(organizationId, "billing", sale.id);
+                                    return (
+                                        <TableRow key={sale.id}>
+                                            <TableCell className="font-medium">
+                                                <a
+                                                    href={href}
+                                                    className="text-primary underline-offset-4 hover:underline"
+                                                    onClick={(event) => followInspectionLink(event, href)}
+                                                >
+                                                    {sale.saleNumber ?? "Draft"}
+                                                </a>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="rounded-full">
+                                                    {saleStatusLabel(sale.status)}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>{formatCompletedSalesValue(sale.grandTotal)}</TableCell>
+                                            <TableCell className="whitespace-nowrap text-muted-foreground">
+                                                {formatLastCompletedSale(sale.occurredAt)}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+
+    const renderStoreDevices = (devices: PlatformStoreDeviceInspectionDTO[]) => (
+        <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+            <CardHeader className="gap-1">
+                <h2 className="font-display text-xl font-semibold tracking-tight">Store devices</h2>
+                <CardDescription>Console-safe operational metadata only. Device secrets are never shown.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {devices.length === 0 ? (
+                    <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                                <MonitorSmartphone />
+                            </EmptyMedia>
+                            <EmptyTitle>No devices registered</EmptyTitle>
+                            <EmptyDescription>This store has no POS terminals yet.</EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                ) : (
+                    <div className="overflow-x-auto rounded-xl border border-border/60">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Device</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Last seen</TableHead>
+                                    <TableHead>Created</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {devices.map((device) => (
+                                    <TableRow key={device.id}>
+                                        <TableCell>
+                                            <div>
+                                                <p className="font-medium">{device.name}</p>
+                                                <p className="mt-1 font-mono text-xs text-muted-foreground">{device.loginUsername}</p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="rounded-full">
+                                                {deviceStatusLabel(device.status)}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                                            {formatLastCompletedSale(device.lastSeenAt)}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                                            {formatLastCompletedSale(device.createdAt)}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+
+    const renderStoresList = () => {
+        if (storesQuery.isLoading) {
+            return (
+                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading stores">
+                    <Spinner className="size-6 text-primary" />
+                </div>
+            );
+        }
+        if (storesErrorCode === 404 || storesErrorMessage === "Organization not found") {
+            return (
+                <Alert role="alert">
+                    <AlertTitle>Organization was not found</AlertTitle>
+                    <AlertDescription>
+                        This organization is not available. Return to the organizations list to continue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (storesQuery.isError || storesResponse?.status === "error") {
+            return (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>Stores could not be loaded</AlertTitle>
+                    <AlertDescription>{storesErrorMessage ?? "The store list is unavailable."}</AlertDescription>
+                </Alert>
+            );
+        }
+        if (!stores) return null;
+
+        return renderStoreTable(
+            stores,
+            "Stores",
+            `${periodLabel} sales metrics · store status from last 7 days`,
+        );
+    };
+
+    const renderStoreDetail = (storeDetail: PlatformStoreDetailDTO) => (
+        <div className="space-y-6">
+            <Button
+                type="button"
+                variant="ghost"
+                className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                onClick={() => go(organizationInspectionPath(organizationId, "stores"))}
+            >
+                <ArrowLeft className="size-4" />
+                Back to stores
+            </Button>
+
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                            variant={storeDetail.isActive ? "secondary" : "outline"}
+                            className="rounded-full"
+                        >
+                            {storeDetail.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                        {storeDetail.kotSystemEnabled ? (
+                            <Badge variant="outline" className="rounded-full">KOT enabled</Badge>
+                        ) : null}
+                        {storeDetail.tableManagementEnabled ? (
+                            <Badge variant="outline" className="rounded-full">Table service enabled</Badge>
+                        ) : null}
+                    </div>
+                    <h2 className="font-display text-2xl font-semibold tracking-tight">{storeDetail.name}</h2>
+                    <CardDescription>
+                        {storeDetail.address ?? "Address not added yet"}
+                        {` · Created ${formatLastCompletedSale(storeDetail.createdAt)}`}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <MetricCard label="Customers" value={String(storeDetail.customerCount)} />
+                        <MetricCard label="Sales" value={String(storeDetail.completedSaleCount)} />
+                        <MetricCard label="Sales value" value={formatCompletedSalesValue(storeDetail.completedSalesValue)} />
+                        <MetricCard label="Last sale" value={formatLastCompletedSale(storeDetail.lastCompletedSaleAt)} />
+                    </div>
+                    <p className="mt-4 text-xs text-muted-foreground">
+                        {`${periodLabel} sales metrics · activity status uses last 7 days`}
+                    </p>
+                </CardContent>
+            </Card>
+
+            {renderStoreDevices(storeDetail.devices)}
+            {renderStoreRecentSales(storeDetail.recentSales, storeDetail.name)}
+        </div>
+    );
+
+    const renderStoreInspection = () => {
+        if (resourceId) {
+            if (storeQuery.isLoading) {
+                return (
+                    <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading store">
+                        <Spinner className="size-6 text-primary" />
+                    </div>
+                );
+            }
+            if (storeErrorCode === 404 || storeErrorMessage === "Store not found") {
+                return (
+                    <Alert role="alert">
+                        <AlertTitle>Store was not found</AlertTitle>
+                        <AlertDescription>
+                            This store is not available in this organization. Return to the store list to continue.
+                        </AlertDescription>
+                    </Alert>
+                );
+            }
+            if (storeQuery.isError || storeResponse?.status === "error") {
+                return (
+                    <Alert variant="destructive" role="alert">
+                        <AlertTitle>Store could not be loaded</AlertTitle>
+                        <AlertDescription>{storeErrorMessage ?? "The store detail is unavailable."}</AlertDescription>
+                    </Alert>
+                );
+            }
+            if (!store) return null;
+            return renderStoreDetail(store);
+        }
+
+        return renderStoresList();
+    };
+
+    const renderStorePerformance = (stores: PlatformStoreActivityDTO[]) => (
+        renderStoreTable(
+            stores,
+            "Store performance",
+            `${periodLabel} sales metrics · store status from last 7 days`,
+        )
     );
 
     const renderRecentSales = (recentSales: PlatformRecentSaleDTO[]) => (
@@ -439,31 +741,37 @@ const PlatformOrganizationDetailPage = ({
 
             {renderSectionNav()}
 
-            {detailQuery.isLoading ? (
+            {detailQuery.isLoading && section !== "stores" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
                     <Spinner className="size-6 text-primary" />
                 </div>
-            ) : errorCode === 401 ? (
+            ) : activeSectionErrorCode === 401 ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Owner session is no longer valid</AlertTitle>
                     <AlertDescription>
-                        {errorMessage ?? "Sign in again to continue using Ganatri Console."}
+                        {activeSectionErrorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
-            ) : errorCode === 404 || errorMessage === "Organization not found" ? (
+            ) : section !== "stores" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
                 <Alert role="alert">
                     <AlertTitle>Organization was not found</AlertTitle>
                     <AlertDescription>
                         This organization is not available. Return to the organizations list to continue.
                     </AlertDescription>
                 </Alert>
-            ) : detailQuery.isError || response?.status === "error" ? (
+            ) : section !== "stores" && (detailQuery.isError || response?.status === "error") ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Organization could not be loaded</AlertTitle>
                     <AlertDescription>{errorMessage ?? "The organization detail is unavailable."}</AlertDescription>
                 </Alert>
-            ) : organization ? (
-                section === "overview" ? renderOverview() : renderLaterSection()
+            ) : section === "stores" || organization ? (
+                section === "overview" && organization
+                    ? renderOverview()
+                    : section === "stores"
+                        ? renderStoreInspection()
+                        : organization
+                            ? renderLaterSection()
+                            : null
             ) : null}
         </section>
     );

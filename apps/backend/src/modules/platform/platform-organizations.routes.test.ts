@@ -7,6 +7,8 @@ import {
     type PlatformOrganizationDetailResponse,
     type PlatformOrganizationListItemDTO,
     type PlatformOrganizationListResponse,
+    type PlatformStoreDetailResponse,
+    type PlatformStoreListResponse,
     type ServiceResponse,
 } from "@repo/types";
 
@@ -19,6 +21,9 @@ import type {
     PlatformOrganizationDetailMetricsQuery,
     PlatformOrganizationListMetrics,
     PlatformOrganizationListMetricsQuery,
+    PlatformOrganizationStoresMetrics,
+    PlatformStoreDetailMetrics,
+    PlatformStoreDetailMetricsQuery,
 } from "./platform-reporting.repository";
 import { createPlatformRoutes } from "./platform.routes";
 
@@ -35,7 +40,9 @@ const storeActive = "55555555-5555-4555-8555-555555555555";
 const storeQuiet = "66666666-6666-4666-8666-666666666666";
 const storeMixedActive = "77777777-7777-4777-8777-777777777777";
 const storeMixedQuiet = "88888888-8888-4888-8888-888888888888";
+const deviceMixedActive = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const missingOrganizationId = "99999999-9999-4999-8999-999999999999";
+const missingStoreId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const saleMixedCompleted = "b1111111-1111-4111-8111-b11111111111";
 const saleQuietOld = "b2222222-2222-4222-8222-b22222222222";
 const saleQuietRecent = "b3333333-3333-4333-8333-b33333333333";
@@ -72,6 +79,17 @@ type ReportingCustomer = {
     createdAt: Date;
 };
 
+type ReportingDevice = {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    name: string;
+    loginUsername: string;
+    status: "active" | "inactive" | "revoked";
+    lastSeenAt: Date | null;
+    createdAt: Date;
+};
+
 const inWindow = (value: Date | null, startAt: Date | null, endAt: Date | null) => {
     if (!value) return false;
     if (startAt && value.getTime() < startAt.getTime()) return false;
@@ -84,9 +102,10 @@ const byNameThenUsernameThenId = (left: ReportingOrganization, right: ReportingO
 
 const createReportingMetrics = (
     organizations: ReportingOrganization[],
-    stores: Array<{ id: string; organizationId: string; name: string }>,
+    stores: Array<{ id: string; organizationId: string; name: string; address?: string | null; kotSystemEnabled?: boolean; tableManagementEnabled?: boolean; createdAt?: Date }>,
     customers: ReportingCustomer[],
     sales: ReportingSale[],
+    devices: ReportingDevice[] = [],
 ) => {
     const organizationRow = (
         query: PlatformDashboardMetricsQuery,
@@ -240,6 +259,71 @@ const createReportingMetrics = (
         };
     };
 
+    const listOrganizationStores = async (
+        query: PlatformOrganizationDetailMetricsQuery,
+    ): Promise<PlatformOrganizationStoresMetrics | null> => {
+        const organization = organizations.find((item) => item.id === query.organizationId);
+        if (!organization) return null;
+        const detail = await getOrganizationDetail(query);
+        return detail ? { stores: detail.stores } : null;
+    };
+
+    const getStoreDetail = async (
+        query: PlatformStoreDetailMetricsQuery,
+    ): Promise<PlatformStoreDetailMetrics | null> => {
+        const store = stores.find((item) => item.id === query.storeId && item.organizationId === query.organizationId);
+        if (!store) return null;
+
+        const detail = await getOrganizationDetail(query);
+        const storeMetrics = detail?.stores.find((item) => item.id === query.storeId);
+        if (!storeMetrics) return null;
+
+        const recentSales = sales
+            .filter((sale) => sale.organizationId === query.organizationId && sale.storeId === query.storeId)
+            .map((sale) => {
+                const occurredAt = sale.committedAt ?? sale.updatedAt ?? new Date(0);
+                return {
+                    id: sale.id,
+                    saleNumber: sale.saleNumber ?? null,
+                    status: sale.status,
+                    grandTotal: sale.grandTotal,
+                    occurredAt: occurredAt.toISOString(),
+                    storeId: sale.storeId,
+                    storeName: store.name,
+                    sortAt: occurredAt.getTime(),
+                };
+            })
+            .sort((left, right) => right.sortAt - left.sortAt || right.id.localeCompare(left.id))
+            .slice(0, 10)
+            .map(({ sortAt: _sortAt, ...sale }) => sale);
+
+        return {
+            id: store.id,
+            organizationId: store.organizationId,
+            name: store.name,
+            address: store.address ?? null,
+            kotSystemEnabled: store.kotSystemEnabled ?? false,
+            tableManagementEnabled: store.tableManagementEnabled ?? false,
+            createdAt: (store.createdAt ?? new Date("2026-01-01T00:00:00.000Z")).toISOString(),
+            isActive: storeMetrics.isActive,
+            customerCount: storeMetrics.customerCount,
+            completedSaleCount: storeMetrics.completedSaleCount,
+            completedSalesValue: storeMetrics.completedSalesValue,
+            lastCompletedSaleAt: storeMetrics.lastCompletedSaleAt,
+            devices: devices
+                .filter((device) => device.organizationId === query.organizationId && device.storeId === query.storeId)
+                .map((device) => ({
+                    id: device.id,
+                    name: device.name,
+                    loginUsername: device.loginUsername,
+                    status: device.status,
+                    lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
+                    createdAt: device.createdAt.toISOString(),
+                })),
+            recentSales,
+        };
+    };
+
     const getDashboardMetrics = async (query: PlatformDashboardMetricsQuery): Promise<PlatformDashboardMetrics> => {
         const listed = await listOrganizations({
             ...query,
@@ -262,7 +346,7 @@ const createReportingMetrics = (
         };
     };
 
-    return { getDashboardMetrics, listOrganizations, getOrganizationDetail };
+    return { getDashboardMetrics, listOrganizations, getOrganizationDetail, listOrganizationStores, getStoreDetail };
 };
 
 const platformFacts = () => {
@@ -293,10 +377,22 @@ const platformFacts = () => {
         },
     ];
     const stores = [
-        { id: storeActive, organizationId: orgActive, name: "Cafe Counter" },
+        { id: storeActive, organizationId: orgActive, name: "Cafe Counter", address: "1 Main Street", kotSystemEnabled: true, tableManagementEnabled: false, createdAt: new Date("2026-01-01T00:00:00.000Z") },
         { id: storeQuiet, organizationId: orgInactive, name: "Quiet Aisle" },
-        { id: storeMixedActive, organizationId: orgMixed, name: "Front Hall" },
+        { id: storeMixedActive, organizationId: orgMixed, name: "Front Hall", address: "12 Market Road", kotSystemEnabled: true, tableManagementEnabled: false, createdAt: new Date("2026-01-10T00:00:00.000Z") },
         { id: storeMixedQuiet, organizationId: orgMixed, name: "Garden Patio" },
+    ];
+    const devices: ReportingDevice[] = [
+        {
+            id: deviceMixedActive,
+            organizationId: orgMixed,
+            storeId: storeMixedActive,
+            name: "Counter POS",
+            loginUsername: "front-hall-pos",
+            status: "active",
+            lastSeenAt: new Date("2026-08-19T09:00:00.000Z"),
+            createdAt: new Date("2026-01-15T00:00:00.000Z"),
+        },
     ];
     const customers: ReportingCustomer[] = [
         { id: customerCafeActive, organizationId: orgActive, isActive: true, createdAt: new Date("2026-01-15T10:00:00.000Z") },
@@ -403,7 +499,7 @@ const platformFacts = () => {
         },
     ];
 
-    return { organizations, stores, customers, sales };
+    return { organizations, stores, customers, sales, devices };
 };
 
 const activeOwner = async (): Promise<OwnerUserRecord> => ({
@@ -436,7 +532,7 @@ const createHarness = async () => {
         tokenProvider: createOwnerTokenProvider(ownerSecret),
     });
     const reportingService = createPlatformReportingService({
-        repository: createReportingMetrics(facts.organizations, facts.stores, facts.customers, facts.sales),
+        repository: createReportingMetrics(facts.organizations, facts.stores, facts.customers, facts.sales, facts.devices),
         now: () => now,
     });
     const app = new Hono().route("/platform", createPlatformRoutes(authService, undefined, reportingService));
@@ -467,6 +563,12 @@ const organizations = (app: Hono, cookie: string, query = "") =>
 
 const organizationDetail = (app: Hono, cookie: string, organizationId: string, query = "") =>
     app.request(`/platform/organizations/${organizationId}${query}`, { headers: { cookie } });
+
+const organizationStores = (app: Hono, cookie: string, organizationId: string, query = "") =>
+    app.request(`/platform/organizations/${organizationId}/stores${query}`, { headers: { cookie } });
+
+const organizationStoreDetail = (app: Hono, cookie: string, organizationId: string, storeId: string, query = "") =>
+    app.request(`/platform/organizations/${organizationId}/stores/${storeId}${query}`, { headers: { cookie } });
 
 const names = (rows: PlatformOrganizationListItemDTO[] | undefined) => rows?.map((row) => row.name);
 
@@ -895,5 +997,101 @@ describe("Platform Organization drill-down API", () => {
             },
         ]);
         expect(recentSales.every((sale) => sale.store.name === "Quiet Aisle")).toBe(true);
+    });
+});
+
+describe("Platform Store inspection API", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("returns Organization Stores only to an active Owner User", async () => {
+        const { app, setOwnerActive } = await createHarness();
+        const customerToken = await sign(
+            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
+            "customer-and-device-secret",
+        );
+        const ownerCookie = cookieFrom(await passwordLogin(app));
+
+        expect((await app.request(`/platform/organizations/${orgMixed}/stores`)).status).toBe(401);
+        expect((await app.request(`/platform/organizations/${orgMixed}/stores`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
+
+        setOwnerActive(false);
+        expect((await organizationStores(app, ownerCookie, orgMixed)).status).toBe(401);
+    });
+
+    test("lists Store activity for an Organization and matches overview aggregates", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const detail = await organizationDetail(app, cookie, orgMixed);
+        const stores = await organizationStores(app, cookie, orgMixed);
+        const detailBody = await detail.json() as ServiceResponse<PlatformOrganizationDetailResponse>;
+        const storesBody = await stores.json() as ServiceResponse<PlatformStoreListResponse>;
+
+        expect(stores.status).toBe(200);
+        expect(storesBody.data?.stores).toEqual(detailBody.data?.organization.stores);
+        expect(JSON.stringify(storesBody.data)).not.toContain("deviceSecret");
+        expect(JSON.stringify(storesBody.data)).not.toContain("password");
+    });
+
+    test("returns Store detail with safe device metadata and Store-attributed recent Sales", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const response = await organizationStoreDetail(app, cookie, orgMixed, storeMixedActive);
+        const body = await response.json() as ServiceResponse<PlatformStoreDetailResponse>;
+
+        expect(response.status).toBe(200);
+        expect(body.data?.store).toMatchObject({
+            id: storeMixedActive,
+            organizationId: orgMixed,
+            name: "Front Hall",
+            address: "12 Market Road",
+            kotSystemEnabled: true,
+            tableManagementEnabled: false,
+            isActive: true,
+            completedSaleCount: 1,
+            completedSalesValue: 50.5,
+        });
+        expect(body.data?.store.devices).toEqual([
+            {
+                id: deviceMixedActive,
+                name: "Counter POS",
+                loginUsername: "front-hall-pos",
+                status: "active",
+                lastSeenAt: "2026-08-19T09:00:00.000Z",
+                createdAt: "2026-01-15T00:00:00.000Z",
+            },
+        ]);
+        expect(body.data?.store.recentSales).toEqual([
+            {
+                id: saleMixedCompleted,
+                saleNumber: "12",
+                status: "completed",
+                grandTotal: 50.5,
+                occurredAt: "2026-08-19T10:00:00.000Z",
+                store: { id: storeMixedActive, name: "Front Hall" },
+            },
+        ]);
+        expect(JSON.stringify(body.data)).not.toContain("deviceSecret");
+        expect(JSON.stringify(body.data)).not.toContain("password");
+        expect(JSON.stringify(body.data)).not.toContain("token");
+        expect(JSON.stringify(body.data)).not.toContain("Garden Patio");
+    });
+
+    test("hides missing Organizations and Stores and rejects invalid ids", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const missingOrg = await organizationStores(app, cookie, missingOrganizationId);
+        const missingStore = await organizationStoreDetail(app, cookie, orgMixed, missingStoreId);
+        const invalidStore = await organizationStoreDetail(app, cookie, orgMixed, "not-a-uuid");
+        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
+        const missingStoreBody = await missingStore.json() as ServiceResponse<null>;
+
+        expect(missingOrg.status).toBe(404);
+        expect(missingOrgBody.message).toBe("Organization not found");
+        expect(missingStore.status).toBe(404);
+        expect(missingStoreBody.message).toBe("Store not found");
+        expect(invalidStore.status).toBe(400);
+        expect(JSON.stringify(missingStoreBody)).not.toContain("Front Hall");
     });
 });

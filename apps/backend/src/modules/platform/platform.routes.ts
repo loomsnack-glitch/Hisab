@@ -8,6 +8,7 @@ import {
     PlatformDashboardQuerySchema,
     PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListQuerySchema,
+    PlatformStoreInspectionQuerySchema,
     STATUS_CODES,
     type PlatformEntryResponse,
 } from "@repo/types";
@@ -124,6 +125,65 @@ export const createPlatformRoutes = (
                 );
             } catch (error) {
                 return handleError("platform.routes", "getPlatformOrganization", c, error);
+            }
+        },
+    );
+
+    router.get(
+        "/organizations/:organizationId/stores",
+        validateSchema("query", PlatformStoreInspectionQuerySchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await reportingService.listOrganizationStores(organizationId.data, c.req.valid("query")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "listPlatformOrganizationStores", c, error);
+            }
+        },
+    );
+
+    router.get(
+        "/organizations/:organizationId/stores/:storeId",
+        validateSchema("query", PlatformStoreInspectionQuerySchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                const storeId = z.uuid("Invalid store id").safeParse(c.req.param("storeId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!storeId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid store id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await reportingService.getStore(organizationId.data, storeId.data, c.req.valid("query")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "getPlatformStore", c, error);
             }
         },
     );

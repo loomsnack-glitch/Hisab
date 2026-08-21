@@ -79,9 +79,47 @@ export type PlatformOrganizationDetailMetricsQuery = PlatformDashboardMetricsQue
     organizationId: string;
 };
 
+export type PlatformOrganizationStoresMetrics = {
+    stores: PlatformStoreActivityMetricsRow[];
+};
+
+export type PlatformStoreDetailMetricsQuery = PlatformOrganizationDetailMetricsQuery & {
+    storeId: string;
+};
+
+export type PlatformStoreDeviceMetricsRow = {
+    id: string;
+    name: string;
+    loginUsername: string;
+    status: "active" | "inactive" | "revoked";
+    lastSeenAt: string | null;
+    createdAt: string;
+};
+
+export type PlatformStoreDetailMetrics = {
+    id: string;
+    organizationId: string;
+    name: string;
+    address: string | null;
+    kotSystemEnabled: boolean;
+    tableManagementEnabled: boolean;
+    createdAt: string;
+    isActive: boolean;
+    customerCount: number;
+    completedSaleCount: number;
+    completedSalesValue: number;
+    lastCompletedSaleAt: string | null;
+    devices: PlatformStoreDeviceMetricsRow[];
+    recentSales: PlatformRecentSaleMetricsRow[];
+};
+
 const asCount = (value: unknown) => Number(value ?? 0);
 const asSaleStatus = (value: unknown): "draft" | "completed" | "voided" | null => {
     if (value === "draft" || value === "completed" || value === "voided") return value;
+    return null;
+};
+const asDeviceStatus = (value: unknown): "active" | "inactive" | "revoked" | null => {
+    if (value === "active" || value === "inactive" || value === "revoked") return value;
     return null;
 };
 const asMoney = (value: unknown) => Number(value ?? 0);
@@ -325,6 +363,242 @@ export const listOrganizations = async (
     };
 };
 
+const mapStoreActivityRow = (row: Record<string, unknown>): PlatformStoreActivityMetricsRow => ({
+    id: String(row.id),
+    name: String(row.name),
+    isActive: asCount(row.is_active) > 0,
+    customerCount: asCount(row.customer_count),
+    completedSaleCount: asCount(row.completed_sale_count),
+    completedSalesValue: asMoney(row.completed_sales_value),
+    lastCompletedSaleAt: asTimestamp(row.last_completed_sale_at),
+});
+
+const listOrganizationStoreRows = async (
+    query: PlatformOrganizationDetailMetricsQuery,
+): Promise<PlatformStoreActivityMetricsRow[]> => {
+    const activityStartAt = query.activityStartAt.toISOString();
+    const activityEndAt = query.activityEndAt.toISOString();
+    const periodStartAt = query.periodStartAt?.toISOString() ?? null;
+    const periodEndAt = query.periodEndAt?.toISOString() ?? null;
+
+    const storeRows = await pg`
+        WITH completed_sales AS (
+            SELECT store_id, customer_id, grand_total, committed_at
+            FROM sales
+            WHERE status = 'completed'
+              AND organization_id = ${query.organizationId}
+        ),
+        customer_counts AS (
+            SELECT store_id, COUNT(DISTINCT customer_id)::int AS customer_count
+            FROM completed_sales
+            WHERE customer_id IS NOT NULL
+            GROUP BY store_id
+        ),
+        period_sales AS (
+            SELECT
+                store_id,
+                COUNT(*)::int AS completed_sale_count,
+                COALESCE(SUM(grand_total), 0) AS completed_sales_value
+            FROM completed_sales
+            WHERE (${periodStartAt}::timestamptz IS NULL OR committed_at >= ${periodStartAt}::timestamptz)
+              AND (${periodEndAt}::timestamptz IS NULL OR committed_at < ${periodEndAt}::timestamptz)
+            GROUP BY store_id
+        ),
+        last_sales AS (
+            SELECT store_id, MAX(committed_at) AS last_completed_sale_at
+            FROM completed_sales
+            GROUP BY store_id
+        ),
+        active_stores AS (
+            SELECT DISTINCT store_id
+            FROM completed_sales
+            WHERE committed_at >= ${activityStartAt}::timestamptz
+              AND committed_at < ${activityEndAt}::timestamptz
+        )
+        SELECT
+            store.id,
+            store.name,
+            COALESCE(customer_counts.customer_count, 0)::int AS customer_count,
+            COALESCE(period_sales.completed_sale_count, 0)::int AS completed_sale_count,
+            COALESCE(period_sales.completed_sales_value, 0) AS completed_sales_value,
+            last_sales.last_completed_sale_at,
+            CASE WHEN active_stores.store_id IS NOT NULL THEN 1 ELSE 0 END AS is_active
+        FROM stores store
+        LEFT JOIN customer_counts ON customer_counts.store_id = store.id
+        LEFT JOIN period_sales ON period_sales.store_id = store.id
+        LEFT JOIN last_sales ON last_sales.store_id = store.id
+        LEFT JOIN active_stores ON active_stores.store_id = store.id
+        WHERE store.organization_id = ${query.organizationId}
+        ORDER BY store.name ASC, store.id ASC
+    `;
+
+    return storeRows.map((row: Record<string, unknown>) => mapStoreActivityRow(row));
+};
+
+export const organizationExists = async (organizationId: string): Promise<boolean> => {
+    const [row] = await pg`
+        SELECT 1
+        FROM organizations
+        WHERE id = ${organizationId}
+        LIMIT 1
+    `;
+    return Boolean(row);
+};
+
+export const listOrganizationStores = async (
+    query: PlatformOrganizationDetailMetricsQuery,
+): Promise<PlatformOrganizationStoresMetrics | null> => {
+    if (!(await organizationExists(query.organizationId))) {
+        return null;
+    }
+
+    return {
+        stores: await listOrganizationStoreRows(query),
+    };
+};
+
+export const getStoreDetail = async (
+    query: PlatformStoreDetailMetricsQuery,
+): Promise<PlatformStoreDetailMetrics | null> => {
+    const activityStartAt = query.activityStartAt.toISOString();
+    const activityEndAt = query.activityEndAt.toISOString();
+    const periodStartAt = query.periodStartAt?.toISOString() ?? null;
+    const periodEndAt = query.periodEndAt?.toISOString() ?? null;
+
+    const [storeRow] = await pg`
+        WITH completed_sales AS (
+            SELECT store_id, customer_id, grand_total, committed_at
+            FROM sales
+            WHERE status = 'completed'
+              AND organization_id = ${query.organizationId}
+              AND store_id = ${query.storeId}
+        ),
+        customer_counts AS (
+            SELECT COUNT(DISTINCT customer_id)::int AS customer_count
+            FROM completed_sales
+            WHERE customer_id IS NOT NULL
+        ),
+        period_sales AS (
+            SELECT
+                COUNT(*)::int AS completed_sale_count,
+                COALESCE(SUM(grand_total), 0) AS completed_sales_value
+            FROM completed_sales
+            WHERE (${periodStartAt}::timestamptz IS NULL OR committed_at >= ${periodStartAt}::timestamptz)
+              AND (${periodEndAt}::timestamptz IS NULL OR committed_at < ${periodEndAt}::timestamptz)
+        ),
+        last_sales AS (
+            SELECT MAX(committed_at) AS last_completed_sale_at
+            FROM completed_sales
+        ),
+        active_store AS (
+            SELECT 1 AS is_active
+            FROM completed_sales
+            WHERE committed_at >= ${activityStartAt}::timestamptz
+              AND committed_at < ${activityEndAt}::timestamptz
+            LIMIT 1
+        )
+        SELECT
+            store.id,
+            store.organization_id,
+            store.name,
+            store.address,
+            store.kot_system_enabled,
+            store.table_management_enabled,
+            store.created_at,
+            COALESCE(customer_counts.customer_count, 0)::int AS customer_count,
+            COALESCE(period_sales.completed_sale_count, 0)::int AS completed_sale_count,
+            COALESCE(period_sales.completed_sales_value, 0) AS completed_sales_value,
+            last_sales.last_completed_sale_at,
+            CASE WHEN active_store.is_active IS NOT NULL THEN 1 ELSE 0 END AS is_active
+        FROM stores store
+        LEFT JOIN customer_counts ON TRUE
+        LEFT JOIN period_sales ON TRUE
+        LEFT JOIN last_sales ON TRUE
+        LEFT JOIN active_store ON TRUE
+        WHERE store.organization_id = ${query.organizationId}
+          AND store.id = ${query.storeId}
+    `;
+
+    if (!storeRow?.id) {
+        return null;
+    }
+
+    const deviceRows = await pg`
+        SELECT
+            id,
+            name,
+            login_username,
+            status::text AS status,
+            last_seen_at,
+            created_at
+        FROM store_devices
+        WHERE organization_id = ${query.organizationId}
+          AND store_id = ${query.storeId}
+        ORDER BY created_at ASC, id ASC
+    `;
+
+    const recentSaleRows = await pg`
+        SELECT
+            sale.id,
+            sale.sale_number,
+            sale.status::text AS status,
+            sale.grand_total,
+            COALESCE(sale.committed_at, sale.updated_at, sale.created_at) AS occurred_at,
+            store.id AS store_id,
+            store.name AS store_name
+        FROM sales sale
+        INNER JOIN stores store
+          ON store.id = sale.store_id
+         AND store.organization_id = sale.organization_id
+        WHERE sale.organization_id = ${query.organizationId}
+          AND sale.store_id = ${query.storeId}
+        ORDER BY COALESCE(sale.committed_at, sale.updated_at, sale.created_at) DESC, sale.id DESC
+        LIMIT ${PLATFORM_OVERVIEW_RECENT_SALE_LIMIT}
+    `;
+
+    return {
+        id: String(storeRow.id),
+        organizationId: String(storeRow.organization_id),
+        name: String(storeRow.name),
+        address: storeRow.address == null ? null : String(storeRow.address),
+        kotSystemEnabled: Boolean(storeRow.kot_system_enabled),
+        tableManagementEnabled: Boolean(storeRow.table_management_enabled),
+        createdAt: asTimestamp(storeRow.created_at) ?? new Date(0).toISOString(),
+        isActive: asCount(storeRow.is_active) > 0,
+        customerCount: asCount(storeRow.customer_count),
+        completedSaleCount: asCount(storeRow.completed_sale_count),
+        completedSalesValue: asMoney(storeRow.completed_sales_value),
+        lastCompletedSaleAt: asTimestamp(storeRow.last_completed_sale_at),
+        devices: deviceRows.flatMap((row: Record<string, unknown>) => {
+            const status = asDeviceStatus(row.status);
+            const createdAt = asTimestamp(row.created_at);
+            if (!status || !createdAt) return [];
+            return [{
+                id: String(row.id),
+                name: String(row.name),
+                loginUsername: String(row.login_username),
+                status,
+                lastSeenAt: asTimestamp(row.last_seen_at),
+                createdAt,
+            }];
+        }),
+        recentSales: recentSaleRows.flatMap((row: Record<string, unknown>) => {
+            const status = asSaleStatus(row.status);
+            const occurredAt = asTimestamp(row.occurred_at);
+            if (!status || !occurredAt) return [];
+            return [{
+                id: String(row.id),
+                saleNumber: row.sale_number == null ? null : String(row.sale_number),
+                status,
+                grandTotal: asMoney(row.grand_total),
+                occurredAt,
+                storeId: String(row.store_id),
+                storeName: String(row.store_name),
+            }];
+        }),
+    };
+};
+
 export const getOrganizationDetail = async (
     query: PlatformOrganizationDetailMetricsQuery,
 ): Promise<PlatformOrganizationDetailMetrics | null> => {
@@ -404,56 +678,7 @@ export const getOrganizationDetail = async (
         return null;
     }
 
-    const storeRows = await pg`
-        WITH completed_sales AS (
-            SELECT store_id, customer_id, grand_total, committed_at
-            FROM sales
-            WHERE status = 'completed'
-              AND organization_id = ${query.organizationId}
-        ),
-        customer_counts AS (
-            SELECT store_id, COUNT(DISTINCT customer_id)::int AS customer_count
-            FROM completed_sales
-            WHERE customer_id IS NOT NULL
-            GROUP BY store_id
-        ),
-        period_sales AS (
-            SELECT
-                store_id,
-                COUNT(*)::int AS completed_sale_count,
-                COALESCE(SUM(grand_total), 0) AS completed_sales_value
-            FROM completed_sales
-            WHERE (${periodStartAt}::timestamptz IS NULL OR committed_at >= ${periodStartAt}::timestamptz)
-              AND (${periodEndAt}::timestamptz IS NULL OR committed_at < ${periodEndAt}::timestamptz)
-            GROUP BY store_id
-        ),
-        last_sales AS (
-            SELECT store_id, MAX(committed_at) AS last_completed_sale_at
-            FROM completed_sales
-            GROUP BY store_id
-        ),
-        active_stores AS (
-            SELECT DISTINCT store_id
-            FROM completed_sales
-            WHERE committed_at >= ${activityStartAt}::timestamptz
-              AND committed_at < ${activityEndAt}::timestamptz
-        )
-        SELECT
-            store.id,
-            store.name,
-            COALESCE(customer_counts.customer_count, 0)::int AS customer_count,
-            COALESCE(period_sales.completed_sale_count, 0)::int AS completed_sale_count,
-            COALESCE(period_sales.completed_sales_value, 0) AS completed_sales_value,
-            last_sales.last_completed_sale_at,
-            CASE WHEN active_stores.store_id IS NOT NULL THEN 1 ELSE 0 END AS is_active
-        FROM stores store
-        LEFT JOIN customer_counts ON customer_counts.store_id = store.id
-        LEFT JOIN period_sales ON period_sales.store_id = store.id
-        LEFT JOIN last_sales ON last_sales.store_id = store.id
-        LEFT JOIN active_stores ON active_stores.store_id = store.id
-        WHERE store.organization_id = ${query.organizationId}
-        ORDER BY store.name ASC, store.id ASC
-    `;
+    const stores = await listOrganizationStoreRows(query);
 
     const recentSaleRows = await pg`
         SELECT
@@ -475,15 +700,7 @@ export const getOrganizationDetail = async (
 
     return {
         ...toOrganizationMetricsRow(organization),
-        stores: storeRows.map((row: Record<string, unknown>) => ({
-            id: String(row.id),
-            name: String(row.name),
-            isActive: asCount(row.is_active) > 0,
-            customerCount: asCount(row.customer_count),
-            completedSaleCount: asCount(row.completed_sale_count),
-            completedSalesValue: asMoney(row.completed_sales_value),
-            lastCompletedSaleAt: asTimestamp(row.last_completed_sale_at),
-        })),
+        stores,
         recentSales: recentSaleRows.flatMap((row: Record<string, unknown>) => {
             const status = asSaleStatus(row.status);
             const occurredAt = asTimestamp(row.occurred_at);

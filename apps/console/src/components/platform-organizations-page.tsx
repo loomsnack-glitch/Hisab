@@ -3,7 +3,9 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Building2, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import {
     getPlatformOrganization as getPlatformOrganizationRequest,
+    getPlatformOrganizationStores as getPlatformOrganizationStoresRequest,
     getPlatformOrganizations as getPlatformOrganizationsRequest,
+    getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
 import {
     PLATFORM_REPORTING_TIMEZONE,
@@ -39,6 +41,8 @@ type PlatformOrganizationsPageProps = {
     reportingQuery?: PlatformDashboardQueryJSON;
     getPlatformOrganizations?: typeof getPlatformOrganizationsRequest;
     getPlatformOrganization?: typeof getPlatformOrganizationRequest;
+    getPlatformOrganizationStores?: typeof getPlatformOrganizationStoresRequest;
+    getPlatformStore?: typeof getPlatformStoreRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
     initialSort?: DirectorySort;
@@ -109,6 +113,8 @@ const PlatformOrganizationsPage = ({
     reportingQuery = { period: "all-time" },
     getPlatformOrganizations = getPlatformOrganizationsRequest,
     getPlatformOrganization = getPlatformOrganizationRequest,
+    getPlatformOrganizationStores = getPlatformOrganizationStoresRequest,
+    getPlatformStore = getPlatformStoreRequest,
     initialSearch = "",
     initialActivity = "all",
     initialSort = "recent_activity",
@@ -220,6 +226,8 @@ const PlatformOrganizationsPage = ({
                 onBack={() => go(organizationDirectoryPath)}
                 onUnauthorized={onUnauthorized}
                 getPlatformOrganization={getPlatformOrganization}
+                getPlatformOrganizationStores={getPlatformOrganizationStores}
+                getPlatformStore={getPlatformStore}
             />
         );
     }
