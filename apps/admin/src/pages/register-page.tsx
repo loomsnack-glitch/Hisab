@@ -18,6 +18,7 @@ import { Controller } from "react-hook-form";
 import AuthShell from "@/components/auth/auth-shell";
 import OtpField from "@/components/auth/otp-field";
 import PhoneNumberField from "@/components/auth/phone-number-field";
+import { getPosLoginUrl } from "@/lib/pos-origin";
 import { useAuthActions } from "@/store/auth.store";
 
 import { authKeys } from "@/lib/query-keys";
@@ -108,9 +109,9 @@ const RegisterPage = () => {
                         <MonitorSmartphone className="size-4 shrink-0 text-amber-500" />
                         <span>Looking for cashier access?</span>
                     </div>
-                    <Link to="/pos/login" className="font-semibold text-amber-600 dark:text-amber-400 hover:underline shrink-0">
+                    <a href={getPosLoginUrl()} className="font-semibold text-amber-600 dark:text-amber-400 hover:underline shrink-0">
                         Device POS login &rarr;
-                    </Link>
+                    </a>
                 </div>
 
                 <Card className="border-border/70 shadow-sm">
@@ -260,9 +261,9 @@ const RegisterPage = () => {
                                     </Link>
                                 </p>
                                 <p>
-                                    <Link to="/pos/login" className="font-semibold text-primary hover:underline">
+                                    <a href={getPosLoginUrl()} className="font-semibold text-primary hover:underline">
                                         Open POS login
-                                    </Link>
+                                    </a>
                                 </p>
                             </div>
                         </form>

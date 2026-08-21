@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import type { StoreWithDevicesDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
@@ -8,6 +7,7 @@ import CreateDeviceDialog from "@/components/organizations/create-device-dialog"
 import DeviceActionsMenu from "@/components/organizations/device-actions-menu";
 import DeviceStatusBadge from "@/components/organizations/device-status-badge";
 import { formatDateTime } from "@/lib/format";
+import { getPosLoginUrl } from "@/lib/pos-origin";
 
 type StoreDevicesSectionProps = {
     organizationId: string;
@@ -110,7 +110,16 @@ const StoreDevicesSection = ({ organizationId, organizationUsername, store }: St
                                                         variant="outline"
                                                         size="sm"
                                                         className="rounded-full"
-                                                        render={<Link target="_blank" rel="noopener noreferrer" to={`/pos/login?org=${encodeURIComponent(organizationUsername)}&device=${encodeURIComponent(device.loginUsername)}`} />}
+                                                        render={
+                                                            <a
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                href={getPosLoginUrl({
+                                                                    organizationUsername,
+                                                                    deviceUsername: device.loginUsername,
+                                                                })}
+                                                            />
+                                                        }
                                                     >
                                                         <ExternalLink className="size-4" />
                                                         Open POS
@@ -172,7 +181,16 @@ const StoreDevicesSection = ({ organizationId, organizationUsername, store }: St
                                             variant="outline"
                                             size="sm"
                                             className="rounded-full"
-                                            render={<Link target="_blank" rel="noopener noreferrer" to={`/pos/login?org=${encodeURIComponent(organizationUsername)}&device=${encodeURIComponent(device.loginUsername)}`} />}
+                                            render={
+                                                <a
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    href={getPosLoginUrl({
+                                                        organizationUsername,
+                                                        deviceUsername: device.loginUsername,
+                                                    })}
+                                                />
+                                            }
                                         >
                                             <ExternalLink className="size-4" />
                                             Open POS

@@ -1,7 +1,6 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
 
-import { getWebAppIdentity, getWebAppWorkspace } from "@/lib/web-app-manifest";
+import { getWebAppIdentity } from "@/lib/web-app-manifest";
 
 const setMetaContent = (name: string, content: string) => {
     let meta = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
@@ -14,8 +13,7 @@ const setMetaContent = (name: string, content: string) => {
 };
 
 const WebAppHead = () => {
-    const { pathname } = useLocation();
-    const identity = getWebAppIdentity(getWebAppWorkspace(pathname));
+    const identity = getWebAppIdentity();
 
     useEffect(() => {
         let manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');

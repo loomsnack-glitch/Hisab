@@ -16,6 +16,7 @@ import { PasswordInput } from "@repo/ui/components/password-input";
 import AuthShell from "@/components/auth/auth-shell";
 import OtpField from "@/components/auth/otp-field";
 import PhoneNumberField from "@/components/auth/phone-number-field";
+import { getPosLoginUrl } from "@/lib/pos-origin";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions } from "@/store/auth.store";
 
@@ -113,9 +114,9 @@ const LoginPage = () => {
                         <MonitorSmartphone className="size-4 shrink-0 text-amber-500" />
                         <span>Need to open cashier POS?</span>
                     </div>
-                    <Link to="/pos/login" className="font-semibold text-amber-600 dark:text-amber-400 hover:underline shrink-0">
+                    <a href={getPosLoginUrl()} className="font-semibold text-amber-600 dark:text-amber-400 hover:underline shrink-0">
                         Device POS login &rarr;
-                    </Link>
+                    </a>
                 </div>
 
                 {/* Card Container */}
@@ -253,9 +254,9 @@ const LoginPage = () => {
                                     </Link>
                                 </p>
                                 <p>
-                                    <Link to="/pos/login" className="font-semibold text-primary hover:underline">
+                                    <a href={getPosLoginUrl()} className="font-semibold text-primary hover:underline">
                                         Open POS login
-                                    </Link>
+                                    </a>
                                 </p>
                             </div>
                         </form>

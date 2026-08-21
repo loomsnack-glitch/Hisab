@@ -1,19 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { DeviceSessionDTO, WhatsAppConversationDTO, WhatsAppMessageDTO } from "@repo/types";
+import type { WhatsAppMessageDTO } from "@repo/types";
 import {
-    attachPosWhatsAppConversationCustomer,
     attachWhatsAppConversationCustomer,
     getCustomers,
-    getPosCustomers,
-    getPosWhatsAppAttachment,
-    getPosWhatsAppConversation,
-    getPosWhatsAppConversations,
     getWhatsAppAttachment,
     getWhatsAppConversation,
     getWhatsAppConversations,
-    sendPosWhatsAppConversationText,
     sendWhatsAppConversationText,
 } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
@@ -25,21 +19,12 @@ import { ArrowLeft, FileText, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { whatsappKeys } from "@/lib/query-keys";
-import type { PosRouteContext } from "@/pages/pos-route-context";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
-type AdminInbox = {
-    mode: "admin";
+type InboxViewProps = {
     organizationId: string;
     storeId: string;
 };
-
-type DeviceInbox = {
-    mode: "device";
-    session: DeviceSessionDTO;
-};
-
-type InboxViewProps = AdminInbox | DeviceInbox;
 
 const normalizePhone = (phone: string) => phone.replace(/\D/g, "");
 
@@ -58,8 +43,8 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
     const [draft, setDraft] = useState("");
     const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
 
-    const organizationId = props.mode === "admin" ? props.organizationId : props.session.organization.id;
-    const storeId = props.mode === "admin" ? props.storeId : props.session.store.id;
+    const organizationId = props.organizationId;
+    const storeId = props.storeId;
     const conversationsKey = whatsappKeys.conversations(organizationId, storeId);
     const conversationKey = selectedConversationId
         ? whatsappKeys.conversation(organizationId, storeId, selectedConversationId)
@@ -67,9 +52,7 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
 
     const conversationsQuery = useQuery({
         queryKey: conversationsKey,
-        queryFn: () => props.mode === "admin"
-            ? getWhatsAppConversations(organizationId, storeId)
-            : getPosWhatsAppConversations(),
+        queryFn: () => getWhatsAppConversations(organizationId, storeId),
         refetchInterval: 5_000,
     });
 
@@ -91,9 +74,7 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
 
     const conversationQuery = useQuery({
         queryKey: conversationKey,
-        queryFn: () => props.mode === "admin"
-            ? getWhatsAppConversation(organizationId, storeId, selectedConversationId!)
-            : getPosWhatsAppConversation(selectedConversationId!),
+        queryFn: () => getWhatsAppConversation(organizationId, storeId, selectedConversationId!),
         enabled: Boolean(selectedConversationId),
         refetchInterval: 5_000,
     });
@@ -106,9 +87,7 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
 
     const customerQuery = useQuery({
         queryKey: [...conversationKey, "customer-candidates"],
-        queryFn: () => props.mode === "admin"
-            ? getCustomers(organizationId, { search: selectedConversation?.contactPhoneNumber, limit: 20 })
-            : getPosCustomers({ search: selectedConversation?.contactPhoneNumber, limit: 20 }),
+        queryFn: () => getCustomers(organizationId, { search: selectedConversation?.contactPhoneNumber, limit: 20 }),
         enabled: Boolean(selectedConversation && !selectedConversation.customerId),
     });
 
@@ -119,9 +98,8 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
     }, [customerQuery.data, selectedConversation?.contactPhoneNumber]);
 
     const sendMutation = useMutation({
-        mutationFn: (body: string) => props.mode === "admin"
-            ? sendWhatsAppConversationText(organizationId, storeId, selectedConversationId!, { body })
-            : sendPosWhatsAppConversationText(selectedConversationId!, { body }),
+        mutationFn: (body: string) =>
+            sendWhatsAppConversationText(organizationId, storeId, selectedConversationId!, { body }),
         onSuccess: (response) => {
             const message = responseMessage(response);
             if (message) {
@@ -135,9 +113,8 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
     });
 
     const attachMutation = useMutation({
-        mutationFn: (customerId: string) => props.mode === "admin"
-            ? attachWhatsAppConversationCustomer(organizationId, storeId, selectedConversationId!, { customerId })
-            : attachPosWhatsAppConversationCustomer(selectedConversationId!, { customerId }),
+        mutationFn: (customerId: string) =>
+            attachWhatsAppConversationCustomer(organizationId, storeId, selectedConversationId!, { customerId }),
         onSuccess: (response) => {
             const message = responseMessage(response);
             if (message) {
@@ -154,9 +131,7 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
     const openAttachment = async (message: WhatsAppMessageDTO) => {
         if (!selectedConversationId || !message.attachmentFileName) return;
         setOpeningAttachmentId(message.id);
-        const response = props.mode === "admin"
-            ? await getWhatsAppAttachment(organizationId, storeId, selectedConversationId, message.id)
-            : await getPosWhatsAppAttachment(selectedConversationId, message.id);
+        const response = await getWhatsAppAttachment(organizationId, storeId, selectedConversationId, message.id);
         setOpeningAttachmentId(null);
         const messageText = responseMessage(response);
         if (messageText || response.status !== "success" || !response.data?.url) {
@@ -183,12 +158,10 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
                     <p className="mt-1 text-sm text-muted-foreground">Direct customer chats for this Store.</p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                    {props.mode === "admin" ? (
-                        <Button variant="outline" render={<Link to={`/organizations/${organizationId}/stores/${storeId}/whatsapp`} />}>
-                            <ArrowLeft className="size-4" />
-                            Account settings
-                        </Button>
-                    ) : null}
+                    <Button variant="outline" render={<Link to={`/organizations/${organizationId}/stores/${storeId}/whatsapp`} />}>
+                        <ArrowLeft className="size-4" />
+                        Account settings
+                    </Button>
                 </div>
             </div>
 
@@ -368,12 +341,7 @@ const MessageBubble = ({
 
 const WhatsAppInboxPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
-    return <WhatsAppInboxView mode="admin" organizationId={organizationId} storeId={storeId} />;
-};
-
-export const PosWhatsAppInboxPage = () => {
-    const { session } = useOutletContext<PosRouteContext>();
-    return <WhatsAppInboxView mode="device" session={session} />;
+    return <WhatsAppInboxView organizationId={organizationId} storeId={storeId} />;
 };
 
 export default WhatsAppInboxPage;

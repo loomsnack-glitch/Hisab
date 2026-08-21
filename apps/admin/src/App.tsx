@@ -9,13 +9,6 @@ import BillingPage from "@/pages/billing-page";
 import PurchasesPage from "@/pages/purchases-page";
 import LoginPage from "@/pages/login-page";
 import OrganizationsPage from "@/pages/organizations-page";
-import PosLoginPage from "@/pages/pos-login-page";
-import PosPage from "@/pages/pos-page";
-import PosBillsPage from "@/pages/pos-bills-page";
-import PosTablesPage from "@/pages/pos-tables-page";
-import PosCustomersPage from "@/pages/pos-customers-page";
-import PosProductsPage from "@/pages/pos-products-page";
-import PosPurchasesPage from "@/pages/pos-purchases-page";
 import RegisterPage from "@/pages/register-page";
 import StoresPage from "@/pages/stores-page";
 import {
@@ -32,18 +25,16 @@ import AddOnsPage from "@/pages/add-ons-page";
 import LabelTemplatesPage from "@/pages/label-templates-page";
 import LandingPage from "@/pages/landing-page";
 import ReportsPage from "@/pages/reports-page";
-import PosReportsPage from "@/pages/pos-reports-page";
 import AppearancePage from "@/pages/appearance-page";
-import PosAppearancePage from "@/pages/pos-appearance-page";
 import TablesPage from "@/pages/tables-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
-import WhatsAppInboxPage, { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
+import WhatsAppInboxPage from "@/pages/whatsapp-inbox-page";
+import RetiredPosRoutePage from "@/pages/retired-pos-route-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
-import type { DisplayScaleScope } from "@/lib/display-scale";
 import { getDocumentTitle } from "@/lib/app-identity";
 
 const SPLASH_DURATION_MS = 2200;
@@ -54,24 +45,18 @@ const App = () => {
     const { clearUser, setUser } = useAuthActions();
     const [showSplash, setShowSplash] = useState(false);
     const hadAuthUserRef = useRef(false);
-    const isPosRoute = location.pathname.startsWith("/pos");
 
     useEffect(() => {
-        document.title = getDocumentTitle(location.pathname);
+        document.title = getDocumentTitle();
     }, [location.pathname]);
 
     const authQuery = useQuery({
         queryKey: authKeys.me,
         queryFn: userAuthenticate,
-        enabled: !isPosRoute,
         retry: false,
     });
 
     useEffect(() => {
-        if (isPosRoute) {
-            return;
-        }
-
         if (authQuery.data?.status === "success" && authQuery.data.data?.user) {
             setUser(authQuery.data.data.user);
             return;
@@ -83,10 +68,6 @@ const App = () => {
     }, [authQuery.data, authQuery.isError, clearUser, setUser]);
 
     useEffect(() => {
-        if (isPosRoute) {
-            return;
-        }
-
         if (!authUser) {
             hadAuthUserRef.current = false;
             setShowSplash(false);
@@ -97,19 +78,17 @@ const App = () => {
             hadAuthUserRef.current = true;
             setShowSplash(true);
         }
-    }, [authUser, isPosRoute]);
+    }, [authUser]);
 
     const authenticatedUser =
         authUser ??
         (authQuery.data?.status === "success" ? authQuery.data.data?.user ?? null : null);
 
-    const displayScaleScope: DisplayScaleScope = isPosRoute ? "pos" : "admin";
-
     return (
-        <DisplayScaleProvider scope={displayScaleScope}>
+        <DisplayScaleProvider scope="admin">
             <WebAppHead />
-            <div data-workspace={isPosRoute ? "pos" : "admin"}>
-                {!isPosRoute && authQuery.isPending ? (
+            <div data-workspace="admin">
+                {authQuery.isPending ? (
                     <div className="min-h-screen bg-background" aria-busy="true" aria-label="Loading" />
                 ) : (
                     <>
@@ -120,18 +99,8 @@ const App = () => {
                                 path="/register"
                                 element={authenticatedUser ? <Navigate to="/organizations" replace /> : <RegisterPage />}
                             />
-                            <Route path="/pos/login" element={<PosLoginPage />} />
-                            <Route path="/pos" element={<PosPage />}>
-                                <Route index element={<PosProductsPage />} />
-                                <Route path="tables" element={<PosTablesPage />} />
-                                <Route path="bills" element={<PosBillsPage />} />
-                                <Route path="reports" element={<PosReportsPage />} />
-                                <Route path="customers" element={<PosCustomersPage />} />
-                                <Route path="purchases" element={<PosPurchasesPage />} />
-                                <Route path="whatsapp" element={<PosWhatsAppInboxPage />} />
-                                <Route path="appearance" element={<PosAppearancePage />} />
-                                <Route path="settings" element={<Navigate to="/pos/appearance" replace />} />
-                            </Route>
+                            <Route path="/pos" element={<RetiredPosRoutePage />} />
+                            <Route path="/pos/*" element={<RetiredPosRoutePage />} />
                             <Route
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                             >

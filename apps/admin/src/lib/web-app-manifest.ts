@@ -1,5 +1,3 @@
-export type WebAppWorkspace = "admin" | "pos";
-
 export const WEB_APP_SCOPE = "/";
 
 type WebAppIdentity = {
@@ -11,32 +9,19 @@ type WebAppIdentity = {
     themeColor: string;
 };
 
-const webAppIdentities: Record<WebAppWorkspace, WebAppIdentity> = {
-    admin: {
-        name: "Ganatri Admin",
-        shortName: "Ganatri Admin",
-        startUrl: "/organizations",
-        id: "/",
-        manifestHref: "/admin.webmanifest",
-        themeColor: "#2563eb",
-    },
-    pos: {
-        name: "Ganatri POS",
-        shortName: "Ganatri POS",
-        startUrl: "/pos",
-        id: "/pos",
-        manifestHref: "/pos.webmanifest",
-        themeColor: "#2563eb",
-    },
+const adminIdentity: WebAppIdentity = {
+    name: "Ganatri Admin",
+    shortName: "Ganatri Admin",
+    startUrl: "/organizations",
+    id: "/",
+    manifestHref: "/admin.webmanifest",
+    themeColor: "#2563eb",
 };
 
-export const getWebAppWorkspace = (pathname: string): WebAppWorkspace =>
-    pathname.startsWith("/pos") ? "pos" : "admin";
+export const getWebAppIdentity = () => adminIdentity;
 
-export const getWebAppIdentity = (workspace: WebAppWorkspace) => webAppIdentities[workspace];
-
-export const buildWebAppManifest = (workspace: WebAppWorkspace) => {
-    const identity = getWebAppIdentity(workspace);
+export const buildWebAppManifest = () => {
+    const identity = getWebAppIdentity();
 
     return {
         name: identity.name,

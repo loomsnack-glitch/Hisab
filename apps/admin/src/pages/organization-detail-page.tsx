@@ -12,6 +12,7 @@ import CatalogSection from "@/components/catalog/catalog-section";
 import EditOrganizationDialog from "@/components/organizations/edit-organization-dialog";
 import StoresSection from "@/components/organizations/stores-section";
 import { formatDateTime } from "@/lib/format";
+import { getPosLoginUrl } from "@/lib/pos-origin";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
 
 const OrganizationDetailPage = () => {
@@ -115,7 +116,7 @@ const OrganizationDetailPage = () => {
                                 </Button>
                                 <Button
                                     className="rounded-full"
-                                    render={<Link to="/pos/login" />}
+                                    render={<a href={getPosLoginUrl()} />}
                                 >
                                     Open POS login
                                 </Button>

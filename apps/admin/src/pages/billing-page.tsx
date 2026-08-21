@@ -76,18 +76,11 @@ import { PhoneInput } from "@repo/ui/components/phone-input";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
     ArrowUpDown,
     Barcode,
-    BarChart3,
     Calendar,
     Check,
     ChevronLeft,
@@ -101,20 +94,16 @@ import {
     Printer,
     ReceiptText,
     Search,
-    ShoppingBag,
     ShoppingCart,
     Store,
     Trash2,
     User,
-    Users,
     X,
     Boxes,
     SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import PosDeviceSidebar from "@/components/pos/pos-device-sidebar";
-import { usePosMobileNav } from "@/components/pos/pos-mobile-nav-context";
 import CustomerDirectory from "@/components/customers/customer-directory";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
@@ -122,10 +111,8 @@ import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
-import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
-import type { BillingWorkspaceMode } from "@/lib/billing-mode";
-import type { PosComposerHandoff, PosPanelTab } from "@/pages/pos-route-context";
+import type { BillingWorkspaceMode, PosComposerHandoff, PosPanelTab } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate, getAverageBillPerOrder } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
@@ -418,7 +405,6 @@ type BillingPageProps = {
     initialPanelTab?: "products" | "bills" | "reports" | "customers" | "purchases";
     productSearch?: string;
     salesSearch?: string;
-    purchaseSearch?: string;
     customerSearch?: string;
     onPanelTabChange?: (
         tab: PosPanelTab,
@@ -436,7 +422,6 @@ const BillingPage = ({
     initialPanelTab = "products",
     productSearch: productSearchProp,
     salesSearch: salesSearchProp,
-    purchaseSearch: purchaseSearchProp,
     customerSearch: customerSearchProp,
     onPanelTabChange,
     onProductSearchChange,
@@ -445,7 +430,6 @@ const BillingPage = ({
     onComposerHandoffConsumed,
 }: BillingPageProps) => {
     const queryClient = useQueryClient();
-    const { setBillsCount } = usePosMobileNav();
     const { organizationId: organizationIdParam = "" } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const isDeviceMode = mode === "device";
@@ -525,7 +509,6 @@ const BillingPage = ({
 
     const productSearch = productSearchProp ?? "";
     const salesSearch = salesSearchProp ?? "";
-    const purchaseSearch = purchaseSearchProp ?? "";
     const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
     const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
@@ -893,15 +876,6 @@ const BillingPage = ({
             ),
         [salesPages],
     );
-
-    useEffect(() => {
-        if (!isDeviceMode) {
-            return;
-        }
-
-        setBillsCount(sales.length);
-        return () => setBillsCount(0);
-    }, [isDeviceMode, sales.length, setBillsCount]);
 
     const firstSalesPage = salesPages[0];
     const salesServiceError =
@@ -2146,14 +2120,6 @@ const BillingPage = ({
 
             {/* ─── Main Two-Panel Layout ─── */}
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-                {isDeviceMode ? (
-                    <PosDeviceSidebar
-                        activePanelTab={leftPanelTab}
-                        billsCount={sales.length}
-                        onPanelTabChange={changePanelTab}
-                    />
-                ) : null}
-
                 {/* ─── LEFT PANEL: Product Grid ─── */}
                 <div
                     ref={salesScrollContainerRef}
@@ -2187,10 +2153,6 @@ const BillingPage = ({
                         <div className="min-h-full p-4 max-lg:pb-2 lg:p-6 lg:pb-6">
                             {session ? <ProductSalesSummary mode="pos" storeName={session.store.name} /> : null}
                         </div>
-                    ) : canMutate && leftPanelTab === "purchases" ? (
-                        session ? (
-                            <PosPurchasesPanel session={session} search={purchaseSearch} />
-                        ) : null
                     ) : canMutate && leftPanelTab === "products" ? (
                         <>
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col">

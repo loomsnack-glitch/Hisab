@@ -164,6 +164,8 @@ describe("Store detail page", () => {
         expect(markup).toContain("Add device");
         expect(markup).toContain("Counter 1");
         expect(markup).toContain("Open POS");
+        expect(markup).toContain('href="http://localhost:5174/login?org=demo&amp;device=counter_1"');
+        expect(markup).not.toContain("/pos/login");
         expect(markup).not.toContain("Bill numbering");
     });
 

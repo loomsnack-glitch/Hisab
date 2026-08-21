@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import CopyToClipboard from "@repo/ui/components/copy-to-clipboard";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
@@ -11,6 +10,8 @@ import {
 } from "@repo/ui/components/dialog";
 import { Spinner } from "@repo/ui/components/spinner";
 import { ExternalLink, Eye, EyeOff, KeyRound, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+
+import { getPosLoginUrl } from "@/lib/pos-origin";
 
 type DeviceSecretDialogProps = {
     open: boolean;
@@ -197,10 +198,13 @@ const DeviceSecretDialog = ({
                                 variant="outline"
                                 className="rounded-full"
                                 render={
-                                    <Link
+                                    <a
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        to={`/pos/login?org=${encodeURIComponent(organizationUsername)}&device=${encodeURIComponent(deviceLoginUsername)}`}
+                                        href={getPosLoginUrl({
+                                            organizationUsername,
+                                            deviceUsername: deviceLoginUsername,
+                                        })}
                                     />
                                 }
                             >

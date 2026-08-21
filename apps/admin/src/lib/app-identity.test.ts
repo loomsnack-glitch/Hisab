@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { getDocumentTitle } from "./app-identity";
+import { ADMIN_APP_NAME, getDocumentTitle } from "./app-identity";
 import { buildAdminVersionMetadata } from "./app-version";
 
 const appRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -29,17 +29,24 @@ describe("Ganatri Admin identity", () => {
         });
     });
 
-    test("uses Ganatri Admin as the document title for Organization-admin routes", () => {
-        expect(getDocumentTitle("/")).toBe("Ganatri Admin");
-        expect(getDocumentTitle("/organizations")).toBe("Ganatri Admin");
-        expect(getDocumentTitle("/login")).toBe("Ganatri Admin");
-        expect(getDocumentTitle("/appearance")).toBe("Ganatri Admin");
+    test("uses Ganatri Admin as the document title for every Admin route", () => {
+        expect(getDocumentTitle()).toBe("Ganatri Admin");
+        expect(getDocumentTitle()).toBe(ADMIN_APP_NAME);
     });
 
-    test("keeps the temporary embedded POS document title", () => {
-        expect(getDocumentTitle("/pos")).toBe("Ganatri POS");
-        expect(getDocumentTitle("/pos/login")).toBe("Ganatri POS");
-        expect(getDocumentTitle("/pos/bills")).toBe("Ganatri POS");
+    test("does not detect POS from Admin pathnames or load Device Login", () => {
+        const appSource = readFileSync(join(appRoot, "src/App.tsx"), "utf8");
+
+        expect(appSource).toContain("userAuthenticate");
+        expect(appSource).not.toContain("deviceAuthenticate");
+        expect(appSource).not.toContain("isPosRoute");
+        expect(appSource).not.toContain("PosLoginPage");
+        expect(appSource).not.toContain("PosPage");
+        expect(appSource).not.toContain('path="/pos/login"');
+        expect(appSource).toContain('path="/pos"');
+        expect(appSource).toContain("<RetiredPosRoutePage");
+        expect(appSource).not.toContain('Navigate to="/pos');
+        expect(appSource).not.toContain("startsWith(\"/pos\")");
     });
 
     test("install document metadata identifies Ganatri Admin", () => {

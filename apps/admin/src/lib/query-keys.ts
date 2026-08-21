@@ -2,10 +2,6 @@ export const authKeys = {
   me: ["auth", "me"] as const,
 };
 
-export const deviceAuthKeys = {
-  me: ["device-auth", "me"] as const,
-};
-
 export const organizationKeys = {
   all: ["organizations"] as const,
   list: () => [...organizationKeys.all, "list"] as const,

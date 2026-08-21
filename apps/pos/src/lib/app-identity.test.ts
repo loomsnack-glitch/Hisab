@@ -57,16 +57,22 @@ describe("Ganatri POS identity", () => {
         });
     });
 
-    test("owns a device-only root route table with a settings alias inside POS", () => {
+    test("owns a device-only root route table isolated from Admin user authentication", () => {
         const appSource = readFileSync(join(appRoot, "src/App.tsx"), "utf8");
 
         expect(appSource).not.toContain("userAuthenticate");
         expect(appSource).toContain('path="/login"');
         expect(appSource).toContain("<PosProductsPage />");
         expect(appSource).toContain('path="tables"');
+        expect(appSource).toContain('path="customers"');
         expect(appSource).toContain('path="bills"');
+        expect(appSource).toContain('path="reports"');
+        expect(appSource).toContain('path="purchases"');
+        expect(appSource).toContain('path="whatsapp"');
         expect(appSource).toContain('path="appearance"');
         expect(appSource).toContain('path="settings"');
         expect(appSource).toContain('to="/appearance"');
+        expect(appSource).not.toContain("/pos/login");
+        expect(appSource).not.toContain('data-workspace="admin"');
     });
 });
