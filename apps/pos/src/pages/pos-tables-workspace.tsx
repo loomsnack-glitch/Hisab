@@ -46,9 +46,6 @@ import type { PosRouteContext } from "@/pages/pos-route-context";
 type TableOperation = { tableId: string; action: PosServiceTableAction };
 type OrderOperation = { tableId: string; mode: "start" | "resume" };
 
-const panelMaxHeight =
-  "calc(100dvh - var(--pos-header-height, 3.5rem) - env(safe-area-inset-top, 0px) - var(--pos-mobile-nav-height, 0px))";
-
 const PosTablesWorkspace = () => {
   const { session, onPanelTabChange } = useOutletContext<PosRouteContext>();
   const queryClient = useQueryClient();
@@ -276,13 +273,10 @@ const PosTablesWorkspace = () => {
 
   return (
     <div
-      className="flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] flex-col max-lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden"
+      className="flex h-full min-h-0 flex-col overflow-hidden lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))]"
       data-testid="pos-tables-page"
     >
-      <div
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-[pan-y_pinch-zoom] p-3 max-lg:pb-2 sm:p-4 lg:p-6 lg:pb-6"
-        style={{ maxHeight: panelMaxHeight }}
-      >
+      <div className="min-h-0 flex-1 touch-[pan-y_pinch-zoom] overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-6">
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h1 className="sr-only">Tables</h1>
