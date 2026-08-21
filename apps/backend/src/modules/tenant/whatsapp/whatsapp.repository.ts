@@ -13,6 +13,7 @@ import type {
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
+import { releaseCloudQuota, settleCloudQuota } from "./cloud-api/cloud-quota.repository";
 
 type AccountRow = Record<string, unknown>;
 
@@ -1226,7 +1227,7 @@ export const completeInvoiceOutbox = async (
 ): Promise<boolean> => {
     return pg.begin(async tx => {
         const [outbox] = await tx`
-            SELECT id, message_id, attempt_count, kind
+            SELECT id, message_id, attempt_count, kind, cloud_quota_reservation_id
             FROM whatsapp_outbox
             WHERE id = ${outboxId}
               AND status = 'processing'
@@ -1255,6 +1256,9 @@ export const completeInvoiceOutbox = async (
                     updated_at = NOW()
                 WHERE id = ${outbox.id}
             `;
+            if (outbox.cloud_quota_reservation_id) {
+                await settleCloudQuota(tx, String(outbox.cloud_quota_reservation_id));
+            }
             if (outbox.kind === "promotion") {
                 await tx`
                     UPDATE whatsapp_campaign_recipients
@@ -1302,6 +1306,9 @@ export const completeInvoiceOutbox = async (
                 updated_at = NOW()
             WHERE id = ${outbox.id}
         `;
+        if (permanentlyFailed && outbox.cloud_quota_reservation_id) {
+            await releaseCloudQuota(tx, String(outbox.cloud_quota_reservation_id));
+        }
         if (outbox.kind === "promotion" && permanentlyFailed) {
             await tx`
                 UPDATE whatsapp_campaign_recipients
@@ -1487,7 +1494,8 @@ export const updateCloudMessageStatus = async (
 ): Promise<"updated" | "stale" | "missing"> => {
     return pg.begin(async tx => {
         const [existing] = await tx`
-            SELECT message.id, outbox.id AS outbox_id, outbox.status AS outbox_status
+            SELECT message.id, outbox.id AS outbox_id, outbox.status AS outbox_status,
+                   outbox.cloud_quota_reservation_id
             FROM whatsapp_messages message
             LEFT JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
             WHERE message.whatsapp_account_id = ${accountId}
@@ -1557,6 +1565,9 @@ export const updateCloudMessageStatus = async (
                     WHERE id = ${existing.outbox_id}
                       AND status = 'reconciling'
                 `;
+                if (existing.cloud_quota_reservation_id) {
+                    await releaseCloudQuota(tx, String(existing.cloud_quota_reservation_id));
+                }
             } else {
                 await tx`
                     UPDATE whatsapp_outbox
@@ -1569,6 +1580,9 @@ export const updateCloudMessageStatus = async (
                     WHERE id = ${existing.outbox_id}
                       AND status = 'reconciling'
                 `;
+                if (existing.cloud_quota_reservation_id) {
+                    await settleCloudQuota(tx, String(existing.cloud_quota_reservation_id));
+                }
             }
         }
         return "updated";

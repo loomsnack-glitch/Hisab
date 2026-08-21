@@ -766,8 +766,12 @@ Last updated: 2026-08-22
 - Verification: Cloud-focused suite passes 92 tests; `git diff --check` passes;
   the full backend TypeScript check still reports only the repository's
   pre-existing unrelated test-contract errors.
-- Loop 5 — **next**: implement quota reservation and append-only usage/cost
-  accounting before any Cloud caller migration.
+- Loop 5A — **in progress**: add an atomic Organization quota reservation,
+  append-only usage/cost ledger, reservation settlement/release on direct and
+  uncertain sends, and repair the Cloud template message-content constraint.
+- Loop 5B — **next**: add rolling recipient windows, customer cooldown and
+  campaign duplicate admission, stop-campaign behavior, and reconciliation
+  reporting on top of the ledger.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 
@@ -820,9 +824,9 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The next code slice is therefore Loop 5 quota reservation and append-only
-usage/cost accounting. Phase 6 remains blocked until the provider/runtime and
-quota gates are closed.
+The current code slice is Loop 5A quota reservation and append-only usage/cost
+accounting. Phase 6 remains blocked until the provider/runtime and quota gates
+are closed.
 
 ## Target architecture
 

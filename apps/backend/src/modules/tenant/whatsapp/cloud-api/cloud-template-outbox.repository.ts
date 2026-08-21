@@ -1,6 +1,7 @@
 import type { WhatsAppMessageTemplateKind } from "@repo/types";
 import { pg } from "@/config/db";
 import { type CloudTemplateSendSnapshot } from "./cloud-template-admission";
+import { reserveCloudQuota } from "./cloud-quota.repository";
 
 export type CloudTemplateOutboxRecord = {
   messageId: string;
@@ -113,6 +114,16 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
   if (Number(queued?.count ?? 0) >= pendingLimit) {
     throw new Error("WhatsApp account queue is full; retry shortly");
   }
+  const quota = await reserveCloudQuota(tx, {
+    organizationId: params.organizationId,
+    accountId: params.accountId,
+    storeId: params.storeId,
+    customerId: params.customerId,
+    idempotencyKey,
+  });
+  if (quota.status === "released") {
+    throw new Error("Cloud template idempotency key was already released; use a new key");
+  }
   const externalChatId = `${params.customerPhone.replace(/^\+/, "")}@s.whatsapp.net`;
   const [conversation] = await tx`
     INSERT INTO whatsapp_conversations (
@@ -163,10 +174,10 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
   const [outbox] = await tx`
     INSERT INTO whatsapp_outbox (
       organization_id, store_id, whatsapp_account_id, message_id, kind,
-      status, cloud_template_binding_id, cloud_template_snapshot
+      status, cloud_template_binding_id, cloud_template_snapshot, cloud_quota_reservation_id
     ) VALUES (
       ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${message.id}, 'template', 'pending',
-      ${params.snapshot.bindingId}, ${JSON.stringify(params.snapshot)}::jsonb
+      ${params.snapshot.bindingId}, ${JSON.stringify(params.snapshot)}::jsonb, ${quota.id}
     )
     RETURNING id, status
   `;
