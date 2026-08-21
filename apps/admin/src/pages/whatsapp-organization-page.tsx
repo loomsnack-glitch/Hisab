@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Query } from "@tanstack/query-core";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@repo/ui/components/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
 import { FileText, Link2, LoaderCircle, LogOut, Megaphone, Pencil, RefreshCw, Settings2 } from "lucide-react";
@@ -99,7 +100,7 @@ const WhatsAppOrganizationPage = () => {
             queryKey: whatsappKeys.organizationAccount(organizationId, account.id),
             queryFn: () => getWhatsAppOrganizationAccount(organizationId, account.id),
             enabled: Boolean(organizationId),
-            refetchInterval: query => {
+            refetchInterval: (query: Query<Awaited<ReturnType<typeof getWhatsAppOrganizationAccount>>, Error, Awaited<ReturnType<typeof getWhatsAppOrganizationAccount>>, readonly unknown[]>) => {
                 const error = query.state.error as WhatsAppQueryError | null;
                 const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
                 const pollUntil = statusPollUntilByAccountId[account.id] ?? 0;
@@ -201,7 +202,6 @@ const WhatsAppOrganizationPage = () => {
     });
     const newPhoneError = newPhoneNumber.length > 0 && !normalizePhoneNumber(newPhoneNumber);
     const isBusy = createMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeMutation.isPending;
-    const liveAccounts = accounts.map((account, index) => statusQueries[index]?.data?.data?.account ?? account);
     const selectStore = (storeId: string) => {
         setSearchParams({ storeId });
     };
@@ -246,7 +246,7 @@ const WhatsAppOrganizationPage = () => {
                         {activeTab !== "accounts" && organizationQuery.data?.status === "success" ? (
                             <div className="flex w-full items-center gap-2 sm:w-auto">
                                 <span className="text-sm font-medium">Store</span>
-                                <Select value={selectedStoreId} onValueChange={selectStore}>
+                                <Select value={selectedStoreId} onValueChange={(value) => { if (value) selectStore(value); }}>
                                     <SelectTrigger className="w-full rounded-xl sm:w-64" aria-label="Select Store for WhatsApp settings">
                                     <SelectValue placeholder="Select Store">
                                         {selectedStore?.name ? <span className="truncate">{selectedStore.name}</span> : null}
@@ -430,7 +430,7 @@ const WhatsAppOrganizationPage = () => {
                         createMutation.mutate();
                     }}>
                         <div className="space-y-2">
-                            <PhoneInput id="organization-whatsapp-phone" className="h-10" value={phoneNumber || undefined} onChange={value => setPhoneNumber(value ?? "")} placeholder="9876543210" inputMode="tel" aria-invalid={phoneError} />
+                            <PhoneInput id="organization-whatsapp-phone" className="h-10" value={phoneNumber || undefined} onChange={(value: string | undefined) => setPhoneNumber(value ?? "")} placeholder="9876543210" inputMode="tel" aria-invalid={phoneError} />
                             <p className="text-xs text-muted-foreground">India (+91) is selected by default.</p>
                         </div>
                         <DialogFooter>
@@ -451,7 +451,7 @@ const WhatsAppOrganizationPage = () => {
                         id="organization-whatsapp-new-phone"
                         className="h-10"
                         value={newPhoneNumber || undefined}
-                        onChange={value => setNewPhoneNumber(value ?? "")}
+                        onChange={(value: string | undefined) => setNewPhoneNumber(value ?? "")}
                         placeholder="9876543210"
                         inputMode="tel"
                         aria-invalid={newPhoneError}

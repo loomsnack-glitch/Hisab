@@ -181,10 +181,10 @@ const PurchasesPage = () => {
 
             <div className="grid gap-3 sm:grid-cols-3">
                 {[
-                    ["Today", summary?.today],
-                    ["This week", summary?.thisWeek],
-                    ["This month", summary?.thisMonth],
-                ].map(([label, value]) => (
+                    { label: "Today", value: summary?.today },
+                    { label: "This week", value: summary?.thisWeek },
+                    { label: "This month", value: summary?.thisMonth },
+                ].map(({ label, value }) => (
                     <div key={String(label)} className="rounded-xl border border-border/70 bg-card p-4">
                         <p className="text-sm text-muted-foreground">{label}</p>
                         <p className="mt-1 text-2xl font-bold">{formatCurrency((value as { amount: number } | undefined)?.amount ?? 0)}</p>

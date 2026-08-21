@@ -318,8 +318,8 @@ const UpsertProductDialog = ({
       ingredients: labelProfileForm.ingredients,
       netWeight: labelProfileForm.netWeight,
       unitSellingPriceText: labelProfileForm.unitSellingPriceText,
-      mrp: labelProfileForm.mrp,
-      shelfLifeDays: labelProfileForm.shelfLifeDays,
+      mrp: labelProfileForm.mrp.trim() ? Number(labelProfileForm.mrp) : null,
+      shelfLifeDays: labelProfileForm.shelfLifeDays.trim() ? Number(labelProfileForm.shelfLifeDays) : null,
       nutrition: nutrition.length > 0 ? nutrition : null,
     };
   };

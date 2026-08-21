@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ComponentProps, type MouseEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Controller, useFieldArray, useForm, useWatch, type SubmitHandler } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch, type Resolver, type SubmitHandler } from "react-hook-form";
 import { createLabelTemplate, updateLabelTemplate } from "@repo/services";
 import {
     CreateLabelTemplateSchema,
@@ -542,7 +542,7 @@ const UpsertLabelTemplateDialog = ({
     const isEditMode = Boolean(labelTemplate);
 
     const form = useForm<FormValues>({
-        resolver: zodResolver(LabelTemplateFormSchema),
+        resolver: zodResolver(LabelTemplateFormSchema) as unknown as Resolver<FormValues>,
         defaultValues: valuesFromDocument(THERMAL_ROLL_LABEL_TEMPLATE),
     });
     const keepOuts = useFieldArray({ control: form.control, name: "keepOuts" });

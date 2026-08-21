@@ -1546,7 +1546,7 @@ const PlatformOrganizationDetailPage = ({
                         (billActivityQuery.error as { message?: string } | null)?.message
                             ?? (billActivityResponse?.status === "error" ? billActivityResponse.message : undefined)
                     }
-                    activity={billActivity}
+                    activity={billActivity ?? undefined}
                 />
             </div>
         );

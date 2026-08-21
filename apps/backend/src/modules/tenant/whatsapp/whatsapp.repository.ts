@@ -1410,7 +1410,7 @@ export const listPromotionCampaigns = async (
     ]);
     const statsRow = (statsRows[0] ?? {}) as Record<string, unknown>;
     return {
-        campaigns: campaignRows.map(row => mapPromotionCampaign(row as Record<string, unknown>)),
+        campaigns: campaignRows.map((row: Record<string, unknown>) => mapPromotionCampaign(row)),
         stats: {
             totalCampaigns: promotionNumber(statsRow, "total_campaigns"),
             totalRecipients: promotionNumber(statsRow, "total_recipients"),

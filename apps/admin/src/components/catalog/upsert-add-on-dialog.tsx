@@ -5,7 +5,6 @@ import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import { createAddOn, updateAddOn } from "@repo/services";
 import {
     AddOnStatusSchema,
-    CreateAddOnSchema,
     type AddOnDTO,
     type AddOnStatus,
     type CreateAddOnJSON,
@@ -15,10 +14,8 @@ import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
-    DialogTitle,
     DialogTrigger,
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
@@ -48,7 +45,8 @@ const sanitizeDecimalInput = (value: string) => {
     return digitsAndDot.slice(0, dotIndex + 1) + digitsAndDot.slice(dotIndex + 1).replace(/\./g, "");
 };
 
-const UpsertAddOnFormSchema = CreateAddOnSchema.safeExtend({
+const UpsertAddOnFormSchema = z.object({
+    name: z.string().trim().min(1, "Name is required").max(255, "Name is too long"),
     price: z
         .string()
         .refine((value) => value.length > 0, "Price is required")
@@ -64,6 +62,11 @@ const UpsertAddOnFormSchema = CreateAddOnSchema.safeExtend({
         .transform((value) => (value === "" ? 0 : Number(value)))
         .pipe(z.number().min(0, "Discount must be 0 or more"))
         .optional(),
+    status: AddOnStatusSchema.optional(),
+}).superRefine((value, context) => {
+    if (value.discount !== undefined && value.discount > value.price) {
+        context.addIssue({ code: "custom", path: ["discount"], message: "Discount cannot exceed price" });
+    }
 });
 
 type UpsertAddOnFormInput = z.input<typeof UpsertAddOnFormSchema>;
@@ -85,7 +88,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
     const queryClient = useQueryClient();
     const isEditMode = Boolean(addOn);
 
-    const form = useForm<UpsertAddOnFormInput, unknown, CreateAddOnJSON>({
+    const form = useForm<UpsertAddOnFormInput, unknown, z.output<typeof UpsertAddOnFormSchema>>({
         resolver: zodResolver(UpsertAddOnFormSchema),
         defaultValues,
     });
@@ -124,7 +127,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
         },
     });
 
-    const onSubmit: SubmitHandler<CreateAddOnJSON> = (values) => {
+    const onSubmit: SubmitHandler<z.output<typeof UpsertAddOnFormSchema>> = (values) => {
         mutation.mutate({
             name: values.name.trim(),
             price: values.price,

@@ -6,7 +6,7 @@ import { createComboProduct, getComboProduct, updateComboProduct } from "@repo/s
 import { ProductStatusSchema, type CategoryDTO, type CreateComboProductJSON, type ProductResponseDTO } from "@repo/types";
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@repo/ui/components/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";

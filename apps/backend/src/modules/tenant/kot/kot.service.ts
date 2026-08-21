@@ -19,6 +19,7 @@ import {
     type ServiceResponse,
     type ServiceTableDTO,
     type ServiceTableSaleResponse,
+    type StatusCode,
     type TableOrderDTO,
     type UpdateTableKotSVC,
     type UpdateTableOrderSVC,
@@ -341,7 +342,7 @@ const tableOrderWorkspace = (
     tableOrder: TableOrderDTO,
     sale: SaleDetailDTO | null,
     message: string,
-    code: number,
+    code: StatusCode,
 ): ServiceResponse<ServiceTableSaleResponse> => ({
     status: "success",
     data: { table, tableOrder, sale },
@@ -349,12 +350,13 @@ const tableOrderWorkspace = (
     code,
 });
 
+type PreparedKotLine = Extract<
+    Awaited<ReturnType<typeof billingService.prepareTrustedSaleLines>>,
+    { lines: unknown }
+>["lines"][number];
+
 const mapPreparedLinesToKotItems = (
-    lines: Awaited<ReturnType<typeof billingService.prepareTrustedSaleLines>> extends {
-        lines: infer L;
-    }
-        ? L
-        : never,
+    lines: PreparedKotLine[],
     kotId: string,
 ): CreateKotItemREPO[] =>
     (lines ?? []).map((line) => {

@@ -121,7 +121,7 @@ const CategoriesPage = () => {
             header: "Created",
             accessor: (category) => formatDateTime(category.createdAt),
             sortable: true,
-            getSortValue: (category) => category.createdAt,
+            getSortValue: (category) => String(category.createdAt),
         },
     ], [productsByCategoryId]);
 

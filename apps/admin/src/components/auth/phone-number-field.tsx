@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { FieldError as RHFFieldError } from "react-hook-form";
+import type { Value } from "react-phone-number-input";
 import { FieldContent, FieldError, FieldLabel, Field } from "@repo/ui/components/field";
 import { PhoneInput } from "@repo/ui/components/phone-input";
 
@@ -11,7 +12,7 @@ type PhoneNumberFieldProps = {
     required?: boolean;
 };
 
-const PhoneNumberField = React.forwardRef<HTMLInputElement, PhoneNumberFieldProps>(
+const PhoneNumberField = React.forwardRef<React.ElementRef<typeof PhoneInput>, PhoneNumberFieldProps>(
     ({ value, onChange, onBlur, error, required }, ref) => {
         return (
             <Field data-invalid={!!error} className="space-y-1">
@@ -25,7 +26,7 @@ const PhoneNumberField = React.forwardRef<HTMLInputElement, PhoneNumberFieldProp
                                 : "border-input focus-within:border-ring focus-within:ring-ring/50"
                         }`}
                         value={value || undefined}
-                        onChange={(nextValue) => onChange(nextValue ?? "")}
+                        onChange={(nextValue: Value | undefined) => onChange(nextValue ?? "")}
                         onBlur={onBlur}
                         autoComplete="tel"
                         placeholder="9876543210"

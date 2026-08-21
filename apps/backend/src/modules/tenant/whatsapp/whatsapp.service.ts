@@ -3,6 +3,7 @@ import {
     normalizePhoneNumber,
     validateWhatsAppTemplate,
     type ServiceResponse,
+    type StatusCode,
     type WhatsAppAccountDTO,
     type WhatsAppAccountStatusResponseDTO,
     type WhatsAppChangeAccountNumberJSON,
@@ -219,7 +220,15 @@ export const createOrganizationAccount = async (
     }
 };
 
-const getOrganizationAccount = async (userId: string, organizationId: string, accountId: string) => {
+type OrganizationAccountScope =
+    | { error: string; code: StatusCode }
+    | { account: WhatsAppAccountDTO };
+
+const getOrganizationAccount = async (
+    userId: string,
+    organizationId: string,
+    accountId: string,
+): Promise<OrganizationAccountScope> => {
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { error: "Organization not found" as const, code: STATUS_CODES.NOT_FOUND };
     const account = await repository.getAccountById(accountId);

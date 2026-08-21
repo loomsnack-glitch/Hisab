@@ -202,7 +202,8 @@ export const createPromotion = async (
   }
   if (
     rows.some(
-      (row) => promotionBody(data.body, String(row.name), store).length > 4096,
+      (row: Record<string, unknown>) =>
+        promotionBody(data.body, String(row.name), store).length > 4096,
     )
   ) {
     return {

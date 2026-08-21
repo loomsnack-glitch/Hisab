@@ -162,7 +162,7 @@ const AddOnsPage = () => {
             header: "Updated",
             accessor: (addOn) => formatDateTime(addOn.updatedAt),
             sortable: true,
-            getSortValue: (addOn) => addOn.updatedAt,
+            getSortValue: (addOn) => String(addOn.updatedAt),
         },
     ], []);
 
