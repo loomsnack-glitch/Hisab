@@ -127,11 +127,20 @@ const organizationListLimitSchema = z.coerce
 
 export const PlatformOrganizationActivityFilterSchema = z.enum(["all", "active", "inactive"]);
 
+export const PlatformOrganizationDirectorySortSchema = z.enum([
+    "recent_activity",
+    "name_asc",
+    "name_desc",
+    "sales_value_desc",
+    "sales_value_asc",
+]);
+
 export const PlatformOrganizationListQuerySchema = z
     .object({
         ...platformReportingPeriodQueryFields,
         search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
         activity: PlatformOrganizationActivityFilterSchema.default("all"),
+        sort: PlatformOrganizationDirectorySortSchema.default("recent_activity"),
         page: positivePageSchema.default(1),
         limit: organizationListLimitSchema.default(20),
     })

@@ -1,5 +1,5 @@
 import { sql } from "bun";
-import { PLATFORM_OVERVIEW_RECENT_SALE_LIMIT } from "@repo/types";
+import { PLATFORM_OVERVIEW_RECENT_SALE_LIMIT, type PlatformOrganizationDirectorySort } from "@repo/types";
 import { pg } from "@/config/db";
 
 export type PlatformDashboardMetricsQuery = {
@@ -24,6 +24,7 @@ export type PlatformDashboardMetrics = {
 export type PlatformOrganizationListMetricsQuery = PlatformDashboardMetricsQuery & {
     search: string;
     activity: "all" | "active" | "inactive";
+    sort: PlatformOrganizationDirectorySort;
     page: number;
     limit: number;
 };
@@ -204,6 +205,10 @@ export const listOrganizations = async (
         ? sql`AND (
                 organization.name ILIKE ${searchPattern}
                 OR organization.username ILIKE ${searchPattern}
+                OR creator.first_name ILIKE ${searchPattern}
+                OR creator.last_name ILIKE ${searchPattern}
+                OR (creator.first_name || ' ' || creator.last_name) ILIKE ${searchPattern}
+                OR creator.phone ILIKE ${searchPattern}
             )`
         : sql``;
     const activityClause =
@@ -212,6 +217,16 @@ export const listOrganizations = async (
             : query.activity === "inactive"
                 ? sql`AND COALESCE(active_store_counts.active_store_count, 0) = 0`
                 : sql``;
+    const orderClause =
+        query.sort === "name_asc"
+            ? sql`ORDER BY name ASC, username ASC, id ASC`
+            : query.sort === "name_desc"
+                ? sql`ORDER BY name DESC, username ASC, id ASC`
+                : query.sort === "sales_value_desc"
+                    ? sql`ORDER BY completed_sales_value DESC, name ASC, username ASC, id ASC`
+                    : query.sort === "sales_value_asc"
+                        ? sql`ORDER BY completed_sales_value ASC, name ASC, username ASC, id ASC`
+                        : sql`ORDER BY last_completed_sale_at DESC NULLS LAST, name ASC, username ASC, id ASC`;
 
     const rows = await pg`
         WITH completed_sales AS (
@@ -296,7 +311,7 @@ export const listOrganizations = async (
         LEFT JOIN (
             SELECT *
             FROM filtered
-            ORDER BY name ASC, username ASC, id ASC
+            ${orderClause}
             LIMIT ${query.limit}
             OFFSET ${offset}
         ) paged ON TRUE

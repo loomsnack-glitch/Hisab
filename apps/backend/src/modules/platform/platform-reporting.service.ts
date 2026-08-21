@@ -117,6 +117,7 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
             periodEndAt: resolved.period.endAt,
             search: query.search ?? "",
             activity: query.activity,
+            sort: query.sort,
             page: query.page,
             limit: query.limit,
         });

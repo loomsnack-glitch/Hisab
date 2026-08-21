@@ -14,6 +14,7 @@ import type {
 
 import ConsoleEntry from "./console-entry";
 import PlatformOrganizationsPage, { type PlatformOrganizationsPageProps } from "./platform-organizations-page";
+import { organizationInspectionPath } from "@/lib/organization-inspection-url";
 
 afterEach(() => {
     cleanup();
@@ -103,6 +104,7 @@ const renderList = (
         reportingQuery?: PlatformDashboardQueryJSON;
         initialSearch?: string;
         initialActivity?: PlatformOrganizationsPageProps["initialActivity"];
+        onUnauthorized?: () => Promise<void>;
     } = {},
 ) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -113,12 +115,13 @@ const renderList = (
                 getPlatformOrganizations={loadOrganizations}
                 initialSearch={options.initialSearch}
                 initialActivity={options.initialActivity}
+                onUnauthorized={options.onUnauthorized}
             />
         </QueryClientProvider>,
     );
 };
 
-describe("Platform Organization outreach list", () => {
+describe("Organization Directory", () => {
     test("opens Organizations from the console home", async () => {
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -136,28 +139,36 @@ describe("Platform Organization outreach list", () => {
 
         fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
         expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
-        expect(await view.findByText("Active Cafe")).toBeTruthy();
+        expect(await view.findByRole("link", { name: "Active Cafe" })).toBeTruthy();
+        expect(view.queryByText("Outreach")).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.queryByText("Create Organization")).toBeNull();
         expect(view.queryByText("Payments")).toBeNull();
     });
 
-    test("shows identity, creator contact, adoption metrics, and last completed Sale", async () => {
+    test("shows identity, creator, adoption health, and selected-period sales in a table and mobile cards", async () => {
         const view = renderList();
 
-        expect(await view.findByText("Active Cafe")).toBeTruthy();
-        expect(view.getByText("active-cafe")).toBeTruthy();
-        expect(view.getByText("Kiran Patel")).toBeTruthy();
-        expect(view.getByText("Quiet Mart")).toBeTruthy();
-        expect(view.getByText("Leela Nair")).toBeTruthy();
+        expect(await view.findByRole("link", { name: "Active Cafe" })).toBeTruthy();
+        expect(view.getByText("Organization Directory")).toBeTruthy();
+        expect(view.queryByText("Outreach")).toBeNull();
+        expect(view.getByRole("table")).toBeTruthy();
+        expect(view.getByRole("columnheader", { name: "Organization" })).toBeTruthy();
+        expect(view.getByRole("link", { name: "Inspect Active Cafe" })).toBeTruthy();
+        expect(view.getAllByText("active-cafe").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Kiran Patel").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Quiet Mart").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Leela Nair").length).toBeGreaterThan(0);
         expect(view.getAllByText("Active").length).toBeGreaterThan(0);
         expect(view.getAllByText("Inactive").length).toBeGreaterThan(0);
-        expect(view.getByText("Customers")).toBeTruthy();
-        expect(view.getByText("Sales value")).toBeTruthy();
-        expect(view.getByText("161.25", { exact: false })).toBeTruthy();
+        expect(view.getAllByText("Customers").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Sales value").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Last sale").length).toBeGreaterThan(0);
+        expect(view.getAllByText("161.25", { exact: false }).length).toBeGreaterThan(0);
         expect(view.getAllByText("—").length).toBeGreaterThan(0);
         expect(view.getByText(/Activity uses last 7 days in Asia\/Kolkata/)).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
+        expect(view.queryByText("Edit Organization")).toBeNull();
     });
 
     test("filters to inactive Organizations without changing the seven-day activity meaning", async () => {
@@ -168,14 +179,14 @@ describe("Platform Organization outreach list", () => {
             return successList([activeCafe, quietMart, newStand]);
         });
 
-        await view.findByText("Active Cafe");
+        await view.findByRole("link", { name: "Active Cafe" });
         fireEvent.click(view.getByRole("button", { name: "Inactive" }));
         await waitFor(() => {
             expect(requested.some((query) => query.activity === "inactive")).toBe(true);
-            expect(view.queryByText("Active Cafe") === null).toBe(true);
+            expect(view.queryAllByRole("link", { name: "Active Cafe" }).length).toBe(0);
         });
-        expect(view.getByText("New Stand")).toBeTruthy();
-        expect(view.getByText("Quiet Mart")).toBeTruthy();
+        expect(view.getByRole("link", { name: "New Stand" })).toBeTruthy();
+        expect(view.getByRole("link", { name: "Quiet Mart" })).toBeTruthy();
         expect(view.getByText(/Activity uses last 7 days in Asia\/Kolkata/)).toBeTruthy();
         expect(view.queryByText("Create Sale") === null).toBe(true);
     });
@@ -204,12 +215,12 @@ describe("Platform Organization outreach list", () => {
             return successList([activeCafe], { page: 1, limit: 20, totalCount: 21 });
         }, { reportingQuery: { period: "7d" } });
 
-        await view.findByText("Active Cafe");
+        await view.findByRole("link", { name: "Active Cafe" });
         expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
         fireEvent.click(view.getByRole("button", { name: "Next" }));
         await waitFor(() => {
             expect(requested.some((query) => query.page === 2 && query.period === "7d")).toBe(true);
-            expect(view.getByText("Quiet Mart")).toBeTruthy();
+            expect(view.getByRole("link", { name: "Quiet Mart" })).toBeTruthy();
         });
         expect(requested[0]?.period).toBe("7d");
         expect(view.getByText("Page 2 of 2")).toBeTruthy();
@@ -271,5 +282,84 @@ describe("Platform Organization outreach list", () => {
         expect(await view.findByText("Organizations could not be loaded")).toBeTruthy();
         expect(view.getByText("Cannot reach the API")).toBeTruthy();
         expect(view.queryByText("No matches")).toBeNull();
+    });
+
+    test("shows a labeled loading state while the Organization Directory loads", async () => {
+        const view = renderList(() => new Promise(() => {}));
+
+        expect(await view.findByLabelText("Loading organizations")).toBeTruthy();
+        expect(view.queryByText("Create Sale")).toBeNull();
+    });
+
+    test("searches Organization identity and creator through the platform list contract", async () => {
+        const requested: PlatformOrganizationListQueryJSON[] = [];
+        const view = renderList(async (query = {}) => {
+            requested.push(query);
+            if (query.search === "Nair") return successList([quietMart]);
+            return successList([activeCafe, quietMart, newStand]);
+        }, { initialSearch: "Nair" });
+
+        expect(view.getByRole("searchbox", { name: "Search organization or creator" })).toBeTruthy();
+        expect(await view.findByRole("link", { name: "Quiet Mart" })).toBeTruthy();
+        await waitFor(() => {
+            expect(requested.some((query) => query.search === "Nair")).toBe(true);
+        });
+        expect(view.queryAllByRole("link", { name: "Active Cafe" }).length).toBe(0);
+        expect(view.getAllByText("Leela Nair").length).toBeGreaterThan(0);
+        expect(view.queryByText("Create Sale")).toBeNull();
+    });
+
+    test("requests recency-first sorting by default and can change directory sort", async () => {
+        const requested: PlatformOrganizationListQueryJSON[] = [];
+        const view = renderList(async (query = {}) => {
+            requested.push(query);
+            if (query.sort === "name_asc") return successList([activeCafe, newStand, quietMart]);
+            if (query.sort === "sales_value_desc") return successList([activeCafe, quietMart, newStand]);
+            return successList([activeCafe, quietMart, newStand]);
+        });
+
+        await view.findByRole("link", { name: "Active Cafe" });
+        expect(requested[0]?.sort).toBe("recent_activity");
+        fireEvent.click(view.getByRole("button", { name: "Name A–Z" }));
+        await waitFor(() => {
+            expect(requested.some((query) => query.sort === "name_asc" && query.page === 1)).toBe(true);
+        });
+        fireEvent.click(view.getByRole("button", { name: "Highest sales value" }));
+        await waitFor(() => {
+            expect(requested.some((query) => query.sort === "sales_value_desc")).toBe(true);
+        });
+        expect(view.queryByText("Create Sale")).toBeNull();
+    });
+
+    test("opens an Inspection URL from a directory row or name", async () => {
+        window.history.replaceState(null, "", "/organizations");
+        const view = renderList();
+
+        const nameLink = await view.findByRole("link", { name: "Active Cafe" });
+        fireEvent.click(nameLink.closest("tr")!);
+
+        await waitFor(() => {
+            expect(window.location.pathname).toBe(organizationInspectionPath(activeCafe.id));
+        });
+        expect(view.queryByText("Create Sale")).toBeNull();
+        expect(view.queryByText("Edit Organization")).toBeNull();
+    });
+
+    test("hides Organizations when the Owner User session is no longer valid", async () => {
+        let unauthorized = false;
+        const view = renderList(async () => {
+            throw { code: 401, message: "Owner authentication is required", data: null, status: "error" };
+        }, {
+            onUnauthorized: async () => {
+                unauthorized = true;
+            },
+        });
+
+        expect(await view.findByText("Owner session is no longer valid")).toBeTruthy();
+        expect(view.queryByText("Active Cafe")).toBeNull();
+        expect(view.queryByText("Create Sale")).toBeNull();
+        await waitFor(() => {
+            expect(unauthorized).toBe(true);
+        });
     });
 });

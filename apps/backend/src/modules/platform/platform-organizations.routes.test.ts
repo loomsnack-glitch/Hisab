@@ -130,16 +130,40 @@ const createReportingMetrics = (
         query: PlatformOrganizationListMetricsQuery,
     ): Promise<PlatformOrganizationListMetrics> => {
         const search = query.search.trim().toLowerCase();
-        const rows = [...organizations]
-            .sort(byNameThenUsernameThenId)
+        const rows = organizations
             .map((organization) => organizationRow(query, organization))
             .filter((organization) => {
-                if (search && !organization.name.toLowerCase().includes(search) && !organization.username.toLowerCase().includes(search)) {
-                    return false;
-                }
+                const haystack = [
+                    organization.name,
+                    organization.username,
+                    organization.creatorFirstName,
+                    organization.creatorLastName,
+                    `${organization.creatorFirstName} ${organization.creatorLastName}`,
+                    organization.creatorPhone,
+                ].join(" ").toLowerCase();
+                if (search && !haystack.includes(search)) return false;
                 if (query.activity === "active") return organization.isActive;
                 if (query.activity === "inactive") return !organization.isActive;
                 return true;
+            })
+            .sort((left, right) => {
+                const byName = byNameThenUsernameThenId(left, right);
+                if (query.sort === "name_asc") return byName;
+                if (query.sort === "name_desc") {
+                    return right.name.localeCompare(left.name)
+                        || left.username.localeCompare(right.username)
+                        || left.id.localeCompare(right.id);
+                }
+                if (query.sort === "sales_value_desc" || query.sort === "sales_value_asc") {
+                    const diff = query.sort === "sales_value_desc"
+                        ? right.completedSalesValue - left.completedSalesValue
+                        : left.completedSalesValue - right.completedSalesValue;
+                    return diff !== 0 ? diff : byName;
+                }
+                const leftSaleAt = left.lastCompletedSaleAt ? Date.parse(left.lastCompletedSaleAt) : Number.NEGATIVE_INFINITY;
+                const rightSaleAt = right.lastCompletedSaleAt ? Date.parse(right.lastCompletedSaleAt) : Number.NEGATIVE_INFINITY;
+                const diff = rightSaleAt - leftSaleAt;
+                return diff !== 0 ? diff : byName;
             });
 
         const start = (query.page - 1) * query.limit;
@@ -221,6 +245,7 @@ const createReportingMetrics = (
             ...query,
             search: "",
             activity: "all",
+            sort: "recent_activity",
             page: 1,
             limit: organizations.length || 1,
         });
@@ -445,7 +470,7 @@ const organizationDetail = (app: Hono, cookie: string, organizationId: string, q
 
 const names = (rows: PlatformOrganizationListItemDTO[] | undefined) => rows?.map((row) => row.name);
 
-describe("Platform Organization outreach list API", () => {
+describe("Platform Organization Directory API", () => {
     beforeEach(() => {
         process.env.NODE_ENV = "test";
     });
@@ -470,14 +495,14 @@ describe("Platform Organization outreach list API", () => {
         expect((await organizations(app, ownerCookie)).status).toBe(401);
     });
 
-    test("returns identity, creator contact, adoption counts, and last completed Sale in a stable order", async () => {
+    test("returns identity, creator contact, adoption counts, and last completed Sale in recency-first order", async () => {
         const { app } = await createHarness();
         const response = await organizations(app, cookieFrom(await passwordLogin(app)));
         const body = await response.json() as ServiceResponse<PlatformOrganizationListResponse>;
         const rows = body.data?.organizations ?? [];
 
         expect(response.status).toBe(200);
-        expect(names(rows)).toEqual(["Active Cafe", "Mixed Bistro", "New Stand", "Quiet Mart"]);
+        expect(names(rows)).toEqual(["Active Cafe", "Mixed Bistro", "Quiet Mart", "New Stand"]);
         expect(rows.map((row) => ({
             username: row.username,
             isActive: row.isActive,
@@ -512,17 +537,6 @@ describe("Platform Organization outreach list API", () => {
                 lastCompletedSaleAt: "2026-08-19T10:00:00.000Z",
             },
             {
-                username: "new-stand",
-                isActive: false,
-                creator: { firstName: "Priya", lastName: "Shah", phone: "+919800000004" },
-                storeCount: 0,
-                activeStoreCount: 0,
-                customerCount: 0,
-                completedSaleCount: 0,
-                completedSalesValue: 0,
-                lastCompletedSaleAt: null,
-            },
-            {
                 username: "quiet-mart",
                 isActive: false,
                 creator: { firstName: "Leela", lastName: "Nair", phone: "+919800000002" },
@@ -532,6 +546,17 @@ describe("Platform Organization outreach list API", () => {
                 completedSaleCount: 2,
                 completedSalesValue: 52,
                 lastCompletedSaleAt: "2026-08-14T18:29:59.000Z",
+            },
+            {
+                username: "new-stand",
+                isActive: false,
+                creator: { firstName: "Priya", lastName: "Shah", phone: "+919800000004" },
+                storeCount: 0,
+                activeStoreCount: 0,
+                customerCount: 0,
+                completedSaleCount: 0,
+                completedSalesValue: 0,
+                lastCompletedSaleAt: null,
             },
         ]);
         expect(JSON.stringify(body.data)).not.toContain("999");
@@ -564,7 +589,7 @@ describe("Platform Organization outreach list API", () => {
         expect(sevenDayByName["Active Cafe"]?.lastCompletedSaleAt).toBe(allTimeByName["Active Cafe"]?.lastCompletedSaleAt);
     });
 
-    test("filters inactive outreach to Organizations with no Store and formerly active Organizations", async () => {
+    test("filters inactive Organizations with no Store and formerly active Organizations", async () => {
         const { app } = await createHarness();
         const cookie = cookieFrom(await passwordLogin(app));
         const inactive = await organizations(app, cookie, "?activity=inactive&period=90d");
@@ -572,35 +597,58 @@ describe("Platform Organization outreach list API", () => {
         const inactiveBody = await inactive.json() as ServiceResponse<PlatformOrganizationListResponse>;
         const activeBody = await active.json() as ServiceResponse<PlatformOrganizationListResponse>;
 
-        expect(names(inactiveBody.data?.organizations)).toEqual(["New Stand", "Quiet Mart"]);
+        expect(names(inactiveBody.data?.organizations)).toEqual(["Quiet Mart", "New Stand"]);
         expect(inactiveBody.data?.organizations.every((row) => row.isActive === false)).toBe(true);
         expect(names(activeBody.data?.organizations)).toEqual(["Active Cafe", "Mixed Bistro"]);
         expect(activeBody.data?.reportingPeriod.selection).toBe("90d");
         expect(inactiveBody.data?.organizations.find((row) => row.name === "Quiet Mart")?.completedSaleCount).toBe(2);
     });
 
-    test("searches by Organization name or username and paginates in the same order", async () => {
+    test("searches by Organization identity or creator and paginates in recency-first order", async () => {
         const { app } = await createHarness();
         const cookie = cookieFrom(await passwordLogin(app));
         const byName = await organizations(app, cookie, "?search=Cafe");
         const byUsername = await organizations(app, cookie, "?search=new-stand");
+        const byCreator = await organizations(app, cookie, "?search=Nair");
+        const byCreatorPhone = await organizations(app, cookie, "?search=9800000003");
         const pageOne = await organizations(app, cookie, "?limit=2&page=1");
         const pageTwo = await organizations(app, cookie, "?limit=2&page=2");
         const empty = await organizations(app, cookie, "?search=zzzz");
         const byNameBody = await byName.json() as ServiceResponse<PlatformOrganizationListResponse>;
         const byUsernameBody = await byUsername.json() as ServiceResponse<PlatformOrganizationListResponse>;
+        const byCreatorBody = await byCreator.json() as ServiceResponse<PlatformOrganizationListResponse>;
+        const byCreatorPhoneBody = await byCreatorPhone.json() as ServiceResponse<PlatformOrganizationListResponse>;
         const pageOneBody = await pageOne.json() as ServiceResponse<PlatformOrganizationListResponse>;
         const pageTwoBody = await pageTwo.json() as ServiceResponse<PlatformOrganizationListResponse>;
         const emptyBody = await empty.json() as ServiceResponse<PlatformOrganizationListResponse>;
 
         expect(names(byNameBody.data?.organizations)).toEqual(["Active Cafe"]);
         expect(names(byUsernameBody.data?.organizations)).toEqual(["New Stand"]);
+        expect(names(byCreatorBody.data?.organizations)).toEqual(["Quiet Mart"]);
+        expect(names(byCreatorPhoneBody.data?.organizations)).toEqual(["Mixed Bistro"]);
         expect(names(pageOneBody.data?.organizations)).toEqual(["Active Cafe", "Mixed Bistro"]);
-        expect(names(pageTwoBody.data?.organizations)).toEqual(["New Stand", "Quiet Mart"]);
+        expect(names(pageTwoBody.data?.organizations)).toEqual(["Quiet Mart", "New Stand"]);
         expect(pageOneBody.data?.pagination).toEqual({ page: 1, limit: 2, totalCount: 4 });
         expect(pageTwoBody.data?.pagination).toEqual({ page: 2, limit: 2, totalCount: 4 });
         expect(emptyBody.data?.organizations).toEqual([]);
         expect(emptyBody.data?.pagination.totalCount).toBe(0);
+    });
+
+    test("sorts the Organization Directory and rejects unknown sort values", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const byName = await organizations(app, cookie, "?sort=name_asc");
+        const byNameDesc = await organizations(app, cookie, "?sort=name_desc");
+        const bySalesValue = await organizations(app, cookie, "?sort=sales_value_asc");
+        const unknown = await organizations(app, cookie, "?sort=newest");
+        const byNameBody = await byName.json() as ServiceResponse<PlatformOrganizationListResponse>;
+        const byNameDescBody = await byNameDesc.json() as ServiceResponse<PlatformOrganizationListResponse>;
+        const bySalesValueBody = await bySalesValue.json() as ServiceResponse<PlatformOrganizationListResponse>;
+
+        expect(names(byNameBody.data?.organizations)).toEqual(["Active Cafe", "Mixed Bistro", "New Stand", "Quiet Mart"]);
+        expect(names(byNameDescBody.data?.organizations)).toEqual(["Quiet Mart", "New Stand", "Mixed Bistro", "Active Cafe"]);
+        expect(names(bySalesValueBody.data?.organizations)).toEqual(["New Stand", "Mixed Bistro", "Quiet Mart", "Active Cafe"]);
+        expect(unknown.status).toBe(400);
     });
 
     test("rejects malformed pagination and future-invalid custom Platform Reporting Periods", async () => {

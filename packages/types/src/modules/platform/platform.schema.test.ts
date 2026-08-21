@@ -181,21 +181,23 @@ describe("Platform Reporting Period contracts", () => {
 });
 
 describe("Platform Organization list contracts", () => {
-    test("defaults missing list filters to all Organizations on page 1", () => {
+    test("defaults missing list filters to all Organizations on page 1 with recency-first sorting", () => {
         expect(PlatformOrganizationListQuerySchema.parse({})).toEqual({
             period: "all-time",
             activity: "all",
             page: 1,
             limit: 20,
+            sort: "recent_activity",
         });
     });
 
-    test("accepts search, activity, and pagination alongside a Platform Reporting Period", () => {
+    test("accepts search, activity, sort, and pagination alongside a Platform Reporting Period", () => {
         expect(
             PlatformOrganizationListQuerySchema.parse({
                 period: "7d",
                 search: "  cafe ",
                 activity: "inactive",
+                sort: "name_asc",
                 page: "2",
                 limit: "10",
             }),
@@ -203,14 +205,16 @@ describe("Platform Organization list contracts", () => {
             period: "7d",
             search: "cafe",
             activity: "inactive",
+            sort: "name_asc",
             page: 2,
             limit: 10,
         });
     });
 
-    test("rejects invalid pagination and inverted custom Platform Reporting Periods", () => {
+    test("rejects invalid pagination, unknown sort, and inverted custom Platform Reporting Periods", () => {
         expect(PlatformOrganizationListQuerySchema.safeParse({ page: "0" }).success).toBe(false);
         expect(PlatformOrganizationListQuerySchema.safeParse({ limit: "101" }).success).toBe(false);
+        expect(PlatformOrganizationListQuerySchema.safeParse({ sort: "newest" }).success).toBe(false);
         expect(
             PlatformOrganizationListQuerySchema.safeParse({
                 period: "custom",

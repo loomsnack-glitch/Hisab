@@ -58,6 +58,7 @@ export type PlatformDashboardResponse = PlatformDashboardDTO;
 export type PlatformOrganizationListQueryJSON = z.input<typeof PlatformOrganizationListQuerySchema>;
 export type PlatformOrganizationListQuerySVC = z.output<typeof PlatformOrganizationListQuerySchema>;
 export type PlatformOrganizationActivityFilter = PlatformOrganizationListQuerySVC["activity"];
+export type PlatformOrganizationDirectorySort = PlatformOrganizationListQuerySVC["sort"];
 export type PlatformOrganizationListItemDTO = z.infer<typeof PlatformOrganizationListItemDTOSchema>;
 export type PlatformOrganizationListDTO = z.infer<typeof PlatformOrganizationListDTOSchema>;
 export type PlatformOrganizationListResponse = PlatformOrganizationListDTO;
