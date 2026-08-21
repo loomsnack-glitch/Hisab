@@ -52,6 +52,15 @@ const messageFor = async (
   loadAttachment: CloudAttachmentLoader,
   bucket: string,
 ): Promise<CloudOutboundMessage> => {
+  if (job.messageType === "template") {
+    if (!job.templateSnapshot) throw new Error("Cloud template snapshot is missing");
+    return {
+      type: "template",
+      name: job.templateSnapshot.name,
+      languageCode: job.templateSnapshot.languageCode,
+      components: job.templateSnapshot.components,
+    };
+  }
   if (job.messageType === "text") {
     if (!job.body) throw new Error("Cloud text message has no body");
     return { type: "text", body: job.body };
@@ -107,7 +116,8 @@ const dispatch = async (
     const messageText = error instanceof Error ? error.message : "Cloud media unavailable";
     return errorOutcome(
       messageText.includes("has no private attachment") ||
-        messageText.includes("has no body")
+        messageText.includes("has no body") ||
+        messageText.includes("template snapshot is missing")
         ? "permanent"
         : "retryable",
       "cloud_media_unavailable",

@@ -143,3 +143,22 @@ export const listCustomerConsentEvents = async (
   `;
   return rows.map((row: Record<string, unknown>) => mapEvent(row));
 };
+
+export const getCustomerMessagingState = async (organizationId: string, customerId: string) => {
+  const [row] = await pg`
+    SELECT id, name, phone, marketing_opted_in, marketing_opted_out,
+           utility_opted_in, whatsapp_suppressed
+    FROM customers
+    WHERE id = ${customerId} AND organization_id = ${organizationId}
+  `;
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    phone: row.phone == null ? null : String(row.phone),
+    marketingOptedIn: Boolean(row.marketing_opted_in),
+    marketingOptedOut: Boolean(row.marketing_opted_out),
+    utilityOptedIn: Boolean(row.utility_opted_in),
+    whatsappSuppressed: Boolean(row.whatsapp_suppressed),
+  };
+};

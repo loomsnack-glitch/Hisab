@@ -100,4 +100,39 @@ describe("Cloud outbox dispatcher", () => {
     expect(result).toEqual({ status: "reconciling", code: "submission_uncertain" });
     expect(reconciled).toBe(true);
   });
+
+  test("dispatches an immutable Cloud template snapshot", async () => {
+    let payload: unknown;
+    const result = await dispatchCloudOutboxJob({
+      ...job,
+      messageType: "template",
+      body: null,
+      templateSnapshot: {
+        bindingId: "55555555-5555-4555-8555-555555555555",
+        assetId: "66666666-6666-4666-8666-666666666666",
+        version: 2,
+        name: "bill_ready",
+        languageCode: "en_US",
+        category: "utility",
+        intent: "bill",
+        components: [{ type: "body", parameters: [{ type: "text", text: "Asha" }] }],
+      },
+    }, {
+      vault: {
+        async store() { return { reference: "secret://new", keyVersion: "v2" }; },
+        async resolve() { return "token-only-in-memory"; },
+        async rotate() { return { reference: "secret://new", keyVersion: "v2" }; },
+        async revoke() {},
+      },
+      createClient: () => ({
+        async sendMessage(_phoneNumberId, nextPayload) { payload = nextPayload; return { messages: [{ id: "wamid.HBgM456" }] }; },
+        async uploadMedia() { return { id: "media-1" }; },
+      }),
+      loadAttachment: async () => new Uint8Array(),
+      complete: async () => true,
+      reconcile: async () => true,
+    });
+    expect(result).toEqual({ status: "accepted", providerMessageId: "wamid.HBgM456" });
+    expect(payload).toMatchObject({ template: { name: "bill_ready", language: { code: "en_US" } } });
+  });
 });

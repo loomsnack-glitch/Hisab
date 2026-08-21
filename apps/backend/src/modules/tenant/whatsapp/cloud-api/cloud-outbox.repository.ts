@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { pg } from "@/config/db";
 import { completeInvoiceOutbox } from "../whatsapp.repository";
+import type { CloudTemplateSendSnapshot } from "./cloud-template-admission";
 
 export type CloudOutboxJob = {
   organizationId: string;
@@ -11,7 +12,8 @@ export type CloudOutboxJob = {
   phoneNumberId: string;
   credentialReference: string;
   credentialKeyVersion: string;
-  messageType: "text" | "document" | "image";
+  messageType: "text" | "document" | "image" | "template";
+  templateSnapshot?: CloudTemplateSendSnapshot | null;
   body: string | null;
   caption: string | null;
   attachmentStorageKey: string | null;
@@ -61,7 +63,7 @@ export const claimNextCloudOutbox = async (
       INNER JOIN whatsapp_business_accounts business
         ON business.id = account.whatsapp_business_account_id
        AND business.organization_id = account.organization_id
-      WHERE outbox.kind IN ('invoice', 'text', 'document', 'promotion')
+      WHERE outbox.kind IN ('invoice', 'text', 'document', 'promotion', 'template')
         AND outbox.status IN ('pending', 'retryable')
         AND outbox.next_attempt_at <= NOW()
         AND account.provider = 'cloud_api'
@@ -125,6 +127,7 @@ export const claimNextCloudOutbox = async (
         message.attachment_storage_key,
         message.attachment_file_name,
         message.attachment_mime_type,
+        outbox.cloud_template_snapshot,
         conversation.contact_phone_number,
         outbox.attempt_count,
         outbox.lease_owner
@@ -151,6 +154,7 @@ export const claimNextCloudOutbox = async (
       credentialReference: String(job.credential_reference),
       credentialKeyVersion: String(job.credential_key_version),
       messageType: job.message_type as CloudOutboxJob["messageType"],
+      templateSnapshot: parseTemplateSnapshot(job.cloud_template_snapshot),
       body: (job.body as string | null | undefined) ?? null,
       caption: (job.caption as string | null | undefined) ?? null,
       attachmentStorageKey:
@@ -163,6 +167,22 @@ export const claimNextCloudOutbox = async (
       leaseOwner: String(job.lease_owner),
     };
   });
+};
+
+const parseTemplateSnapshot = (value: unknown): CloudTemplateSendSnapshot | null => {
+  if (!value || typeof value !== "object") return null;
+  const snapshot = value as Record<string, unknown>;
+  if (typeof snapshot.bindingId !== "string" || typeof snapshot.assetId !== "string" || typeof snapshot.version !== "number" || typeof snapshot.name !== "string" || typeof snapshot.languageCode !== "string" || !Array.isArray(snapshot.components)) return null;
+  return {
+    bindingId: snapshot.bindingId,
+    assetId: snapshot.assetId,
+    version: snapshot.version,
+    name: snapshot.name,
+    languageCode: snapshot.languageCode,
+    category: snapshot.category as CloudTemplateSendSnapshot["category"],
+    intent: snapshot.intent as CloudTemplateSendSnapshot["intent"],
+    components: snapshot.components as CloudTemplateSendSnapshot["components"],
+  };
 };
 
 export const markCloudOutboxReconciling = async (

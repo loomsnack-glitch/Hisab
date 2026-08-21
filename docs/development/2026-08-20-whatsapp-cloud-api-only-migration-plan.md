@@ -170,7 +170,7 @@ The branch now also contains a Cloud API contract foundation:
 | Phase 2A–2D Cloud contracts | Runtime seams implemented; provider gate open | Signed receipt replay is scheduled, Baileys claims are provider-scoped, Cloud outbox leasing/dispatch/media upload and uncertain-send reconciliation are implemented behind injected credential/storage ports, and focused fixtures pass. Live vault assembly, Meta verification, and production observation remain. |
 | Phase 3A–3D onboarding contracts | Implemented | State, persistence, result validation, and server-side exchange seams are covered by focused fixtures. |
 | Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, refresh/revoke endpoints, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, durable provisioning-attempt execution, and production-shaped Store/inbound testing remain. |
-| Phase 4 templates/policy | 4B code-first complete; 4C next | Phase 4 is split into 4A Meta asset/binding sync, 4B auditable consent/suppression, and 4C send-time policy admission. Existing Hisab templates/promotions remain local until these seams are complete. |
+| Phase 4 templates/policy | 4C code-first complete; external gate open | Phase 4 is split into 4A Meta asset/binding sync, 4B auditable consent/suppression, and 4C send-time policy admission. Existing Hisab templates/promotions remain local until these seams are complete. |
 | Phase 5 quotas/usage/safety | Not started | Existing queue limits/cooldowns are not the append-only usage ledger, atomic quota reservation, Meta-limit sync, or reconciliation model required here. |
 | Phase 6 feature migration | Blocked | Must wait for the Phase 2–5 exit gates. |
 | Phase 7 Baileys retirement | Not started | Baileys code, auth state, UI, deployment, and port `8100` remain intentionally. |
@@ -577,7 +577,7 @@ database run prove the full flow.
 
 ### Phase 4: Templates and policy enforcement
 
-Status: **sub-phased; 4B code-first complete; 4C next**. The existing local Hisab template
+Status: **sub-phased; 4C code-first complete; external gate open**. The existing local Hisab template
 manager and promotion UI must not be treated as Meta template approval or
 policy enforcement.
 
@@ -653,12 +653,23 @@ Implementation boundary:
 - require an approved Cloud binding for Cloud template sends;
 - enforce category/intent compatibility, required variables, consent, and the
   rolling 24-hour customer-service window;
-- return safe operator-facing reasons and wire template status/consent UI;
+- return safe operator-facing reasons for Admin/POS callers; wire the
+  template-status and consent controls when Phase 6 migrates those callers;
 - leave quota/budget reservation to Phase 5.
 
 Exit gate: fixture tests prove approved utility sends, rejected/pending/paused
 templates, missing consent, invalid variables, and expired 24-hour windows are
 blocked before an outbox row is created.
+
+Review result: the admission policy now enforces active bindings, approved
+status, utility/marketing category compatibility, positive consent, suppression
+precedence, required component variables, and a 24-hour window for free-form
+messages. Cloud template outbox rows atomically re-check the account, Store
+assignment, binding, approval/version, and consent, then persist the immutable
+binding/version snapshot; the Cloud dispatcher sends that snapshot as a Meta
+template payload. Focused fixture tests pass 92 tests. Phase 6 still must route
+bill, due-reminder, and promotion callers to this seam; live Meta approval,
+migration execution, and controlled provider tests remain external gates.
 
 ### Phase 5: Quotas, usage, and campaign safety
 
@@ -760,10 +771,10 @@ current branch, work proceeds in this order:
    remaining work is deployment-selected secret-manager assembly, durable
    provisioning-attempt execution, Meta test-WABA verification, and the
    production-shaped reload/reconnect/inbound acceptance run.
-6. **Implement Phase 4 in sub-phases.** Complete 4A Meta asset/binding sync,
-   then 4B auditable consent/suppression, then 4C send-time template/category,
-   variable, consent, and 24-hour admission. Keep quota/budget reservation in
-   Phase 5 and do not route production POS sends until the Phase 4 exit gate.
+6. **Complete the Phase 4 external gate.** The 4A asset/binding, 4B consent/
+   suppression, and 4C send-time admission seams are code-first complete. Apply
+   migrations, connect the Admin/POS commands, and run the controlled Meta
+   template/consent acceptance tests before production sends.
 7. **Implement Phase 5.** Add the append-only usage ledger, atomic quota and
    budget reservations, Meta limit/quality snapshots, rolling recipient
    windows, cooldown/duplicate admission, campaign stop, and reconciliation.
@@ -774,8 +785,8 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The next code slice is therefore Phase 3 account operations—not direct Cloud
-sending from POS and not Baileys removal.
+The next code slice is therefore Phase 5 quota and campaign safety—not direct
+Cloud feature migration from POS and not Baileys removal.
 
 ## Target architecture
 
