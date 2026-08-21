@@ -161,7 +161,7 @@ The branch now also contains a Cloud API contract foundation:
 
 | Area | Status | Evidence and remaining gate |
 | --- | --- | --- |
-| Phase 0 Meta/product readiness | Not started | Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions are not verified in this repository. |
+| Phase 0 Meta/product readiness | Readiness researched; external gate open | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions still require external completion. |
 | Phase 1 account/database foundation | Partial | Additive schema is applied to the configured development database: 62 applied, 0 pending. Credential storage, backfill checks, production-shaped copy, and account provisioning persistence remain. |
 | Phase 2A–2D Cloud contracts | Contract slices implemented | Focused Cloud fixture tests pass. Runtime scheduling, Cloud outbox wiring, media handling, and controlled Meta verification remain. |
 | Phase 3A–3D onboarding contracts | Contract slices implemented | State, persistence, result validation, and exchange seams exist. Embedded Signup UI, live exchange, WABA discovery, phone registration, webhook subscription, credential binding, and Store assignment remain. |
@@ -205,7 +205,9 @@ and then the Phase 3 account-operations seam, not Phase 6 feature delivery.
 
 ### Phase 0: Meta and product readiness
 
-Status: **not started / external gate**.
+Status: **readiness researched; external gate open**. See
+`docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md` for
+the source-backed checklist and exit evidence.
 
 Dependencies: none.
 
