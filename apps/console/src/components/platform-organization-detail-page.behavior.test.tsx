@@ -971,7 +971,6 @@ describe("Organization Inspection Workspace", () => {
 
         expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
         expect(view.getByText("Omar Khan")).toBeTruthy();
-        expect(view.getByText("Inspection")).toBeTruthy();
         expect(view.getByRole("link", { name: "Overview" })).toBeTruthy();
         expect(view.getByRole("link", { name: "Stores" })).toBeTruthy();
         expect(view.getByRole("link", { name: "Billing" })).toBeTruthy();
@@ -979,35 +978,34 @@ describe("Organization Inspection Workspace", () => {
         expect(view.getAllByRole("button", { name: "Organizations" })[0]?.getAttribute("aria-current")).toBe("page");
     });
 
-    test("shows labeled adoption metrics, Store performance, and recent Sales with Store attribution", async () => {
+    test("shows at-a-glance adoption metrics on overview", async () => {
         const view = renderConsole(organizationInspectionPath(mixedBistro.id));
 
         expect(await view.findByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
-        expect(view.getByText(/All-time metrics from Dashboard/)).toBeTruthy();
-        expect(view.getAllByText("Stores").length).toBeGreaterThan(0);
+        expect(view.getByText(/All-time metrics/)).toBeTruthy();
+        expect(view.getByRole("heading", { name: "At a glance" })).toBeTruthy();
         expect(view.getByText("Active stores")).toBeTruthy();
-        expect(view.getByText("12")).toBeTruthy();
-        expect(view.getByText("Completed")).toBeTruthy();
-        expect(view.getAllByText("Front Hall").length).toBeGreaterThan(1);
+        expect(view.queryByRole("heading", { name: "Store performance" })).toBeNull();
+        expect(view.queryByRole("heading", { name: "Recent sales" })).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.queryByText("Edit Organization")).toBeNull();
         expect(view.queryByText("Print")).toBeNull();
     });
 
-    test("links Store performance and recent Sales into workspace sections", async () => {
+    test("links Stores and Billing workspace sections from their tabs", async () => {
         const view = renderConsole(organizationInspectionPath(mixedBistro.id));
         await view.findByRole("heading", { name: "Mixed Bistro" });
 
-        fireEvent.click(view.getAllByRole("link", { name: "Front Hall" })[0]!);
+        fireEvent.click(view.getByRole("link", { name: "Stores" }));
+        fireEvent.click(await view.findByRole("link", { name: "Front Hall" }));
         expect(window.location.pathname).toBe(organizationInspectionPath(mixedBistro.id, "stores", mixedStores[0]!.id));
         expect(await view.findByRole("heading", { name: "Front Hall" })).toBeTruthy();
         expect(view.getByRole("link", { name: "Stores" }).getAttribute("aria-current")).toBe("page");
         expect(view.getByRole("heading", { name: "Mixed Bistro" })).toBeTruthy();
         expect(view.queryByText("Create Store")).toBeNull();
 
-        fireEvent.click(view.getByRole("link", { name: "Overview" }));
-        expect(await view.findByRole("heading", { name: "Store performance" })).toBeTruthy();
-        fireEvent.click(view.getByRole("link", { name: "12" }));
+        fireEvent.click(view.getByRole("link", { name: "Billing" }));
+        fireEvent.click(await view.findByRole("link", { name: "Bill 12" }));
         expect(`${window.location.pathname}${window.location.search}`).toBe(
             organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id),
         );

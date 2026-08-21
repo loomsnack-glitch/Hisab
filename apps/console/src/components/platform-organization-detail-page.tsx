@@ -6,12 +6,13 @@ import {
     Building2,
     ChevronLeft,
     ChevronRight,
+    Clock3,
+    IndianRupee,
     LayoutDashboard,
     LayoutGrid,
     MessageCircle,
     MonitorSmartphone,
     Package2,
-    Phone,
     Receipt,
     Search,
     ShoppingCart,
@@ -268,12 +269,113 @@ const ledgerEntryTypeLabel = (entryType: PlatformCustomerInspectionDetailDTO["le
     return "Sale";
 };
 
-const MetricCard = ({ label, value }: { label: string; value: string }) => (
-    <div className="rounded-xl border border-border/60 bg-background/80 p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="mt-2 font-display text-2xl font-semibold tracking-tight">{value}</p>
-    </div>
-);
+type MetricCardTone = "blue" | "emerald" | "violet" | "amber" | "sky" | "slate";
+
+type MetricCardProps = {
+    label: string;
+    value: string;
+    icon?: LucideIcon;
+    tone?: MetricCardTone;
+    valueClassName?: string;
+    compact?: boolean;
+};
+
+const metricCardToneStyles: Record<MetricCardTone, { card: string; icon: string }> = {
+    blue: {
+        card: "border-blue-500/15 bg-gradient-to-br from-blue-500/[0.08] via-background/80 to-background/90",
+        icon: "bg-blue-500/12 text-blue-600 dark:text-blue-400",
+    },
+    emerald: {
+        card: "border-emerald-500/15 bg-gradient-to-br from-emerald-500/[0.08] via-background/80 to-background/90",
+        icon: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
+    },
+    violet: {
+        card: "border-violet-500/15 bg-gradient-to-br from-violet-500/[0.08] via-background/80 to-background/90",
+        icon: "bg-violet-500/12 text-violet-600 dark:text-violet-400",
+    },
+    amber: {
+        card: "border-amber-500/15 bg-gradient-to-br from-amber-500/[0.08] via-background/80 to-background/90",
+        icon: "bg-amber-500/12 text-amber-600 dark:text-amber-400",
+    },
+    sky: {
+        card: "border-sky-500/15 bg-gradient-to-br from-sky-500/[0.08] via-background/80 to-background/90",
+        icon: "bg-sky-500/12 text-sky-600 dark:text-sky-400",
+    },
+    slate: {
+        card: "border-border/60 bg-gradient-to-br from-muted/50 via-background/80 to-background/90",
+        icon: "bg-muted text-muted-foreground",
+    },
+};
+
+const MetricCard = ({ label, value, icon: Icon, tone, valueClassName, compact = false }: MetricCardProps) => {
+    const toneStyles = tone ? metricCardToneStyles[tone] : null;
+
+    if (compact) {
+        return (
+            <div
+                className={cn(
+                    "flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2",
+                    toneStyles?.card ?? "border-border/60 bg-background/80",
+                )}
+            >
+                {Icon ? (
+                    <div
+                        className={cn(
+                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                            toneStyles?.icon ?? "bg-muted/70 text-muted-foreground",
+                        )}
+                    >
+                        <Icon className="size-3.5" />
+                    </div>
+                ) : null}
+                <div className="min-w-0">
+                    <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                    <p
+                        className={cn(
+                            "font-display text-sm font-semibold leading-tight text-foreground",
+                            valueClassName,
+                        )}
+                    >
+                        {value}
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className={cn(
+                "relative overflow-hidden rounded-2xl border p-4 shadow-sm shadow-black/[0.03] transition-colors",
+                toneStyles?.card ?? "border-border/60 bg-background/80",
+            )}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+                    <p
+                        className={cn(
+                            "mt-2 font-display text-2xl font-semibold tracking-tight text-foreground",
+                            valueClassName,
+                        )}
+                    >
+                        {value}
+                    </p>
+                </div>
+                {Icon ? (
+                    <div
+                        className={cn(
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                            toneStyles?.icon ?? "bg-muted/70 text-muted-foreground",
+                        )}
+                    >
+                        <Icon className="size-4.5" />
+                    </div>
+                ) : null}
+            </div>
+        </div>
+    );
+};
 
 const PlatformOrganizationDetailPage = ({
     organizationId,
@@ -1153,112 +1255,37 @@ const PlatformOrganizationDetailPage = ({
         return renderStoresList();
     };
 
-    const renderStorePerformance = (stores: PlatformStoreActivityDTO[]) => (
-        renderStoreTable(
-            stores,
-            "Store performance",
-            `${periodLabel} sales metrics · store status from last 7 days`,
-        )
-    );
-
-    const renderRecentSales = (recentSales: PlatformRecentSaleDTO[]) => (
-        <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-            <CardHeader className="gap-1">
-                <h2 className="font-display text-xl font-semibold tracking-tight">Recent sales</h2>
-                <CardDescription>Latest sales across all stores, not limited by reporting period</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {recentSales.length === 0 ? (
-                    <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
-                        <EmptyHeader>
-                            <EmptyMedia variant="icon">
-                                <Receipt />
-                            </EmptyMedia>
-                            <EmptyTitle>No recent sales</EmptyTitle>
-                            <EmptyDescription>Sales will appear here once this organization starts billing.</EmptyDescription>
-                        </EmptyHeader>
-                    </Empty>
-                ) : (
-                    <div className="overflow-x-auto rounded-xl border border-border/60">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Sale</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Store</TableHead>
-                                    <TableHead>Value</TableHead>
-                                    <TableHead>When</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {recentSales.map((sale) => {
-                                    const href = organizationInspectionPath(organizationId, "billing", sale.id);
-                                    const storeHref = organizationInspectionPath(organizationId, "stores", sale.store.id);
-                                    return (
-                                        <TableRow key={sale.id}>
-                                            <TableCell className="font-medium">
-                                                <a
-                                                    href={href}
-                                                    className="text-primary underline-offset-4 hover:underline"
-                                                    onClick={(event) => followInspectionLink(event, href)}
-                                                >
-                                                    {sale.saleNumber ?? "Draft"}
-                                                </a>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className="rounded-full">
-                                                    {saleStatusLabel(sale.status)}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <a
-                                                    href={storeHref}
-                                                    className="text-primary underline-offset-4 hover:underline"
-                                                    onClick={(event) => followInspectionLink(event, storeHref)}
-                                                >
-                                                    {sale.store.name}
-                                                </a>
-                                            </TableCell>
-                                            <TableCell>{formatCompletedSalesValue(sale.grandTotal)}</TableCell>
-                                            <TableCell className="whitespace-nowrap text-muted-foreground">
-                                                {formatLastCompletedSale(sale.occurredAt)}
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
-
     const renderOverview = () => {
         if (!organization) return null;
         return (
-            <div className="space-y-6">
-                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                    <CardHeader className="gap-1">
-                        <h2 className="font-display text-xl font-semibold tracking-tight">At a glance</h2>
-                        <CardDescription>
-                            {`${periodLabel} metrics · ${organization.activeStoreCount}/${organization.storeCount} active stores`}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            <MetricCard label="Stores" value={String(organization.storeCount)} />
-                            <MetricCard label="Active stores" value={String(organization.activeStoreCount)} />
-                            <MetricCard label="Customers" value={String(organization.customerCount)} />
-                            <MetricCard label="Sales" value={String(organization.completedSaleCount)} />
-                            <MetricCard label="Sales value" value={formatCompletedSalesValue(organization.completedSalesValue)} />
-                            <MetricCard label="Last sale" value={formatLastCompletedSale(organization.lastCompletedSaleAt)} />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {renderStorePerformance(organization.stores)}
-                {renderRecentSales(organization.recentSales)}
+            <div className="space-y-2">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                    <h2 className="text-sm font-semibold text-foreground">At a glance</h2>
+                    <p className="text-xs text-muted-foreground">
+                        {`${periodLabel} metrics · ${organization.activeStoreCount}/${organization.storeCount} active stores · activity last 7 days`}
+                    </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                    <MetricCard compact label="Stores" value={String(organization.storeCount)} icon={Store} tone="blue" />
+                    <MetricCard compact label="Active stores" value={String(organization.activeStoreCount)} icon={Building2} tone="emerald" />
+                    <MetricCard compact label="Customers" value={String(organization.customerCount)} icon={Users} tone="violet" />
+                    <MetricCard compact label="Sales" value={String(organization.completedSaleCount)} icon={Receipt} tone="sky" />
+                    <MetricCard
+                        compact
+                        label="Sales value"
+                        value={formatCompletedSalesValue(organization.completedSalesValue)}
+                        icon={IndianRupee}
+                        tone="amber"
+                    />
+                    <MetricCard
+                        compact
+                        label="Last sale"
+                        value={formatLastCompletedSale(organization.lastCompletedSaleAt)}
+                        icon={Clock3}
+                        tone="slate"
+                        valueClassName="text-xs leading-snug"
+                    />
+                </div>
             </div>
         );
     };
@@ -3150,61 +3177,55 @@ const PlatformOrganizationDetailPage = ({
     };
 
     return (
-        <section className="space-y-6">
-            <Button
-                type="button"
-                variant="ghost"
-                className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                onClick={onBack}
-            >
-                <ArrowLeft className="size-4" />
-                Back to organizations
-            </Button>
-
-            <Card className="overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardContent className="relative p-6 sm:p-8">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_25%),radial-gradient(circle_at_bottom_right,_rgba(251,191,36,0.10),_transparent_30%)]" />
-                    <div className="relative space-y-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
-                                Inspection
-                            </Badge>
-                            {organization ? (
-                                <Badge
-                                    variant={organization.isActive ? "secondary" : "outline"}
-                                    className="rounded-full"
-                                >
-                                    {organization.isActive ? "Active" : "Inactive"}
-                                </Badge>
-                            ) : null}
+        <section className="space-y-4">
+            <div className="space-y-0">
+                <div className="flex items-center justify-between gap-3 pb-1">
+                    <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            className="h-9 w-9 shrink-0 rounded-lg"
+                            onClick={onBack}
+                            aria-label="Back to organizations"
+                        >
+                            <ArrowLeft className="size-4" />
+                        </Button>
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <Building2 className="size-4" />
                         </div>
-                        <div className="space-y-2">
-                            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-                                {organization?.name ?? "Organization"}
-                            </h1>
-                            {organization ? (
-                                <p className="text-sm text-muted-foreground">
-                                    {`@${organization.username} · ${periodLabel} metrics from Dashboard · Activity uses last 7 days`}
-                                </p>
-                            ) : null}
-                        </div>
-                        {organization ? (
-                            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                                <div className="flex items-center gap-2">
-                                    <Building2 className="size-4 text-primary" />
-                                    <span>{`${organization.creator.firstName} ${organization.creator.lastName}`}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Phone className="size-4 text-primary" />
-                                    <span>{formatPhoneDisplay(organization.creator.phone)}</span>
-                                </div>
+                        <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <h1 className="truncate font-display text-lg font-semibold tracking-tight sm:text-xl">
+                                    {organization?.name ?? "Organization"}
+                                </h1>
+                                {organization ? (
+                                    <Badge
+                                        variant={organization.isActive ? "secondary" : "outline"}
+                                        className="hidden shrink-0 rounded-full text-[10px] sm:inline-flex"
+                                    >
+                                        {organization.isActive ? "Active" : "Inactive"}
+                                    </Badge>
+                                ) : null}
                             </div>
-                        ) : null}
+                            {organization ? (
+                                <p className="truncate text-xs text-muted-foreground">@{organization.username}</p>
+                            ) : null}
+                        </div>
                     </div>
-                </CardContent>
-            </Card>
+                    {organization ? (
+                        <div className="flex max-w-[42%] shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground sm:max-w-none sm:gap-2 sm:px-3">
+                            <span className="truncate font-medium text-foreground">
+                                {`${organization.creator.firstName} ${organization.creator.lastName}`}
+                            </span>
+                            <span className="hidden text-muted-foreground/60 sm:inline">·</span>
+                            <span className="hidden truncate sm:inline">{formatPhoneDisplay(organization.creator.phone)}</span>
+                        </div>
+                    ) : null}
+                </div>
 
-            {renderSectionNav()}
+                {renderSectionNav()}
+            </div>
 
             {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && section !== "whatsapp" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
