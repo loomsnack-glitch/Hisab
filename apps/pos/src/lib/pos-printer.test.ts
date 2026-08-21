@@ -47,11 +47,13 @@ describe("80mm ESC/POS receipt payload", () => {
       build80mmEscPosPayload({ ...sale, tokenNumber: "001" }),
     );
 
-    expect(output).toContain("Token No: 001");
-    expect(output.indexOf("Token No: 001")).toBeLessThan(output.indexOf("Bill No: INV-1042"));
+    expect(output).toContain("TOKEN NO: 001");
+    expect(output.indexOf("Bill No: INV-1042")).toBeLessThan(
+      output.indexOf("TOKEN NO: 001"),
+    );
   });
 
-  test("prints token number, KOT token numbers, and table number together", () => {
+  test("prints bill, table, KOT, and token lines in order with compact KOT values", () => {
     const output = new TextDecoder().decode(
       build80mmEscPosPayload({
         ...sale,
@@ -61,16 +63,14 @@ describe("80mm ESC/POS receipt payload", () => {
       }),
     );
 
-    expect(output).toContain("Token No: 001");
-    expect(output).toContain("KOT token numbers: KOT-001, KOT-002");
+    expect(output).toContain("Bill No: INV-1042");
     expect(output).toContain("Table No: A1");
-    expect(output.indexOf("Token No: 001")).toBeLessThan(
-      output.indexOf("KOT token numbers: KOT-001, KOT-002"),
-    );
-    expect(output.indexOf("KOT token numbers: KOT-001, KOT-002")).toBeLessThan(
-      output.indexOf("Bill No: INV-1042"),
-    );
+    expect(output).toContain("KOT NO: 001, 002");
+    expect(output).toContain("TOKEN NO: 001");
+    expect(output).not.toContain("KOT-001");
     expect(output.indexOf("Bill No: INV-1042")).toBeLessThan(output.indexOf("Table No: A1"));
+    expect(output.indexOf("Table No: A1")).toBeLessThan(output.indexOf("KOT NO: 001, 002"));
+    expect(output.indexOf("KOT NO: 001, 002")).toBeLessThan(output.indexOf("TOKEN NO: 001"));
   });
 
   test("uses an ASCII-safe fallback for unsupported printer characters", () => {

@@ -4,6 +4,7 @@ import {
   buildReceiptText,
   countWrappedReceiptLines,
   RECEIPT_WIDTH,
+  TOKEN_NO_RECEIPT_PREFIX,
   type ReceiptContext,
 } from "@/lib/receipt-text";
 
@@ -135,8 +136,9 @@ export const build80mmEscPosPayload = (
         finalAmountLineIndex >= 0 &&
         index >= finalAmountLineIndex &&
         index < finalAmountEndIndex;
+      const isTokenNoLine = line.includes(TOKEN_NO_RECEIPT_PREFIX);
 
-      if (isBrandLine || isFinalAmountLine) {
+      if (isBrandLine || isFinalAmountLine || isTokenNoLine) {
         return concatBytes(
           bytes(esc.alignCenter, esc.boldOn, esc.doubleSizeOn),
           encoder.encode(toPrinterText(`${line.trim()}\n`)),

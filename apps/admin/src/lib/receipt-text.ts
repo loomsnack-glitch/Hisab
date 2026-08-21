@@ -118,6 +118,14 @@ type ReceiptTextOptions = {
   width?: number;
 };
 
+export const formatKotNumberForReceipt = (kotNumber: string) =>
+  kotNumber.replace(/^KOT-/i, "");
+
+export const formatKotNumbersForReceipt = (kotNumbers: string[]) =>
+  kotNumbers.map(formatKotNumberForReceipt).join(", ");
+
+export const TOKEN_NO_RECEIPT_PREFIX = "TOKEN NO:";
+
 const appendWrappedText = (lines: string[], value: string, width: number) => {
   wrapText(value, width).forEach((line) => lines.push(line));
 };
@@ -182,16 +190,6 @@ export const buildReceiptText = (
     storePhone
   )
     lines.push(separator);
-  if (sale.tokenNumber) {
-    appendWrappedText(lines, `Token No: ${sale.tokenNumber}`, width);
-  }
-  if (sale.kotNumbers && sale.kotNumbers.length > 0) {
-    appendWrappedText(
-      lines,
-      `KOT token numbers: ${sale.kotNumbers.join(", ")}`,
-      width,
-    );
-  }
   appendWrappedText(
     lines,
     `Bill No: ${sale.saleNumber ? sale.saleNumber : "Draft"}`,
@@ -199,6 +197,21 @@ export const buildReceiptText = (
   );
   if (sale.serviceTableLabel) {
     appendWrappedText(lines, `Table No: ${sale.serviceTableLabel}`, width);
+  }
+  if (sale.kotNumbers && sale.kotNumbers.length > 0) {
+    appendWrappedText(
+      lines,
+      `KOT NO: ${formatKotNumbersForReceipt(sale.kotNumbers)}`,
+      width,
+    );
+  }
+  if (sale.tokenNumber) {
+    const tokenLine = `${TOKEN_NO_RECEIPT_PREFIX} ${sale.tokenNumber}`;
+    if (options.doubleWidthEmphasis) {
+      appendCenteredText(lines, tokenLine, emphasisWidth);
+    } else {
+      appendWrappedText(lines, tokenLine, width);
+    }
   }
   appendWrappedText(lines, `Date: ${formatDateTime(sale.createdAt)}`, width);
   const customerWithPhone = sale.customer?.phone ? sale.customer : null;
