@@ -23,8 +23,8 @@ export type PosNavDestination = {
 export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "products", label: "POS", icon: Store, path: getPosPanelPath("products"), tab: "products" },
     { id: "tables", label: "Tables", icon: Armchair, path: getPosPanelPath("tables"), tab: "tables" },
-    { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
     { id: "bills", label: "Bills", icon: ReceiptText, path: getPosPanelPath("bills"), tab: "bills" },
+    { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
     { id: "reports", label: "Reports", icon: BarChart3, path: getPosPanelPath("reports"), tab: "reports" },
     { id: "purchases", label: "Purchases", icon: ShoppingBag, path: getPosPanelPath("purchases"), tab: "purchases" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
