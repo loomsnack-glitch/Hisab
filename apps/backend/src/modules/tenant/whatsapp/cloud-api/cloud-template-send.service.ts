@@ -31,6 +31,7 @@ export const enqueueCloudTemplateSend = async (
     accountId: string;
     customerId: string;
     bindingId: string;
+    idempotencyKey: string;
     intent: WhatsAppMessageTemplateKind;
     mode?: "template" | "freeform";
     outboundComponents?: CloudTemplateAdmissionInput["outboundComponents"];
@@ -64,7 +65,7 @@ export const enqueueCloudTemplateSend = async (
       intent: input.intent,
       snapshot: admission.snapshot,
       messageId: crypto.randomUUID(),
-      idempotencyKey: `cloud-template:${input.bindingId}:${input.customerId}:${crypto.randomUUID()}`,
+      idempotencyKey: input.idempotencyKey,
     });
     return { status: "success", message: "Cloud WhatsApp template queued", data: queued, code: STATUS_CODES.CREATED };
   } catch (error) {

@@ -233,10 +233,47 @@ export class WhatsAppCloudApiClient {
     );
   }
 
-  getTemplates(wabaId: string) {
-    return this.requestJson<{ data?: Array<Record<string, unknown>> }>(
+  getTemplates(wabaId: string): Promise<{ data: Array<Record<string, unknown>> }> {
+    return this.getAllGraphPages<Record<string, unknown>>(
       `${normalizeResourceId(wabaId, "WABA ID")}/message_templates`,
-    );
+    ).then(data => ({ data }));
+  }
+
+  private async getAllGraphPages<T>(initialPath: string): Promise<T[]> {
+    const pages = new Set<string>();
+    const values: T[] = [];
+    let path: string | null = initialPath;
+    for (let page = 0; path; page += 1) {
+      if (page >= 100 || pages.has(path)) {
+        throw new WhatsAppCloudApiError({
+          message: "WhatsApp Cloud API returned invalid pagination",
+          retryable: false,
+        });
+      }
+      pages.add(path);
+      const response: { data?: T[]; paging?: { next?: unknown } } = await this.requestJson<{
+        data?: T[];
+        paging?: { next?: unknown };
+      }>(path);
+      if (response.data) values.push(...response.data);
+      const next: unknown = response.paging?.next;
+      if (typeof next !== "string" || !next.trim()) {
+        path = null;
+        continue;
+      }
+      const nextUrl: URL = new URL(next);
+      const expectedOrigin = new URL(this.baseUrl).origin;
+      const versionPrefix = `/${this.graphVersion}/`;
+      if (nextUrl.origin !== expectedOrigin || !nextUrl.pathname.startsWith(versionPrefix)) {
+        throw new WhatsAppCloudApiError({
+          message: "WhatsApp Cloud API returned an invalid pagination URL",
+          retryable: false,
+        });
+      }
+      const resourcePath: string = nextUrl.pathname.slice(versionPrefix.length);
+      path = resourcePath ? `${resourcePath}${nextUrl.search}` : null;
+    }
+    return values;
   }
 
   sendMessage(phoneNumberId: string, payload: Record<string, unknown>) {

@@ -35,6 +35,41 @@ const boundedText = (value: unknown, label: string, maxLength: number): string =
   return normalized;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const normalizeComponents = (value: unknown): unknown[] => {
+  if (!Array.isArray(value) || value.length > 20) {
+    throw new Error("Cloud template components are invalid");
+  }
+  for (const component of value) {
+    if (!isRecord(component)) throw new Error("Cloud template components are invalid");
+    const type = boundedText(component.type, "component type", 32);
+    if (!/^[A-Za-z_]+$/.test(type)) {
+      throw new Error("Cloud template component type is invalid");
+    }
+    if (component.text !== undefined) {
+      boundedText(component.text, "component text", 4_096);
+    }
+    if (component.buttons !== undefined && (!Array.isArray(component.buttons) || component.buttons.length > 10)) {
+      throw new Error("Cloud template buttons are invalid");
+    }
+  }
+  const serialized = JSON.stringify(value);
+  if (!serialized || serialized.length > 64 * 1024) {
+    throw new Error("Cloud template components are too large");
+  }
+  return value;
+};
+
+const providerTimestamp = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") throw new Error("Cloud template update time is invalid");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error("Cloud template update time is invalid");
+  return date.toISOString();
+};
+
 const nullableBoundedText = (value: unknown, maxLength: number): string | null => {
   if (value === null || value === undefined) return null;
   return boundedText(value, "rejection reason", maxLength);
@@ -53,9 +88,16 @@ const normalizeCategory = (value: unknown): CloudTemplateAssetInput["category"] 
 };
 
 const normalizeLanguageCode = (value: unknown): string => {
-  if (typeof value === "string") return boundedText(value, "language", 64);
-  if (value && typeof value === "object" && "code" in value) return boundedText((value as { code?: unknown }).code, "language", 64);
-  throw new Error("Cloud template language is invalid");
+  const raw = typeof value === "string"
+    ? value
+    : value && typeof value === "object" && "code" in value
+      ? (value as { code?: unknown }).code
+      : null;
+  const language = boundedText(raw, "language", 64);
+  if (!/^[A-Za-z]{2,10}(?:[_-][A-Za-z0-9]{2,10})*$/.test(language)) {
+    throw new Error("Cloud template language is invalid");
+  }
+  return language;
 };
 
 /** Normalize provider data before it reaches SQL or the public DTO. */
@@ -63,18 +105,22 @@ export const normalizeCloudTemplateAsset = (
   organizationId: string,
   whatsappBusinessAccountId: string,
   providerTemplate: Record<string, unknown>,
-): CloudTemplateAssetInput => ({
-  organizationId,
-  whatsappBusinessAccountId,
-  metaTemplateId: boundedText(providerTemplate.id, "id", 255),
-  name: boundedText(providerTemplate.name, "name", 512),
-  languageCode: normalizeLanguageCode(providerTemplate.language),
-  category: normalizeCategory(providerTemplate.category),
-  status: normalizeStatus(providerTemplate.status),
-  components: Array.isArray(providerTemplate.components) ? providerTemplate.components : [],
-  rejectionReason: nullableBoundedText(providerTemplate.rejected_reason ?? providerTemplate.rejection_reason, 1000),
-  providerUpdatedAt: typeof providerTemplate.updated_at === "string" ? providerTemplate.updated_at : null,
-});
+): CloudTemplateAssetInput => {
+  const name = boundedText(providerTemplate.name, "name", 512);
+  if (!/^[a-z0-9_]+$/.test(name)) throw new Error("Cloud template name is invalid");
+  return {
+    organizationId,
+    whatsappBusinessAccountId,
+    metaTemplateId: boundedText(providerTemplate.id, "id", 255),
+    name,
+    languageCode: normalizeLanguageCode(providerTemplate.language),
+    category: normalizeCategory(providerTemplate.category),
+    status: normalizeStatus(providerTemplate.status),
+    components: normalizeComponents(providerTemplate.components),
+    rejectionReason: nullableBoundedText(providerTemplate.rejected_reason ?? providerTemplate.rejection_reason, 1000),
+    providerUpdatedAt: providerTimestamp(providerTemplate.updated_at),
+  };
+};
 
 const mapAsset = (row: Record<string, unknown>): WhatsAppCloudTemplateAssetDTO => {
   const mapped = snakeToCamel(row) as Record<string, unknown>;

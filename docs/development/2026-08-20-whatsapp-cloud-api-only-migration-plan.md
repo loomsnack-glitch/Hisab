@@ -753,8 +753,15 @@ Last updated: 2026-08-22
 - Verification: Cloud-focused suite passes 89 tests; backend TypeScript still
   reports the repository's existing unrelated test-contract errors; no errors
   remain in the changed Cloud files.
-- Loop 3 — **next**: make template enqueue idempotent and complete provider
-  template pagination/validation before migrating any caller.
+- Loop 3 — **complete**: require caller-owned template idempotency keys, make
+  Cloud template enqueue replay-safe at the database boundary, follow bounded
+  same-origin Graph pagination, and reject malformed provider template identity,
+  timestamps, and components.
+- Verification: Cloud-focused suite passes 91 tests; `git diff --check` passes;
+  the full backend TypeScript check still reports only the repository's
+  pre-existing unrelated test-contract errors.
+- Loop 4 — **next**: make Cloud account provisioning resumable and make account
+  health changes durable instead of refresh-only UI state.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 
@@ -786,12 +793,13 @@ current branch, work proceeds in this order:
    now carry a bounded callback token and settle from a later provider status;
    unresolved rows still require an operational timeout/dead-letter policy.
 5. **Close the Phase 3 account-operations gate.** **Code-first implementation
-   complete; evidence open.** The server-side exchange and provider discovery,
-   idempotent WABA/sender persistence, WABA subscription, safe connect,
-   reconnect, revoke, refresh, and Store assignment paths are implemented. The
-   remaining work is deployment-selected secret-manager assembly, durable
-   provisioning-attempt execution, Meta test-WABA verification, and the
-   production-shaped reload/reconnect/inbound acceptance run.
+   in progress; evidence open.** The server-side exchange and provider
+   discovery, idempotent WABA/sender persistence, WABA subscription, safe
+   connect, reconnect, revoke, refresh, and Store assignment paths are
+   implemented. The next code slice makes provisioning attempts durable and
+   consumes account health changes; deployment-selected secret-manager
+   assembly, Meta test-WABA verification, and the production-shaped
+   reload/reconnect/inbound acceptance run remain.
 6. **Complete the Phase 4 external gate.** The 4A asset/binding, 4B consent/
    suppression, and 4C send-time admission seams are code-first complete. Apply
    migrations, connect the Admin/POS commands, and run the controlled Meta
@@ -806,8 +814,8 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The next code slice is therefore Loop 3 template idempotency, pagination, and
-strict provider-template validation. Phase 5 remains blocked until the
+The next code slice is therefore Loop 4 provisioning resumability and durable
+Cloud account health handling. Phase 5 remains blocked until the
 provider/runtime gates are closed.
 
 ## Target architecture

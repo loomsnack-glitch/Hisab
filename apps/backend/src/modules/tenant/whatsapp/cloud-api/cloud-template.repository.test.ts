@@ -35,4 +35,13 @@ describe("Cloud template normalization", () => {
       language: {},
     })).toThrow("Cloud template language is invalid");
   });
+
+  test("rejects malformed provider components instead of storing an empty template", () => {
+    expect(() => normalizeCloudTemplateAsset(organizationId, businessAccountId, {
+      id: "meta-template-1",
+      name: "bill_ready",
+      language: "en_US",
+      components: [{ text: "Body without a component type" }],
+    })).toThrow("Cloud template component type is invalid");
+  });
 });

@@ -65,6 +65,33 @@ describe("WhatsAppCloudApiClient", () => {
     expect(error.message).toBe("Template is not approved");
   });
 
+  test("follows same-origin Graph pagination for template discovery", async () => {
+    const calls: string[] = [];
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v23.0",
+      baseUrl: "https://graph.example.test",
+      fetchImpl: async url => {
+        const value = String(url);
+        calls.push(value);
+        return calls.length === 1
+          ? jsonResponse({
+              data: [{ id: "template-1" }],
+              paging: { next: "https://graph.example.test/v23.0/waba-1/message_templates?after=cursor-1" },
+            })
+          : jsonResponse({ data: [{ id: "template-2" }] });
+      },
+    });
+
+    await expect(client.getTemplates("waba-1")).resolves.toEqual({
+      data: [{ id: "template-1" }, { id: "template-2" }],
+    });
+    expect(calls).toEqual([
+      "https://graph.example.test/v23.0/waba-1/message_templates",
+      "https://graph.example.test/v23.0/waba-1/message_templates?after=cursor-1",
+    ]);
+  });
+
   test("marks rate limits as retryable", async () => {
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",

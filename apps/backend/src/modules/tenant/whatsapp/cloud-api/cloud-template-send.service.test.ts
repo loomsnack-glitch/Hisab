@@ -42,25 +42,28 @@ const binding = {
 describe("Cloud template send service", () => {
   test("admits first, then queues the versioned template snapshot", async () => {
     let queuedSnapshotVersion: number | null = null;
+    let queuedIdempotencyKey: string | null = null;
     const response = await enqueueCloudTemplateSend(userId, organizationId, {
       storeId,
       accountId,
       customerId,
       bindingId,
+      idempotencyKey: "promotion:campaign-1:recipient-1",
       intent: "promotion",
     }, {
       organizationAccess: async () => true,
       getBinding: async () => binding,
       getCustomer: async () => ({ id: customerId, name: "Asha", phone: "+919876543210", marketingOptedIn: true, marketingOptedOut: false, utilityOptedIn: true, whatsappSuppressed: false }),
-      enqueue: async input => { queuedSnapshotVersion = input.snapshot.version; return { messageId: "message-1", outboxId: "outbox-1", messageStatus: "queued", outboxStatus: "pending" }; },
+      enqueue: async input => { queuedSnapshotVersion = input.snapshot.version; queuedIdempotencyKey = input.idempotencyKey; return { messageId: "message-1", outboxId: "outbox-1", messageStatus: "queued", outboxStatus: "pending" }; },
     });
     expect(response.status).toBe("success");
     expect(queuedSnapshotVersion as unknown as number).toBe(2);
+    expect(queuedIdempotencyKey).toBe("promotion:campaign-1:recipient-1");
   });
 
   test("blocks a rejected template before enqueue", async () => {
     let enqueueCalled = false;
-    const response = await enqueueCloudTemplateSend(userId, organizationId, { storeId, accountId, customerId, bindingId, intent: "promotion" }, {
+    const response = await enqueueCloudTemplateSend(userId, organizationId, { storeId, accountId, customerId, bindingId, idempotencyKey: "promotion:campaign-1:recipient-2", intent: "promotion" }, {
       organizationAccess: async () => true,
       getBinding: async () => ({ ...binding, asset: { ...binding.asset, status: "rejected" as const } }),
       getCustomer: async () => ({ id: customerId, name: "Asha", phone: "+919876543210", marketingOptedIn: true, marketingOptedOut: false, utilityOptedIn: true, whatsappSuppressed: false }),

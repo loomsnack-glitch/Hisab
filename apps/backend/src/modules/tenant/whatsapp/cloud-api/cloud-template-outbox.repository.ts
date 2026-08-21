@@ -22,7 +22,42 @@ export type CloudTemplateOutboxRequest = {
   idempotencyKey: string;
 };
 
+const idempotencyKeyFor = (value: string): string => {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 255 || /[\r\n]/.test(normalized)) {
+    throw new Error("Cloud template idempotency key is invalid");
+  }
+  return normalized;
+};
+
+const recordFrom = (row: Record<string, unknown>): CloudTemplateOutboxRecord => ({
+  messageId: String(row.message_id),
+  outboxId: String(row.outbox_id),
+  messageStatus: String(row.message_status),
+  outboxStatus: String(row.outbox_status),
+});
+
 export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxRequest): Promise<CloudTemplateOutboxRecord> => pg.begin(async tx => {
+  const idempotencyKey = idempotencyKeyFor(params.idempotencyKey);
+  const [existing] = await tx`
+    SELECT message.id AS message_id, message.organization_id, message.store_id,
+           conversation.customer_id,
+           outbox.id AS outbox_id, message.status AS message_status,
+           outbox.status AS outbox_status
+    FROM whatsapp_messages message
+    INNER JOIN whatsapp_conversations conversation ON conversation.id = message.conversation_id
+    INNER JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+    WHERE message.whatsapp_account_id = ${params.accountId}
+      AND message.idempotency_key = ${idempotencyKey}
+    FOR UPDATE OF message, outbox
+  `;
+  if (existing) {
+    if (String(existing.organization_id) !== params.organizationId || String(existing.store_id) !== params.storeId || String(existing.customer_id) !== params.customerId) {
+      throw new Error("Cloud template idempotency key is already used for another send");
+    }
+    return recordFrom(existing as Record<string, unknown>);
+  }
+
   const [scope] = await tx`
     SELECT account.id, account.provider, account.cloud_status,
            binding.is_active, binding.whatsapp_business_account_id,
@@ -101,12 +136,30 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
       direction, message_type, body, status, idempotency_key
     ) VALUES (
       ${params.messageId}, ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${conversation.id},
-      'outbound', 'template', NULL, 'queued', ${params.idempotencyKey}
+      'outbound', 'template', NULL, 'queued', ${idempotencyKey}
     )
     ON CONFLICT (whatsapp_account_id, idempotency_key) DO NOTHING
     RETURNING id, status
   `;
-  if (!message) throw new Error("Failed to create Cloud template message");
+  if (!message) {
+    const [raced] = await tx`
+      SELECT message.id AS message_id, message.organization_id, message.store_id,
+             conversation.customer_id,
+             outbox.id AS outbox_id, message.status AS message_status,
+             outbox.status AS outbox_status
+      FROM whatsapp_messages message
+      INNER JOIN whatsapp_conversations conversation ON conversation.id = message.conversation_id
+      INNER JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+      WHERE message.whatsapp_account_id = ${params.accountId}
+        AND message.idempotency_key = ${idempotencyKey}
+      FOR UPDATE OF message, outbox
+    `;
+    if (!raced) throw new Error("Failed to create Cloud template message");
+    if (String(raced.organization_id) !== params.organizationId || String(raced.store_id) !== params.storeId || String(raced.customer_id) !== params.customerId) {
+      throw new Error("Cloud template idempotency key is already used for another send");
+    }
+    return recordFrom(raced as Record<string, unknown>);
+  }
   const [outbox] = await tx`
     INSERT INTO whatsapp_outbox (
       organization_id, store_id, whatsapp_account_id, message_id, kind,
@@ -123,10 +176,10 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
     SET last_message_at = NOW(), updated_at = NOW()
     WHERE id = ${conversation.id}
   `;
-  return {
-    messageId: String(message.id),
-    outboxId: String(outbox.id),
-    messageStatus: String(message.status),
-    outboxStatus: String(outbox.status),
-  };
+  return recordFrom({
+    message_id: message.id,
+    outbox_id: outbox.id,
+    message_status: message.status,
+    outbox_status: outbox.status,
+  });
 });
