@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
+import { useDeferredValue, useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
     ArrowLeft,
@@ -14,6 +14,7 @@ import {
     MonitorSmartphone,
     Package2,
     Receipt,
+    RotateCcw,
     Search,
     ShoppingCart,
     Store,
@@ -65,7 +66,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@repo/ui/components/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
+import { DataTableSortFilter } from "@repo/ui/components/data-table-sort-filter";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui/components/table";
 import { cn } from "@repo/ui/lib/utils";
@@ -223,6 +226,50 @@ const paymentStatusLabel = (status: PlatformSaleInspectionSummaryDTO["paymentSta
     if (status === "partial") return "Partial";
     if (status === "paid") return "Paid";
     return "Pending";
+};
+
+type StoreStatusSelection = "active" | "inactive";
+type StoreDirectorySort = "recent_activity" | "name_asc" | "name_desc" | "sales_value_desc" | "sales_value_asc";
+
+const storeStatusFilterOptions = [
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+] as const;
+
+const storeSortOptions = [
+    { value: "recent_activity", label: "Most recently active" },
+    { value: "name_asc", label: "Name A–Z" },
+    { value: "name_desc", label: "Name Z–A" },
+    { value: "sales_value_desc", label: "Highest sales value" },
+    { value: "sales_value_asc", label: "Lowest sales value" },
+] as const;
+
+const filterStores = (
+    stores: PlatformStoreActivityDTO[],
+    search: string,
+    statusSelection: Set<StoreStatusSelection>,
+    sort: StoreDirectorySort,
+): PlatformStoreActivityDTO[] => {
+    let result = stores;
+    if (search) {
+        const query = search.toLowerCase();
+        result = result.filter((store) => store.name.toLowerCase().includes(query));
+    }
+    if (statusSelection.size === 1) {
+        const active = statusSelection.has("active");
+        result = result.filter((store) => store.isActive === active);
+    }
+    const sorted = [...result];
+    sorted.sort((left, right) => {
+        if (sort === "name_asc") return left.name.localeCompare(right.name);
+        if (sort === "name_desc") return right.name.localeCompare(left.name);
+        if (sort === "sales_value_desc") return right.completedSalesValue - left.completedSalesValue;
+        if (sort === "sales_value_asc") return left.completedSalesValue - right.completedSalesValue;
+        const leftTime = left.lastCompletedSaleAt ? new Date(left.lastCompletedSaleAt).getTime() : 0;
+        const rightTime = right.lastCompletedSaleAt ? new Date(right.lastCompletedSaleAt).getTime() : 0;
+        return rightTime - leftTime;
+    });
+    return sorted;
 };
 
 const deviceStatusLabel = (status: PlatformStoreDeviceInspectionDTO["status"]) => {
@@ -429,6 +476,10 @@ const PlatformOrganizationDetailPage = ({
         parsePurchaseInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
     );
     const [purchaseSearchInput, setPurchaseSearchInput] = useState(purchaseFilters.search ?? "");
+    const [storeSearchInput, setStoreSearchInput] = useState("");
+    const deferredStoreSearch = useDeferredValue(storeSearchInput.trim());
+    const [storeStatusSelection, setStoreStatusSelection] = useState<Set<StoreStatusSelection>>(new Set());
+    const [storeSort, setStoreSort] = useState<StoreDirectorySort>("recent_activity");
     const detailQueryInput = toDetailQuery(reportingQuery);
     const periodLabel = reportingPeriodLabel(reportingQuery);
     const detailQuery = useQuery({
@@ -945,74 +996,145 @@ const PlatformOrganizationDetailPage = ({
         </nav>
     );
 
-    const renderStoreTable = (storeRows: PlatformStoreActivityDTO[], heading: string, description: string) => (
-        <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-            <CardHeader className="gap-1">
-                <h2 className="font-display text-xl font-semibold tracking-tight">{heading}</h2>
-                <CardDescription>{description}</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {storeRows.length === 0 ? (
-                    <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
-                        <EmptyHeader>
-                            <EmptyMedia variant="icon">
-                                <Store />
-                            </EmptyMedia>
-                            <EmptyTitle>No stores yet</EmptyTitle>
-                            <EmptyDescription>This organization has not opened any stores.</EmptyDescription>
-                        </EmptyHeader>
-                    </Empty>
-                ) : (
-                    <div className="overflow-x-auto rounded-xl border border-border/60">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Store</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Customers</TableHead>
-                                    <TableHead>Sales</TableHead>
-                                    <TableHead>Sales value</TableHead>
-                                    <TableHead>Last sale</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {storeRows.map((storeRow) => {
-                                    const href = organizationInspectionPath(organizationId, "stores", storeRow.id);
-                                    return (
-                                        <TableRow key={storeRow.id}>
-                                            <TableCell className="font-medium">
-                                                <a
-                                                    href={href}
-                                                    className="text-primary underline-offset-4 hover:underline"
-                                                    onClick={(event) => followInspectionLink(event, href)}
-                                                >
-                                                    {storeRow.name}
-                                                </a>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge
-                                                    variant={storeRow.isActive ? "secondary" : "outline"}
-                                                    className="rounded-full"
-                                                >
-                                                    {storeRow.isActive ? "Active" : "Inactive"}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>{storeRow.customerCount}</TableCell>
-                                            <TableCell>{storeRow.completedSaleCount}</TableCell>
-                                            <TableCell>{formatCompletedSalesValue(storeRow.completedSalesValue)}</TableCell>
-                                            <TableCell className="whitespace-nowrap text-muted-foreground">
-                                                {formatLastCompletedSale(storeRow.lastCompletedSaleAt)}
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
+    const renderStoreTable = (storeRows: PlatformStoreActivityDTO[]) => {
+        const storeColumnAriaSort = (column: "name" | "sales_value" | "last_sale"): "ascending" | "descending" | undefined => {
+            if (column === "name" && (storeSort === "name_asc" || storeSort === "name_desc")) {
+                return storeSort === "name_asc" ? "ascending" : "descending";
+            }
+            if (column === "sales_value" && (storeSort === "sales_value_asc" || storeSort === "sales_value_desc")) {
+                return storeSort === "sales_value_asc" ? "ascending" : "descending";
+            }
+            if (column === "last_sale" && storeSort === "recent_activity") return "descending";
+            return undefined;
+        };
+
+        return (
+            <div className="space-y-4">
+                <div className="hidden overflow-x-auto md:block">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead aria-sort={storeColumnAriaSort("name")}>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="-ml-2 h-8 px-2"
+                                        onClick={() => setStoreSort(storeSort === "name_asc" ? "name_desc" : "name_asc")}
+                                    >
+                                        Store
+                                    </Button>
+                                </TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Customers</TableHead>
+                                <TableHead>Sales</TableHead>
+                                <TableHead aria-sort={storeColumnAriaSort("sales_value")}>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="-ml-2 h-8 px-2"
+                                        onClick={() => setStoreSort(storeSort === "sales_value_desc" ? "sales_value_asc" : "sales_value_desc")}
+                                    >
+                                        Sales value
+                                    </Button>
+                                </TableHead>
+                                <TableHead aria-sort={storeColumnAriaSort("last_sale")}>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="-ml-2 h-8 px-2"
+                                        onClick={() => setStoreSort("recent_activity")}
+                                    >
+                                        Last sale
+                                    </Button>
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {storeRows.map((storeRow) => {
+                                const href = organizationInspectionPath(organizationId, "stores", storeRow.id);
+                                return (
+                                    <TableRow
+                                        key={storeRow.id}
+                                        className="cursor-pointer"
+                                        onClick={() => go(href)}
+                                    >
+                                        <TableCell>
+                                            <a
+                                                href={href}
+                                                className="font-medium text-primary underline-offset-4 hover:underline"
+                                                onClick={(event) => followInspectionLink(event, href)}
+                                            >
+                                                {storeRow.name}
+                                            </a>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={storeRow.isActive ? "secondary" : "outline"}
+                                                className="rounded-full"
+                                            >
+                                                {storeRow.isActive ? "Active" : "Inactive"}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>{storeRow.customerCount}</TableCell>
+                                        <TableCell>{storeRow.completedSaleCount}</TableCell>
+                                        <TableCell>{formatCompletedSalesValue(storeRow.completedSalesValue)}</TableCell>
+                                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                                            {formatLastCompletedSale(storeRow.lastCompletedSaleAt)}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </div>
+                <div className="grid gap-3 md:hidden">
+                    {storeRows.map((storeRow) => {
+                        const href = organizationInspectionPath(organizationId, "stores", storeRow.id);
+                        return (
+                            <a
+                                key={storeRow.id}
+                                href={href}
+                                aria-label={`Inspect ${storeRow.name}`}
+                                className="rounded-xl border border-border/60 bg-background/70 p-4 no-underline"
+                                onClick={(event) => followInspectionLink(event, href)}
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <p className="font-medium text-foreground">{storeRow.name}</p>
+                                    <Badge
+                                        variant={storeRow.isActive ? "secondary" : "outline"}
+                                        className="rounded-full"
+                                    >
+                                        {storeRow.isActive ? "Active" : "Inactive"}
+                                    </Badge>
+                                </div>
+                                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">Customers</dt>
+                                        <dd>{storeRow.customerCount}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">Sales</dt>
+                                        <dd>{storeRow.completedSaleCount}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">Sales value</dt>
+                                        <dd>{formatCompletedSalesValue(storeRow.completedSalesValue)}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">Last sale</dt>
+                                        <dd>{formatLastCompletedSale(storeRow.lastCompletedSaleAt)}</dd>
+                                    </div>
+                                </dl>
+                            </a>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
 
     const renderStoreRecentSales = (recentSales: PlatformRecentSaleDTO[], storeName: string) => (
         <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
@@ -1162,10 +1284,98 @@ const PlatformOrganizationDetailPage = ({
         }
         if (!stores) return null;
 
-        return renderStoreTable(
-            stores,
-            "Stores",
-            `${periodLabel} sales metrics · store status from last 7 days`,
+        const hasStoreDropdownFilters = storeStatusSelection.size > 0 || storeSort !== "recent_activity";
+        const filteredStores = filterStores(stores, deferredStoreSearch, storeStatusSelection, storeSort);
+
+        const clearStoreDropdownFilters = () => {
+            setStoreStatusSelection(new Set());
+            setStoreSort("recent_activity");
+        };
+
+        const resetStoreFilters = () => {
+            setStoreSearchInput("");
+            setStoreStatusSelection(new Set());
+            setStoreSort("recent_activity");
+        };
+
+        return (
+            <section className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                    <div className="relative min-w-0 w-full sm:max-w-md group/search">
+                        <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
+                        <Input
+                            id="store-search"
+                            name="search"
+                            type="search"
+                            value={storeSearchInput}
+                            onChange={(event) => setStoreSearchInput(event.target.value)}
+                            aria-label="Search store"
+                            placeholder="Search store"
+                            className="h-10 w-full rounded-full border-border/60 bg-card/60 pl-10 text-sm shadow-2xs transition-all duration-200 focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/30"
+                        />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <DataTableFacetedFilter
+                            title="Status"
+                            options={storeStatusFilterOptions}
+                            selectedValues={storeStatusSelection}
+                            onSelectedValuesChange={(values) => setStoreStatusSelection(new Set(Array.from(values) as StoreStatusSelection[]))}
+                        />
+                        <DataTableSortFilter
+                            title="Sort"
+                            value={storeSort}
+                            onValueChange={(value) => setStoreSort(value as StoreDirectorySort)}
+                            options={storeSortOptions}
+                        />
+                        {hasStoreDropdownFilters ? (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 rounded-full px-2.5 text-muted-foreground"
+                                onClick={clearStoreDropdownFilters}
+                            >
+                                <RotateCcw className="size-3.5" />
+                                Clear
+                            </Button>
+                        ) : null}
+                    </div>
+                </div>
+
+                {stores.length === 0 ? (
+                    <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                                <Store />
+                            </EmptyMedia>
+                            <EmptyTitle>No stores yet</EmptyTitle>
+                            <EmptyDescription>This organization has not opened any stores.</EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                ) : filteredStores.length === 0 ? (
+                    <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                                <Store />
+                            </EmptyMedia>
+                            <EmptyTitle>No matches</EmptyTitle>
+                            <EmptyDescription>Try a different search or status filter.</EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-full"
+                                onClick={resetStoreFilters}
+                            >
+                                Clear filters
+                            </Button>
+                        </EmptyContent>
+                    </Empty>
+                ) : (
+                    renderStoreTable(filteredStores)
+                )}
+            </section>
         );
     };
 

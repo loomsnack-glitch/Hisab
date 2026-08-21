@@ -1057,9 +1057,9 @@ describe("Organization Store inspection", () => {
     test("shows a read-only Store list with activity metrics and no tenant write controls", async () => {
         const view = renderStoresSection(organizationInspectionPath(mixedBistro.id, "stores"));
 
-        expect(await view.findByRole("heading", { name: "Stores" })).toBeTruthy();
-        expect(view.getByText("Front Hall")).toBeTruthy();
-        expect(view.getByText("Garden Patio")).toBeTruthy();
+        expect(await view.findByLabelText("Search store")).toBeTruthy();
+        expect(view.getAllByText("Front Hall").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Garden Patio").length).toBeGreaterThan(0);
         expect(view.getAllByText("Active").length).toBeGreaterThan(0);
         expect(view.getAllByText("Inactive").length).toBeGreaterThan(0);
         expect(view.queryByText("Create Store")).toBeNull();
