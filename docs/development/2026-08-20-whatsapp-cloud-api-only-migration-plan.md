@@ -766,7 +766,12 @@ Last updated: 2026-08-22
 - Verification: Cloud-focused suite passes 92 tests; `git diff --check` passes;
   the full backend TypeScript check still reports only the repository's
   pre-existing unrelated test-contract errors.
-- Loop 5A — **in progress**: add an atomic Organization quota reservation,
+- Loop 5A verification: Cloud-focused suite passes 95 tests; `git diff
+  --check` passes; the full backend TypeScript check still reports only the
+  repository's pre-existing unrelated test-contract errors; `dbmate up`
+  applied the template-admission, resumable-provisioning, and quota-ledger
+  migrations successfully against the configured local database.
+- Loop 5A — **complete**: add an atomic Organization quota reservation,
   append-only usage/cost ledger, reservation settlement/release on direct and
   uncertain sends, and repair the Cloud template message-content constraint.
 - Loop 5B — **next**: add rolling recipient windows, customer cooldown and
