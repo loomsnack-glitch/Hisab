@@ -170,7 +170,7 @@ The branch now also contains a Cloud API contract foundation:
 | Phase 2A–2D Cloud contracts | Runtime seams implemented; provider gate open | Signed receipt replay is scheduled, Baileys claims are provider-scoped, Cloud outbox leasing/dispatch/media upload and uncertain-send reconciliation are implemented behind injected credential/storage ports, and focused fixtures pass. Live vault assembly, Meta verification, and production observation remain. |
 | Phase 3A–3D onboarding contracts | Implemented | State, persistence, result validation, and server-side exchange seams are covered by focused fixtures. |
 | Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, refresh/revoke endpoints, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, durable provisioning-attempt execution, and production-shaped Store/inbound testing remain. |
-| Phase 4 templates/policy | 4A code-first complete; 4B next | Phase 4 is split into 4A Meta asset/binding sync, 4B auditable consent/suppression, and 4C send-time policy admission. Existing Hisab templates/promotions remain local until these seams are complete. |
+| Phase 4 templates/policy | 4B code-first complete; 4C next | Phase 4 is split into 4A Meta asset/binding sync, 4B auditable consent/suppression, and 4C send-time policy admission. Existing Hisab templates/promotions remain local until these seams are complete. |
 | Phase 5 quotas/usage/safety | Not started | Existing queue limits/cooldowns are not the append-only usage ledger, atomic quota reservation, Meta-limit sync, or reconciliation model required here. |
 | Phase 6 feature migration | Blocked | Must wait for the Phase 2–5 exit gates. |
 | Phase 7 Baileys retirement | Not started | Baileys code, auth state, UI, deployment, and port `8100` remain intentionally. |
@@ -577,7 +577,7 @@ database run prove the full flow.
 
 ### Phase 4: Templates and policy enforcement
 
-Status: **sub-phased; 4A code-first complete; 4B next**. The existing local Hisab template
+Status: **sub-phased; 4B code-first complete; 4C next**. The existing local Hisab template
 manager and promotion UI must not be treated as Meta template approval or
 policy enforcement.
 
@@ -636,6 +636,15 @@ Implementation boundary:
 Exit gate: consent history is append-only/auditable, suppression wins over
 campaign selection, and existing customers are not silently treated as opted
 in.
+
+Review result: the code-first slice adds explicit marketing and utility consent
+state, bounded source/evidence/reason metadata, append-only consent events, and
+Store-independent customer suppression with transactional state updates. The
+existing legacy opt-out column remains intact, while promotion selection now
+requires positive marketing consent and rejects suppressed customers. The
+focused Cloud/consent suite passes 85 tests. Applying the migration, wiring the
+Admin/POS controls to these commands, and provider/customer reply ingestion
+remain integration gates.
 
 #### Phase 4C: Send-time policy admission
 

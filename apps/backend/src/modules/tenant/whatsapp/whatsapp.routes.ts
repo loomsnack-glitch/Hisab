@@ -20,6 +20,8 @@ import {
     WhatsAppWorkerMessageStatusSchema,
     WhatsAppWorkerStatusUpdateSchema,
     WhatsAppCreateCloudTemplateBindingSchema,
+    WhatsAppRecordCustomerConsentSchema,
+    WhatsAppSetCustomerSuppressionSchema,
 } from "@repo/types";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { handleServiceResponse } from "@/helpers/service.helper";
@@ -42,6 +44,7 @@ import {
     createCloudTemplateBindingForStore,
     listCloudTemplateBindingsForStore,
 } from "./cloud-api/cloud-template.service";
+import * as consentService from "./cloud-api/customer-consent.service";
 
 const uuidSchema = z.uuid("Invalid id");
 const userRouter = new Hono<{ Variables: AppVariables }>();
@@ -198,6 +201,50 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/cloud/template-binding
         const invalidAccount = whatsappBusinessAccountId ? invalidUuid(whatsappBusinessAccountId, "Invalid WABA id") : null;
         if (invalidAccount) return c.json(invalidAccount, invalidAccount.code);
         return handleServiceResponse(c, await listCloudTemplateBindingsForStore(c.get("authUser").id, organizationId, storeId, whatsappBusinessAccountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post(
+    "/:organizationId/customers/:customerId/whatsapp/consent",
+    validateSchema("json", WhatsAppRecordCustomerConsentSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const customerId = c.req.param("customerId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(customerId, "Invalid customer id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await consentService.recordCustomerConsent(c.get("authUser").id, organizationId, customerId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.post(
+    "/:organizationId/customers/:customerId/whatsapp/suppression",
+    validateSchema("json", WhatsAppSetCustomerSuppressionSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const customerId = c.req.param("customerId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(customerId, "Invalid customer id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await consentService.setCustomerSuppression(c.get("authUser").id, organizationId, customerId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.get("/:organizationId/customers/:customerId/whatsapp/consent", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const customerId = c.req.param("customerId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(customerId, "Invalid customer id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await consentService.listCustomerConsentEvents(c.get("authUser").id, organizationId, customerId));
     } catch (error) {
         return unexpectedError(c, error);
     }

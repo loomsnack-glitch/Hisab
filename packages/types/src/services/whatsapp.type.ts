@@ -54,6 +54,12 @@ import {
     WhatsAppCloudTemplateAssetSchema,
     WhatsAppCloudTemplateBindingSchema,
     WhatsAppCreateCloudTemplateBindingSchema,
+    WhatsAppCustomerConsentKindSchema,
+    WhatsAppCustomerConsentStateSchema,
+    WhatsAppCustomerConsentSourceSchema,
+    WhatsAppCustomerConsentEventSchema,
+    WhatsAppRecordCustomerConsentSchema,
+    WhatsAppSetCustomerSuppressionSchema,
     WhatsAppCloudAccountSnapshotSchema,
     WhatsAppCloudProvisioningAttemptSchema,
     WhatsAppCloudOnboardingStateResponseSchema,
@@ -91,6 +97,12 @@ export type WhatsAppCloudTemplateCategory = z.infer<typeof WhatsAppCloudTemplate
 export type WhatsAppCloudTemplateAssetDTO = z.infer<typeof WhatsAppCloudTemplateAssetSchema>;
 export type WhatsAppCloudTemplateBindingDTO = z.infer<typeof WhatsAppCloudTemplateBindingSchema>;
 export type WhatsAppCreateCloudTemplateBindingJSON = z.infer<typeof WhatsAppCreateCloudTemplateBindingSchema>;
+export type WhatsAppCustomerConsentKind = z.infer<typeof WhatsAppCustomerConsentKindSchema>;
+export type WhatsAppCustomerConsentState = z.infer<typeof WhatsAppCustomerConsentStateSchema>;
+export type WhatsAppCustomerConsentSource = z.infer<typeof WhatsAppCustomerConsentSourceSchema>;
+export type WhatsAppCustomerConsentEventDTO = z.infer<typeof WhatsAppCustomerConsentEventSchema>;
+export type WhatsAppRecordCustomerConsentJSON = z.infer<typeof WhatsAppRecordCustomerConsentSchema>;
+export type WhatsAppSetCustomerSuppressionJSON = z.infer<typeof WhatsAppSetCustomerSuppressionSchema>;
 export type WhatsAppCloudAccountSnapshot = z.infer<typeof WhatsAppCloudAccountSnapshotSchema>;
 export type WhatsAppCloudProvisioningAttempt = z.infer<typeof WhatsAppCloudProvisioningAttemptSchema>;
 export type WhatsAppCloudOnboardingStateResponseDTO = z.infer<typeof WhatsAppCloudOnboardingStateResponseSchema>;

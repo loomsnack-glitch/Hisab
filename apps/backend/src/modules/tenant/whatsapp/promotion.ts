@@ -167,7 +167,9 @@ export const createPromotion = async (
     FROM customers
     WHERE organization_id = ${organizationId}
       AND is_active = TRUE
+      AND marketing_opted_in = TRUE
       AND marketing_opted_out = FALSE
+      AND whatsapp_suppressed = FALSE
       AND phone IS NOT NULL
       AND phone ~ '^[+][1-9][0-9]{7,14}$'
     ORDER BY created_at ASC

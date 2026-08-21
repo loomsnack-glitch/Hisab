@@ -27,6 +27,9 @@ import type {
     WhatsAppCloudTemplateAssetDTO,
     WhatsAppCloudTemplateBindingDTO,
     WhatsAppCreateCloudTemplateBindingJSON,
+    WhatsAppCustomerConsentEventDTO,
+    WhatsAppRecordCustomerConsentJSON,
+    WhatsAppSetCustomerSuppressionJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -38,6 +41,8 @@ type WhatsAppCloudOnboardingResponse = ServiceResponse<WhatsAppCloudOnboardingSt
 type WhatsAppCloudTemplatesResponse = ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>;
 type WhatsAppCloudBindingsResponse = ServiceResponse<{ bindings: WhatsAppCloudTemplateBindingDTO[] } | null>;
 type WhatsAppCloudBindingResponse = ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>;
+type WhatsAppCustomerConsentResponse = ServiceResponse<WhatsAppCustomerConsentEventDTO | null>;
+type WhatsAppCustomerConsentHistoryResponse = ServiceResponse<{ events: WhatsAppCustomerConsentEventDTO[] } | null>;
 type WhatsAppInvoiceResponse = ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
 type WhatsAppReminderResponse = ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
 type WhatsAppPromotionDashboardResponse = ServiceResponse<WhatsAppPromotionDashboardResponseDTO | null>;
@@ -141,6 +146,44 @@ export const getWhatsAppCloudTemplateBindings = async (
 ): Promise<WhatsAppCloudBindingsResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/whatsapp/cloud/template-bindings`, { params: whatsappBusinessAccountId ? { whatsappBusinessAccountId } : undefined });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const recordWhatsAppCustomerConsent = async (
+    organizationId: string,
+    customerId: string,
+    data: WhatsAppRecordCustomerConsentJSON,
+): Promise<WhatsAppCustomerConsentResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/customers/${customerId}/whatsapp/consent`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const setWhatsAppCustomerSuppression = async (
+    organizationId: string,
+    customerId: string,
+    data: WhatsAppSetCustomerSuppressionJSON,
+): Promise<WhatsAppCustomerConsentResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/customers/${customerId}/whatsapp/suppression`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppCustomerConsentHistory = async (
+    organizationId: string,
+    customerId: string,
+): Promise<WhatsAppCustomerConsentHistoryResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/customers/${customerId}/whatsapp/consent`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

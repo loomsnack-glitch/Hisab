@@ -107,6 +107,37 @@ export const WhatsAppCreateCloudTemplateBindingSchema = z.object({
     isDefault: z.boolean().optional(),
 });
 
+export const WhatsAppCustomerConsentKindSchema = z.enum(["marketing", "utility"]);
+export const WhatsAppCustomerConsentStateSchema = z.enum(["opted_in", "opted_out"]);
+export const WhatsAppCustomerConsentSourceSchema = z.enum(["admin", "pos", "import", "customer_reply", "migration", "system"]);
+export const WhatsAppCustomerConsentEventSchema = z.object({
+    id: z.uuid("Invalid consent event id"),
+    organizationId: z.uuid("Invalid organization id"),
+    customerId: z.uuid("Invalid customer id"),
+    kind: z.enum(["marketing", "utility", "suppression"]),
+    state: z.enum(["opted_in", "opted_out", "suppressed", "cleared"]),
+    source: WhatsAppCustomerConsentSourceSchema,
+    wordingVersion: z.string().trim().min(1).max(64).nullable(),
+    evidenceReference: z.string().trim().min(1).max(255).nullable(),
+    reason: z.string().trim().min(1).max(1000).nullable(),
+    createdBy: z.uuid("Invalid creator id").nullable(),
+    createdAt: dtoDateSchema,
+});
+export const WhatsAppRecordCustomerConsentSchema = z.object({
+    kind: WhatsAppCustomerConsentKindSchema,
+    state: WhatsAppCustomerConsentStateSchema,
+    source: WhatsAppCustomerConsentSourceSchema,
+    wordingVersion: z.string().trim().min(1).max(64).nullable().optional(),
+    evidenceReference: z.string().trim().min(1).max(255).nullable().optional(),
+    reason: z.string().trim().min(1).max(1000).nullable().optional(),
+});
+export const WhatsAppSetCustomerSuppressionSchema = z.object({
+    suppressed: z.boolean(),
+    source: WhatsAppCustomerConsentSourceSchema,
+    reason: z.string().trim().min(1).max(1000).nullable().optional(),
+    evidenceReference: z.string().trim().min(1).max(255).nullable().optional(),
+});
+
 export const WhatsAppCloudAccountSnapshotSchema = z.object({
     id: z.uuid("Invalid WhatsApp account id"),
     organizationId: z.uuid("Invalid organization id"),
