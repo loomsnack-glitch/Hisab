@@ -834,9 +834,12 @@ current branch, work proceeds in this order:
    suppression, and 4C send-time admission seams are code-first complete. Apply
    migrations, connect the Admin/POS commands, and run the controlled Meta
    template/consent acceptance tests before production sends.
-7. **Implement Phase 5.** Add the append-only usage ledger, atomic quota and
-   budget reservations, Meta limit/quality snapshots, rolling recipient
-   windows, cooldown/duplicate admission, campaign stop, and reconciliation.
+7. **Close the Phase 5 external gate.** **Code-first implementation complete;
+   evidence open.** The append-only usage ledger, atomic quota/budget
+   reservations, provider quality/limit snapshots, rolling recipient windows,
+   cooldown/duplicate admission, campaign stop, and reconciliation controls
+   are implemented. Apply policy in the target environment and run concurrent
+   send, failure-release, and controlled provider checks.
 8. **Only then implement Phase 6.** Migrate bill documents, due reminders,
    promotions/media, inbound replies, and delivery statuses behind an explicit
    Cloud feature flag while Baileys remains available for controlled rollback.
@@ -844,9 +847,8 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The current code slice is Loop 5A quota reservation and append-only usage/cost
-accounting. Phase 6 remains blocked until the provider/runtime and quota gates
-are closed.
+The current code slice is Loop 7 feature-caller migration. Phase 6 remains
+blocked until the provider/runtime and quota external gates are closed.
 
 ## Target architecture
 
