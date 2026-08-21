@@ -1,4 +1,5 @@
 import type { ServiceTableState } from "@repo/types";
+import { hasActiveTableWorkspace } from "./pos-table-kot";
 
 export type PosServiceTableAction = "allocate" | "free";
 
@@ -106,3 +107,5 @@ export const getPosServiceTableStateLabel = (state: ServiceTableState) => {
 export const shouldReturnToPosTablesAfterSale = (sale: {
   serviceTableId?: string | null;
 }) => Boolean(sale.serviceTableId);
+
+export { hasActiveTableWorkspace };

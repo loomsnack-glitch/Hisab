@@ -9,6 +9,7 @@ import type {
   UpdateServiceTableSchema,
 } from "./table-service.schema";
 import type { SaleDetailDTO } from "../billing";
+import type { TableOrderDTO } from "../kot";
 
 export type ServiceTableDTO = z.infer<typeof ServiceTableDTOSchema>;
 export type ServiceTableState = ServiceTableDTO["state"];
@@ -50,7 +51,8 @@ export type ServiceTableResponse = {
 
 export type ServiceTableSaleResponse = {
   table: ServiceTableDTO;
-  sale: SaleDetailDTO;
+  sale: SaleDetailDTO | null;
+  tableOrder?: TableOrderDTO | null;
 };
 
 export type ServiceAreaDTO = z.infer<typeof ServiceAreaDTOSchema>;

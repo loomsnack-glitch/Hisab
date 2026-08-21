@@ -53,6 +53,7 @@ const table = (state: ServiceTableDTO["state"]): ServiceTableDTO => ({
   position: { x: 0.05, y: 0.05 },
   state,
   currentSaleId: null,
+  currentTableOrderId: null,
   currentSaleTotal: null,
   serviceAreaId: null,
   createdBy: "11111111-1111-4111-8111-111111111111",
@@ -218,6 +219,20 @@ describe("POS Service Table behavior", () => {
     expect(markup).toContain("Cancel order");
     expect(markup).not.toContain("Ready to bill");
     expect(markup).not.toContain("Mark table A1 Ready to bill");
+  });
+
+  test("shows Open and Cancel for an engaged table with an Active Table Order", () => {
+    const markup = renderTableFloor([
+      {
+        ...table("engaged"),
+        currentTableOrderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+        currentSaleTotal: 90,
+      },
+    ]);
+
+    expect(markup).toContain("Current total");
+    expect(markup).toContain("Open order");
+    expect(markup).toContain("Cancel order");
   });
 
   test("treats leftover Ready to bill tables as Engaged draft orders", () => {

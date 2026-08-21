@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/format";
 import {
   getPosServiceTableAction,
   getPosServiceTableStateLabel,
+  hasActiveTableWorkspace,
   posServiceTableFloorToneClassName,
   posServiceTableSimpleToneClassName,
   posServiceTableStatusDotClassName,
@@ -119,7 +120,7 @@ const buildSimpleTileActions = ({
     ];
   }
 
-  if ((table.state === "engaged" || table.state === "ready_to_bill") && table.currentSaleId) {
+  if (hasActiveTableWorkspace(table)) {
     return [
       {
         key: "open",
@@ -253,7 +254,7 @@ const PosServiceTableActions = ({
           Start order
         </Button>
       ) : null}
-      {(table.state === "engaged" || table.state === "ready_to_bill") && table.currentSaleId ? (
+      {(table.state === "engaged" || table.state === "ready_to_bill") && hasActiveTableWorkspace(table) ? (
         <Button
           type="button"
           size={size}
@@ -267,7 +268,7 @@ const PosServiceTableActions = ({
           Open order
         </Button>
       ) : null}
-      {(table.state === "engaged" || table.state === "ready_to_bill") && table.currentSaleId ? (
+      {(table.state === "engaged" || table.state === "ready_to_bill") && hasActiveTableWorkspace(table) ? (
         <Button
           type="button"
           size={size}

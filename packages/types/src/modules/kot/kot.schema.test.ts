@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { CreateParcelKotSchema, KotDTOSchema, KotTypeSchema } from "./kot.schema";
+import {
+  CheckoutTableOrderSchema,
+  CreateParcelKotSchema,
+  CreateTableKotSchema,
+  KotDTOSchema,
+  KotTypeSchema,
+  TableOrderDTOSchema,
+  UpdateTableKotSchema,
+} from "./kot.schema";
 
 const now = new Date("2026-08-21T12:00:00.000Z");
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -101,6 +109,101 @@ describe("Parcel KOT contracts", () => {
       expect(result.data.kotNumber).toBe("KOT-001");
       expect(result.data.saleId).toBe(saleId);
       expect(result.data.items[0]?.unitPriceSnapshot).toBe(100);
+    }
+  });
+});
+
+describe("Table Order and Table KOT contracts", () => {
+  const tableOrderId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01";
+  const serviceTableId = "99999999-9999-4999-8999-999999999999";
+
+  test("Table KOT creation accepts selection-only items and rejects client prices", () => {
+    const result = CreateTableKotSchema.safeParse({
+      items: [
+        {
+          productId,
+          quantity: 1,
+          addOns: [{ addOnId, quantity: 1 }],
+          unitPrice: 99,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.items).toHaveLength(1);
+      expect("unitPrice" in result.data.items[0]!).toBe(false);
+    }
+  });
+
+  test("Table KOT updates may clear remaining items", () => {
+    expect(UpdateTableKotSchema.safeParse({ items: [] }).success).toBe(true);
+    expect(UpdateTableKotSchema.safeParse({}).success).toBe(false);
+  });
+
+  test("checkout accepts payments and does not require a Customer", () => {
+    const result = CheckoutTableOrderSchema.safeParse({
+      requestId: "77777777-7777-4777-8777-777777777777",
+      payments: [{ amount: 90, method: "cash" }],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.customerId).toBeUndefined();
+      expect(result.data.payments).toHaveLength(1);
+    }
+  });
+
+  test("an Active Table Order can group multiple table KOTs before a Sale exists", () => {
+    const result = TableOrderDTOSchema.safeParse({
+      id: tableOrderId,
+      organizationId,
+      storeId,
+      serviceTableId,
+      customerId: null,
+      saleId: null,
+      status: "active",
+      remainingSubtotal: 180,
+      remainingDiscountTotal: 10,
+      remainingGrandTotal: 170,
+      createdAt: now,
+      updatedAt: now,
+      kots: [
+        {
+          id: kotId,
+          organizationId,
+          storeId,
+          saleId: null,
+          tableOrderId,
+          kotType: "table",
+          kotNumber: "KOT-001",
+          kotSequenceNumber: 1,
+          kotPeriodKey: "20260821",
+          createdAt: now,
+          updatedAt: now,
+          items: [],
+        },
+        {
+          id: "f1f1f1f1-f1f1-41f1-81f1-f1f1f1f1f1f1",
+          organizationId,
+          storeId,
+          saleId: null,
+          tableOrderId,
+          kotType: "table",
+          kotNumber: "KOT-002",
+          kotSequenceNumber: 2,
+          kotPeriodKey: "20260821",
+          createdAt: now,
+          updatedAt: now,
+          items: [],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.kots).toHaveLength(2);
+      expect(result.data.saleId).toBe(null);
     }
   });
 });

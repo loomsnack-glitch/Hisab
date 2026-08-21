@@ -1,10 +1,12 @@
-import type { DeviceSessionDTO, SaleDetailDTO } from "@repo/types";
+import type { DeviceSessionDTO, SaleDetailDTO, ServiceTableDTO, TableOrderDTO } from "@repo/types";
 
 export type PosPanelTab = "products" | "tables" | "bills" | "reports" | "customers" | "purchases" | "whatsapp";
 
 export type PosComposerHandoff = {
-    sale: SaleDetailDTO;
+    sale: SaleDetailDTO | null;
     editSaleId: string | null;
+    table?: ServiceTableDTO;
+    tableOrder?: TableOrderDTO | null;
 };
 
 export const posPanelConfig = {

@@ -4,11 +4,13 @@ export const isParcelKotActionVisible = ({
   isDeviceMode,
   kotSystemEnabled,
   isReplacingSale,
+  hasActiveTableOrder = false,
 }: {
   isDeviceMode: boolean;
   kotSystemEnabled: boolean;
   isReplacingSale: boolean;
-}) => isDeviceMode && kotSystemEnabled && !isReplacingSale;
+  hasActiveTableOrder?: boolean;
+}) => isDeviceMode && kotSystemEnabled && !isReplacingSale && !hasActiveTableOrder;
 
 type PosParcelKotActionProps = {
   available: boolean;

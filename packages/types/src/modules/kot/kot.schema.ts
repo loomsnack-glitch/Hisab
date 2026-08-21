@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
-import { SaleItemInputSchema } from "../billing/billing.schema";
+import { CreatePaymentSchema, SaleItemInputSchema } from "../billing/billing.schema";
 
 const nameSchema = z
   .string()
@@ -110,6 +110,7 @@ export const KotDTOSchema = z.object({
   organizationId: z.uuid("Invalid organization id"),
   storeId: z.uuid("Invalid store id"),
   saleId: z.uuid("Invalid sale id").nullable(),
+  tableOrderId: z.uuid("Invalid table order id").nullable().optional().default(null),
   kotType: KotTypeSchema,
   kotNumber: z.string().min(1).max(64),
   kotSequenceNumber: z.number().int().positive(),
@@ -119,6 +120,59 @@ export const KotDTOSchema = z.object({
   createdAt: dtoDateSchema,
   updatedAt: dtoDateSchema,
   items: z.array(KotItemDTOSchema).default([]),
+});
+
+export const TableOrderStatusSchema = z.enum(["active", "checked_out", "discarded"]);
+
+export const TableOrderDTOSchema = z.object({
+  id: z.uuid("Invalid table order id"),
+  organizationId: z.uuid("Invalid organization id"),
+  storeId: z.uuid("Invalid store id"),
+  serviceTableId: z.uuid("Invalid service table id"),
+  customerId: z.uuid("Invalid customer id").nullable(),
+  saleId: z.uuid("Invalid sale id").nullable(),
+  status: TableOrderStatusSchema,
+  notes: z.string().nullable().optional(),
+  remainingSubtotal: moneySchema.optional().default(0),
+  remainingDiscountTotal: moneySchema.optional().default(0),
+  remainingGrandTotal: moneySchema.optional().default(0),
+  createdByDeviceId: z.uuid("Invalid creator device id").nullable().optional(),
+  updatedByDeviceId: z.uuid("Invalid updater device id").nullable().optional(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+  kots: z.array(KotDTOSchema).default([]),
+});
+
+export const CreateTableKotSchema = z.object({
+  items: z.array(SaleItemInputSchema).min(1, "At least one item is required"),
+  customerId: z
+    .union([z.literal(""), z.uuid("Invalid customer id")])
+    .nullable()
+    .optional(),
+  notes: optionalNotesSchema,
+});
+
+export const UpdateTableKotSchema = z.object({
+  items: z.array(SaleItemInputSchema),
+});
+
+export const UpdateTableOrderSchema = z.object({
+  customerId: z
+    .union([z.literal(""), z.uuid("Invalid customer id")])
+    .nullable()
+    .optional(),
+  notes: optionalNotesSchema,
+});
+
+export const CheckoutTableOrderSchema = z.object({
+  requestId: z.uuid("Invalid completion request id"),
+  customerId: z
+    .union([z.literal(""), z.uuid("Invalid customer id")])
+    .nullable()
+    .optional(),
+  orderDiscountAmount: moneySchema.optional(),
+  notes: optionalNotesSchema,
+  payments: z.array(CreatePaymentSchema).optional().default([]),
 });
 
 export const CreateParcelKotSchema = z.object({

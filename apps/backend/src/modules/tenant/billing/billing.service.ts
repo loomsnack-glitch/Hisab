@@ -2562,6 +2562,7 @@ type CompletedSaleTransactionParams = {
   committedAt: Date;
   requestId: string;
   replacementOfSaleId?: string | null;
+  serviceTableId?: string | null;
 };
 
 const persistCompletedSale = async (
@@ -2606,6 +2607,7 @@ const persistCompletedSale = async (
       userId: params.actor.userId ?? null,
       completionRequestId: params.requestId,
       replacementOfSaleId: params.replacementOfSaleId ?? null,
+      serviceTableId: params.serviceTableId ?? null,
     },
     tx,
   );
@@ -3931,3 +3933,47 @@ export const voidSaleForDevice = async (
     voidData,
   );
 };
+
+export const prepareTrustedSaleLines = (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  items: SaleItemInput[],
+  orderDiscountAmount?: number | string | null,
+  existingItems: SaleItemDTO[] = [],
+) =>
+  prepareSaleItems(
+    organizationId,
+    storeId,
+    saleId,
+    items,
+    orderDiscountAmount,
+    existingItems,
+  );
+
+export const totalsFromTrustedSaleLines = (
+  lines: Array<{
+    item: { lineSubtotal: number; discountAmount: number };
+    addOns: Array<{ lineSubtotal: number; discountAmount: number }>;
+  }>,
+  orderDiscountAmount?: number | string | null,
+) =>
+  buildSalePricingTotals(
+    getParentAndAddOnSubtotal(
+      lines.map((line) => ({
+        lineSubtotal: line.item.lineSubtotal,
+        addOns: line.addOns,
+      })),
+    ),
+    getSaleLineDiscountTotal(
+      lines.map((line) => ({
+        discountAmount: line.item.discountAmount,
+        addOns: line.addOns,
+      })),
+    ),
+    orderDiscountAmount,
+  );
+
+export const persistCompletedSaleFromTrustedLines = persistCompletedSale;
+
+export const resolveCustomerAssignment = validateCustomerAssignment;

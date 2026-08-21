@@ -47,6 +47,10 @@ import type {
   ServiceTableSaleResponse,
   ServiceTablesListResponse,
   ServiceAreasListResponse,
+  CreateTableKotJSON,
+  UpdateTableKotJSON,
+  UpdateTableOrderJSON,
+  CheckoutTableOrderJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -154,6 +158,55 @@ export const cancelPosServiceTableOrder = async (
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
   try {
     const response = await api.delete(`/pos/tables/${tableId}/order`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const updatePosServiceTableOrder = async (
+  tableId: string,
+  data: UpdateTableOrderJSON,
+): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  try {
+    const response = await api.patch(`/pos/tables/${tableId}/order`, data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const createPosTableKot = async (
+  tableId: string,
+  data: CreateTableKotJSON,
+): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  try {
+    const response = await api.post(`/pos/tables/${tableId}/kots`, data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const updatePosTableKot = async (
+  tableId: string,
+  kotId: string,
+  data: UpdateTableKotJSON,
+): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  try {
+    const response = await api.patch(`/pos/tables/${tableId}/kots/${kotId}`, data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const checkoutPosTableOrder = async (
+  tableId: string,
+  data: CheckoutTableOrderJSON,
+): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  try {
+    const response = await api.post(`/pos/tables/${tableId}/checkout`, data);
     return response.data;
   } catch (error) {
     return handleApiError(error);

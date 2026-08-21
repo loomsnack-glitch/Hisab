@@ -7,6 +7,9 @@ import {
     commitPosSale,
     completePosSale,
     createPosParcelKot,
+    createPosTableKot,
+    updatePosTableKot,
+    checkoutPosTableOrder,
     createDraftSale,
     createPosDraftSale,
     createCustomer,
@@ -39,6 +42,8 @@ import type {
     ReplaceSaleJSON,
     CompleteSaleJSON,
     CreateParcelKotJSON,
+    CreateTableKotJSON,
+    CheckoutTableOrderJSON,
     CreateCustomerJSON,
     CreateDraftSaleJSON,
     DeviceSessionDTO,
@@ -51,6 +56,8 @@ import type {
     SalesListSummary,
     SaleDetailDTO,
     SaleSummaryDTO,
+    ServiceTableDTO,
+    TableOrderDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
 import { normalizePhoneNumber } from "@repo/types";
@@ -119,7 +126,7 @@ import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import type { PosComposerHandoff, PosPanelTab } from "@/pages/pos-route-context";
-import { billingKeys, catalogKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
+import { billingKeys, catalogKeys, organizationKeys, serviceTableKeys, whatsappKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate, getAverageBillPerOrder } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
@@ -141,6 +148,13 @@ import {
 } from "@/lib/barcode-scanning";
 import { safeRandomUUID } from "@/lib/uuid";
 import { isParcelKotActionVisible, PosParcelKotAction } from "@/lib/pos-parcel-kot";
+import {
+    composerItemsFromTableKot,
+    isTableKotActionVisible,
+    PosTableKotAction,
+    PosTableKotList,
+    remainingTableKotItemCount,
+} from "@/lib/pos-table-kot";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
 type ComposerAddOn = CustomizeAddOnSelection;
@@ -450,6 +464,10 @@ const BillingPage = ({
         : null;
 
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+    const [activeTableId, setActiveTableId] = useState<string | null>(null);
+    const [activeTableOrder, setActiveTableOrder] = useState<TableOrderDTO | null>(null);
+    const [selectedKotId, setSelectedKotId] = useState<string | null>(null);
+    const [editingKotId, setEditingKotId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
     const [selectedCustomerFallback, setSelectedCustomerFallback] = useState<CustomerDTO | null>(null);
     const [customerSearch, setCustomerSearch] = useState("");
@@ -1026,6 +1044,9 @@ const BillingPage = ({
         return matchesCategory && matchesSearch;
     });
     const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
+    const hasActiveTableOrder = Boolean(activeTableId && activeTableOrder);
+    const tableKotItemCount = remainingTableKotItemCount(activeTableOrder);
+    const isTableOrderCheckout = hasActiveTableOrder && items.length === 0 && !editingKotId;
 
     const filteredSales = sales.filter((sale) => {
         switch (historyFilter) {
@@ -1088,7 +1109,13 @@ const BillingPage = ({
     const lineDiscountTotal = items.reduce((total, item) => {
         return total + getComposerItemPricing(item).lineDiscountTotal;
     }, 0);
-    const discountBase = Math.max(subtotal - lineDiscountTotal, 0);
+    const remainingTableSubtotal = Number(activeTableOrder?.remainingSubtotal ?? 0);
+    const remainingTableDiscount = Number(activeTableOrder?.remainingDiscountTotal ?? 0);
+    const remainingTableGrand = Number(activeTableOrder?.remainingGrandTotal ?? 0);
+    const discountBase = Math.max(
+        isTableOrderCheckout ? remainingTableGrand : subtotal - lineDiscountTotal,
+        0,
+    );
     const parsedDiscountValue = discountInput.trim() === "" ? 0 : Number(discountInput);
     const normalizedDiscountValue =
         Number.isFinite(parsedDiscountValue) && parsedDiscountValue >= 0 ? parsedDiscountValue : 0;
@@ -1110,7 +1137,10 @@ const BillingPage = ({
                   : null;
     const hasInvalidDiscount = Boolean(discountValidationMessage);
     const totalDiscount = lineDiscountTotal + orderDiscountAmount;
-    const itemDiscountPercentage = formatDiscountPercentage(lineDiscountTotal, subtotal);
+    const itemDiscountPercentage = formatDiscountPercentage(
+        isTableOrderCheckout ? remainingTableDiscount : lineDiscountTotal,
+        isTableOrderCheckout ? remainingTableSubtotal : subtotal,
+    );
     const orderDiscountPercentage = formatDiscountPercentage(orderDiscountAmount, discountBase);
     const discountPresetOptions = discountPresetPercentages
         .map((percentage) => ({
@@ -1118,12 +1148,26 @@ const BillingPage = ({
             amount: roundCurrency((discountBase * percentage) / 100),
         }))
         .filter((preset) => preset.amount > 0 && preset.amount <= discountBase + 0.005);
-    const grandTotal = Math.max(subtotal - totalDiscount, 0);
+    const cartGrandTotal = Math.max(subtotal - totalDiscount, 0);
+    const grandTotal = isTableOrderCheckout
+        ? Math.max(remainingTableGrand - orderDiscountAmount, 0)
+        : cartGrandTotal;
+    const displaySubtotal = isTableOrderCheckout ? remainingTableSubtotal : subtotal;
+    const displayLineDiscount = isTableOrderCheckout ? remainingTableDiscount : lineDiscountTotal;
+    const orderItemCount = isTableOrderCheckout ? tableKotItemCount : cartItemCount;
     const rawPartialPaymentAmount = Math.max(Number(partialPaymentAmount || 0), 0);
     const collectedTotal =
         settlementMode === "due" ? 0 : settlementMode === "full" ? grandTotal : rawPartialPaymentAmount;
     const dueTotal = Math.max(grandTotal - collectedTotal, 0);
     const isReplacingSale = Boolean(replacingSaleId);
+    const tableKotActionAvailable = isTableKotActionVisible({
+        isDeviceMode,
+        kotSystemEnabled: session?.store.kotSystemEnabled === true,
+        tableManagementEnabled: session?.store.tableManagementEnabled === true,
+        hasActiveTableOrder,
+        isReplacingSale,
+    });
+    const canPlaceTableBill = isTableOrderCheckout && tableKotItemCount > 0;
     const displayedDueTotal = dueTotal;
     const isOverpaid = settlementMode === "partial" && rawPartialPaymentAmount > grandTotal;
     const isPartialAmountMissing = settlementMode === "partial" && rawPartialPaymentAmount <= 0;
@@ -1216,8 +1260,21 @@ const BillingPage = ({
         });
     };
 
+    const invalidateTableQueries = () => {
+        if (!selectedStoreId) {
+            return;
+        }
+        queryClient.invalidateQueries({
+            queryKey: serviceTableKeys.pos(organizationId, selectedStoreId),
+        });
+    };
+
     const resetComposer = () => {
         setActiveDraftId(null);
+        setActiveTableId(null);
+        setActiveTableOrder(null);
+        setSelectedKotId(null);
+        setEditingKotId(null);
         setReplacingSaleId(null);
         setReplaceConfirmationOpen(false);
         setSelectedCustomerId("");
@@ -1708,6 +1765,46 @@ const BillingPage = ({
                 throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
             }
 
+            if (activeTableId && activeTableOrder) {
+                if (items.length > 0 || editingKotId) {
+                    throw new Error("Generate KOT before placing the table bill");
+                }
+
+                if (tableKotItemCount === 0) {
+                    throw new Error("Generate a Table KOT before placing the bill");
+                }
+
+                if (hasInvalidDiscount) {
+                    throw new Error(discountValidationMessage || "Enter a valid discount");
+                }
+
+                if (isOverpaid) {
+                    throw new Error("Collected amount cannot exceed the bill total");
+                }
+
+                if (settlementMode === "partial" && isPartialAmountMissing) {
+                    throw new Error("Enter the amount the customer is paying now");
+                }
+
+                if (matchesFullPayment) {
+                    throw new Error("Select 'Paid' when the customer is paying the full bill amount");
+                }
+
+                const payload: CheckoutTableOrderJSON = {
+                    requestId,
+                    customerId: selectedCustomerId || null,
+                    orderDiscountAmount,
+                    notes: notes.trim() || null,
+                    payments: buildCommitPayload().payments,
+                };
+                const response = await checkoutPosTableOrder(activeTableId, payload);
+                if (response.status !== "success" || !response.data?.sale) {
+                    throw new Error(response.message || "Failed to complete table bill");
+                }
+
+                return response.data.sale;
+            }
+
             if (items.length === 0) {
                 throw new Error("Add at least one product before completing the bill");
             }
@@ -1791,6 +1888,7 @@ const BillingPage = ({
             const wasReplacing = Boolean(replacingSaleId);
             completionRequestRef.current = null;
             invalidateBillingQueries();
+            invalidateTableQueries();
             setPlaceOrderDialogOpen(false);
             setMobileCartOpen(false);
             resetComposer();
@@ -1835,7 +1933,7 @@ const BillingPage = ({
                     ? `Bill ${sale.saleNumber ?? ""} edited`
                     : `Bill ${sale.saleNumber ?? ""} completed`,
             );
-            if (!wasReplacing && isDeviceMode && shouldReturnToPosTablesAfterSale(sale)) {
+            if (!wasReplacing && isDeviceMode && (hasActiveTableOrder || shouldReturnToPosTablesAfterSale(sale))) {
                 onPanelTabChange?.("tables");
             }
         },
@@ -1889,6 +1987,84 @@ const BillingPage = ({
         parcelKotMutation.mutate({ requestId });
     };
 
+    const tableKotMutation = useMutation({
+        mutationFn: async ({ editingKotId: kotId }: { editingKotId: string | null }) => {
+            if (!activeTableId) {
+                throw new Error("No Active Table Order");
+            }
+
+            if (items.length === 0) {
+                throw new Error(
+                    kotId ? "Add at least one product before saving this KOT" : "Add at least one product before generating a Table KOT",
+                );
+            }
+
+            if (hasInvalidDiscount) {
+                throw new Error(discountValidationMessage || "Enter a valid discount");
+            }
+
+            const payload: CreateTableKotJSON = {
+                items: buildDraftPayload().items,
+                customerId: selectedCustomerId || null,
+                notes: notes.trim() || null,
+            };
+            const response = kotId
+                ? await updatePosTableKot(activeTableId, kotId, { items: payload.items })
+                : await createPosTableKot(activeTableId, payload);
+
+            if (response.status !== "success" || !response.data?.tableOrder) {
+                throw new Error(response.message || (kotId ? "Failed to update Table KOT" : "Failed to generate Table KOT"));
+            }
+
+            return response.data.tableOrder;
+        },
+        onSuccess: (tableOrder, variables) => {
+            invalidateBillingQueries();
+            invalidateTableQueries();
+            if (variables.editingKotId) {
+                setActiveTableOrder(tableOrder);
+                setEditingKotId(null);
+                setItems([]);
+                toast.success("Table KOT updated");
+                return;
+            }
+
+            const latestKot = tableOrder.kots[tableOrder.kots.length - 1];
+            resetComposer();
+            toast.success(`Table ${latestKot?.kotNumber ?? "KOT"} generated`);
+            onPanelTabChange?.("tables");
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error?.message || "Failed to generate Table KOT");
+        },
+    });
+
+    const submitTableKot = () => {
+        tableKotMutation.mutate({ editingKotId });
+    };
+
+    const handleSelectTableKot = (kotId: string) => {
+        if (!activeTableOrder) {
+            return;
+        }
+
+        if (selectedKotId === kotId && editingKotId === kotId) {
+            setSelectedKotId(null);
+            setEditingKotId(null);
+            setItems([]);
+            return;
+        }
+
+        setSelectedKotId(kotId);
+        setEditingKotId(kotId);
+        setItems(composerItemsFromTableKot(activeTableOrder, kotId));
+    };
+
+    const returnToTables = () => {
+        resetComposer();
+        onPanelTabChange?.("tables");
+    };
+
     const submitCompleteSale = () => {
         const shouldPrint = invoiceActions.includes("print");
         const shouldSendWhatsApp = invoiceActions.includes("whatsapp");
@@ -1914,6 +2090,10 @@ const BillingPage = ({
     const loadSaleIntoComposer = useCallback((sale: SaleDetailDTO, editSaleId: string | null) => {
         setReplacingSaleId(editSaleId);
         setActiveDraftId(editSaleId ? null : sale.id);
+        setActiveTableId(null);
+        setActiveTableOrder(null);
+        setSelectedKotId(null);
+        setEditingKotId(null);
         setSelectedCustomerId(sale.customerId ?? "");
         setSelectedCustomerFallback(null);
         setCustomerSearch(sale.customer?.phone || sale.customer?.name || "");
@@ -1976,9 +2156,56 @@ const BillingPage = ({
         setLeftPanelTab("products");
     }, [getComposerUnitDiscountFromSaleItem]);
 
+    const loadTableOrderIntoComposer = useCallback((table: ServiceTableDTO, tableOrder: TableOrderDTO) => {
+        setReplacingSaleId(null);
+        setActiveDraftId(null);
+        setActiveTableId(table.id);
+        setActiveTableOrder(tableOrder);
+        setSelectedKotId(null);
+        setEditingKotId(null);
+        setSelectedCustomerId(tableOrder.customerId ?? "");
+        setSelectedCustomerFallback(null);
+        setCustomerSearch("");
+        setNotes(tableOrder.notes ?? "");
+        setItems([]);
+        setSettlementMode("full");
+        setSettlementEditorOpen(false);
+        setSelectedPaymentMethod("cash");
+        setPartialPaymentAmount("");
+        setDiscountInput("");
+        setDiscountMode("percent");
+        setDiscountEditorOpen(false);
+        setLeftPanelTab("products");
+    }, []);
+
     useEffect(() => {
         if (!pendingComposerHandoff) {
             consumedComposerHandoffRef.current = null;
+            return;
+        }
+
+        if (pendingComposerHandoff.tableOrder) {
+            const handoffKey = `table-order:${pendingComposerHandoff.tableOrder.id}`;
+            if (consumedComposerHandoffRef.current === handoffKey) {
+                return;
+            }
+
+            consumedComposerHandoffRef.current = handoffKey;
+            if (pendingComposerHandoff.table) {
+                loadTableOrderIntoComposer(pendingComposerHandoff.table, pendingComposerHandoff.tableOrder);
+            }
+            setMobileCartOpen(true);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            onComposerHandoffConsumed?.();
+            toast.success(
+                pendingComposerHandoff.tableOrder.kots.length > 0
+                    ? "Table order loaded"
+                    : "Table order started",
+            );
+            return;
+        }
+
+        if (!pendingComposerHandoff.sale) {
             return;
         }
 
@@ -1997,7 +2224,7 @@ const BillingPage = ({
                 ? "Bill loaded for editing"
                 : "Draft loaded into the composer",
         );
-    }, [loadSaleIntoComposer, onComposerHandoffConsumed, pendingComposerHandoff]);
+    }, [loadSaleIntoComposer, loadTableOrderIntoComposer, onComposerHandoffConsumed, pendingComposerHandoff]);
 
     const handleEditSale = (sale: SaleDetailDTO) => {
         if (isDeviceMode && onPanelTabChange) {
@@ -3064,8 +3291,8 @@ const BillingPage = ({
                                             </span>
                                             <span>
                                                 <span className="block text-sm font-bold">
-                                                    {cartItemCount} item
-                                                    {cartItemCount === 1 ? "" : "s"} in cart
+                                                    {orderItemCount} item
+                                                    {orderItemCount === 1 ? "" : "s"} in cart
                                                 </span>
                                                 <span className="block text-xs text-primary-foreground/75">
                                                     Tap to review order
@@ -3103,18 +3330,28 @@ const BillingPage = ({
                                 <div className="shrink-0 border-b border-border/40 px-2 py-1">
                                     <div className="flex items-center justify-between">
                                         <div className="flex min-w-0 items-baseline gap-1.5">
-                                            <h2 className="text-sm font-bold text-foreground">Current Order</h2>
+                                            <h2 className="text-sm font-bold text-foreground">
+                                                {hasActiveTableOrder ? "Table Order" : "Current Order"}
+                                            </h2>
                                             <span className="truncate text-[10px] text-muted-foreground">
-                                                {cartItemCount === 0
+                                                {orderItemCount === 0
                                                     ? "0 items in cart"
-                                                    : `${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} in cart`}
+                                                    : `${orderItemCount} item${orderItemCount !== 1 ? "s" : ""} in cart`}
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {items.length > 0 && (
+                                            {(items.length > 0 || editingKotId) && (
                                                 <button
                                                     type="button"
-                                                    onClick={resetComposer}
+                                                    onClick={() => {
+                                                        if (hasActiveTableOrder) {
+                                                            setItems([]);
+                                                            setEditingKotId(null);
+                                                            setSelectedKotId(null);
+                                                            return;
+                                                        }
+                                                        resetComposer();
+                                                    }}
                                                     className="min-h-7 rounded-lg px-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-destructive"
                                                 >
                                                     Clear
@@ -3134,14 +3371,25 @@ const BillingPage = ({
 
                                 {/* Cart Items - Scrollable */}
                                 <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-2 py-1.5">
+                                    <PosTableKotList
+                                        tableOrder={activeTableOrder}
+                                        selectedKotId={selectedKotId}
+                                        onSelect={handleSelectTableKot}
+                                    />
                                     {items.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-10 text-center">
                                             <ShoppingCart className="size-10 text-muted-foreground/30" />
                                             <p className="mt-3 text-sm font-medium text-muted-foreground">
-                                                Cart is empty
+                                                {hasActiveTableOrder && tableKotItemCount > 0
+                                                    ? "Ready to bill remaining KOTs"
+                                                    : "Cart is empty"}
                                             </p>
                                             <p className="mt-1 text-xs text-muted-foreground/60">
-                                                Click products to add
+                                                {hasActiveTableOrder
+                                                    ? activeTableOrder?.kots.length
+                                                        ? "Tap a KOT to edit it, or add products for another KOT"
+                                                        : "Add products, then generate the first Table KOT"
+                                                    : "Click products to add"}
                                             </p>
                                         </div>
                                     ) : (
@@ -3336,13 +3584,13 @@ const BillingPage = ({
                                     <div className="mb-2 space-y-0.5 rounded-lg bg-background/40 px-2.5 py-2 text-[11px]">
                                         <div className="flex justify-between text-muted-foreground">
                                             <span>Subtotal</span>
-                                            <span>{formatCurrency(subtotal)}</span>
+                                            <span>{formatCurrency(displaySubtotal)}</span>
                                         </div>
-                                        {lineDiscountTotal > 0 ? (
+                                        {displayLineDiscount > 0 ? (
                                             <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                                                 <span>Item discounts</span>
                                                 <span>
-                                                    -{formatCurrency(lineDiscountTotal)}
+                                                    -{formatCurrency(displayLineDiscount)}
                                                     {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
                                                 </span>
                                             </div>
@@ -3360,7 +3608,7 @@ const BillingPage = ({
                                             <span>Total</span>
                                             <span>{formatCurrency(grandTotal)}</span>
                                         </div>
-                                        {displayedDueTotal > 0 && items.length > 0 ? (
+                                        {displayedDueTotal > 0 && (items.length > 0 || canPlaceTableBill) ? (
                                             <div className="flex justify-between text-amber-600 dark:text-amber-400">
                                                 <span>Due after bill</span>
                                                 <span>{formatCurrency(displayedDueTotal)}</span>
@@ -3373,17 +3621,34 @@ const BillingPage = ({
                                             isDeviceMode,
                                             kotSystemEnabled: session?.store.kotSystemEnabled === true,
                                             isReplacingSale,
+                                            hasActiveTableOrder,
                                         })}
                                         disabled={
                                             parcelKotMutation.isPending ||
                                             completeSaleMutation.isPending ||
                                             saveDraftMutation.isPending ||
+                                            tableKotMutation.isPending ||
                                             items.length === 0 ||
                                             hasInvalidDiscount
                                         }
                                         isPending={parcelKotMutation.isPending}
                                         onGenerate={submitParcelKot}
                                     />
+
+                                    <div className={tableKotActionAvailable ? "mb-2" : undefined}>
+                                        <PosTableKotAction
+                                            available={tableKotActionAvailable}
+                                            disabled={
+                                                tableKotMutation.isPending ||
+                                                completeSaleMutation.isPending ||
+                                                items.length === 0 ||
+                                                hasInvalidDiscount
+                                            }
+                                            isPending={tableKotMutation.isPending}
+                                            editing={Boolean(editingKotId)}
+                                            onGenerate={submitTableKot}
+                                        />
+                                    </div>
 
                                     <div className="grid grid-cols-2 gap-2">
                                         {isReplacingSale ? (
@@ -3396,6 +3661,19 @@ const BillingPage = ({
                                             >
                                                 Cancel edit
                                             </Button>
+                                        ) : hasActiveTableOrder ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="h-9 rounded-lg text-xs font-semibold"
+                                                disabled={
+                                                    tableKotMutation.isPending ||
+                                                    completeSaleMutation.isPending
+                                                }
+                                                onClick={returnToTables}
+                                            >
+                                                Tables
+                                            </Button>
                                         ) : (
                                             <Button
                                                 type="button"
@@ -3405,6 +3683,7 @@ const BillingPage = ({
                                                     saveDraftMutation.isPending ||
                                                     completeSaleMutation.isPending ||
                                                     parcelKotMutation.isPending ||
+                                                    tableKotMutation.isPending ||
                                                     items.length === 0 ||
                                                     hasInvalidDiscount
                                                 }
@@ -3424,9 +3703,15 @@ const BillingPage = ({
                                                 completeSaleMutation.isPending ||
                                                 parcelKotMutation.isPending ||
                                                 saveDraftMutation.isPending ||
-                                                items.length === 0
+                                                tableKotMutation.isPending ||
+                                                hasInvalidDiscount ||
+                                                (hasActiveTableOrder ? !canPlaceTableBill : items.length === 0)
                                             }
                                             onClick={() => {
+                                                if (hasActiveTableOrder && (items.length > 0 || editingKotId)) {
+                                                    toast.error("Generate KOT before placing the table bill");
+                                                    return;
+                                                }
                                                 setPlaceOrderDialogOpen(true);
                                             }}
                                         >
@@ -3540,7 +3825,7 @@ const BillingPage = ({
                                         ? "Add phone and name, then save"
                                         : customerPickerOpen
                                           ? "Search by name or phone · optional for paid bills"
-                                          : `${cartItemCount} ${cartItemCount === 1 ? "item" : "items"} in this order`}
+                                          : `${orderItemCount} ${orderItemCount === 1 ? "item" : "items"} in this order`}
                                 </DialogDescription>
                             </div>
                         </div>
@@ -4022,18 +4307,18 @@ const BillingPage = ({
                                 <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                                     <span>Order total</span>
                                     <span>
-                                        {cartItemCount} {cartItemCount === 1 ? "item" : "items"}
+                                        {orderItemCount} {orderItemCount === 1 ? "item" : "items"}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between text-muted-foreground">
                                     <span>Subtotal</span>
-                                    <span>{formatCurrency(subtotal)}</span>
+                                    <span>{formatCurrency(displaySubtotal)}</span>
                                 </div>
-                                {lineDiscountTotal > 0 ? (
+                                {displayLineDiscount > 0 ? (
                                     <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
                                         <span>Item discounts</span>
                                         <span>
-                                            -{formatCurrency(lineDiscountTotal)}
+                                            -{formatCurrency(displayLineDiscount)}
                                             {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
                                         </span>
                                     </div>

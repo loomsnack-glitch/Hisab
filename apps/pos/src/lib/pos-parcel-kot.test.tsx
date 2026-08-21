@@ -33,6 +33,14 @@ describe("Parcel KOT POS action", () => {
         isReplacingSale: true,
       }),
     ).toBe(false);
+    expect(
+      isParcelKotActionVisible({
+        isDeviceMode: true,
+        kotSystemEnabled: true,
+        isReplacingSale: false,
+        hasActiveTableOrder: true,
+      }),
+    ).toBe(false);
   });
 
   test("renders the Parcel KOT action when the KOT System is enabled", () => {

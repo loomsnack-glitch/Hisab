@@ -18,12 +18,21 @@ import {
 } from "@repo/types";
 import * as billingRepository from "@/modules/tenant/billing/billing.repository";
 import * as billingService from "@/modules/tenant/billing/billing.service";
+import * as kotService from "@/modules/tenant/kot/kot.service";
 import * as tableRepository from "./table-service.repository";
 
 const defaultPosition = { x: 0.05, y: 0.05 } as const;
 
 const isActiveDraftTableState = (state: ServiceTableDTO["state"]) =>
   state === "engaged" || state === "ready_to_bill";
+
+const usesKotTableOrders = async (session: DeviceSessionDTO) => {
+  const store = await organizationRepository.getStoreById(
+    session.organization.id,
+    session.store.id,
+  );
+  return Boolean(store?.kotSystemEnabled && store?.tableManagementEnabled);
+};
 
 type StoreScopeResult =
   | { ok: true }
@@ -205,6 +214,10 @@ export const startServiceTableOrderForDevice = async (
   session: DeviceSessionDTO,
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  if (await usesKotTableOrders(session)) {
+    return kotService.startActiveTableOrderForDevice(session, tableId);
+  }
+
   const result = await pg.begin(async (tx) => {
     const table = await tableRepository.lockServiceTableForDevice(
       session.organization.id,
@@ -213,7 +226,7 @@ export const startServiceTableOrderForDevice = async (
       tx,
     );
     if (!table) return { kind: "not_found" as const };
-    if (table.state !== "allocated" || table.currentSaleId)
+    if (table.state !== "allocated" || table.currentSaleId || table.currentTableOrderId)
       return { kind: "conflict" as const };
 
     const saleId = crypto.randomUUID();
@@ -300,6 +313,10 @@ export const getServiceTableOrderForDevice = async (
   session: DeviceSessionDTO,
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  if (await usesKotTableOrders(session)) {
+    return kotService.getActiveTableOrderForDevice(session, tableId);
+  }
+
   const table = await tableRepository.getServiceTableById(
     session.organization.id,
     session.store.id,
@@ -351,6 +368,9 @@ export const cancelServiceTableOrderForDevice = async (
   session: DeviceSessionDTO,
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  if (await usesKotTableOrders(session)) {
+    return kotService.discardActiveTableOrderForDevice(session, tableId);
+  }
   const result = await pg.begin(async (tx) => {
     const table = await tableRepository.lockServiceTableForDevice(
       session.organization.id,

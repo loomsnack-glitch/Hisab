@@ -7,12 +7,14 @@ import type {
     CreateKotItemBundleComponentREPO,
     CreateKotItemREPO,
     CreateKotREPO,
+    CreateTableOrderREPO,
     KotDTO,
     KotItemAddOnDTO,
     KotItemBundleComponentAddOnDTO,
     KotItemBundleComponentDTO,
     KotItemDTO,
     KotNumberResetPeriod,
+    TableOrderDTO,
 } from "@repo/types";
 import {
     DEFAULT_SALE_NUMBER_TIMEZONE,
@@ -24,7 +26,55 @@ const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 
 const mapKot = (row: Record<string, unknown>, items: KotItemDTO[] = []): KotDTO => ({
     ...mapRow<Omit<KotDTO, "items">>(row),
+    saleId: (row.sale_id as string | null | undefined) ?? null,
+    tableOrderId: (row.table_order_id as string | null | undefined) ?? null,
     items,
+});
+
+const remainingTotalsFromKots = (kots: KotDTO[]) => {
+    const remainingSubtotal = kots.reduce(
+        (sum, kot) =>
+            sum +
+            kot.items.reduce(
+                (itemSum, item) =>
+                    itemSum +
+                    Number(item.lineSubtotal ?? 0) +
+                    item.addOns.reduce((addOnSum, addOn) => addOnSum + Number(addOn.lineSubtotal ?? 0), 0),
+                0,
+            ),
+        0,
+    );
+    const remainingDiscountTotal = kots.reduce(
+        (sum, kot) =>
+            sum +
+            kot.items.reduce(
+                (itemSum, item) =>
+                    itemSum +
+                    Number(item.discountAmount ?? 0) +
+                    item.addOns.reduce((addOnSum, addOn) => addOnSum + Number(addOn.discountAmount ?? 0), 0),
+                0,
+            ),
+        0,
+    );
+    return {
+        remainingSubtotal,
+        remainingDiscountTotal,
+        remainingGrandTotal: remainingSubtotal - remainingDiscountTotal,
+    };
+};
+
+const mapTableOrder = (
+    row: Record<string, unknown>,
+    kots: KotDTO[] = [],
+): TableOrderDTO => ({
+    ...mapRow<Omit<TableOrderDTO, "kots" | "remainingSubtotal" | "remainingDiscountTotal" | "remainingGrandTotal">>(
+        row,
+    ),
+    customerId: (row.customer_id as string | null | undefined) ?? null,
+    saleId: (row.sale_id as string | null | undefined) ?? null,
+    notes: (row.notes as string | null | undefined) ?? null,
+    kots,
+    ...remainingTotalsFromKots(kots),
 });
 
 export const allocateKotNumber = async (
@@ -336,4 +386,231 @@ export const getKotBySaleId = async (
     }
 
     return mapKot(result, await getKotItemsByKotId(String(result.id), tx));
+};
+
+export const getKotsByTableOrderId = async (
+    organizationId: string,
+    storeId: string,
+    tableOrderId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<KotDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM kots
+        WHERE table_order_id = ${tableOrderId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+        ORDER BY created_at ASC, kot_sequence_number ASC
+    `;
+    const kots: KotDTO[] = [];
+    for (const result of results) {
+        kots.push(mapKot(result, await getKotItemsByKotId(String(result.id), tx)));
+    }
+    return kots;
+};
+
+export const createTableOrder = async (
+    tableOrder: CreateTableOrderREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<TableOrderDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO table_orders ${camelToSnakeSql(tableOrder)}
+        RETURNING *
+    `;
+    return result ? mapTableOrder(result) : null;
+};
+
+export const getTableOrderById = async (
+    organizationId: string,
+    storeId: string,
+    tableOrderId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<TableOrderDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM table_orders
+        WHERE id = ${tableOrderId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+    if (!result) {
+        return null;
+    }
+    return mapTableOrder(
+        result,
+        await getKotsByTableOrderId(organizationId, storeId, tableOrderId, tx),
+    );
+};
+
+export const lockActiveTableOrderForTable = async (
+    organizationId: string,
+    storeId: string,
+    tableId: string,
+    tx: Bun.TransactionSQL,
+): Promise<TableOrderDTO | null> => {
+    const [result] = await tx`
+        SELECT *
+        FROM table_orders
+        WHERE service_table_id = ${tableId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND status = 'active'
+        FOR UPDATE
+    `;
+    if (!result) {
+        return null;
+    }
+    return mapTableOrder(
+        result,
+        await getKotsByTableOrderId(organizationId, storeId, String(result.id), tx),
+    );
+};
+
+export const updateTableOrderCustomer = async (
+    organizationId: string,
+    storeId: string,
+    tableOrderId: string,
+    customerId: string | null,
+    notes: string | null | undefined,
+    updatedByDeviceId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<TableOrderDTO | null> => {
+    const db = tx || pg;
+    const [result] =
+        notes === undefined
+            ? await db`
+                UPDATE table_orders
+                SET customer_id = ${customerId},
+                    updated_by_device_id = ${updatedByDeviceId},
+                    updated_at = NOW()
+                WHERE id = ${tableOrderId}
+                  AND organization_id = ${organizationId}
+                  AND store_id = ${storeId}
+                  AND status = 'active'
+                RETURNING *
+              `
+            : await db`
+                UPDATE table_orders
+                SET customer_id = ${customerId},
+                    notes = ${notes},
+                    updated_by_device_id = ${updatedByDeviceId},
+                    updated_at = NOW()
+                WHERE id = ${tableOrderId}
+                  AND organization_id = ${organizationId}
+                  AND store_id = ${storeId}
+                  AND status = 'active'
+                RETURNING *
+              `;
+    if (!result) {
+        return null;
+    }
+    return mapTableOrder(
+        result,
+        await getKotsByTableOrderId(organizationId, storeId, tableOrderId, tx),
+    );
+};
+
+export const markTableOrderCheckedOut = async (
+    organizationId: string,
+    storeId: string,
+    tableOrderId: string,
+    saleId: string,
+    updatedByDeviceId: string,
+    tx: Bun.TransactionSQL,
+): Promise<TableOrderDTO | null> => {
+    const [result] = await tx`
+        UPDATE table_orders
+        SET status = 'checked_out',
+            sale_id = ${saleId},
+            updated_by_device_id = ${updatedByDeviceId},
+            updated_at = NOW()
+        WHERE id = ${tableOrderId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND status = 'active'
+        RETURNING *
+    `;
+    if (!result) {
+        return null;
+    }
+    return mapTableOrder(
+        result,
+        await getKotsByTableOrderId(organizationId, storeId, tableOrderId, tx),
+    );
+};
+
+export const discardTableOrder = async (
+    organizationId: string,
+    storeId: string,
+    tableOrderId: string,
+    updatedByDeviceId: string,
+    tx: Bun.TransactionSQL,
+): Promise<boolean> => {
+    const [result] = await tx`
+        UPDATE table_orders
+        SET status = 'discarded',
+            updated_by_device_id = ${updatedByDeviceId},
+            updated_at = NOW()
+        WHERE id = ${tableOrderId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND status = 'active'
+        RETURNING id
+    `;
+    return Boolean(result);
+};
+
+export const linkKotsToSale = async (
+    organizationId: string,
+    storeId: string,
+    tableOrderId: string,
+    saleId: string,
+    updatedByDeviceId: string,
+    tx: Bun.TransactionSQL,
+): Promise<void> => {
+    await tx`
+        UPDATE kots
+        SET sale_id = ${saleId},
+            updated_by_device_id = ${updatedByDeviceId},
+            updated_at = NOW()
+        WHERE table_order_id = ${tableOrderId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+};
+
+export const replaceKotItems = async (
+    kotId: string,
+    items: CreateKotItemREPO[],
+    updatedByDeviceId: string,
+    tx: Bun.TransactionSQL,
+): Promise<KotDTO | null> => {
+    await tx`
+        UPDATE kots
+        SET updated_by_device_id = ${updatedByDeviceId},
+            updated_at = NOW()
+        WHERE id = ${kotId}
+    `;
+    await tx`
+        DELETE FROM kot_items
+        WHERE kot_id = ${kotId}
+    `;
+    for (const item of items) {
+        const created = await createKotItem(item, tx);
+        if (!created) {
+            throw new Error("Failed to replace KOT items");
+        }
+    }
+    const [result] = await tx`
+        SELECT *
+        FROM kots
+        WHERE id = ${kotId}
+    `;
+    if (!result) {
+        return null;
+    }
+    return mapKot(result, await getKotItemsByKotId(kotId, tx));
 };

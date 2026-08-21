@@ -17,7 +17,7 @@ const store = {
     organizationId,
     name: "Main Store",
     kotSystemEnabled: true,
-    tableManagementEnabled: false,
+    tableManagementEnabled: true,
 };
 const deviceSession = {
     device: {
@@ -83,6 +83,25 @@ const createdSaleItems: Array<Record<string, unknown>> = [];
 const createdSaleItemAddOns: Array<Record<string, unknown>> = [];
 const createdPayments: Array<Record<string, unknown>> = [];
 const createdKots: Array<Record<string, unknown>> = [];
+const createdTableOrders: Array<Record<string, unknown>> = [];
+const tableId = "99999999-9999-4999-8999-999999999999";
+let serviceTable = {
+    id: tableId,
+    organizationId,
+    storeId,
+    serviceAreaId: null,
+    tableLabel: "A1",
+    capacity: 4,
+    position: { x: 0.05, y: 0.05 },
+    state: "allocated" as const,
+    currentSaleId: null as string | null,
+    currentTableOrderId: null as string | null,
+    currentSaleTotal: null as number | null,
+    createdBy: userId,
+    updatedBy: null as string | null,
+    createdAt: now,
+    updatedAt: now,
+};
 
 const createSale = mock(async (data: Record<string, unknown>) => {
     const sale = {
@@ -184,18 +203,156 @@ const allocateKotNumber = mock(async () => {
 const getKotBySaleId = mock(async (_organizationId: string, _storeId: string, saleId: string) =>
     createdKots.find((kot) => kot.saleId === saleId) ?? null,
 );
+const getKotById = mock(async (_organizationId: string, _storeId: string, kotId: string) =>
+    createdKots.find((kot) => kot.id === kotId) ?? null,
+);
 const createKot = mock(async (data: Record<string, unknown>) => {
-    const kot = { ...data, createdAt: now, updatedAt: now };
+    const kot = { ...data, createdAt: now, updatedAt: now, items: data.items ?? [] };
     createdKots.push(kot);
     return kot;
 });
+const remainingTotals = (kots: Array<Record<string, unknown>>) => {
+    const remainingSubtotal = kots.reduce((sum, kot) => {
+        const items = (kot.items as Array<{ lineSubtotal?: number; addOns?: Array<{ lineSubtotal?: number }> }>) ?? [];
+        return (
+            sum +
+            items.reduce(
+                (itemSum, item) =>
+                    itemSum +
+                    Number(item.lineSubtotal ?? 0) +
+                    (item.addOns ?? []).reduce((addOnSum, addOn) => addOnSum + Number(addOn.lineSubtotal ?? 0), 0),
+                0,
+            )
+        );
+    }, 0);
+    const remainingDiscountTotal = kots.reduce((sum, kot) => {
+        const items = (kot.items as Array<{ discountAmount?: number; addOns?: Array<{ discountAmount?: number }> }>) ?? [];
+        return (
+            sum +
+            items.reduce(
+                (itemSum, item) =>
+                    itemSum +
+                    Number(item.discountAmount ?? 0) +
+                    (item.addOns ?? []).reduce((addOnSum, addOn) => addOnSum + Number(addOn.discountAmount ?? 0), 0),
+                0,
+            )
+        );
+    }, 0);
+    return {
+        remainingSubtotal,
+        remainingDiscountTotal,
+        remainingGrandTotal: remainingSubtotal - remainingDiscountTotal,
+    };
+};
+const hydrateTableOrder = (order: Record<string, unknown>) => {
+    const kots = createdKots.filter((kot) => kot.tableOrderId === order.id);
+    return { ...order, kots, ...remainingTotals(kots) };
+};
+const createTableOrder = mock(async (data: Record<string, unknown>) => {
+    const order = { ...data, saleId: null, notes: data.notes ?? null, createdAt: now, updatedAt: now };
+    createdTableOrders.push(order);
+    return hydrateTableOrder(order);
+});
+const getTableOrderById = mock(async (_organizationId: string, _storeId: string, tableOrderId: string) => {
+    const order = createdTableOrders.find((row) => row.id === tableOrderId);
+    return order ? hydrateTableOrder(order) : null;
+});
+const lockActiveTableOrderForTable = mock(async (_organizationId: string, _storeId: string, requestedTableId: string) => {
+    const order = createdTableOrders.find(
+        (row) => row.serviceTableId === requestedTableId && row.status === "active",
+    );
+    return order ? hydrateTableOrder(order) : null;
+});
+const updateTableOrderCustomer = mock(
+    async (
+        _organizationId: string,
+        _storeId: string,
+        tableOrderId: string,
+        customerId: string | null,
+        notes: string | null | undefined,
+    ) => {
+        const order = createdTableOrders.find((row) => row.id === tableOrderId);
+        if (!order) return null;
+        order.customerId = customerId;
+        if (notes !== undefined) order.notes = notes;
+        return hydrateTableOrder(order);
+    },
+);
+const markTableOrderCheckedOut = mock(
+    async (_organizationId: string, _storeId: string, tableOrderId: string, saleId: string) => {
+        const order = createdTableOrders.find((row) => row.id === tableOrderId);
+        if (!order) return null;
+        order.status = "checked_out";
+        order.saleId = saleId;
+        return hydrateTableOrder(order);
+    },
+);
+const discardTableOrder = mock(async (_organizationId: string, _storeId: string, tableOrderId: string) => {
+    const order = createdTableOrders.find((row) => row.id === tableOrderId);
+    if (!order || order.status !== "active") return false;
+    order.status = "discarded";
+    return true;
+});
+const linkKotsToSale = mock(async (_organizationId: string, _storeId: string, tableOrderId: string, saleId: string) => {
+    for (const kot of createdKots.filter((row) => row.tableOrderId === tableOrderId)) {
+        kot.saleId = saleId;
+    }
+});
+const replaceKotItems = mock(async (kotId: string, items: unknown[]) => {
+    const kot = createdKots.find((row) => row.id === kotId);
+    if (!kot) return null;
+    kot.items = items;
+    return kot;
+});
+const lockServiceTableForDevice = mock(async () => ({ ...serviceTable }));
+const getServiceTableById = mock(async () => ({ ...serviceTable }));
+const attachTableOrder = mock(async (_o: string, _s: string, _t: string, tableOrderId: string) => {
+    serviceTable = {
+        ...serviceTable,
+        state: "engaged",
+        currentTableOrderId: tableOrderId,
+        currentSaleId: null,
+        currentSaleTotal: 0,
+    };
+    return { ...serviceTable };
+});
+const clearTableOrder = mock(async () => {
+    serviceTable = {
+        ...serviceTable,
+        state: "free",
+        currentTableOrderId: null,
+        currentSaleId: null,
+        currentSaleTotal: null,
+    };
+    return { ...serviceTable };
+});
+const attachCheckedOutSale = mock(
+    async (
+        _o: string,
+        _s: string,
+        _t: string,
+        _tableOrderId: string,
+        saleId: string,
+        state: "payment_due" | "paid",
+    ) => {
+        serviceTable = {
+            ...serviceTable,
+            state,
+            currentSaleId: saleId,
+            currentTableOrderId: null,
+            currentSaleTotal: 90,
+        };
+        return { ...serviceTable };
+    },
+);
 
 let kotSystemEnabled = true;
+let tableManagementEnabled = true;
 const getStoreById = mock(async (requestedOrganizationId: string, requestedStoreId: string) => {
     if (requestedOrganizationId !== organizationId || requestedStoreId !== storeId) {
         return null;
     }
-    return { ...store, kotSystemEnabled };
+    return { ...store, kotSystemEnabled, tableManagementEnabled };
 });
 
 mock.module("@/config/db", () => ({
@@ -243,6 +400,11 @@ mock.module("@/modules/tenant/billing/billing.repository", () => ({
 
 mock.module("@/modules/tenant/table-service/table-service.repository", () => ({
     lockServiceTableForSale: mock(async () => null),
+    lockServiceTableForDevice,
+    getServiceTableById,
+    attachTableOrder,
+    clearTableOrder,
+    attachCheckedOutSale,
     markReadyDraftAsEngaged: mock(async () => false),
     setCommittedSaleTableState: mock(async () => null),
     syncCommittedSalePaymentState: mock(async () => null),
@@ -252,7 +414,18 @@ mock.module("./kot.repository", () => ({
     allocateKotNumber,
     createKot,
     getKotBySaleId,
-    getKotById: mock(async () => null),
+    getKotById,
+    createTableOrder,
+    getTableOrderById,
+    lockActiveTableOrderForTable,
+    updateTableOrderCustomer,
+    markTableOrderCheckedOut,
+    discardTableOrder,
+    linkKotsToSale,
+    replaceKotItems,
+    getKotsByTableOrderId: mock(async (_organizationId: string, _storeId: string, tableOrderId: string) =>
+        createdKots.filter((kot) => kot.tableOrderId === tableOrderId),
+    ),
 }));
 
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
@@ -271,9 +444,18 @@ describe("Parcel KOT generation", () => {
         createdSaleItemAddOns.length = 0;
         createdPayments.length = 0;
         createdKots.length = 0;
+        createdTableOrders.length = 0;
         saleSequence = 0;
         kotSequence = 0;
         kotSystemEnabled = true;
+        tableManagementEnabled = true;
+        serviceTable = {
+            ...serviceTable,
+            state: "allocated",
+            currentSaleId: null,
+            currentTableOrderId: null,
+            currentSaleTotal: null,
+        };
         createSale.mockClear();
         createSaleItem.mockClear();
         createSaleItemAddOn.mockClear();
@@ -433,5 +615,237 @@ describe("Parcel KOT generation", () => {
         expect(collected.status).toBe("success");
         expect(collected.data?.sale.paymentStatus).toBe("paid");
         expect(createdPayments).toHaveLength(1);
+    });
+});
+
+describe("Table Order KOT workflow", () => {
+    let getProductByIdSpy: ReturnType<typeof spyOn>;
+    let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
+    let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
+    let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+        createdSales.length = 0;
+        createdSaleItems.length = 0;
+        createdSaleItemAddOns.length = 0;
+        createdPayments.length = 0;
+        createdKots.length = 0;
+        createdTableOrders.length = 0;
+        saleSequence = 0;
+        kotSequence = 0;
+        kotSystemEnabled = true;
+        tableManagementEnabled = true;
+        serviceTable = {
+            ...serviceTable,
+            state: "allocated",
+            currentSaleId: null,
+            currentTableOrderId: null,
+            currentSaleTotal: null,
+        };
+        createSale.mockClear();
+        createKot.mockClear();
+        allocateKotNumber.mockClear();
+        createTableOrder.mockClear();
+
+        getProductByIdSpy = spyOn(catalogRepository, "getProductById").mockResolvedValue(product as never);
+        getSelectableAttachmentSpy = spyOn(
+            catalogRepository,
+            "getSelectableProductAddOnAttachmentByProductAndAddOn",
+        ).mockResolvedValue(selectableAttachment as never);
+        getComboChoiceGroupsSpy = spyOn(catalogRepository, "getComboChoiceGroupsByProductId").mockResolvedValue(
+            [] as never,
+        );
+        getComboChoiceOptionsSpy = spyOn(catalogRepository, "getComboChoiceOptionsByGroupIds").mockResolvedValue(
+            [] as never,
+        );
+    });
+
+    afterEach(() => {
+        getProductByIdSpy.mockRestore();
+        getSelectableAttachmentSpy.mockRestore();
+        getComboChoiceGroupsSpy.mockRestore();
+        getComboChoiceOptionsSpy.mockRestore();
+    });
+
+    test("starts one Active Table Order without a Customer or Draft Sale", async () => {
+        const response = await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.sale ?? null).toBe(null);
+        expect(response.data?.tableOrder?.status).toBe("active");
+        expect(response.data?.tableOrder?.customerId ?? null).toBe(null);
+        expect(response.data?.tableOrder?.serviceTableId).toBe(tableId);
+        expect(response.data?.table.state).toBe("engaged");
+        expect(response.data?.table.currentTableOrderId).toBe(response.data?.tableOrder?.id);
+        expect(createSale).not.toHaveBeenCalled();
+    });
+
+    test("rejects a second Active Table Order on the same Service Table", async () => {
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        const second = await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+
+        expect(second.status).toBe("error");
+        expect(second.code).toBe(409);
+        expect(createTableOrder).toHaveBeenCalledTimes(1);
+    });
+
+    test("requires both the KOT System and Table Management to generate a Table KOT", async () => {
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        tableManagementEnabled = false;
+
+        const response = await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(403);
+        expect(response.message).toContain("Table Management");
+        expect(createKot).not.toHaveBeenCalled();
+    });
+
+    test("generates the first Table KOT with a Store-local KOT Number and trusted snapshots", async () => {
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+
+        const response = await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [{ addOnId, quantity: 1 }] }],
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.tableOrder?.kots).toHaveLength(1);
+        expect(response.data?.tableOrder?.kots[0]?.kotType).toBe("table");
+        expect(response.data?.tableOrder?.kots[0]?.kotNumber).toBe("KOT-001");
+        expect(response.data?.tableOrder?.kots[0]?.saleId ?? null).toBe(null);
+        expect(response.data?.tableOrder?.kots[0]?.items[0]?.unitPriceSnapshot).toBe(100);
+        expect(response.data?.tableOrder?.kots[0]?.items[0]?.addOns[0]?.unitPriceSnapshot).toBe(20);
+        expect(response.data?.table.state).toBe("engaged");
+        expect(createSale).not.toHaveBeenCalled();
+    });
+
+    test("lets another same-Store device continue the Active Table Order", async () => {
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+
+        const otherDevice = {
+            ...deviceSession,
+            device: { ...deviceSession.device, id: "18181818-1818-4181-8181-181818181818", name: "Floor" },
+        } satisfies DeviceSessionDTO;
+
+        const response = await kotService.getActiveTableOrderForDevice(otherDevice, tableId);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.tableOrder?.kots).toHaveLength(1);
+        expect(response.data?.tableOrder?.kots[0]?.kotNumber).toBe("KOT-001");
+        expect(response.data?.sale ?? null).toBe(null);
+    });
+
+    test("checks out one table-linked Sale from remaining KOT snapshots without repricing", async () => {
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        getProductByIdSpy.mockResolvedValue({ ...product, price: 500, discount: 0 } as never);
+
+        const response = await kotService.checkoutTableOrderForDevice(deviceSession, tableId, {
+            requestId: "91919191-9191-4919-8919-919191919191",
+            payments: [],
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.sale?.status).toBe("completed");
+        expect(response.data?.sale?.paymentStatus).toBe("pending");
+        expect(response.data?.sale?.serviceTableId).toBe(tableId);
+        expect(response.data?.sale?.items[0]?.unitPriceSnapshot).toBe(100);
+        expect(response.data?.sale?.grandTotal).toBe(90);
+        expect(response.data?.table.state).toBe("payment_due");
+        expect(response.data?.table.currentSaleId).toBe(response.data?.sale?.id);
+        expect(response.data?.tableOrder?.status).toBe("checked_out");
+    });
+
+    test("preserves paid table-release after a fully paid table checkout", async () => {
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+
+        const response = await kotService.checkoutTableOrderForDevice(deviceSession, tableId, {
+            requestId: "92929292-9292-4929-8929-929292929292",
+            payments: [{ amount: 90, method: "cash" }],
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.sale?.paymentStatus).toBe("paid");
+        expect(response.data?.table.state).toBe("paid");
+        expect(createdPayments).toHaveLength(1);
+    });
+
+    test("edits a selected KOT so a removed item is excluded from the final Sale", async () => {
+        const misalId = "12121212-1212-4121-8121-121212121212";
+        getProductByIdSpy.mockImplementation(async (_organizationId: string, requestedProductId: string) => {
+            if (requestedProductId === misalId) {
+                return { ...product, id: misalId, name: "Misal Pav", price: 80, discount: 0 };
+            }
+            return { ...product, name: "Pav Bhaji" };
+        });
+
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const kotId = createdKots[0]?.id as string;
+
+        const edited = await kotService.updateTableKotForDevice(deviceSession, tableId, kotId, {
+            items: [{ productId: misalId, quantity: 1, addOns: [] }],
+        });
+
+        expect(edited.status).toBe("success");
+        expect(edited.data?.tableOrder?.kots[0]?.items).toHaveLength(1);
+        expect(edited.data?.tableOrder?.kots[0]?.items[0]?.productNameSnapshot).toBe("Misal Pav");
+
+        const checkedOut = await kotService.checkoutTableOrderForDevice(deviceSession, tableId, {
+            requestId: "93939393-9393-4939-8939-939393939393",
+            payments: [],
+        });
+
+        expect(checkedOut.data?.sale?.items).toHaveLength(1);
+        expect(checkedOut.data?.sale?.items[0]?.productNameSnapshot).toBe("Misal Pav");
+        expect(checkedOut.data?.sale?.items[0]?.unitPriceSnapshot).toBe(80);
+        expect(checkedOut.data?.sale?.grandTotal).toBe(80);
+    });
+
+    test("creates a later Table KOT and aggregates remaining snapshot items into one Sale", async () => {
+        const misalId = "13131313-1313-4131-8131-131313131313";
+        getProductByIdSpy.mockImplementation(async (_organizationId: string, requestedProductId: string) => {
+            if (requestedProductId === misalId) {
+                return { ...product, id: misalId, name: "Misal Pav", price: 80, discount: 0 };
+            }
+            return product;
+        });
+
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+        const second = await kotService.createTableKotForDevice(deviceSession, tableId, {
+            items: [{ productId: misalId, quantity: 1, addOns: [] }],
+        });
+
+        expect(second.data?.tableOrder?.kots).toHaveLength(2);
+        expect(second.data?.tableOrder?.kots[0]?.kotNumber).toBe("KOT-001");
+        expect(second.data?.tableOrder?.kots[1]?.kotNumber).toBe("KOT-002");
+        expect(second.data?.tableOrder?.kots[1]?.items[0]?.productNameSnapshot).toBe("Misal Pav");
+
+        getProductByIdSpy.mockResolvedValue({ ...product, price: 500, discount: 0 } as never);
+
+        const checkedOut = await kotService.checkoutTableOrderForDevice(deviceSession, tableId, {
+            requestId: "94949494-9494-4949-8949-949494949494",
+            payments: [],
+        });
+
+        expect(checkedOut.data?.sale?.items).toHaveLength(2);
+        expect(checkedOut.data?.sale?.items.map((item) => item.unitPriceSnapshot)).toEqual([100, 80]);
+        expect(checkedOut.data?.sale?.grandTotal).toBe(170);
+        expect(createdSales).toHaveLength(1);
     });
 });

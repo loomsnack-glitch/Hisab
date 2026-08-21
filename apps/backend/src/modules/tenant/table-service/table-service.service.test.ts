@@ -22,6 +22,7 @@ const table: ServiceTableDTO = {
   position: { x: 0.05, y: 0.05 },
   state: "free",
   currentSaleId: null,
+  currentTableOrderId: null,
   currentSaleTotal: null,
   createdBy: userId,
   updatedBy: null,
@@ -269,6 +270,55 @@ mock.module("@/modules/tenant/billing/billing.repository", () => ({
 mock.module("@/modules/tenant/billing/billing.service", () => ({
   getSaleDetailsForDevice,
 }));
+const startActiveTableOrderForDevice = mock(async () => ({
+  status: "success" as const,
+  data: {
+    table: {
+      ...allocatedTable,
+      state: "engaged" as const,
+      currentSaleId: null,
+      currentTableOrderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+    },
+    sale: null,
+    tableOrder: {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+      status: "active" as const,
+      kots: [],
+    },
+  },
+  message: "Table order started",
+  code: 201,
+}));
+const getActiveTableOrderForDevice = mock(async () => ({
+  status: "success" as const,
+  data: {
+    table: {
+      ...allocatedTable,
+      state: "engaged" as const,
+      currentSaleId: null,
+      currentTableOrderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+    },
+    sale: null,
+    tableOrder: {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+      status: "active" as const,
+      kots: [],
+    },
+  },
+  message: "Table order loaded",
+  code: 200,
+}));
+const discardActiveTableOrderForDevice = mock(async () => ({
+  status: "success" as const,
+  data: { table: allocatedTable },
+  message: "Table order cancelled",
+  code: 200,
+}));
+mock.module("@/modules/tenant/kot/kot.service", () => ({
+  startActiveTableOrderForDevice,
+  getActiveTableOrderForDevice,
+  discardActiveTableOrderForDevice,
+}));
 
 const tableService = await import("./table-service.service");
 
@@ -329,6 +379,9 @@ describe("Service Table application service", () => {
     lockDraftSale.mockClear();
     deleteDraftSale.mockClear();
     getSaleDetailsForDevice.mockClear();
+    startActiveTableOrderForDevice.mockClear();
+    getActiveTableOrderForDevice.mockClear();
+    discardActiveTableOrderForDevice.mockClear();
     begin.mockClear();
   });
 
@@ -515,6 +568,28 @@ describe("Service Table application service", () => {
       expect.any(String),
       deviceSession.device.id,
       expect.anything(),
+    );
+  });
+
+  test("starts an Active Table Order instead of a Draft Sale when both Store features are enabled", async () => {
+    getStoreById.mockResolvedValueOnce({
+      ...store,
+      kotSystemEnabled: true,
+      tableManagementEnabled: true,
+    });
+
+    const response = await tableService.startServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response.status).toBe("success");
+    expect(response.data?.sale).toBe(null);
+    expect(response.data?.tableOrder?.status).toBe("active");
+    expect(createSale).not.toHaveBeenCalled();
+    expect(startActiveTableOrderForDevice).toHaveBeenCalledWith(
+      deviceSession,
+      tableId,
     );
   });
 

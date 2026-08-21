@@ -123,13 +123,13 @@ const PosTablesWorkspace = () => {
         ? startPosServiceTableOrder(tableId)
         : getPosServiceTableOrder(tableId),
     onSuccess: async (response) => {
-      if (response.status !== "success" || !response.data?.sale) {
+      if (response.status !== "success" || (!response.data?.sale && !response.data?.tableOrder)) {
         toast.error(response.message);
         return;
       }
       if (
         response.data.table.state === "engaged" &&
-        response.data.table.currentSaleId
+        (response.data.table.currentSaleId || response.data.table.currentTableOrderId)
       ) {
         await queryClient.invalidateQueries({
           queryKey: serviceTableKeys.pos(
@@ -139,7 +139,9 @@ const PosTablesWorkspace = () => {
         });
       }
       onPanelTabChange("products", {
-        sale: response.data.sale,
+        sale: response.data.sale ?? null,
+        table: response.data.table,
+        tableOrder: response.data.tableOrder ?? null,
         editSaleId: null,
       });
     },

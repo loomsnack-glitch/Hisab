@@ -40,6 +40,7 @@ export const ServiceTableDTOSchema = z.object({
   position: ServiceTablePositionSchema,
   state: ServiceTableStateSchema,
   currentSaleId: z.uuid("Invalid current sale id").nullable(),
+  currentTableOrderId: z.uuid("Invalid current table order id").nullable().optional().default(null),
   currentSaleTotal: z.number().nullable(),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable(),

@@ -23,6 +23,10 @@ import {
   WhatsAppSendConversationTextSchema,
   WhatsAppDueReminderRequestSchema,
   CreateParcelKotSchema,
+  CreateTableKotSchema,
+  UpdateTableKotSchema,
+  UpdateTableOrderSchema,
+  CheckoutTableOrderSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { deviceAuthMiddleware } from "@/middlewares/device-auth.middleware";
@@ -178,6 +182,98 @@ router.delete("/tables/:tableId/order", async (c) => {
     return handleError(FILE_NAME, "cancelServiceTableOrderForDevice", c, error);
   }
 });
+
+router.patch(
+  "/tables/:tableId/order",
+  validateSchema("json", UpdateTableOrderSchema),
+  async (c) => {
+    try {
+      const tableId = c.req.param("tableId");
+      const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+      if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.updateActiveTableOrderForDevice(
+          c.get("authDevice"),
+          tableId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "updateActiveTableOrderForDevice", c, error);
+    }
+  },
+);
+
+router.post(
+  "/tables/:tableId/kots",
+  validateSchema("json", CreateTableKotSchema),
+  async (c) => {
+    try {
+      const tableId = c.req.param("tableId");
+      const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+      if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.createTableKotForDevice(
+          c.get("authDevice"),
+          tableId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "createTableKotForDevice", c, error);
+    }
+  },
+);
+
+router.patch(
+  "/tables/:tableId/kots/:kotId",
+  validateSchema("json", UpdateTableKotSchema),
+  async (c) => {
+    try {
+      const tableId = c.req.param("tableId");
+      const kotId = c.req.param("kotId");
+      const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+      if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+      const invalidKotId = validateUuidParam(kotId, "Invalid KOT id");
+      if (invalidKotId) return c.json(invalidKotId, invalidKotId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.updateTableKotForDevice(
+          c.get("authDevice"),
+          tableId,
+          kotId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "updateTableKotForDevice", c, error);
+    }
+  },
+);
+
+router.post(
+  "/tables/:tableId/checkout",
+  validateSchema("json", CheckoutTableOrderSchema),
+  async (c) => {
+    try {
+      const tableId = c.req.param("tableId");
+      const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+      if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.checkoutTableOrderForDevice(
+          c.get("authDevice"),
+          tableId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "checkoutTableOrderForDevice", c, error);
+    }
+  },
+);
 
 router.post("/tables/:tableId/free-paid", async (c) => {
   try {
