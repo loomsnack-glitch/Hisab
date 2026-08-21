@@ -4,6 +4,11 @@ import {
     resolveBillingInspectionDateRange,
     resolvePlatformReportingPeriod,
     type PlatformBillingInspectionQuerySVC,
+    type PlatformCatalogAddOnDetailResponse,
+    type PlatformCatalogCategoryDetailResponse,
+    type PlatformCatalogInspectionQuerySVC,
+    type PlatformCatalogListResponse,
+    type PlatformCatalogProductDetailResponse,
     type PlatformDashboardQuerySVC,
     type PlatformDashboardResponse,
     type PlatformOrganizationDetailQuerySVC,
@@ -30,6 +35,10 @@ type PlatformReportingRepository = Pick<
     | "getOrganizationDetail"
     | "listOrganizationStores"
     | "getStoreDetail"
+    | "listOrganizationCatalog"
+    | "getOrganizationCatalogProduct"
+    | "getOrganizationCatalogCategory"
+    | "getOrganizationCatalogAddOn"
     | "listOrganizationSales"
     | "getOrganizationSaleContext"
 >;
@@ -73,6 +82,40 @@ const deriveOrderDiscountAmount = (
     discountTotal: number | string | null | undefined,
     lineDiscountTotal: number | string | null | undefined,
 ) => Math.max(Number(discountTotal ?? 0) - Number(lineDiscountTotal ?? 0), 0);
+
+const toCatalogProductSummary = (product: {
+    id: string;
+    name: string;
+    categoryId: string;
+    categoryName: string;
+    price: number;
+    discount: number;
+    status: "active" | "inactive";
+    productType: "single" | "bundle" | "combo";
+    productCode: string | null;
+    productCodeKind: "manufacturer" | "internal_rcn" | null;
+    sortOrder: number;
+    attachmentCount: number;
+    createdAt: string;
+    updatedAt: string;
+}) => ({
+    id: product.id,
+    name: product.name,
+    category: {
+        id: product.categoryId,
+        name: product.categoryName,
+    },
+    price: product.price,
+    discount: product.discount,
+    status: product.status,
+    productType: product.productType,
+    productCode: product.productCode,
+    productCodeKind: product.productCodeKind,
+    sortOrder: product.sortOrder,
+    attachmentCount: product.attachmentCount,
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+});
 
 const buildReceiptPreview = (params: {
     organizationName: string;
@@ -429,6 +472,174 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
         };
     },
 
+    listOrganizationCatalog: async (
+        organizationId: string,
+        query: PlatformCatalogInspectionQuerySVC,
+    ): Promise<ServiceResponse<PlatformCatalogListResponse | null>> => {
+        const catalog = await dependencies.repository.listOrganizationCatalog({
+            organizationId,
+            tab: query.tab,
+            search: query.search ?? "",
+            status: query.status,
+            page: query.page,
+            limit: query.limit,
+        });
+
+        if (!catalog) {
+            return {
+                status: "error",
+                message: "Organization not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Catalog retrieved successfully",
+            data: {
+                tab: query.tab,
+                counts: catalog.counts,
+                categories: catalog.categories.map((category) => ({
+                    id: category.id,
+                    name: category.name,
+                    sortOrder: category.sortOrder,
+                    status: category.status,
+                    productCount: category.productCount,
+                    createdAt: category.createdAt,
+                    updatedAt: category.updatedAt,
+                })),
+                products: catalog.products.map(toCatalogProductSummary),
+                addOns: catalog.addOns.map((addOn) => ({
+                    id: addOn.id,
+                    name: addOn.name,
+                    price: addOn.price,
+                    discount: addOn.discount,
+                    status: addOn.status,
+                    attachmentCount: addOn.attachmentCount,
+                    createdAt: addOn.createdAt,
+                    updatedAt: addOn.updatedAt,
+                })),
+                pagination: {
+                    page: query.page,
+                    limit: query.limit,
+                    totalCount: catalog.totalCount,
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationCatalogProduct: async (
+        organizationId: string,
+        productId: string,
+    ): Promise<ServiceResponse<PlatformCatalogProductDetailResponse | null>> => {
+        const product = await dependencies.repository.getOrganizationCatalogProduct(organizationId, productId);
+        if (!product) {
+            return {
+                status: "error",
+                message: "Product not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Catalog Product retrieved successfully",
+            data: {
+                product: {
+                    ...toCatalogProductSummary(product),
+                    hasImage: product.hasImage,
+                    attachments: product.attachments.map((attachment) => ({
+                        id: attachment.id,
+                        addOnId: attachment.addOnId,
+                        addOnName: attachment.addOnName,
+                        selectionCap: attachment.selectionCap,
+                        status: attachment.status,
+                        addOnPrice: attachment.addOnPrice,
+                        addOnDiscount: attachment.addOnDiscount,
+                        addOnStatus: attachment.addOnStatus,
+                    })),
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationCatalogCategory: async (
+        organizationId: string,
+        categoryId: string,
+    ): Promise<ServiceResponse<PlatformCatalogCategoryDetailResponse | null>> => {
+        const category = await dependencies.repository.getOrganizationCatalogCategory(organizationId, categoryId);
+        if (!category) {
+            return {
+                status: "error",
+                message: "Category not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Catalog Category retrieved successfully",
+            data: {
+                category: {
+                    id: category.id,
+                    name: category.name,
+                    sortOrder: category.sortOrder,
+                    status: category.status,
+                    productCount: category.productCount,
+                    createdAt: category.createdAt,
+                    updatedAt: category.updatedAt,
+                    products: category.products.map(toCatalogProductSummary),
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
+    getOrganizationCatalogAddOn: async (
+        organizationId: string,
+        addOnId: string,
+    ): Promise<ServiceResponse<PlatformCatalogAddOnDetailResponse | null>> => {
+        const addOn = await dependencies.repository.getOrganizationCatalogAddOn(organizationId, addOnId);
+        if (!addOn) {
+            return {
+                status: "error",
+                message: "Add-on not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            };
+        }
+
+        return {
+            status: "success",
+            message: "Platform Organization Catalog Add-on retrieved successfully",
+            data: {
+                addOn: {
+                    id: addOn.id,
+                    name: addOn.name,
+                    price: addOn.price,
+                    discount: addOn.discount,
+                    status: addOn.status,
+                    attachmentCount: addOn.attachmentCount,
+                    createdAt: addOn.createdAt,
+                    updatedAt: addOn.updatedAt,
+                    attachments: addOn.attachments.map((attachment) => ({
+                        id: attachment.id,
+                        productId: attachment.productId,
+                        productName: attachment.productName,
+                        selectionCap: attachment.selectionCap,
+                        status: attachment.status,
+                    })),
+                },
+            },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
+
     listOrganizationSales: async (
         organizationId: string,
         query: PlatformBillingInspectionQuerySVC,
@@ -537,9 +748,13 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                         grandTotal: sale.grandTotal,
                         paidTotal: sale.paidTotal,
                         dueTotal: sale.dueTotal,
-                        createdAt: sale.createdAt,
-                        committedAt: sale.committedAt ?? null,
-                        voidedAt: sale.voidedAt ?? null,
+                        createdAt: typeof sale.createdAt === "string" ? sale.createdAt : sale.createdAt.toISOString(),
+                        committedAt: sale.committedAt
+                            ? (typeof sale.committedAt === "string" ? sale.committedAt : sale.committedAt.toISOString())
+                            : null,
+                        voidedAt: sale.voidedAt
+                            ? (typeof sale.voidedAt === "string" ? sale.voidedAt : sale.voidedAt.toISOString())
+                            : null,
                         itemCount: sale.itemCount,
                         itemsSummary: sale.itemsSummary ?? null,
                         paymentMethods: sale.paymentMethods ?? null,

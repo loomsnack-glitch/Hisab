@@ -6,6 +6,10 @@ import {
     getPlatformOrganizationSales as getPlatformOrganizationSalesRequest,
     getPlatformOrganizationSale as getPlatformOrganizationSaleRequest,
     getPlatformOrganizationStores as getPlatformOrganizationStoresRequest,
+    getPlatformOrganizationCatalog as getPlatformOrganizationCatalogRequest,
+    getPlatformOrganizationCatalogProduct as getPlatformOrganizationCatalogProductRequest,
+    getPlatformOrganizationCatalogCategory as getPlatformOrganizationCatalogCategoryRequest,
+    getPlatformOrganizationCatalogAddOn as getPlatformOrganizationCatalogAddOnRequest,
     getPlatformOrganizations as getPlatformOrganizationsRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
@@ -47,6 +51,10 @@ type PlatformOrganizationsPageProps = {
     getPlatformStore?: typeof getPlatformStoreRequest;
     getPlatformOrganizationSales?: typeof getPlatformOrganizationSalesRequest;
     getPlatformOrganizationSale?: typeof getPlatformOrganizationSaleRequest;
+    getPlatformOrganizationCatalog?: typeof getPlatformOrganizationCatalogRequest;
+    getPlatformOrganizationCatalogProduct?: typeof getPlatformOrganizationCatalogProductRequest;
+    getPlatformOrganizationCatalogCategory?: typeof getPlatformOrganizationCatalogCategoryRequest;
+    getPlatformOrganizationCatalogAddOn?: typeof getPlatformOrganizationCatalogAddOnRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
     initialSort?: DirectorySort;
@@ -121,6 +129,10 @@ const PlatformOrganizationsPage = ({
     getPlatformStore = getPlatformStoreRequest,
     getPlatformOrganizationSales = getPlatformOrganizationSalesRequest,
     getPlatformOrganizationSale = getPlatformOrganizationSaleRequest,
+    getPlatformOrganizationCatalog = getPlatformOrganizationCatalogRequest,
+    getPlatformOrganizationCatalogProduct = getPlatformOrganizationCatalogProductRequest,
+    getPlatformOrganizationCatalogCategory = getPlatformOrganizationCatalogCategoryRequest,
+    getPlatformOrganizationCatalogAddOn = getPlatformOrganizationCatalogAddOnRequest,
     initialSearch = "",
     initialActivity = "all",
     initialSort = "recent_activity",
@@ -229,6 +241,7 @@ const PlatformOrganizationsPage = ({
                 organizationId={inspection.organizationId}
                 section={inspection.section}
                 resourceId={inspection.resourceId}
+                catalogResourceKind={inspection.catalogResourceKind}
                 reportingQuery={reportingQuery}
                 onNavigate={go}
                 onBack={() => go(organizationDirectoryPath)}
@@ -238,6 +251,10 @@ const PlatformOrganizationsPage = ({
                 getPlatformStore={getPlatformStore}
                 getPlatformOrganizationSales={getPlatformOrganizationSales}
                 getPlatformOrganizationSale={getPlatformOrganizationSale}
+                getPlatformOrganizationCatalog={getPlatformOrganizationCatalog}
+                getPlatformOrganizationCatalogProduct={getPlatformOrganizationCatalogProduct}
+                getPlatformOrganizationCatalogCategory={getPlatformOrganizationCatalogCategory}
+                getPlatformOrganizationCatalogAddOn={getPlatformOrganizationCatalogAddOn}
             />
         );
     }

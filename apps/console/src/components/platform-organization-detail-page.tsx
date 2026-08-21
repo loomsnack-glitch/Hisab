@@ -24,12 +24,19 @@ import {
     getPlatformOrganizationSales as getPlatformOrganizationSalesRequest,
     getPlatformOrganizationSale as getPlatformOrganizationSaleRequest,
     getPlatformOrganizationStores as getPlatformOrganizationStoresRequest,
+    getPlatformOrganizationCatalog as getPlatformOrganizationCatalogRequest,
+    getPlatformOrganizationCatalogProduct as getPlatformOrganizationCatalogProductRequest,
+    getPlatformOrganizationCatalogCategory as getPlatformOrganizationCatalogCategoryRequest,
+    getPlatformOrganizationCatalogAddOn as getPlatformOrganizationCatalogAddOnRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
 import {
     PLATFORM_REPORTING_TIMEZONE,
     formatPhoneDisplay,
     type PlatformBillingInspectionQueryJSON,
+    type PlatformCatalogAddOnDetailResponse,
+    type PlatformCatalogCategoryDetailResponse,
+    type PlatformCatalogProductDetailResponse,
     type PlatformDashboardQueryJSON,
     type PlatformOrganizationDetailQueryJSON,
     type PlatformRecentSaleDTO,
@@ -51,10 +58,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@repo/ui/lib/utils";
 
 import {
+    catalogInspectionPath,
     organizationInspectionPath,
     organizationInspectionSections,
     parseBillingInspectionSearch,
+    parseCatalogInspectionSearch,
     type BillingInspectionFilters,
+    type CatalogInspectionFilters,
+    type CatalogResourceKind,
     type OrganizationInspectionSection,
 } from "@/lib/organization-inspection-url";
 
@@ -63,18 +74,27 @@ const organizationStoresQueryKey = ["platform-owner", "organization-stores"] as 
 const platformStoreQueryKey = ["platform-owner", "store"] as const;
 const organizationSalesQueryKey = ["platform-owner", "organization-sales"] as const;
 const organizationSaleQueryKey = ["platform-owner", "organization-sale"] as const;
+const organizationCatalogQueryKey = ["platform-owner", "organization-catalog"] as const;
+const organizationCatalogProductQueryKey = ["platform-owner", "organization-catalog-product"] as const;
+const organizationCatalogCategoryQueryKey = ["platform-owner", "organization-catalog-category"] as const;
+const organizationCatalogAddOnQueryKey = ["platform-owner", "organization-catalog-add-on"] as const;
 
 type PlatformOrganizationDetailPageProps = {
     organizationId: string;
     onBack: () => void;
     section?: OrganizationInspectionSection;
     resourceId?: string;
+    catalogResourceKind?: CatalogResourceKind;
     reportingQuery?: PlatformDashboardQueryJSON;
     getPlatformOrganization?: typeof getPlatformOrganizationRequest;
     getPlatformOrganizationStores?: typeof getPlatformOrganizationStoresRequest;
     getPlatformStore?: typeof getPlatformStoreRequest;
     getPlatformOrganizationSales?: typeof getPlatformOrganizationSalesRequest;
     getPlatformOrganizationSale?: typeof getPlatformOrganizationSaleRequest;
+    getPlatformOrganizationCatalog?: typeof getPlatformOrganizationCatalogRequest;
+    getPlatformOrganizationCatalogProduct?: typeof getPlatformOrganizationCatalogProductRequest;
+    getPlatformOrganizationCatalogCategory?: typeof getPlatformOrganizationCatalogCategoryRequest;
+    getPlatformOrganizationCatalogAddOn?: typeof getPlatformOrganizationCatalogAddOnRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
 };
@@ -148,6 +168,20 @@ const deviceStatusLabel = (status: PlatformStoreDeviceInspectionDTO["status"]) =
     return "Active";
 };
 
+const catalogStatusLabel = (status: "active" | "inactive") => (status === "active" ? "Active" : "Inactive");
+
+const productTypeLabel = (productType: PlatformCatalogProductDetailResponse["product"]["productType"]) => {
+    if (productType === "bundle") return "Bundle";
+    if (productType === "combo") return "Combo";
+    return "Single";
+};
+
+const catalogTabOptions = [
+    { value: "products", label: "Products" },
+    { value: "categories", label: "Categories" },
+    { value: "add-ons", label: "Add-ons" },
+] as const;
+
 const MetricCard = ({ label, value }: { label: string; value: string }) => (
     <div className="rounded-xl border border-border/60 bg-background/80 p-4">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -160,12 +194,17 @@ const PlatformOrganizationDetailPage = ({
     onBack,
     section = "overview",
     resourceId,
+    catalogResourceKind,
     reportingQuery = { period: "all-time" },
     getPlatformOrganization = getPlatformOrganizationRequest,
     getPlatformOrganizationStores = getPlatformOrganizationStoresRequest,
     getPlatformStore = getPlatformStoreRequest,
     getPlatformOrganizationSales = getPlatformOrganizationSalesRequest,
     getPlatformOrganizationSale = getPlatformOrganizationSaleRequest,
+    getPlatformOrganizationCatalog = getPlatformOrganizationCatalogRequest,
+    getPlatformOrganizationCatalogProduct = getPlatformOrganizationCatalogProductRequest,
+    getPlatformOrganizationCatalogCategory = getPlatformOrganizationCatalogCategoryRequest,
+    getPlatformOrganizationCatalogAddOn = getPlatformOrganizationCatalogAddOnRequest,
     onNavigate,
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
@@ -173,6 +212,10 @@ const PlatformOrganizationDetailPage = ({
         parseBillingInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
     );
     const [billingSearchInput, setBillingSearchInput] = useState(billingFilters.search ?? "");
+    const [catalogFilters, setCatalogFilters] = useState<CatalogInspectionFilters>(() =>
+        parseCatalogInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+    );
+    const [catalogSearchInput, setCatalogSearchInput] = useState(catalogFilters.search ?? "");
     const detailQueryInput = toDetailQuery(reportingQuery);
     const periodLabel = reportingPeriodLabel(reportingQuery);
     const detailQuery = useQuery({
@@ -209,6 +252,34 @@ const PlatformOrganizationDetailPage = ({
         placeholderData: keepPreviousData,
         enabled: section === "billing" && Boolean(resourceId),
     });
+    const catalogQuery = useQuery({
+        queryKey: [...organizationCatalogQueryKey, organizationId, catalogFilters],
+        queryFn: () => getPlatformOrganizationCatalog(organizationId, catalogFilters),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "catalog" && !resourceId,
+    });
+    const catalogProductQuery = useQuery({
+        queryKey: [...organizationCatalogProductQueryKey, organizationId, resourceId],
+        queryFn: () => getPlatformOrganizationCatalogProduct(organizationId, resourceId!),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "catalog" && catalogResourceKind === "products" && Boolean(resourceId),
+    });
+    const catalogCategoryQuery = useQuery({
+        queryKey: [...organizationCatalogCategoryQueryKey, organizationId, resourceId],
+        queryFn: () => getPlatformOrganizationCatalogCategory(organizationId, resourceId!),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "catalog" && catalogResourceKind === "categories" && Boolean(resourceId),
+    });
+    const catalogAddOnQuery = useQuery({
+        queryKey: [...organizationCatalogAddOnQueryKey, organizationId, resourceId],
+        queryFn: () => getPlatformOrganizationCatalogAddOn(organizationId, resourceId!),
+        retry: false,
+        placeholderData: keepPreviousData,
+        enabled: section === "catalog" && catalogResourceKind === "add-ons" && Boolean(resourceId),
+    });
     const response = detailQuery.data;
     const organization = response?.status === "success" ? response.data?.organization : undefined;
     const storesResponse = storesQuery.data;
@@ -219,6 +290,14 @@ const PlatformOrganizationDetailPage = ({
     const salesList = salesResponse?.status === "success" ? salesResponse.data : undefined;
     const saleResponse = saleQuery.data;
     const sale = saleResponse?.status === "success" ? saleResponse.data?.sale : undefined;
+    const catalogResponse = catalogQuery.data;
+    const catalogList = catalogResponse?.status === "success" ? catalogResponse.data : undefined;
+    const catalogProductResponse = catalogProductQuery.data;
+    const catalogProduct = catalogProductResponse?.status === "success" ? catalogProductResponse.data?.product : undefined;
+    const catalogCategoryResponse = catalogCategoryQuery.data;
+    const catalogCategory = catalogCategoryResponse?.status === "success" ? catalogCategoryResponse.data?.category : undefined;
+    const catalogAddOnResponse = catalogAddOnQuery.data;
+    const catalogAddOn = catalogAddOnResponse?.status === "success" ? catalogAddOnResponse.data?.addOn : undefined;
     const errorCode = (detailQuery.error as { code?: number } | null)?.code ?? (response?.status === "error" ? response.code : undefined);
     const storesErrorCode = (storesQuery.error as { code?: number } | null)?.code
         ?? (storesResponse?.status === "error" ? storesResponse.code : undefined);
@@ -228,6 +307,21 @@ const PlatformOrganizationDetailPage = ({
         ?? (salesResponse?.status === "error" ? salesResponse.code : undefined);
     const saleErrorCode = (saleQuery.error as { code?: number } | null)?.code
         ?? (saleResponse?.status === "error" ? saleResponse.code : undefined);
+    const catalogErrorCode = (catalogQuery.error as { code?: number } | null)?.code
+        ?? (catalogResponse?.status === "error" ? catalogResponse.code : undefined);
+    const catalogProductErrorCode = (catalogProductQuery.error as { code?: number } | null)?.code
+        ?? (catalogProductResponse?.status === "error" ? catalogProductResponse.code : undefined);
+    const catalogCategoryErrorCode = (catalogCategoryQuery.error as { code?: number } | null)?.code
+        ?? (catalogCategoryResponse?.status === "error" ? catalogCategoryResponse.code : undefined);
+    const catalogAddOnErrorCode = (catalogAddOnQuery.error as { code?: number } | null)?.code
+        ?? (catalogAddOnResponse?.status === "error" ? catalogAddOnResponse.code : undefined);
+    const catalogDetailErrorCode = catalogResourceKind === "products"
+        ? catalogProductErrorCode
+        : catalogResourceKind === "categories"
+            ? catalogCategoryErrorCode
+            : catalogResourceKind === "add-ons"
+                ? catalogAddOnErrorCode
+                : undefined;
     const activeSectionErrorCode = section === "billing" && resourceId
         ? saleErrorCode ?? errorCode
         : section === "billing"
@@ -236,7 +330,11 @@ const PlatformOrganizationDetailPage = ({
                 ? storeErrorCode ?? errorCode
                 : section === "stores"
                     ? storesErrorCode ?? errorCode
-                    : errorCode;
+                    : section === "catalog" && resourceId
+                        ? catalogDetailErrorCode ?? errorCode
+                        : section === "catalog"
+                            ? catalogErrorCode ?? errorCode
+                            : errorCode;
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
         ?? (response?.status === "error" ? response.message : undefined);
@@ -252,6 +350,25 @@ const PlatformOrganizationDetailPage = ({
     const saleErrorMessage =
         (saleQuery.error as { message?: string } | null)?.message
         ?? (saleResponse?.status === "error" ? saleResponse.message : undefined);
+    const catalogErrorMessage =
+        (catalogQuery.error as { message?: string } | null)?.message
+        ?? (catalogResponse?.status === "error" ? catalogResponse.message : undefined);
+    const catalogProductErrorMessage =
+        (catalogProductQuery.error as { message?: string } | null)?.message
+        ?? (catalogProductResponse?.status === "error" ? catalogProductResponse.message : undefined);
+    const catalogCategoryErrorMessage =
+        (catalogCategoryQuery.error as { message?: string } | null)?.message
+        ?? (catalogCategoryResponse?.status === "error" ? catalogCategoryResponse.message : undefined);
+    const catalogAddOnErrorMessage =
+        (catalogAddOnQuery.error as { message?: string } | null)?.message
+        ?? (catalogAddOnResponse?.status === "error" ? catalogAddOnResponse.message : undefined);
+    const catalogDetailErrorMessage = catalogResourceKind === "products"
+        ? catalogProductErrorMessage
+        : catalogResourceKind === "categories"
+            ? catalogCategoryErrorMessage
+            : catalogResourceKind === "add-ons"
+                ? catalogAddOnErrorMessage
+                : undefined;
     const activeSectionErrorMessage = section === "billing" && resourceId
         ? saleErrorMessage ?? errorMessage
         : section === "billing"
@@ -260,7 +377,11 @@ const PlatformOrganizationDetailPage = ({
                 ? storeErrorMessage ?? errorMessage
                 : section === "stores"
                     ? storesErrorMessage ?? errorMessage
-                    : errorMessage;
+                    : section === "catalog" && resourceId
+                        ? catalogDetailErrorMessage ?? errorMessage
+                        : section === "catalog"
+                            ? catalogErrorMessage ?? errorMessage
+                            : errorMessage;
 
     useEffect(() => {
         if (section !== "billing") return;
@@ -274,6 +395,18 @@ const PlatformOrganizationDetailPage = ({
         return () => window.removeEventListener("popstate", syncBillingFilters);
     }, [section, resourceId]);
 
+    useEffect(() => {
+        if (section !== "catalog") return;
+        const syncCatalogFilters = () => {
+            const nextFilters = parseCatalogInspectionSearch(window.location.search);
+            setCatalogFilters(nextFilters);
+            setCatalogSearchInput(nextFilters.search ?? "");
+        };
+        syncCatalogFilters();
+        window.addEventListener("popstate", syncCatalogFilters);
+        return () => window.removeEventListener("popstate", syncCatalogFilters);
+    }, [section, resourceId, catalogResourceKind]);
+
     const navigateBilling = (nextFilters: BillingInspectionFilters, nextResourceId?: string) => {
         const path = organizationInspectionPath(organizationId, "billing", nextResourceId, nextFilters);
         setBillingFilters(nextFilters);
@@ -282,6 +415,24 @@ const PlatformOrganizationDetailPage = ({
 
     const updateBillingFilters = (patch: Partial<BillingInspectionFilters>, nextResourceId?: string) => {
         navigateBilling({ ...billingFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
+    };
+
+    const navigateCatalog = (
+        nextFilters: CatalogInspectionFilters,
+        target?: { kind: CatalogResourceKind; id: string },
+    ) => {
+        const path = target
+            ? catalogInspectionPath(organizationId, { view: "detail", kind: target.kind, id: target.id, filters: nextFilters })
+            : catalogInspectionPath(organizationId, { view: "list", filters: nextFilters });
+        setCatalogFilters(nextFilters);
+        go(path);
+    };
+
+    const updateCatalogFilters = (
+        patch: Partial<CatalogInspectionFilters>,
+        target?: { kind: CatalogResourceKind; id: string },
+    ) => {
+        navigateCatalog({ ...catalogFilters, ...patch, page: patch.page ?? 1 }, target);
     };
 
     useEffect(() => {
@@ -303,7 +454,9 @@ const PlatformOrganizationDetailPage = ({
                 {organizationInspectionSections.map((item) => {
                     const href = item === "billing"
                         ? organizationInspectionPath(organizationId, item, undefined, billingFilters)
-                        : organizationInspectionPath(organizationId, item);
+                        : item === "catalog"
+                            ? catalogInspectionPath(organizationId, { view: "list", filters: catalogFilters })
+                            : organizationInspectionPath(organizationId, item);
                     const active = item === section;
                     const Icon = sectionConfig[item].icon;
                     return (
@@ -774,7 +927,7 @@ const PlatformOrganizationDetailPage = ({
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <Select
                     value={billingFilters.storeId ?? "all"}
-                    onValueChange={(value) => updateBillingFilters({ storeId: value === "all" ? undefined : value })}
+                    onValueChange={(value) => updateBillingFilters({ storeId: value === "all" ? undefined : value || undefined })}
                 >
                     <SelectTrigger aria-label="Store filter">
                         <SelectValue placeholder="All stores" />
@@ -1169,6 +1322,535 @@ const PlatformOrganizationDetailPage = ({
         return renderBillingList();
     };
 
+    const renderCatalogFilters = () => (
+        <div className="space-y-3">
+            <form
+                className="flex flex-col gap-3 lg:flex-row lg:items-end"
+                onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                    event.preventDefault();
+                    updateCatalogFilters({ search: catalogSearchInput.trim() || undefined });
+                }}
+                role="search"
+            >
+                <div className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        value={catalogSearchInput}
+                        onChange={(event) => setCatalogSearchInput(event.target.value)}
+                        aria-label="Search catalog"
+                        placeholder="Search catalog"
+                        className="h-10 rounded-xl pl-9"
+                    />
+                </div>
+                <Button type="submit" size="sm" className="rounded-full">Search</Button>
+            </form>
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Catalog tabs">
+                {catalogTabOptions.map((option) => (
+                    <Button
+                        key={option.value}
+                        type="button"
+                        size="sm"
+                        className="rounded-full"
+                        variant={(catalogFilters.tab ?? "products") === option.value ? "default" : "outline"}
+                        aria-pressed={(catalogFilters.tab ?? "products") === option.value}
+                        onClick={() => updateCatalogFilters({ tab: option.value, page: 1 })}
+                    >
+                        {option.label}
+                    </Button>
+                ))}
+            </div>
+            <Select
+                value={catalogFilters.status ?? "all"}
+                onValueChange={(value) =>
+                    updateCatalogFilters({
+                        status: value as CatalogInspectionFilters["status"],
+                        page: 1,
+                    })}
+            >
+                <SelectTrigger aria-label="Catalog status filter">
+                    <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+                Catalog inspection shows the full Organization catalog and is not limited by the Dashboard reporting period.
+            </p>
+        </div>
+    );
+
+    const renderCatalogList = () => {
+        if (catalogQuery.isLoading) {
+            return (
+                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading catalog">
+                    <Spinner className="size-6 text-primary" />
+                </div>
+            );
+        }
+        if (catalogErrorCode === 404 || catalogErrorMessage === "Organization not found") {
+            return (
+                <Alert role="alert">
+                    <AlertTitle>Organization was not found</AlertTitle>
+                    <AlertDescription>
+                        This organization is not available. Return to the organizations list to continue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        if (catalogQuery.isError || catalogResponse?.status === "error") {
+            return (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>Catalog could not be loaded</AlertTitle>
+                    <AlertDescription>{catalogErrorMessage ?? "The catalog list is unavailable."}</AlertDescription>
+                </Alert>
+            );
+        }
+        if (!catalogList) return null;
+
+        const activeTab = catalogList.tab;
+        const page = catalogList.pagination.page;
+        const limit = catalogList.pagination.limit;
+        const totalPages = Math.max(1, Math.ceil(catalogList.pagination.totalCount / limit));
+        const emptyLabel = activeTab === "categories"
+            ? "No categories match these filters"
+            : activeTab === "add-ons"
+                ? "No add-ons match these filters"
+                : "No products match these filters";
+
+        return (
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <h2 className="font-display text-xl font-semibold tracking-tight">Catalog</h2>
+                    <CardDescription>
+                        {`Read-only Products, Categories, and Add-ons · ${catalogList.counts.products} products · ${catalogList.counts.categories} categories · ${catalogList.counts.addOns} add-ons`}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {renderCatalogFilters()}
+                    {activeTab === "products" && catalogList.products.length === 0 ? (
+                        <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon"><Package2 /></EmptyMedia>
+                                <EmptyTitle>{emptyLabel}</EmptyTitle>
+                                <EmptyDescription>Try a different search term or status filter.</EmptyDescription>
+                            </EmptyHeader>
+                        </Empty>
+                    ) : activeTab === "categories" && catalogList.categories.length === 0 ? (
+                        <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon"><Package2 /></EmptyMedia>
+                                <EmptyTitle>{emptyLabel}</EmptyTitle>
+                                <EmptyDescription>Try a different search term or status filter.</EmptyDescription>
+                            </EmptyHeader>
+                        </Empty>
+                    ) : activeTab === "add-ons" && catalogList.addOns.length === 0 ? (
+                        <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon"><Package2 /></EmptyMedia>
+                                <EmptyTitle>{emptyLabel}</EmptyTitle>
+                                <EmptyDescription>Try a different search term or status filter.</EmptyDescription>
+                            </EmptyHeader>
+                        </Empty>
+                    ) : (
+                        <div className="overflow-x-auto rounded-xl border border-border/60">
+                            <Table>
+                                <TableHeader>
+                                    {activeTab === "products" ? (
+                                        <TableRow>
+                                            <TableHead>Product</TableHead>
+                                            <TableHead>Category</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>Price</TableHead>
+                                            <TableHead>Attachments</TableHead>
+                                        </TableRow>
+                                    ) : activeTab === "categories" ? (
+                                        <TableRow>
+                                            <TableHead>Category</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Products</TableHead>
+                                            <TableHead>Updated</TableHead>
+                                        </TableRow>
+                                    ) : (
+                                        <TableRow>
+                                            <TableHead>Add-on</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Price</TableHead>
+                                            <TableHead>Attachments</TableHead>
+                                        </TableRow>
+                                    )}
+                                </TableHeader>
+                                <TableBody>
+                                    {activeTab === "products"
+                                        ? catalogList.products.map((product) => {
+                                            const href = catalogInspectionPath(organizationId, {
+                                                view: "detail",
+                                                kind: "products",
+                                                id: product.id,
+                                                filters: catalogFilters,
+                                            });
+                                            const categoryHref = catalogInspectionPath(organizationId, {
+                                                view: "detail",
+                                                kind: "categories",
+                                                id: product.category.id,
+                                                filters: catalogFilters,
+                                            });
+                                            return (
+                                                <TableRow key={product.id}>
+                                                    <TableCell className="font-medium">
+                                                        <a href={href} className="text-primary underline-offset-4 hover:underline" onClick={(event) => followInspectionLink(event, href)}>
+                                                            {product.name}
+                                                        </a>
+                                                        {product.productCode ? (
+                                                            <p className="mt-1 font-mono text-xs text-muted-foreground">{product.productCode}</p>
+                                                        ) : null}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <a href={categoryHref} className="text-primary underline-offset-4 hover:underline" onClick={(event) => followInspectionLink(event, categoryHref)}>
+                                                            {product.category.name}
+                                                        </a>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className="rounded-full">{catalogStatusLabel(product.status)}</Badge>
+                                                    </TableCell>
+                                                    <TableCell>{productTypeLabel(product.productType)}</TableCell>
+                                                    <TableCell>{formatCompletedSalesValue(product.price)}</TableCell>
+                                                    <TableCell>{product.attachmentCount}</TableCell>
+                                                </TableRow>
+                                            );
+                                        })
+                                        : activeTab === "categories"
+                                            ? catalogList.categories.map((category) => {
+                                                const href = catalogInspectionPath(organizationId, {
+                                                    view: "detail",
+                                                    kind: "categories",
+                                                    id: category.id,
+                                                    filters: catalogFilters,
+                                                });
+                                                return (
+                                                    <TableRow key={category.id}>
+                                                        <TableCell className="font-medium">
+                                                            <a href={href} className="text-primary underline-offset-4 hover:underline" onClick={(event) => followInspectionLink(event, href)}>
+                                                                {category.name}
+                                                            </a>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className="rounded-full">{catalogStatusLabel(category.status)}</Badge>
+                                                        </TableCell>
+                                                        <TableCell>{category.productCount}</TableCell>
+                                                        <TableCell className="whitespace-nowrap text-muted-foreground">{formatLastCompletedSale(category.updatedAt)}</TableCell>
+                                                    </TableRow>
+                                                );
+                                            })
+                                            : catalogList.addOns.map((addOn) => {
+                                                const href = catalogInspectionPath(organizationId, {
+                                                    view: "detail",
+                                                    kind: "add-ons",
+                                                    id: addOn.id,
+                                                    filters: catalogFilters,
+                                                });
+                                                return (
+                                                    <TableRow key={addOn.id}>
+                                                        <TableCell className="font-medium">
+                                                            <a href={href} className="text-primary underline-offset-4 hover:underline" onClick={(event) => followInspectionLink(event, href)}>
+                                                                {addOn.name}
+                                                            </a>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className="rounded-full">{catalogStatusLabel(addOn.status)}</Badge>
+                                                        </TableCell>
+                                                        <TableCell>{formatCompletedSalesValue(addOn.price)}</TableCell>
+                                                        <TableCell>{addOn.attachmentCount}</TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                    {catalogList.pagination.totalCount > limit ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-sm text-muted-foreground">Page {page} of {totalPages}</p>
+                            <div className="flex gap-2">
+                                <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => updateCatalogFilters({ page: page - 1 })}>
+                                    <ChevronLeft className="size-4" />
+                                    Previous
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" disabled={page >= totalPages} onClick={() => updateCatalogFilters({ page: page + 1 })}>
+                                    Next
+                                    <ChevronRight className="size-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    ) : null}
+                </CardContent>
+            </Card>
+        );
+    };
+
+    const renderCatalogProductDetail = (product: PlatformCatalogProductDetailResponse["product"]) => (
+        <div className="space-y-6">
+            <Button type="button" variant="ghost" className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground" onClick={() => navigateCatalog(catalogFilters)}>
+                <ArrowLeft className="size-4" />
+                Back to catalog
+            </Button>
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">Read-only inspection</Badge>
+                        <Badge variant="outline" className="rounded-full">{catalogStatusLabel(product.status)}</Badge>
+                        <Badge variant="outline" className="rounded-full">{productTypeLabel(product.productType)}</Badge>
+                    </div>
+                    <h2 className="font-display text-2xl font-semibold tracking-tight">{product.name}</h2>
+                    <CardDescription>
+                        {`${product.category.name} · Updated ${formatLastCompletedSale(product.updatedAt)}`}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <MetricCard label="Price" value={formatCompletedSalesValue(product.price)} />
+                        <MetricCard label="Discount" value={formatCompletedSalesValue(product.discount)} />
+                        <MetricCard label="Attachments" value={String(product.attachmentCount)} />
+                        <MetricCard label="Image" value={product.hasImage ? "Present" : "None"} />
+                    </div>
+                    {product.productCode ? (
+                        <p className="text-sm text-muted-foreground">{`Product code: ${product.productCode}${product.productCodeKind ? ` (${product.productCodeKind})` : ""}`}</p>
+                    ) : null}
+                    <Card className="border-border/60 bg-background/70">
+                        <CardHeader className="gap-1">
+                            <h3 className="font-medium">Product add-on attachments</h3>
+                            <CardDescription>Attachment eligibility and selection caps for this product.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {product.attachments.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No add-ons are attached to this product.</p>
+                            ) : (
+                                <div className="overflow-x-auto rounded-xl border border-border/60">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Add-on</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>Cap</TableHead>
+                                                <TableHead>Price</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {product.attachments.map((attachment) => {
+                                                const href = catalogInspectionPath(organizationId, {
+                                                    view: "detail",
+                                                    kind: "add-ons",
+                                                    id: attachment.addOnId,
+                                                    filters: catalogFilters,
+                                                });
+                                                return (
+                                                    <TableRow key={attachment.id}>
+                                                        <TableCell className="font-medium">
+                                                            <a href={href} className="text-primary underline-offset-4 hover:underline" onClick={(event) => followInspectionLink(event, href)}>
+                                                                {attachment.addOnName}
+                                                            </a>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className="rounded-full">{catalogStatusLabel(attachment.status)}</Badge>
+                                                        </TableCell>
+                                                        <TableCell>{attachment.selectionCap}</TableCell>
+                                                        <TableCell>{formatCompletedSalesValue(attachment.addOnPrice)}</TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </CardContent>
+            </Card>
+        </div>
+    );
+
+    const renderCatalogCategoryDetail = (category: PlatformCatalogCategoryDetailResponse["category"]) => (
+        <div className="space-y-6">
+            <Button type="button" variant="ghost" className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground" onClick={() => navigateCatalog(catalogFilters)}>
+                <ArrowLeft className="size-4" />
+                Back to catalog
+            </Button>
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <Badge variant="outline" className="w-fit rounded-full">{catalogStatusLabel(category.status)}</Badge>
+                    <h2 className="font-display text-2xl font-semibold tracking-tight">{category.name}</h2>
+                    <CardDescription>{`${category.productCount} products · Updated ${formatLastCompletedSale(category.updatedAt)}`}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {category.products.length === 0 ? (
+                        <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon"><Package2 /></EmptyMedia>
+                                <EmptyTitle>No products in this category</EmptyTitle>
+                            </EmptyHeader>
+                        </Empty>
+                    ) : (
+                        <div className="overflow-x-auto rounded-xl border border-border/60">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Product</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Price</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {category.products.map((product) => {
+                                        const href = catalogInspectionPath(organizationId, {
+                                            view: "detail",
+                                            kind: "products",
+                                            id: product.id,
+                                            filters: catalogFilters,
+                                        });
+                                        return (
+                                            <TableRow key={product.id}>
+                                                <TableCell className="font-medium">
+                                                    <a href={href} className="text-primary underline-offset-4 hover:underline" onClick={(event) => followInspectionLink(event, href)}>
+                                                        {product.name}
+                                                    </a>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="rounded-full">{catalogStatusLabel(product.status)}</Badge>
+                                                </TableCell>
+                                                <TableCell>{formatCompletedSalesValue(product.price)}</TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+
+    const renderCatalogAddOnDetail = (addOn: PlatformCatalogAddOnDetailResponse["addOn"]) => (
+        <div className="space-y-6">
+            <Button type="button" variant="ghost" className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground" onClick={() => navigateCatalog(catalogFilters)}>
+                <ArrowLeft className="size-4" />
+                Back to catalog
+            </Button>
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader className="gap-1">
+                    <Badge variant="outline" className="w-fit rounded-full">{catalogStatusLabel(addOn.status)}</Badge>
+                    <h2 className="font-display text-2xl font-semibold tracking-tight">{addOn.name}</h2>
+                    <CardDescription>{`${addOn.attachmentCount} product attachments · Updated ${formatLastCompletedSale(addOn.updatedAt)}`}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        <MetricCard label="Price" value={formatCompletedSalesValue(addOn.price)} />
+                        <MetricCard label="Discount" value={formatCompletedSalesValue(addOn.discount)} />
+                        <MetricCard label="Attachments" value={String(addOn.attachmentCount)} />
+                    </div>
+                    <Card className="border-border/60 bg-background/70">
+                        <CardHeader className="gap-1">
+                            <h3 className="font-medium">Product attachments</h3>
+                            <CardDescription>Products that can select this add-on during billing.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {addOn.attachments.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">This add-on is not attached to any products.</p>
+                            ) : (
+                                <div className="overflow-x-auto rounded-xl border border-border/60">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Product</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>Cap</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {addOn.attachments.map((attachment) => {
+                                                const href = catalogInspectionPath(organizationId, {
+                                                    view: "detail",
+                                                    kind: "products",
+                                                    id: attachment.productId,
+                                                    filters: catalogFilters,
+                                                });
+                                                return (
+                                                    <TableRow key={attachment.id}>
+                                                        <TableCell className="font-medium">
+                                                            <a href={href} className="text-primary underline-offset-4 hover:underline" onClick={(event) => followInspectionLink(event, href)}>
+                                                                {attachment.productName}
+                                                            </a>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className="rounded-full">{catalogStatusLabel(attachment.status)}</Badge>
+                                                        </TableCell>
+                                                        <TableCell>{attachment.selectionCap}</TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </CardContent>
+            </Card>
+        </div>
+    );
+
+    const renderCatalogInspection = () => {
+        if (resourceId && catalogResourceKind) {
+            const detailQueryState = catalogResourceKind === "products"
+                ? catalogProductQuery
+                : catalogResourceKind === "categories"
+                    ? catalogCategoryQuery
+                    : catalogAddOnQuery;
+            const detailErrorCode = catalogDetailErrorCode;
+            const detailErrorMessage = catalogDetailErrorMessage;
+            const notFoundMessage = catalogResourceKind === "products"
+                ? "Product not found"
+                : catalogResourceKind === "categories"
+                    ? "Category not found"
+                    : "Add-on not found";
+
+            if (detailQueryState.isLoading) {
+                return (
+                    <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading catalog item">
+                        <Spinner className="size-6 text-primary" />
+                    </div>
+                );
+            }
+            if (detailErrorCode === 404 || detailErrorMessage === notFoundMessage) {
+                return (
+                    <Alert role="alert">
+                        <AlertTitle>{notFoundMessage.replace(" not found", " was not found")}</AlertTitle>
+                        <AlertDescription>
+                            This catalog item is not available in this organization. Return to the catalog list to continue.
+                        </AlertDescription>
+                    </Alert>
+                );
+            }
+            if (detailQueryState.isError || detailQueryState.data?.status === "error") {
+                return (
+                    <Alert variant="destructive" role="alert">
+                        <AlertTitle>Catalog item could not be loaded</AlertTitle>
+                        <AlertDescription>{detailErrorMessage ?? "The catalog detail is unavailable."}</AlertDescription>
+                    </Alert>
+                );
+            }
+            if (catalogResourceKind === "products" && catalogProduct) return renderCatalogProductDetail(catalogProduct);
+            if (catalogResourceKind === "categories" && catalogCategory) return renderCatalogCategoryDetail(catalogCategory);
+            if (catalogResourceKind === "add-ons" && catalogAddOn) return renderCatalogAddOnDetail(catalogAddOn);
+            return null;
+        }
+
+        return renderCatalogList();
+    };
+
     const renderLaterSection = () => {
         const config = sectionConfig[section];
         const Icon = config.icon;
@@ -1262,7 +1944,7 @@ const PlatformOrganizationDetailPage = ({
 
             {renderSectionNav()}
 
-            {detailQuery.isLoading && section !== "stores" && section !== "billing" ? (
+            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
                     <Spinner className="size-6 text-primary" />
                 </div>
@@ -1273,28 +1955,30 @@ const PlatformOrganizationDetailPage = ({
                         {activeSectionErrorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
                 <Alert role="alert">
                     <AlertTitle>Organization was not found</AlertTitle>
                     <AlertDescription>
                         This organization is not available. Return to the organizations list to continue.
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && (detailQuery.isError || response?.status === "error") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && (detailQuery.isError || response?.status === "error") ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Organization could not be loaded</AlertTitle>
                     <AlertDescription>{errorMessage ?? "The organization detail is unavailable."}</AlertDescription>
                 </Alert>
-            ) : section === "stores" || section === "billing" || organization ? (
+            ) : section === "stores" || section === "billing" || section === "catalog" || organization ? (
                 section === "overview" && organization
                     ? renderOverview()
                     : section === "stores"
                         ? renderStoreInspection()
                         : section === "billing"
                             ? renderBillingInspection()
-                            : organization
-                                ? renderLaterSection()
-                                : null
+                            : section === "catalog"
+                                ? renderCatalogInspection()
+                                : organization
+                                    ? renderLaterSection()
+                                    : null
             ) : null}
         </section>
     );

@@ -10,6 +10,14 @@ import {
     SaleStatusSchema,
     SalesSortSchema,
 } from "../billing/billing.schema";
+import {
+    AddOnStatusSchema,
+    CategoryStatusSchema,
+    ProductAddOnAttachmentStatusSchema,
+    ProductCodeKindSchema,
+    ProductStatusSchema,
+    ProductTypeSchema,
+} from "../catalog/catalog.schema";
 import { StoreDeviceStatusSchema } from "../organization/organization.schema";
 
 const ownerPhoneSchema = z
@@ -365,6 +373,119 @@ export const PlatformSaleInspectionDetailDTOSchema = PlatformSaleInspectionSumma
 
 export const PlatformSaleInspectionDetailResponseSchema = z.object({
     sale: PlatformSaleInspectionDetailDTOSchema,
+});
+
+export const PlatformCatalogInspectionTabSchema = z.enum(["products", "categories", "add-ons"]);
+
+export const PlatformCatalogStatusFilterSchema = z.enum(["all", "active", "inactive"]);
+
+export const PlatformCatalogInspectionQuerySchema = z.object({
+    tab: PlatformCatalogInspectionTabSchema.default("products"),
+    search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    status: PlatformCatalogStatusFilterSchema.default("all"),
+    page: positivePageSchema.default(1),
+    limit: organizationListLimitSchema.default(20),
+});
+
+export const PlatformCatalogCategorySummaryDTOSchema = z.object({
+    id: z.uuid("Invalid category id"),
+    name: z.string().trim().min(1),
+    sortOrder: z.number().int().nonnegative(),
+    status: CategoryStatusSchema,
+    productCount: nonNegativeIntSchema,
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformCatalogProductSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid product id"),
+    name: z.string().trim().min(1),
+    category: z.object({
+        id: z.uuid("Invalid category id"),
+        name: z.string().trim().min(1),
+    }),
+    price: nonNegativeMoneySchema,
+    discount: nonNegativeMoneySchema,
+    status: ProductStatusSchema,
+    productType: ProductTypeSchema,
+    productCode: z.string().nullable(),
+    productCodeKind: ProductCodeKindSchema.nullable(),
+    sortOrder: z.number().int().nonnegative(),
+    attachmentCount: nonNegativeIntSchema,
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformCatalogAddOnSummaryDTOSchema = z.object({
+    id: z.uuid("Invalid add-on id"),
+    name: z.string().trim().min(1),
+    price: nonNegativeMoneySchema,
+    discount: nonNegativeMoneySchema,
+    status: AddOnStatusSchema,
+    attachmentCount: nonNegativeIntSchema,
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const PlatformCatalogListDTOSchema = z.object({
+    tab: PlatformCatalogInspectionTabSchema,
+    counts: z.object({
+        categories: nonNegativeIntSchema,
+        products: nonNegativeIntSchema,
+        addOns: nonNegativeIntSchema,
+    }),
+    categories: z.array(PlatformCatalogCategorySummaryDTOSchema),
+    products: z.array(PlatformCatalogProductSummaryDTOSchema),
+    addOns: z.array(PlatformCatalogAddOnSummaryDTOSchema),
+    pagination: z.object({
+        page: z.number().int().min(1),
+        limit: z.number().int().min(1).max(100),
+        totalCount: nonNegativeIntSchema,
+    }),
+});
+
+export const PlatformCatalogAttachmentInspectionDTOSchema = z.object({
+    id: z.uuid("Invalid attachment id"),
+    addOnId: z.uuid("Invalid add-on id"),
+    addOnName: z.string().trim().min(1),
+    selectionCap: z.number().int().min(1),
+    status: ProductAddOnAttachmentStatusSchema,
+    addOnPrice: nonNegativeMoneySchema,
+    addOnDiscount: nonNegativeMoneySchema,
+    addOnStatus: AddOnStatusSchema,
+});
+
+export const PlatformCatalogProductDetailDTOSchema = PlatformCatalogProductSummaryDTOSchema.extend({
+    hasImage: z.boolean(),
+    attachments: z.array(PlatformCatalogAttachmentInspectionDTOSchema),
+});
+
+export const PlatformCatalogProductDetailResponseSchema = z.object({
+    product: PlatformCatalogProductDetailDTOSchema,
+});
+
+export const PlatformCatalogCategoryDetailDTOSchema = PlatformCatalogCategorySummaryDTOSchema.extend({
+    products: z.array(PlatformCatalogProductSummaryDTOSchema),
+});
+
+export const PlatformCatalogCategoryDetailResponseSchema = z.object({
+    category: PlatformCatalogCategoryDetailDTOSchema,
+});
+
+export const PlatformCatalogProductAttachmentInspectionDTOSchema = z.object({
+    id: z.uuid("Invalid attachment id"),
+    productId: z.uuid("Invalid product id"),
+    productName: z.string().trim().min(1),
+    selectionCap: z.number().int().min(1),
+    status: ProductAddOnAttachmentStatusSchema,
+});
+
+export const PlatformCatalogAddOnDetailDTOSchema = PlatformCatalogAddOnSummaryDTOSchema.extend({
+    attachments: z.array(PlatformCatalogProductAttachmentInspectionDTOSchema),
+});
+
+export const PlatformCatalogAddOnDetailResponseSchema = z.object({
+    addOn: PlatformCatalogAddOnDetailDTOSchema,
 });
 
 export const FUTURE_BILLING_INSPECTION_DATE_MESSAGE = "Billing inspection dates cannot be in the future";

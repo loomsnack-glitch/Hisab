@@ -9,6 +9,7 @@ import {
     PlatformOrganizationDetailQuerySchema,
     PlatformOrganizationListQuerySchema,
     PlatformBillingInspectionQuerySchema,
+    PlatformCatalogInspectionQuerySchema,
     PlatformStoreInspectionQuerySchema,
     STATUS_CODES,
     type PlatformEntryResponse,
@@ -188,6 +189,121 @@ export const createPlatformRoutes = (
             }
         },
     );
+
+    router.get(
+        "/organizations/:organizationId/catalog",
+        validateSchema("query", PlatformCatalogInspectionQuerySchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await reportingService.listOrganizationCatalog(organizationId.data, c.req.valid("query")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "listPlatformOrganizationCatalog", c, error);
+            }
+        },
+    );
+
+    router.get("/organizations/:organizationId/catalog/products/:productId", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const productId = z.uuid("Invalid product id").safeParse(c.req.param("productId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!productId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid product id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await reportingService.getOrganizationCatalogProduct(organizationId.data, productId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformOrganizationCatalogProduct", c, error);
+        }
+    });
+
+    router.get("/organizations/:organizationId/catalog/categories/:categoryId", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const categoryId = z.uuid("Invalid category id").safeParse(c.req.param("categoryId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!categoryId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid category id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await reportingService.getOrganizationCatalogCategory(organizationId.data, categoryId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformOrganizationCatalogCategory", c, error);
+        }
+    });
+
+    router.get("/organizations/:organizationId/catalog/add-ons/:addOnId", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const addOnId = z.uuid("Invalid add-on id").safeParse(c.req.param("addOnId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!addOnId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid add-on id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await reportingService.getOrganizationCatalogAddOn(organizationId.data, addOnId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "getPlatformOrganizationCatalogAddOn", c, error);
+        }
+    });
 
     router.get(
         "/organizations/:organizationId/sales",

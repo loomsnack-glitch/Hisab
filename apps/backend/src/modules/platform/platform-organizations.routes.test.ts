@@ -8,6 +8,10 @@ import {
     type PlatformOrganizationDetailResponse,
     type PlatformOrganizationListItemDTO,
     type PlatformOrganizationListResponse,
+    type PlatformCatalogAddOnDetailResponse,
+    type PlatformCatalogCategoryDetailResponse,
+    type PlatformCatalogListResponse,
+    type PlatformCatalogProductDetailResponse,
     type PlatformSaleInspectionDetailResponse,
     type PlatformSaleInspectionListResponse,
     type PlatformStoreDetailResponse,
@@ -28,6 +32,11 @@ import type {
     PlatformOrganizationSalesMetrics,
     PlatformOrganizationSalesMetricsQuery,
     PlatformOrganizationSaleContextMetrics,
+    PlatformCatalogListMetrics,
+    PlatformCatalogListMetricsQuery,
+    PlatformCatalogProductMetricsRow,
+    PlatformCatalogCategoryMetricsRow,
+    PlatformCatalogAddOnMetricsRow,
     PlatformStoreDetailMetrics,
     PlatformStoreDetailMetricsQuery,
 } from "./platform-reporting.repository";
@@ -55,6 +64,11 @@ const saleQuietOld = "b2222222-2222-4222-8222-b22222222222";
 const saleQuietRecent = "b3333333-3333-4333-8333-b33333333333";
 const saleQuietVoided = "b4444444-4444-4444-8444-b44444444444";
 const saleCafeDraft = "b5555555-5555-4555-8555-b55555555555";
+const categoryMixed = "c1111111-1111-4111-8111-c11111111111";
+const productMixed = "d1111111-1111-4111-8111-d11111111111";
+const addOnMixed = "e1111111-1111-4111-8111-e11111111111";
+const attachmentMixed = "f1111111-1111-4111-8111-f11111111111";
+const missingProductId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const customerCafeActive = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaa1";
 const customerCafeInactive = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaa2";
 
@@ -104,6 +118,53 @@ type ReportingDevice = {
     createdAt: Date;
 };
 
+type ReportingCategory = {
+    id: string;
+    organizationId: string;
+    name: string;
+    sortOrder: number;
+    status: "active" | "inactive";
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type ReportingProduct = {
+    id: string;
+    organizationId: string;
+    categoryId: string;
+    name: string;
+    sortOrder: number;
+    price: number;
+    discount: number;
+    status: "active" | "inactive";
+    productType: "single" | "bundle" | "combo";
+    productCode: string | null;
+    productCodeKind: "manufacturer" | "internal_rcn" | null;
+    hasImage: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type ReportingAddOn = {
+    id: string;
+    organizationId: string;
+    name: string;
+    price: number;
+    discount: number;
+    status: "active" | "inactive";
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type ReportingAttachment = {
+    id: string;
+    organizationId: string;
+    productId: string;
+    addOnId: string;
+    selectionCap: number;
+    status: "active" | "inactive";
+};
+
 const inWindow = (value: Date | null, startAt: Date | null, endAt: Date | null) => {
     if (!value) return false;
     if (startAt && value.getTime() < startAt.getTime()) return false;
@@ -120,6 +181,10 @@ const createReportingMetrics = (
     customers: ReportingCustomer[],
     sales: ReportingSale[],
     devices: ReportingDevice[] = [],
+    categories: ReportingCategory[] = [],
+    products: ReportingProduct[] = [],
+    addOns: ReportingAddOn[] = [],
+    attachments: ReportingAttachment[] = [],
 ) => {
     const organizationRow = (
         query: PlatformDashboardMetricsQuery,
@@ -180,7 +245,9 @@ const createReportingMetrics = (
                 return true;
             })
             .sort((left, right) => {
-                const byName = byNameThenUsernameThenId(left, right);
+                const byName = left.name.localeCompare(right.name)
+                    || left.username.localeCompare(right.username)
+                    || left.id.localeCompare(right.id);
                 if (query.sort === "name_asc") return byName;
                 if (query.sort === "name_desc") {
                     return right.name.localeCompare(left.name)
@@ -452,7 +519,194 @@ const createReportingMetrics = (
         };
     };
 
-    return { getDashboardMetrics, listOrganizations, getOrganizationDetail, listOrganizationStores, getStoreDetail, listOrganizationSales, getOrganizationSaleContext };
+    const mapProductRow = (product: ReportingProduct): PlatformCatalogProductMetricsRow => {
+        const category = categories.find((item) => item.id === product.categoryId && item.organizationId === product.organizationId);
+        return {
+            id: product.id,
+            name: product.name,
+            categoryId: product.categoryId,
+            categoryName: category?.name ?? "Unknown",
+            price: product.price,
+            discount: product.discount,
+            status: product.status,
+            productType: product.productType,
+            productCode: product.productCode,
+            productCodeKind: product.productCodeKind,
+            sortOrder: product.sortOrder,
+            attachmentCount: attachments.filter((item) => item.productId === product.id && item.organizationId === product.organizationId).length,
+            hasImage: product.hasImage,
+            createdAt: product.createdAt.toISOString(),
+            updatedAt: product.updatedAt.toISOString(),
+        };
+    };
+
+    const listOrganizationCatalog = async (
+        query: PlatformCatalogListMetricsQuery,
+    ): Promise<PlatformCatalogListMetrics | null> => {
+        const organization = organizations.find((item) => item.id === query.organizationId);
+        if (!organization) return null;
+
+        const organizationCategories = categories.filter((item) => item.organizationId === query.organizationId);
+        const organizationProducts = products.filter((item) => item.organizationId === query.organizationId);
+        const organizationAddOns = addOns.filter((item) => item.organizationId === query.organizationId);
+        const matchesSearch = (value: string) =>
+            !query.search || value.toLowerCase().includes(query.search.toLowerCase());
+        const matchesStatus = (status: "active" | "inactive") =>
+            query.status === "all" || query.status === status;
+        const offset = (query.page - 1) * query.limit;
+
+        if (query.tab === "categories") {
+            const filtered = organizationCategories.filter(
+                (item) => matchesSearch(item.name) && matchesStatus(item.status),
+            );
+            return {
+                counts: {
+                    categories: organizationCategories.length,
+                    products: organizationProducts.length,
+                    addOns: organizationAddOns.length,
+                },
+                categories: filtered.slice(offset, offset + query.limit).map((category) => ({
+                    id: category.id,
+                    name: category.name,
+                    sortOrder: category.sortOrder,
+                    status: category.status,
+                    productCount: organizationProducts.filter((product) => product.categoryId === category.id).length,
+                    createdAt: category.createdAt.toISOString(),
+                    updatedAt: category.updatedAt.toISOString(),
+                })),
+                products: [],
+                addOns: [],
+                totalCount: filtered.length,
+            };
+        }
+
+        if (query.tab === "add-ons") {
+            const filtered = organizationAddOns.filter(
+                (item) => matchesSearch(item.name) && matchesStatus(item.status),
+            );
+            return {
+                counts: {
+                    categories: organizationCategories.length,
+                    products: organizationProducts.length,
+                    addOns: organizationAddOns.length,
+                },
+                categories: [],
+                products: [],
+                addOns: filtered.slice(offset, offset + query.limit).map((addOn) => ({
+                    id: addOn.id,
+                    name: addOn.name,
+                    price: addOn.price,
+                    discount: addOn.discount,
+                    status: addOn.status,
+                    attachmentCount: attachments.filter((item) => item.addOnId === addOn.id && item.organizationId === addOn.organizationId).length,
+                    createdAt: addOn.createdAt.toISOString(),
+                    updatedAt: addOn.updatedAt.toISOString(),
+                })),
+                totalCount: filtered.length,
+            };
+        }
+
+        const filtered = organizationProducts.filter(
+            (item) =>
+                (matchesSearch(item.name) || (item.productCode ? matchesSearch(item.productCode) : false))
+                && matchesStatus(item.status),
+        );
+        return {
+            counts: {
+                categories: organizationCategories.length,
+                products: organizationProducts.length,
+                addOns: organizationAddOns.length,
+            },
+            categories: [],
+            products: filtered.slice(offset, offset + query.limit).map(mapProductRow),
+            addOns: [],
+            totalCount: filtered.length,
+        };
+    };
+
+    const getOrganizationCatalogProduct = async (organizationId: string, productId: string) => {
+        const product = products.find((item) => item.organizationId === organizationId && item.id === productId);
+        if (!product) return null;
+        return {
+            ...mapProductRow(product),
+            attachments: attachments
+                .filter((item) => item.organizationId === organizationId && item.productId === productId)
+                .flatMap((attachment) => {
+                    const addOn = addOns.find((item) => item.id === attachment.addOnId && item.organizationId === organizationId);
+                    if (!addOn) return [];
+                    return [{
+                        id: attachment.id,
+                        addOnId: addOn.id,
+                        addOnName: addOn.name,
+                        selectionCap: attachment.selectionCap,
+                        status: attachment.status,
+                        addOnPrice: addOn.price,
+                        addOnDiscount: addOn.discount,
+                        addOnStatus: addOn.status,
+                    }];
+                }),
+        };
+    };
+
+    const getOrganizationCatalogCategory = async (organizationId: string, categoryId: string) => {
+        const category = categories.find((item) => item.organizationId === organizationId && item.id === categoryId);
+        if (!category) return null;
+        const categoryProducts = products
+            .filter((item) => item.organizationId === organizationId && item.categoryId === categoryId)
+            .map(mapProductRow);
+        return {
+            id: category.id,
+            name: category.name,
+            sortOrder: category.sortOrder,
+            status: category.status,
+            productCount: categoryProducts.length,
+            createdAt: category.createdAt.toISOString(),
+            updatedAt: category.updatedAt.toISOString(),
+            products: categoryProducts,
+        };
+    };
+
+    const getOrganizationCatalogAddOn = async (organizationId: string, addOnId: string) => {
+        const addOn = addOns.find((item) => item.organizationId === organizationId && item.id === addOnId);
+        if (!addOn) return null;
+        return {
+            id: addOn.id,
+            name: addOn.name,
+            price: addOn.price,
+            discount: addOn.discount,
+            status: addOn.status,
+            attachmentCount: attachments.filter((item) => item.addOnId === addOn.id && item.organizationId === organizationId).length,
+            createdAt: addOn.createdAt.toISOString(),
+            updatedAt: addOn.updatedAt.toISOString(),
+            attachments: attachments
+                .filter((item) => item.organizationId === organizationId && item.addOnId === addOnId)
+                .flatMap((attachment) => {
+                    const product = products.find((item) => item.id === attachment.productId && item.organizationId === organizationId);
+                    if (!product) return [];
+                    return [{
+                        id: attachment.id,
+                        productId: product.id,
+                        productName: product.name,
+                        selectionCap: attachment.selectionCap,
+                        status: attachment.status,
+                    }];
+                }),
+        };
+    };
+
+    return {
+        getDashboardMetrics,
+        listOrganizations,
+        getOrganizationDetail,
+        listOrganizationStores,
+        getStoreDetail,
+        listOrganizationCatalog,
+        getOrganizationCatalogProduct,
+        getOrganizationCatalogCategory,
+        getOrganizationCatalogAddOn,
+        listOrganizationSales,
+        getOrganizationSaleContext,
+    };
 };
 
 const platformFacts = () => {
@@ -617,7 +871,59 @@ const platformFacts = () => {
         },
     ];
 
-    return { organizations, stores, customers, sales, devices };
+    const categories: ReportingCategory[] = [
+        {
+            id: categoryMixed,
+            organizationId: orgMixed,
+            name: "Beverages",
+            sortOrder: 0,
+            status: "active",
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+    ];
+    const products: ReportingProduct[] = [
+        {
+            id: productMixed,
+            organizationId: orgMixed,
+            categoryId: categoryMixed,
+            name: "Masala Chai",
+            sortOrder: 0,
+            price: 50,
+            discount: 0,
+            status: "active",
+            productType: "single",
+            productCode: "TEA-001",
+            productCodeKind: "manufacturer",
+            hasImage: false,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+    ];
+    const addOns: ReportingAddOn[] = [
+        {
+            id: addOnMixed,
+            organizationId: orgMixed,
+            name: "Extra Ginger",
+            price: 10,
+            discount: 0,
+            status: "active",
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+    ];
+    const attachments: ReportingAttachment[] = [
+        {
+            id: attachmentMixed,
+            organizationId: orgMixed,
+            productId: productMixed,
+            addOnId: addOnMixed,
+            selectionCap: 1,
+            status: "active",
+        },
+    ];
+
+    return { organizations, stores, customers, sales, devices, categories, products, addOns, attachments };
 };
 
 const activeOwner = async (): Promise<OwnerUserRecord> => ({
@@ -650,7 +956,17 @@ const createHarness = async () => {
         tokenProvider: createOwnerTokenProvider(ownerSecret),
     });
     const reportingService = createPlatformReportingService({
-        repository: createReportingMetrics(facts.organizations, facts.stores, facts.customers, facts.sales, facts.devices),
+        repository: createReportingMetrics(
+            facts.organizations,
+            facts.stores,
+            facts.customers,
+            facts.sales,
+            facts.devices,
+            facts.categories,
+            facts.products,
+            facts.addOns,
+            facts.attachments,
+        ),
         billingRepository: {
             getSaleById: async (organizationId, storeId, saleId) => {
                 const sale = facts.sales.find(
@@ -764,6 +1080,18 @@ const organizationSales = (app: Hono, cookie: string, organizationId: string, qu
 
 const organizationSaleDetail = (app: Hono, cookie: string, organizationId: string, saleId: string) =>
     app.request(`/platform/organizations/${organizationId}/sales/${saleId}`, { headers: { cookie } });
+
+const organizationCatalog = (app: Hono, cookie: string, organizationId: string, query = "") =>
+    app.request(`/platform/organizations/${organizationId}/catalog${query}`, { headers: { cookie } });
+
+const organizationCatalogProduct = (app: Hono, cookie: string, organizationId: string, productId: string) =>
+    app.request(`/platform/organizations/${organizationId}/catalog/products/${productId}`, { headers: { cookie } });
+
+const organizationCatalogCategory = (app: Hono, cookie: string, organizationId: string, categoryId: string) =>
+    app.request(`/platform/organizations/${organizationId}/catalog/categories/${categoryId}`, { headers: { cookie } });
+
+const organizationCatalogAddOn = (app: Hono, cookie: string, organizationId: string, addOnId: string) =>
+    app.request(`/platform/organizations/${organizationId}/catalog/add-ons/${addOnId}`, { headers: { cookie } });
 
 const names = (rows: PlatformOrganizationListItemDTO[] | undefined) => rows?.map((row) => row.name);
 
@@ -1288,6 +1616,90 @@ describe("Platform Store inspection API", () => {
         expect(missingStoreBody.message).toBe("Store not found");
         expect(invalidStore.status).toBe(400);
         expect(JSON.stringify(missingStoreBody)).not.toContain("Front Hall");
+    });
+});
+
+describe("Platform Catalog inspection API", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("returns Organization Catalog only to an active Owner User", async () => {
+        const { app, setOwnerActive } = await createHarness();
+        const customerToken = await sign(
+            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
+            "customer-and-device-secret",
+        );
+        const ownerCookie = cookieFrom(await passwordLogin(app));
+
+        expect((await app.request(`/platform/organizations/${orgMixed}/catalog`)).status).toBe(401);
+        expect((await app.request(`/platform/organizations/${orgMixed}/catalog`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
+
+        setOwnerActive(false);
+        expect((await organizationCatalog(app, ownerCookie, orgMixed)).status).toBe(401);
+    });
+
+    test("lists Products, Categories, and Add-ons with counts, filters, and pagination", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const products = await organizationCatalog(app, cookie, orgMixed);
+        const categories = await organizationCatalog(app, cookie, orgMixed, "?tab=categories");
+        const addOns = await organizationCatalog(app, cookie, orgMixed, "?tab=add-ons&search=Ginger");
+        const productsBody = await products.json() as ServiceResponse<PlatformCatalogListResponse>;
+        const categoriesBody = await categories.json() as ServiceResponse<PlatformCatalogListResponse>;
+        const addOnsBody = await addOns.json() as ServiceResponse<PlatformCatalogListResponse>;
+
+        expect(products.status).toBe(200);
+        expect(productsBody.data?.counts).toEqual({ categories: 1, products: 1, addOns: 1 });
+        expect(productsBody.data?.products.map((product) => product.name)).toEqual(["Masala Chai"]);
+        expect(categoriesBody.data?.categories.map((category) => category.name)).toEqual(["Beverages"]);
+        expect(addOnsBody.data?.addOns.map((addOn) => addOn.name)).toEqual(["Extra Ginger"]);
+        expect(JSON.stringify(productsBody.data)).not.toContain("password");
+        expect(JSON.stringify(productsBody.data)).not.toContain("token");
+        expect(JSON.stringify(productsBody.data)).not.toContain("deviceSecret");
+    });
+
+    test("returns Product, Category, and Add-on detail with attachment metadata", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const product = await organizationCatalogProduct(app, cookie, orgMixed, productMixed);
+        const category = await organizationCatalogCategory(app, cookie, orgMixed, categoryMixed);
+        const addOn = await organizationCatalogAddOn(app, cookie, orgMixed, addOnMixed);
+        const productBody = await product.json() as ServiceResponse<PlatformCatalogProductDetailResponse>;
+        const categoryBody = await category.json() as ServiceResponse<PlatformCatalogCategoryDetailResponse>;
+        const addOnBody = await addOn.json() as ServiceResponse<PlatformCatalogAddOnDetailResponse>;
+
+        expect(product.status).toBe(200);
+        expect(productBody.data?.product.name).toBe("Masala Chai");
+        expect(productBody.data?.product.attachments).toEqual([
+            expect.objectContaining({
+                addOnName: "Extra Ginger",
+                selectionCap: 1,
+                status: "active",
+            }),
+        ]);
+        expect(categoryBody.data?.category.products.map((item) => item.name)).toEqual(["Masala Chai"]);
+        expect(addOnBody.data?.addOn.attachments).toEqual([
+            expect.objectContaining({
+                productName: "Masala Chai",
+                selectionCap: 1,
+            }),
+        ]);
+    });
+
+    test("returns 404 for missing Organization and catalog resources without leaking other tenant data", async () => {
+        const { app } = await createHarness();
+        const cookie = cookieFrom(await passwordLogin(app));
+        const missingOrg = await organizationCatalog(app, cookie, missingOrganizationId);
+        const missingProduct = await organizationCatalogProduct(app, cookie, orgMixed, missingProductId);
+        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
+        const missingProductBody = await missingProduct.json() as ServiceResponse<null>;
+
+        expect(missingOrg.status).toBe(404);
+        expect(missingOrgBody.message).toBe("Organization not found");
+        expect(missingProduct.status).toBe(404);
+        expect(missingProductBody.message).toBe("Product not found");
+        expect(JSON.stringify(missingProductBody)).not.toContain("Masala Chai");
     });
 });
 

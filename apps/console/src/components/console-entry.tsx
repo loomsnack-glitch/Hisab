@@ -27,6 +27,10 @@ type ConsoleEntryProps = {
         | "getPlatformStore"
         | "getPlatformOrganizationSales"
         | "getPlatformOrganizationSale"
+        | "getPlatformOrganizationCatalog"
+        | "getPlatformOrganizationCatalogProduct"
+        | "getPlatformOrganizationCatalogCategory"
+        | "getPlatformOrganizationCatalogAddOn"
         | "initialSearch"
         | "initialActivity"
     >;

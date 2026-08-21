@@ -15,6 +15,11 @@ import type {
     PlatformOrganizationListQueryJSON,
     PlatformOrganizationListResponse,
     PlatformBillingInspectionQueryJSON,
+    PlatformCatalogAddOnDetailResponse,
+    PlatformCatalogCategoryDetailResponse,
+    PlatformCatalogInspectionQueryJSON,
+    PlatformCatalogListResponse,
+    PlatformCatalogProductDetailResponse,
     PlatformSaleInspectionDetailResponse,
     PlatformSaleInspectionListResponse,
     PlatformStoreInspectionQueryJSON,
@@ -166,6 +171,54 @@ export const getPlatformOrganizationSale = async (
 ): Promise<ServiceResponse<PlatformSaleInspectionDetailResponse | null>> => {
     try {
         const response = await api.get(`/platform/organizations/${organizationId}/sales/${saleId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationCatalog = async (
+    organizationId: string,
+    query: PlatformCatalogInspectionQueryJSON = {},
+): Promise<ServiceResponse<PlatformCatalogListResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/catalog`, { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationCatalogProduct = async (
+    organizationId: string,
+    productId: string,
+): Promise<ServiceResponse<PlatformCatalogProductDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/catalog/products/${productId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationCatalogCategory = async (
+    organizationId: string,
+    categoryId: string,
+): Promise<ServiceResponse<PlatformCatalogCategoryDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/catalog/categories/${categoryId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getPlatformOrganizationCatalogAddOn = async (
+    organizationId: string,
+    addOnId: string,
+): Promise<ServiceResponse<PlatformCatalogAddOnDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/organizations/${organizationId}/catalog/add-ons/${addOnId}`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

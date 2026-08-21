@@ -20,6 +20,12 @@ import type {
     PlatformStoreInspectionQuerySchema,
     PlatformStoreListDTOSchema,
     PlatformBillingInspectionQuerySchema,
+    PlatformCatalogAddOnDetailResponseSchema,
+    PlatformCatalogCategoryDetailResponseSchema,
+    PlatformCatalogInspectionQuerySchema,
+    PlatformCatalogListDTOSchema,
+    PlatformCatalogProductDetailResponseSchema,
+    PlatformSaleInspectionDetailDTOSchema,
     PlatformSaleInspectionDetailResponseSchema,
     PlatformSaleInspectionListDTOSchema,
     PlatformSaleInspectionStoreDTOSchema,
@@ -96,3 +102,11 @@ export type PlatformSaleInspectionListDTO = z.infer<typeof PlatformSaleInspectio
 export type PlatformSaleInspectionListResponse = PlatformSaleInspectionListDTO;
 export type PlatformSaleInspectionDetailDTO = z.infer<typeof PlatformSaleInspectionDetailDTOSchema>;
 export type PlatformSaleInspectionDetailResponse = z.infer<typeof PlatformSaleInspectionDetailResponseSchema>;
+
+export type PlatformCatalogInspectionQueryJSON = z.input<typeof PlatformCatalogInspectionQuerySchema>;
+export type PlatformCatalogInspectionQuerySVC = z.output<typeof PlatformCatalogInspectionQuerySchema>;
+export type PlatformCatalogListDTO = z.infer<typeof PlatformCatalogListDTOSchema>;
+export type PlatformCatalogListResponse = PlatformCatalogListDTO;
+export type PlatformCatalogProductDetailResponse = z.infer<typeof PlatformCatalogProductDetailResponseSchema>;
+export type PlatformCatalogCategoryDetailResponse = z.infer<typeof PlatformCatalogCategoryDetailResponseSchema>;
+export type PlatformCatalogAddOnDetailResponse = z.infer<typeof PlatformCatalogAddOnDetailResponseSchema>;

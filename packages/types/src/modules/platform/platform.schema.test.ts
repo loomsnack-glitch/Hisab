@@ -11,6 +11,10 @@ import {
     PlatformOrganizationListQuerySchema,
     PlatformStoreDetailResponseSchema,
     PlatformBillingInspectionQuerySchema,
+    PlatformCatalogAddOnDetailResponseSchema,
+    PlatformCatalogInspectionQuerySchema,
+    PlatformCatalogListDTOSchema,
+    PlatformCatalogProductDetailResponseSchema,
     PlatformSaleInspectionDetailResponseSchema,
     PlatformSaleInspectionListDTOSchema,
     FUTURE_BILLING_INSPECTION_DATE_MESSAGE,
@@ -481,5 +485,106 @@ describe("Platform Billing inspection contracts", () => {
         });
 
         expect(parsed.sales[0]?.store.name).toBe("Front Hall");
+    });
+});
+
+describe("Platform Catalog inspection contracts", () => {
+    test("defaults catalog filters to products on page 1 with all statuses", () => {
+        expect(PlatformCatalogInspectionQuerySchema.parse({})).toEqual({
+            tab: "products",
+            status: "all",
+            page: 1,
+            limit: 20,
+        });
+    });
+
+    test("accepts tab, search, status, and pagination filters", () => {
+        expect(
+            PlatformCatalogInspectionQuerySchema.parse({
+                tab: "add-ons",
+                search: " cheese ",
+                status: "inactive",
+                page: "2",
+                limit: "10",
+            }),
+        ).toEqual({
+            tab: "add-ons",
+            search: "cheese",
+            status: "inactive",
+            page: 2,
+            limit: 10,
+        });
+    });
+
+    test("accepts read-only catalog list and detail responses without credential fields", () => {
+        const list = PlatformCatalogListDTOSchema.parse({
+            tab: "products",
+            counts: { categories: 1, products: 1, addOns: 1 },
+            categories: [],
+            products: [
+                {
+                    id: "d1111111-1111-4111-8111-d11111111111",
+                    name: "Masala Chai",
+                    category: { id: "c1111111-1111-4111-8111-c11111111111", name: "Beverages" },
+                    price: 50,
+                    discount: 0,
+                    status: "active",
+                    productType: "single",
+                    productCode: null,
+                    productCodeKind: null,
+                    sortOrder: 0,
+                    attachmentCount: 1,
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+            ],
+            addOns: [],
+            pagination: { page: 1, limit: 20, totalCount: 1 },
+        });
+        const product = PlatformCatalogProductDetailResponseSchema.parse({
+            product: {
+                ...list.products[0]!,
+                hasImage: false,
+                attachments: [
+                    {
+                        id: "f1111111-1111-4111-8111-f11111111111",
+                        addOnId: "e1111111-1111-4111-8111-e11111111111",
+                        addOnName: "Extra Ginger",
+                        selectionCap: 1,
+                        status: "active",
+                        addOnPrice: 10,
+                        addOnDiscount: 0,
+                        addOnStatus: "active",
+                    },
+                ],
+            },
+        });
+        const addOn = PlatformCatalogAddOnDetailResponseSchema.parse({
+            addOn: {
+                id: "e1111111-1111-4111-8111-e11111111111",
+                name: "Extra Ginger",
+                price: 10,
+                discount: 0,
+                status: "active",
+                attachmentCount: 1,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                attachments: [
+                    {
+                        id: "f1111111-1111-4111-8111-f11111111111",
+                        productId: "d1111111-1111-4111-8111-d11111111111",
+                        productName: "Masala Chai",
+                        selectionCap: 1,
+                        status: "active",
+                    },
+                ],
+            },
+        });
+
+        expect(product.product.attachments[0]?.addOnName).toBe("Extra Ginger");
+        expect(addOn.addOn.attachments[0]?.productName).toBe("Masala Chai");
+        expect(JSON.stringify({ list, product, addOn })).not.toContain("password");
+        expect(JSON.stringify({ list, product, addOn })).not.toContain("token");
+        expect(JSON.stringify({ list, product, addOn })).not.toContain("deviceSecret");
     });
 });

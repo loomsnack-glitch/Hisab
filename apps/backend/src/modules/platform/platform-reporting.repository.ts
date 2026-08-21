@@ -964,3 +964,561 @@ export const getOrganizationSaleContext = async (
         storeAddress: row.store_address == null ? null : String(row.store_address),
     };
 };
+
+export type PlatformCatalogListMetricsQuery = {
+    organizationId: string;
+    tab: "products" | "categories" | "add-ons";
+    search: string;
+    status: "all" | "active" | "inactive";
+    page: number;
+    limit: number;
+};
+
+export type PlatformCatalogCategoryMetricsRow = {
+    id: string;
+    name: string;
+    sortOrder: number;
+    status: "active" | "inactive";
+    productCount: number;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PlatformCatalogProductMetricsRow = {
+    id: string;
+    name: string;
+    categoryId: string;
+    categoryName: string;
+    price: number;
+    discount: number;
+    status: "active" | "inactive";
+    productType: "single" | "bundle" | "combo";
+    productCode: string | null;
+    productCodeKind: "manufacturer" | "internal_rcn" | null;
+    sortOrder: number;
+    attachmentCount: number;
+    hasImage: boolean;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PlatformCatalogAddOnMetricsRow = {
+    id: string;
+    name: string;
+    price: number;
+    discount: number;
+    status: "active" | "inactive";
+    attachmentCount: number;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PlatformCatalogAttachmentMetricsRow = {
+    id: string;
+    addOnId: string;
+    addOnName: string;
+    selectionCap: number;
+    status: "active" | "inactive";
+    addOnPrice: number;
+    addOnDiscount: number;
+    addOnStatus: "active" | "inactive";
+};
+
+export type PlatformCatalogProductAttachmentMetricsRow = {
+    id: string;
+    productId: string;
+    productName: string;
+    selectionCap: number;
+    status: "active" | "inactive";
+};
+
+export type PlatformCatalogListMetrics = {
+    counts: {
+        categories: number;
+        products: number;
+        addOns: number;
+    };
+    categories: PlatformCatalogCategoryMetricsRow[];
+    products: PlatformCatalogProductMetricsRow[];
+    addOns: PlatformCatalogAddOnMetricsRow[];
+    totalCount: number;
+};
+
+const asCategoryStatus = (value: unknown): "active" | "inactive" | null => {
+    if (value === "active" || value === "inactive") return value;
+    return null;
+};
+
+const asProductStatus = asCategoryStatus;
+
+const asAddOnStatus = asCategoryStatus;
+
+const asAttachmentStatus = asCategoryStatus;
+
+const asProductType = (value: unknown): "single" | "bundle" | "combo" | null => {
+    if (value === "single" || value === "bundle" || value === "combo") return value;
+    return null;
+};
+
+const asProductCodeKind = (value: unknown): "manufacturer" | "internal_rcn" | null => {
+    if (value === "manufacturer" || value === "internal_rcn") return value;
+    return null;
+};
+
+const mapCategoryRow = (row: Record<string, unknown>): PlatformCatalogCategoryMetricsRow | null => {
+    const status = asCategoryStatus(row.status);
+    const createdAt = asTimestamp(row.created_at);
+    const updatedAt = asTimestamp(row.updated_at);
+    if (!status || !createdAt || !updatedAt) return null;
+    return {
+        id: String(row.id),
+        name: String(row.name),
+        sortOrder: asCount(row.sort_order),
+        status,
+        productCount: asCount(row.product_count),
+        createdAt,
+        updatedAt,
+    };
+};
+
+const mapProductRow = (row: Record<string, unknown>): PlatformCatalogProductMetricsRow | null => {
+    const status = asProductStatus(row.status);
+    const productType = asProductType(row.product_type);
+    const createdAt = asTimestamp(row.created_at);
+    const updatedAt = asTimestamp(row.updated_at);
+    if (!status || !productType || !createdAt || !updatedAt) return null;
+    return {
+        id: String(row.id),
+        name: String(row.name),
+        categoryId: String(row.category_id),
+        categoryName: String(row.category_name),
+        price: asMoney(row.price),
+        discount: asMoney(row.discount),
+        status,
+        productType,
+        productCode: row.product_code == null ? null : String(row.product_code),
+        productCodeKind: asProductCodeKind(row.product_code_kind),
+        sortOrder: asCount(row.sort_order),
+        attachmentCount: asCount(row.attachment_count),
+        hasImage: Boolean(row.image_path),
+        createdAt,
+        updatedAt,
+    };
+};
+
+const mapAddOnRow = (row: Record<string, unknown>): PlatformCatalogAddOnMetricsRow | null => {
+    const status = asAddOnStatus(row.status);
+    const createdAt = asTimestamp(row.created_at);
+    const updatedAt = asTimestamp(row.updated_at);
+    if (!status || !createdAt || !updatedAt) return null;
+    return {
+        id: String(row.id),
+        name: String(row.name),
+        price: asMoney(row.price),
+        discount: asMoney(row.discount),
+        status,
+        attachmentCount: asCount(row.attachment_count),
+        createdAt,
+        updatedAt,
+    };
+};
+
+const catalogSearchPattern = (search: string) => `%${search.replace(/[%_\\]/g, "\\$&")}%`;
+
+export const listOrganizationCatalog = async (
+    query: PlatformCatalogListMetricsQuery,
+): Promise<PlatformCatalogListMetrics | null> => {
+    if (!(await organizationExists(query.organizationId))) {
+        return null;
+    }
+
+    const search = query.search.trim();
+    const searchPattern = search ? catalogSearchPattern(search) : null;
+    const statusFilter = query.status === "all" ? null : query.status;
+    const offset = (query.page - 1) * query.limit;
+
+    const [countRow] = await pg`
+        SELECT
+            (SELECT COUNT(*)::int FROM categories WHERE organization_id = ${query.organizationId}) AS category_count,
+            (SELECT COUNT(*)::int FROM products WHERE organization_id = ${query.organizationId}) AS product_count,
+            (SELECT COUNT(*)::int FROM add_ons WHERE organization_id = ${query.organizationId}) AS add_on_count
+    `;
+
+    if (query.tab === "categories") {
+        const [totalRow] = await pg`
+            SELECT COUNT(*)::int AS total_count
+            FROM categories category
+            WHERE category.organization_id = ${query.organizationId}
+              AND (${statusFilter}::category_status_enum IS NULL OR category.status = ${statusFilter}::category_status_enum)
+              AND (
+                ${searchPattern}::text IS NULL
+                OR category.name ILIKE ${searchPattern}
+              )
+        `;
+
+        const categoryRows = await pg`
+            SELECT
+                category.id,
+                category.name,
+                category.sort_order,
+                category.status::text AS status,
+                category.created_at,
+                category.updated_at,
+                (
+                    SELECT COUNT(*)::int
+                    FROM products product
+                    WHERE product.organization_id = category.organization_id
+                      AND product.category_id = category.id
+                ) AS product_count
+            FROM categories category
+            WHERE category.organization_id = ${query.organizationId}
+              AND (${statusFilter}::category_status_enum IS NULL OR category.status = ${statusFilter}::category_status_enum)
+              AND (
+                ${searchPattern}::text IS NULL
+                OR category.name ILIKE ${searchPattern}
+              )
+            ORDER BY category.sort_order ASC, category.created_at ASC, category.id ASC
+            LIMIT ${query.limit}
+            OFFSET ${offset}
+        `;
+
+        return {
+            counts: {
+                categories: asCount(countRow?.category_count),
+                products: asCount(countRow?.product_count),
+                addOns: asCount(countRow?.add_on_count),
+            },
+            categories: categoryRows.flatMap((row: Record<string, unknown>) => {
+                const mapped = mapCategoryRow(row);
+                return mapped ? [mapped] : [];
+            }),
+            products: [],
+            addOns: [],
+            totalCount: asCount(totalRow?.total_count),
+        };
+    }
+
+    if (query.tab === "add-ons") {
+        const [totalRow] = await pg`
+            SELECT COUNT(*)::int AS total_count
+            FROM add_ons add_on
+            WHERE add_on.organization_id = ${query.organizationId}
+              AND (${statusFilter}::add_on_status_enum IS NULL OR add_on.status = ${statusFilter}::add_on_status_enum)
+              AND (
+                ${searchPattern}::text IS NULL
+                OR add_on.name ILIKE ${searchPattern}
+              )
+        `;
+
+        const addOnRows = await pg`
+            SELECT
+                add_on.id,
+                add_on.name,
+                add_on.price,
+                add_on.discount,
+                add_on.status::text AS status,
+                add_on.created_at,
+                add_on.updated_at,
+                (
+                    SELECT COUNT(*)::int
+                    FROM product_add_on_attachments attachment
+                    WHERE attachment.organization_id = add_on.organization_id
+                      AND attachment.add_on_id = add_on.id
+                ) AS attachment_count
+            FROM add_ons add_on
+            WHERE add_on.organization_id = ${query.organizationId}
+              AND (${statusFilter}::add_on_status_enum IS NULL OR add_on.status = ${statusFilter}::add_on_status_enum)
+              AND (
+                ${searchPattern}::text IS NULL
+                OR add_on.name ILIKE ${searchPattern}
+              )
+            ORDER BY add_on.created_at ASC, add_on.id ASC
+            LIMIT ${query.limit}
+            OFFSET ${offset}
+        `;
+
+        return {
+            counts: {
+                categories: asCount(countRow?.category_count),
+                products: asCount(countRow?.product_count),
+                addOns: asCount(countRow?.add_on_count),
+            },
+            categories: [],
+            products: [],
+            addOns: addOnRows.flatMap((row: Record<string, unknown>) => {
+                const mapped = mapAddOnRow(row);
+                return mapped ? [mapped] : [];
+            }),
+            totalCount: asCount(totalRow?.total_count),
+        };
+    }
+
+    const [totalRow] = await pg`
+        SELECT COUNT(*)::int AS total_count
+        FROM products product
+        INNER JOIN categories category
+          ON category.id = product.category_id
+         AND category.organization_id = product.organization_id
+        WHERE product.organization_id = ${query.organizationId}
+          AND (${statusFilter}::product_status_enum IS NULL OR product.status = ${statusFilter}::product_status_enum)
+          AND (
+            ${searchPattern}::text IS NULL
+            OR product.name ILIKE ${searchPattern}
+            OR product.product_code ILIKE ${searchPattern}
+          )
+    `;
+
+    const productRows = await pg`
+        SELECT
+            product.id,
+            product.name,
+            product.price,
+            product.discount,
+            product.status::text AS status,
+            product.product_type::text AS product_type,
+            product.product_code,
+            product.product_code_kind::text AS product_code_kind,
+            product.sort_order,
+            product.image_path,
+            product.created_at,
+            product.updated_at,
+            category.id AS category_id,
+            category.name AS category_name,
+            (
+                SELECT COUNT(*)::int
+                FROM product_add_on_attachments attachment
+                WHERE attachment.organization_id = product.organization_id
+                  AND attachment.product_id = product.id
+            ) AS attachment_count
+        FROM products product
+        INNER JOIN categories category
+          ON category.id = product.category_id
+         AND category.organization_id = product.organization_id
+        WHERE product.organization_id = ${query.organizationId}
+          AND (${statusFilter}::product_status_enum IS NULL OR product.status = ${statusFilter}::product_status_enum)
+          AND (
+            ${searchPattern}::text IS NULL
+            OR product.name ILIKE ${searchPattern}
+            OR product.product_code ILIKE ${searchPattern}
+          )
+        ORDER BY category.sort_order ASC, product.sort_order ASC, product.created_at ASC, product.id ASC
+        LIMIT ${query.limit}
+        OFFSET ${offset}
+    `;
+
+    return {
+        counts: {
+            categories: asCount(countRow?.category_count),
+            products: asCount(countRow?.product_count),
+            addOns: asCount(countRow?.add_on_count),
+        },
+        categories: [],
+        products: productRows.flatMap((row: Record<string, unknown>) => {
+            const mapped = mapProductRow(row);
+            return mapped ? [mapped] : [];
+        }),
+        addOns: [],
+        totalCount: asCount(totalRow?.total_count),
+    };
+};
+
+export const getOrganizationCatalogProduct = async (
+    organizationId: string,
+    productId: string,
+): Promise<(PlatformCatalogProductMetricsRow & { attachments: PlatformCatalogAttachmentMetricsRow[] }) | null> => {
+    const [productRow] = await pg`
+        SELECT
+            product.id,
+            product.name,
+            product.price,
+            product.discount,
+            product.status::text AS status,
+            product.product_type::text AS product_type,
+            product.product_code,
+            product.product_code_kind::text AS product_code_kind,
+            product.sort_order,
+            product.image_path,
+            product.created_at,
+            product.updated_at,
+            category.id AS category_id,
+            category.name AS category_name,
+            (
+                SELECT COUNT(*)::int
+                FROM product_add_on_attachments attachment
+                WHERE attachment.organization_id = product.organization_id
+                  AND attachment.product_id = product.id
+            ) AS attachment_count
+        FROM products product
+        INNER JOIN categories category
+          ON category.id = product.category_id
+         AND category.organization_id = product.organization_id
+        WHERE product.organization_id = ${organizationId}
+          AND product.id = ${productId}
+    `;
+
+    const product = productRow ? mapProductRow(productRow) : null;
+    if (!product) return null;
+
+    const attachmentRows = await pg`
+        SELECT
+            attachment.id,
+            attachment.add_on_id,
+            attachment.selection_cap,
+            attachment.status::text AS status,
+            add_on.name AS add_on_name,
+            add_on.price AS add_on_price,
+            add_on.discount AS add_on_discount,
+            add_on.status::text AS add_on_status
+        FROM product_add_on_attachments attachment
+        INNER JOIN add_ons add_on
+          ON add_on.id = attachment.add_on_id
+         AND add_on.organization_id = attachment.organization_id
+        WHERE attachment.organization_id = ${organizationId}
+          AND attachment.product_id = ${productId}
+        ORDER BY attachment.created_at ASC, attachment.id ASC
+    `;
+
+    return {
+        ...product,
+        attachments: attachmentRows.flatMap((row: Record<string, unknown>) => {
+            const status = asAttachmentStatus(row.status);
+            const addOnStatus = asAddOnStatus(row.add_on_status);
+            if (!status || !addOnStatus) return [];
+            return [{
+                id: String(row.id),
+                addOnId: String(row.add_on_id),
+                addOnName: String(row.add_on_name),
+                selectionCap: asCount(row.selection_cap),
+                status,
+                addOnPrice: asMoney(row.add_on_price),
+                addOnDiscount: asMoney(row.add_on_discount),
+                addOnStatus,
+            }];
+        }),
+    };
+};
+
+export const getOrganizationCatalogCategory = async (
+    organizationId: string,
+    categoryId: string,
+): Promise<(PlatformCatalogCategoryMetricsRow & { products: PlatformCatalogProductMetricsRow[] }) | null> => {
+    const [categoryRow] = await pg`
+        SELECT
+            category.id,
+            category.name,
+            category.sort_order,
+            category.status::text AS status,
+            category.created_at,
+            category.updated_at,
+            (
+                SELECT COUNT(*)::int
+                FROM products product
+                WHERE product.organization_id = category.organization_id
+                  AND product.category_id = category.id
+            ) AS product_count
+        FROM categories category
+        WHERE category.organization_id = ${organizationId}
+          AND category.id = ${categoryId}
+    `;
+
+    const category = categoryRow ? mapCategoryRow(categoryRow) : null;
+    if (!category) return null;
+
+    const productRows = await pg`
+        SELECT
+            product.id,
+            product.name,
+            product.price,
+            product.discount,
+            product.status::text AS status,
+            product.product_type::text AS product_type,
+            product.product_code,
+            product.product_code_kind::text AS product_code_kind,
+            product.sort_order,
+            product.image_path,
+            product.created_at,
+            product.updated_at,
+            category.id AS category_id,
+            category.name AS category_name,
+            (
+                SELECT COUNT(*)::int
+                FROM product_add_on_attachments attachment
+                WHERE attachment.organization_id = product.organization_id
+                  AND attachment.product_id = product.id
+            ) AS attachment_count
+        FROM products product
+        INNER JOIN categories category
+          ON category.id = product.category_id
+         AND category.organization_id = product.organization_id
+        WHERE product.organization_id = ${organizationId}
+          AND product.category_id = ${categoryId}
+        ORDER BY product.sort_order ASC, product.created_at ASC, product.id ASC
+    `;
+
+    return {
+        ...category,
+        products: productRows.flatMap((row: Record<string, unknown>) => {
+            const mapped = mapProductRow(row);
+            return mapped ? [mapped] : [];
+        }),
+    };
+};
+
+export const getOrganizationCatalogAddOn = async (
+    organizationId: string,
+    addOnId: string,
+): Promise<(PlatformCatalogAddOnMetricsRow & { attachments: PlatformCatalogProductAttachmentMetricsRow[] }) | null> => {
+    const [addOnRow] = await pg`
+        SELECT
+            add_on.id,
+            add_on.name,
+            add_on.price,
+            add_on.discount,
+            add_on.status::text AS status,
+            add_on.created_at,
+            add_on.updated_at,
+            (
+                SELECT COUNT(*)::int
+                FROM product_add_on_attachments attachment
+                WHERE attachment.organization_id = add_on.organization_id
+                  AND attachment.add_on_id = add_on.id
+            ) AS attachment_count
+        FROM add_ons add_on
+        WHERE add_on.organization_id = ${organizationId}
+          AND add_on.id = ${addOnId}
+    `;
+
+    const addOn = addOnRow ? mapAddOnRow(addOnRow) : null;
+    if (!addOn) return null;
+
+    const attachmentRows = await pg`
+        SELECT
+            attachment.id,
+            attachment.product_id,
+            attachment.selection_cap,
+            attachment.status::text AS status,
+            product.name AS product_name
+        FROM product_add_on_attachments attachment
+        INNER JOIN products product
+          ON product.id = attachment.product_id
+         AND product.organization_id = attachment.organization_id
+        WHERE attachment.organization_id = ${organizationId}
+          AND attachment.add_on_id = ${addOnId}
+        ORDER BY product.sort_order ASC, product.created_at ASC, attachment.id ASC
+    `;
+
+    return {
+        ...addOn,
+        attachments: attachmentRows.flatMap((row: Record<string, unknown>) => {
+            const status = asAttachmentStatus(row.status);
+            if (!status) return [];
+            return [{
+                id: String(row.id),
+                productId: String(row.product_id),
+                productName: String(row.product_name),
+                selectionCap: asCount(row.selection_cap),
+                status,
+            }];
+        }),
+    };
+};

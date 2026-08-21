@@ -27,10 +27,74 @@ export type OrganizationInspectionLocation =
         organizationId: string;
         section: OrganizationInspectionSection;
         resourceId?: string;
+        catalogResourceKind?: CatalogResourceKind;
     }
     | { kind: "invalid"; reason: "missing-organization" | "unknown-section" };
 
 export type BillingInspectionFilters = PlatformBillingInspectionQueryJSON;
+
+export type CatalogInspectionTab = "products" | "categories" | "add-ons";
+
+export type CatalogResourceKind = CatalogInspectionTab;
+
+export type CatalogInspectionFilters = {
+    tab?: CatalogInspectionTab;
+    search?: string;
+    status?: "all" | "active" | "inactive";
+    page?: number;
+    limit?: number;
+};
+
+const catalogFilterKeys = ["tab", "search", "status", "page", "limit"] as const;
+
+export const parseCatalogInspectionSearch = (search: string): CatalogInspectionFilters => {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const filters: CatalogInspectionFilters = {};
+
+    const tab = params.get("tab");
+    if (tab === "products" || tab === "categories" || tab === "add-ons") {
+        filters.tab = tab;
+    }
+
+    const searchValue = params.get("search")?.trim();
+    if (searchValue) filters.search = searchValue;
+
+    const status = params.get("status");
+    if (status === "all" || status === "active" || status === "inactive") {
+        filters.status = status;
+    }
+
+    const page = params.get("page");
+    if (page) filters.page = Number(page);
+
+    const limit = params.get("limit");
+    if (limit) filters.limit = Number(limit);
+
+    return filters;
+};
+
+export const catalogInspectionSearchString = (filters: CatalogInspectionFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const key of catalogFilterKeys) {
+        const value = filters[key];
+        if (value === undefined || value === null || value === "") continue;
+        params.set(key, String(value));
+    }
+    const serialized = params.toString();
+    return serialized ? `?${serialized}` : "";
+};
+
+export const catalogInspectionPath = (
+    organizationId: string,
+    target:
+        | { view: "list"; filters?: CatalogInspectionFilters }
+        | { view: "detail"; kind: CatalogResourceKind; id: string; filters?: CatalogInspectionFilters },
+) => {
+    if (target.view === "detail") {
+        return `${ORGANIZATIONS_PREFIX}/${organizationId}/catalog/${target.kind}/${target.id}${catalogInspectionSearchString(target.filters)}`;
+    }
+    return `${ORGANIZATIONS_PREFIX}/${organizationId}/catalog${catalogInspectionSearchString(target.filters)}`;
+};
 
 const ORGANIZATIONS_PREFIX = "/organizations";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -159,6 +223,28 @@ export const parseOrganizationInspectionPath = (pathname: string): OrganizationI
     const sectionPart = parts[1] ?? "";
     if (!isInspectionSection(sectionPart)) {
         return { kind: "invalid", reason: "unknown-section" };
+    }
+
+    if (sectionPart === "catalog") {
+        const catalogKind = parts[2];
+        const catalogResourceId = parts[3];
+        if (
+            catalogKind === "products"
+            || catalogKind === "categories"
+            || catalogKind === "add-ons"
+        ) {
+            if (!catalogResourceId) {
+                return { kind: "workspace", organizationId, section: "catalog" };
+            }
+            return {
+                kind: "workspace",
+                organizationId,
+                section: "catalog",
+                catalogResourceKind: catalogKind,
+                resourceId: catalogResourceId,
+            };
+        }
+        return { kind: "workspace", organizationId, section: "catalog" };
     }
 
     const resourceId = parts[2];

@@ -7,6 +7,8 @@ import type {
     OwnerUserDTO,
     PlatformDashboardQueryJSON,
     PlatformBillingInspectionQueryJSON,
+    PlatformCatalogProductDetailResponse,
+    PlatformCatalogListResponse,
     PlatformOrganizationDetailQueryJSON,
     PlatformOrganizationDetailResponse,
     PlatformOrganizationListItemDTO,
@@ -25,7 +27,7 @@ import PlatformOrganizationDetailPage, {
     type PlatformOrganizationDetailPageProps,
 } from "./platform-organization-detail-page";
 import PlatformOrganizationsPage from "./platform-organizations-page";
-import { organizationInspectionPath, parseOrganizationInspectionPath } from "@/lib/organization-inspection-url";
+import { catalogInspectionPath, organizationInspectionPath, parseOrganizationInspectionPath } from "@/lib/organization-inspection-url";
 
 afterEach(() => {
     cleanup();
@@ -136,6 +138,80 @@ const mixedRecentSales: PlatformRecentSaleDTO[] = [
         },
     },
 ];
+
+const categoryMixed = "c1111111-1111-4111-8111-c11111111111";
+const productMixed = "d1111111-1111-4111-8111-d11111111111";
+const addOnMixed = "e1111111-1111-4111-8111-e11111111111";
+const attachmentMixed = "f1111111-1111-4111-8111-f11111111111";
+
+const successCatalog = (
+    overrides: Partial<PlatformCatalogListResponse> = {},
+): ServiceResponse<PlatformCatalogListResponse> => ({
+    status: "success",
+    data: {
+        tab: "products",
+        counts: { categories: 1, products: 1, addOns: 1 },
+        categories: [],
+        products: [
+            {
+                id: productMixed,
+                name: "Masala Chai",
+                category: { id: categoryMixed, name: "Beverages" },
+                price: 50,
+                discount: 0,
+                status: "active",
+                productType: "single",
+                productCode: "TEA-001",
+                productCodeKind: "manufacturer",
+                sortOrder: 0,
+                attachmentCount: 1,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+        ],
+        addOns: [],
+        pagination: { page: 1, limit: 20, totalCount: 1 },
+        ...overrides,
+    },
+    message: "Platform Organization Catalog retrieved successfully",
+    code: 200,
+});
+
+const successCatalogProduct = (): ServiceResponse<PlatformCatalogProductDetailResponse> => ({
+    status: "success",
+    data: {
+        product: {
+            id: productMixed,
+            name: "Masala Chai",
+            category: { id: categoryMixed, name: "Beverages" },
+            price: 50,
+            discount: 0,
+            status: "active",
+            productType: "single",
+            productCode: "TEA-001",
+            productCodeKind: "manufacturer",
+            sortOrder: 0,
+            attachmentCount: 1,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            hasImage: false,
+            attachments: [
+                {
+                    id: attachmentMixed,
+                    addOnId: addOnMixed,
+                    addOnName: "Extra Ginger",
+                    selectionCap: 1,
+                    status: "active",
+                    addOnPrice: 10,
+                    addOnDiscount: 0,
+                    addOnStatus: "active",
+                },
+            ],
+        },
+    },
+    message: "Platform Organization Catalog Product retrieved successfully",
+    code: 200,
+});
 
 const successStores = (
     stores: PlatformOrganizationDetailResponse["organization"]["stores"] = mixedStores,
@@ -488,6 +564,8 @@ describe("Organization Inspection Workspace", () => {
             getPlatformStore?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformStore"]>;
             getPlatformOrganizationSales?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationSales"]>;
             getPlatformOrganizationSale?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationSale"]>;
+            getPlatformOrganizationCatalog?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationCatalog"]>;
+            getPlatformOrganizationCatalogProduct?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationCatalogProduct"]>;
         } = {},
     ) => {
         window.history.replaceState(null, "", path);
@@ -505,6 +583,8 @@ describe("Organization Inspection Workspace", () => {
                             getPlatformStore: options.getPlatformStore ?? (async () => successStoreDetail()),
                             getPlatformOrganizationSales: options.getPlatformOrganizationSales ?? (async () => successSales()),
                             getPlatformOrganizationSale: options.getPlatformOrganizationSale ?? (async () => successSaleDetail()),
+                            getPlatformOrganizationCatalog: options.getPlatformOrganizationCatalog ?? (async () => successCatalog()),
+                            getPlatformOrganizationCatalogProduct: options.getPlatformOrganizationCatalogProduct ?? (async () => successCatalogProduct()),
                         }}
                     />
                 </ThemeProvider>
@@ -689,6 +769,91 @@ describe("Organization Store inspection", () => {
         });
         expect(await missingView.findByText("Store was not found")).toBeTruthy();
         expect(missingView.queryByText("Counter POS")).toBeNull();
+    });
+});
+
+describe("Organization Catalog inspection", () => {
+    const renderCatalogSection = (
+        path: string,
+        options: {
+            getPlatformOrganization?: LoadOrganization;
+            getPlatformOrganizationCatalog?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationCatalog"]>;
+            getPlatformOrganizationCatalogProduct?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationCatalogProduct"]>;
+        } = {},
+    ) => {
+        window.history.replaceState(null, "", path);
+        const inspection = parseOrganizationInspectionPath(path);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        return render(
+            <QueryClientProvider client={client}>
+                <PlatformOrganizationDetailPage
+                    organizationId={mixedBistro.id}
+                    section="catalog"
+                    resourceId={inspection?.kind === "workspace" ? inspection.resourceId : undefined}
+                    catalogResourceKind={inspection?.kind === "workspace" ? inspection.catalogResourceKind : undefined}
+                    onNavigate={(nextPath) => {
+                        window.history.pushState(null, "", nextPath);
+                    }}
+                    onBack={() => {}}
+                    getPlatformOrganization={options.getPlatformOrganization ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales))}
+                    getPlatformOrganizationCatalog={options.getPlatformOrganizationCatalog ?? (async () => successCatalog())}
+                    getPlatformOrganizationCatalogProduct={options.getPlatformOrganizationCatalogProduct ?? (async () => successCatalogProduct())}
+                />
+            </QueryClientProvider>,
+        );
+    };
+
+    test("shows a read-only catalog list with tabs and no tenant write controls", async () => {
+        const view = renderCatalogSection(catalogInspectionPath(mixedBistro.id, { view: "list" }));
+
+        expect(await view.findByRole("heading", { name: "Catalog" })).toBeTruthy();
+        expect(view.getByText("Masala Chai")).toBeTruthy();
+        expect(view.getByText("Beverages")).toBeTruthy();
+        expect(view.getByText(/not limited by the Dashboard reporting period/)).toBeTruthy();
+        expect(view.queryByText("Create Product")).toBeNull();
+        expect(view.queryByText("Edit Category")).toBeNull();
+        expect(view.queryByText("Delete")).toBeNull();
+    });
+
+    test("opens product detail with attachment metadata from an Inspection URL", async () => {
+        const view = renderCatalogSection(catalogInspectionPath(mixedBistro.id, {
+            view: "detail",
+            kind: "products",
+            id: productMixed,
+        }));
+
+        expect(await view.findByRole("heading", { name: "Masala Chai" })).toBeTruthy();
+        expect(view.getByText("Product add-on attachments")).toBeTruthy();
+        expect(view.getByText("Extra Ginger")).toBeTruthy();
+        expect(view.getByRole("button", { name: "Back to catalog" })).toBeTruthy();
+        expect(view.queryByText("Attach add-on")).toBeNull();
+    });
+
+    test("shows empty, loading, and not-found catalog states without exposing other Organizations", async () => {
+        const emptyView = renderCatalogSection(catalogInspectionPath(mixedBistro.id, { view: "list" }), {
+            getPlatformOrganizationCatalog: async () => successCatalog({
+                products: [],
+                pagination: { page: 1, limit: 20, totalCount: 0 },
+            }),
+        });
+        expect(await emptyView.findByText("No products match these filters")).toBeTruthy();
+
+        const loadingView = renderCatalogSection(catalogInspectionPath(mixedBistro.id, { view: "list" }), {
+            getPlatformOrganizationCatalog: () => new Promise(() => {}),
+        });
+        expect(await loadingView.findByLabelText("Loading catalog")).toBeTruthy();
+
+        const missingView = renderCatalogSection(catalogInspectionPath(mixedBistro.id, {
+            view: "detail",
+            kind: "products",
+            id: productMixed,
+        }), {
+            getPlatformOrganizationCatalogProduct: async () => {
+                throw { code: 404, message: "Product not found", data: null, status: "error" };
+            },
+        });
+        expect(await missingView.findByText("Product was not found")).toBeTruthy();
+        expect(missingView.queryByText("Extra Ginger")).toBeNull();
     });
 });
 
