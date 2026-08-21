@@ -3,6 +3,7 @@ import {
     BarChart3,
     ReceiptText,
     Settings2,
+    ShoppingBag,
     Store,
     Users,
     type LucideIcon,
@@ -25,6 +26,7 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
     { id: "bills", label: "Bills", icon: ReceiptText, path: getPosPanelPath("bills"), tab: "bills" },
     { id: "reports", label: "Reports", icon: BarChart3, path: getPosPanelPath("reports"), tab: "reports" },
+    { id: "purchases", label: "Purchases", icon: ShoppingBag, path: getPosPanelPath("purchases"), tab: "purchases" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
 ];
 
@@ -40,5 +42,5 @@ export const isPosMoreDestinationActive = (pathname: string) => {
     }
 
     const tab = posWorkspaceDestinations.find((destination) => destination.path === pathname)?.tab;
-    return tab === "tables" || tab === "customers";
+    return tab === "tables" || tab === "customers" || tab === "purchases";
 };
