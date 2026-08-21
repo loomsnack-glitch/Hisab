@@ -182,16 +182,24 @@ export const buildReceiptText = (
     storePhone
   )
     lines.push(separator);
-  if (sale.kotNumbers && sale.kotNumbers.length > 0) {
-    appendWrappedText(lines, `Token No: ${sale.kotNumbers.join(", ")}`, width);
-  } else if (sale.tokenNumber) {
+  if (sale.tokenNumber) {
     appendWrappedText(lines, `Token No: ${sale.tokenNumber}`, width);
+  }
+  if (sale.kotNumbers && sale.kotNumbers.length > 0) {
+    appendWrappedText(
+      lines,
+      `KOT token numbers: ${sale.kotNumbers.join(", ")}`,
+      width,
+    );
   }
   appendWrappedText(
     lines,
     `Bill No: ${sale.saleNumber ? sale.saleNumber : "Draft"}`,
     width,
   );
+  if (sale.serviceTableLabel) {
+    appendWrappedText(lines, `Table No: ${sale.serviceTableLabel}`, width);
+  }
   appendWrappedText(lines, `Date: ${formatDateTime(sale.createdAt)}`, width);
   const customerWithPhone = sale.customer?.phone ? sale.customer : null;
   appendWrappedText(

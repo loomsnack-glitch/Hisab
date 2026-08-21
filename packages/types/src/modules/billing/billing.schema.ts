@@ -18,21 +18,17 @@ export const KotNumberResetPeriodSchema = SaleNumberResetPeriodSchema;
 export const SaleNumberSettingsDTOSchema = z.object({
   storeId: z.uuid("Invalid store id"),
   organizationId: z.uuid("Invalid organization id"),
-  resetPeriod: SaleNumberResetPeriodSchema,
+  resetPeriod: z.literal("financial_yearly"),
   timezone: z.string().min(1).max(64),
-  tokenNumberEnabled: z.boolean(),
-  tokenNumberResetPeriod: TokenNumberResetPeriodSchema,
-  kotNumberResetPeriod: KotNumberResetPeriodSchema,
+  tokenNumberEnabled: z.literal(true),
+  tokenNumberResetPeriod: z.literal("daily"),
+  kotNumberResetPeriod: z.literal("daily"),
   createdAt: dtoDateSchema,
   updatedAt: dtoDateSchema,
 });
 
-export const UpdateSaleNumberSettingsSchema = z.object({
-  resetPeriod: SaleNumberResetPeriodSchema,
-  tokenNumberEnabled: z.boolean(),
-  tokenNumberResetPeriod: TokenNumberResetPeriodSchema,
-  kotNumberResetPeriod: KotNumberResetPeriodSchema.default("daily"),
-});
+/** Bill / token / KOT reset rules are fixed platform-wide; no Store customization. */
+export const UpdateSaleNumberSettingsSchema = z.object({}).strict();
 
 const nameSchema = z
   .string()
@@ -239,6 +235,7 @@ export const SaleSummaryDTOSchema = z.object({
   kotNumbers: z.array(z.string().min(1)).optional(),
   customerId: z.uuid("Invalid customer id").nullable().optional(),
   serviceTableId: z.uuid("Invalid service table id").nullable().optional(),
+  serviceTableLabel: z.string().nullable().optional(),
   customerNameSnapshot: nameSchema.nullable().optional(),
   customerPhoneSnapshot: z.string().nullable().optional(),
   userId: z.uuid("Invalid user id").nullable().optional(),

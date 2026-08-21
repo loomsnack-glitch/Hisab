@@ -108,12 +108,16 @@ A record of money collected against a Sale. A Sale may have many Payments across
 _Avoid_: Settlement row, transaction row
 
 **Sale Number**:
-A human-friendly bill identifier assigned when a Sale is committed. It is unique within a Store.
-_Avoid_: UUID, internal id
+A human-friendly bill identifier assigned when a Sale is committed. It is unique within a Store for the current financial year, prints as a plain sequence (1, 2, 3…), and resets each financial year with no Store customization.
+_Avoid_: UUID, internal id, FY-prefixed bill number, configurable reset period
+
+**Token Number**:
+A human-friendly queue token assigned when a Sale is committed. It is always enabled, resets daily in the Store timezone, and prints separately from KOT Numbers.
+_Avoid_: Optional token toggle, configurable token reset period, KOT Number
 
 **KOT Number**:
-A human-friendly identifier assigned when a KOT is generated. Table and Parcel KOTs share one Store-local sequence that is separate from Sale Numbers; it defaults to a daily reset, and the Store configures it using the existing bill and token reset-period choices.
-_Avoid_: Sale Number, UUID, separate table and parcel sequences
+A human-friendly identifier assigned when a KOT is generated. Table and Parcel KOTs share one Store-local sequence that is separate from Sale Numbers and Token Numbers; it always resets daily with no Store customization. On the final bill, linked KOT Numbers print as KOT token numbers.
+_Avoid_: Sale Number, Token Number, UUID, separate table and parcel sequences, configurable KOT reset period
 
 **Sale Status**:
 The lifecycle state of a Sale. In billing v1, a Sale may be draft, completed, or voided.

@@ -29,7 +29,8 @@ describe("KOT Number sequence allocation", () => {
 
         const sql = executedQueries.join("\n");
         expect(sql).toContain("store_billing_settings");
-        expect(sql).toContain("kot_number_reset_period");
+        expect(sql).toContain("sale_number_timezone");
+        expect(sql).not.toContain("kot_number_reset_period");
         expect(sql).toContain("store_kot_sequences");
         expect(sql).not.toContain("store_sale_sequences");
         expect(sql).not.toContain("store_token_sequences");

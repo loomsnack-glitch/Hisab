@@ -467,11 +467,7 @@ export const getSaleNumberSettings = async (
     (await billingRepository.upsertSaleNumberSettings(
       organizationId,
       storeId,
-      "never",
       DEFAULT_SALE_NUMBER_TIMEZONE,
-      false,
-      "daily",
-      "daily",
     ));
 
   if (!settings) {
@@ -495,7 +491,7 @@ export const updateSaleNumberSettings = async (
   userId: string,
   organizationId: string,
   storeId: string,
-  settingsData: UpdateSaleNumberSettingsSVC,
+  _settingsData: UpdateSaleNumberSettingsSVC,
 ): Promise<ServiceResponse<SaleNumberSettingsResponse | null>> => {
   const invalid = await verifyOrganizationAndStore(
     userId,
@@ -509,11 +505,7 @@ export const updateSaleNumberSettings = async (
   const settings = await billingRepository.upsertSaleNumberSettings(
     organizationId,
     storeId,
-    settingsData.resetPeriod,
     DEFAULT_SALE_NUMBER_TIMEZONE,
-    settingsData.tokenNumberEnabled,
-    settingsData.tokenNumberResetPeriod,
-    settingsData.kotNumberResetPeriod,
   );
 
   if (!settings) {
@@ -582,12 +574,22 @@ const buildSaleDetails = async (
     saleId,
     tx,
   );
+  const serviceTableLabel = sale.serviceTableId
+    ? ((
+        await tableRepository.getServiceTableById(
+          organizationId,
+          storeId,
+          sale.serviceTableId,
+        )
+      )?.tableLabel ?? null)
+    : null;
 
   return {
     ...sale,
     items,
     payments,
     ...(kotNumbers.length > 0 ? { kotNumbers } : {}),
+    ...(serviceTableLabel ? { serviceTableLabel } : {}),
     orderDiscountAmount: deriveOrderDiscountAmount(
       sale.discountTotal,
       lineDiscountTotal,

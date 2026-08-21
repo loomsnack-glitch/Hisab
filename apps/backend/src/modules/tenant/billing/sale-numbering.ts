@@ -1,6 +1,9 @@
-import type { KotNumberResetPeriod, SaleNumberResetPeriod, TokenNumberResetPeriod } from "@repo/types";
+import type { SaleNumberResetPeriod } from "@repo/types";
 
 export const DEFAULT_SALE_NUMBER_TIMEZONE = "Asia/Kolkata";
+export const FIXED_SALE_NUMBER_RESET_PERIOD = "financial_yearly" as const satisfies SaleNumberResetPeriod;
+export const FIXED_TOKEN_NUMBER_RESET_PERIOD = "daily" as const satisfies SaleNumberResetPeriod;
+export const FIXED_KOT_NUMBER_RESET_PERIOD = "daily" as const satisfies SaleNumberResetPeriod;
 
 type ZonedDateParts = {
     year: number;
@@ -30,18 +33,6 @@ const getZonedDateParts = (date: Date, timezone: string): ZonedDateParts => {
     };
 };
 
-const getIsoWeek = (parts: ZonedDateParts) => {
-    const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
-    const weekday = (date.getUTCDay() + 6) % 7;
-    const thursday = new Date(date.getTime() + (3 - weekday) * 86_400_000);
-    const firstThursday = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
-    const firstWeekday = (firstThursday.getUTCDay() + 6) % 7;
-    const firstIsoThursday = new Date(firstThursday.getTime() + (3 - firstWeekday) * 86_400_000);
-    const week = 1 + Math.round((thursday.getTime() - firstIsoThursday.getTime()) / 86_400_000 / 7);
-
-    return `${thursday.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-};
-
 export const isValidSaleNumberTimezone = (timezone: string) => {
     try {
         new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
@@ -51,59 +42,33 @@ export const isValidSaleNumberTimezone = (timezone: string) => {
     }
 };
 
-export const getSaleNumberPeriodKey = (
-    resetPeriod: SaleNumberResetPeriod,
-    date: Date,
-    timezone: string,
-): string => {
-    if (resetPeriod === "never") {
-        return "continuous";
-    }
-
+const getDailyPeriodKey = (date: Date, timezone: string): string => {
     const parts = getZonedDateParts(date, timezone);
     const month = String(parts.month).padStart(2, "0");
     const day = String(parts.day).padStart(2, "0");
-
-    switch (resetPeriod) {
-        case "daily":
-            return `${parts.year}${month}${day}`;
-        case "weekly":
-            return getIsoWeek(parts);
-        case "monthly":
-            return `${parts.year}-${month}`;
-        case "quarterly":
-            return `${parts.year}-Q${Math.ceil(parts.month / 3)}`;
-        case "half_yearly":
-            return `${parts.year}-H${parts.month <= 6 ? 1 : 2}`;
-        case "yearly":
-            return String(parts.year);
-        case "financial_yearly": {
-            const startYear = parts.month >= 4 ? parts.year : parts.year - 1;
-            return `FY${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)}`;
-        }
-    }
+    return `${parts.year}${month}${day}`;
 };
 
-export const formatSaleNumber = (resetPeriod: SaleNumberResetPeriod, periodKey: string, sequenceNumber: number) => {
-    if (resetPeriod === "never") {
-        return String(sequenceNumber);
-    }
-
-    return `${periodKey}-${String(sequenceNumber).padStart(4, "0")}`;
+const getFinancialYearPeriodKey = (date: Date, timezone: string): string => {
+    const parts = getZonedDateParts(date, timezone);
+    const startYear = parts.month >= 4 ? parts.year : parts.year - 1;
+    return `FY${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)}`;
 };
 
-export const getTokenNumberPeriodKey = (
-    resetPeriod: TokenNumberResetPeriod,
-    date: Date,
-    timezone: string,
-): string => getSaleNumberPeriodKey(resetPeriod, date, timezone);
+/** Bill numbers reset each financial year; the printed value is only the sequence. */
+export const getSaleNumberPeriodKey = (date: Date, timezone: string): string =>
+    getFinancialYearPeriodKey(date, timezone);
+
+export const formatSaleNumber = (sequenceNumber: number) => String(sequenceNumber);
+
+/** Token numbers always reset daily. */
+export const getTokenNumberPeriodKey = (date: Date, timezone: string): string =>
+    getDailyPeriodKey(date, timezone);
 
 export const formatTokenNumber = (sequenceNumber: number) => String(sequenceNumber).padStart(3, "0");
 
-export const getKotNumberPeriodKey = (
-    resetPeriod: KotNumberResetPeriod,
-    date: Date,
-    timezone: string,
-): string => getSaleNumberPeriodKey(resetPeriod, date, timezone);
+/** KOT Numbers always reset daily. */
+export const getKotNumberPeriodKey = (date: Date, timezone: string): string =>
+    getDailyPeriodKey(date, timezone);
 
 export const formatKotNumber = (sequenceNumber: number) => `KOT-${String(sequenceNumber).padStart(3, "0")}`;

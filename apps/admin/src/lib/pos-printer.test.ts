@@ -51,6 +51,21 @@ describe("80mm ESC/POS receipt payload", () => {
     expect(output.indexOf("Token No: 001")).toBeLessThan(output.indexOf("Bill No: INV-1042"));
   });
 
+  test("prints token number, KOT token numbers, and table number together", () => {
+    const output = new TextDecoder().decode(
+      build80mmEscPosPayload({
+        ...sale,
+        tokenNumber: "001",
+        kotNumbers: ["KOT-001", "KOT-002"],
+        serviceTableLabel: "A1",
+      }),
+    );
+
+    expect(output).toContain("Token No: 001");
+    expect(output).toContain("KOT token numbers: KOT-001, KOT-002");
+    expect(output).toContain("Table No: A1");
+  });
+
   test("uses an ASCII-safe fallback for unsupported printer characters", () => {
     const localizedSale = {
       ...sale,

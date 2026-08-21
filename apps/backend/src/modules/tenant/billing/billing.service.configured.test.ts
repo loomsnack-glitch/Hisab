@@ -400,6 +400,7 @@ mock.module("@/modules/tenant/table-service/table-service.repository", () => ({
     lockServiceTableForSale,
     markReadyDraftAsEngaged,
     setCommittedSaleTableState,
+    getServiceTableById: mock(async () => null),
 }));
 
 mock.module("@/modules/tenant/kot/kot.repository", () => ({

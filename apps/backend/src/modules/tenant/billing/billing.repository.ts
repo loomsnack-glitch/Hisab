@@ -1111,17 +1111,25 @@ export const getSaleNumberSettings = async (
           AND store_id = ${storeId}
     `;
 
-    return result ? mapRow<SaleNumberSettingsDTO>(result) : null;
+    if (!result) {
+        return null;
+    }
+
+    const mapped = mapRow<SaleNumberSettingsDTO>(result);
+    return {
+        ...mapped,
+        resetPeriod: "financial_yearly",
+        tokenNumberEnabled: true,
+        tokenNumberResetPeriod: "daily",
+        kotNumberResetPeriod: "daily",
+        timezone: mapped.timezone?.trim() || DEFAULT_SALE_NUMBER_TIMEZONE,
+    };
 };
 
 export const upsertSaleNumberSettings = async (
     organizationId: string,
     storeId: string,
-    resetPeriod: SaleNumberSettingsDTO["resetPeriod"],
-    timezone: string,
-    tokenNumberEnabled = false,
-    tokenNumberResetPeriod: SaleNumberSettingsDTO["tokenNumberResetPeriod"] = "daily",
-    kotNumberResetPeriod: SaleNumberSettingsDTO["kotNumberResetPeriod"] = "daily",
+    timezone: string = DEFAULT_SALE_NUMBER_TIMEZONE,
 ): Promise<SaleNumberSettingsDTO | null> => {
     const [result] = await pg`
         INSERT INTO store_billing_settings (
@@ -1135,11 +1143,11 @@ export const upsertSaleNumberSettings = async (
         ) VALUES (
             ${storeId},
             ${organizationId},
-            ${resetPeriod},
+            ${"financial_yearly"},
             ${timezone},
-            ${tokenNumberEnabled},
-            ${tokenNumberResetPeriod},
-            ${kotNumberResetPeriod}
+            ${true},
+            ${"daily"},
+            ${"daily"}
         )
         ON CONFLICT (store_id)
         DO UPDATE SET
@@ -1161,7 +1169,19 @@ export const upsertSaleNumberSettings = async (
             updated_at
     `;
 
-    return result ? mapRow<SaleNumberSettingsDTO>(result) : null;
+    if (!result) {
+        return null;
+    }
+
+    const mapped = mapRow<SaleNumberSettingsDTO>(result);
+    return {
+        ...mapped,
+        resetPeriod: "financial_yearly",
+        tokenNumberEnabled: true,
+        tokenNumberResetPeriod: "daily",
+        kotNumberResetPeriod: "daily",
+        timezone: mapped.timezone?.trim() || DEFAULT_SALE_NUMBER_TIMEZONE,
+    };
 };
 
 export const allocateSaleNumber = async (
@@ -1173,23 +1193,48 @@ export const allocateSaleNumber = async (
     saleNumber: string;
     saleSequenceNumber: number;
     salePeriodKey: string;
-    tokenNumber: string | null;
-    tokenSequenceNumber: number | null;
-    tokenPeriodKey: string | null;
+    tokenNumber: string;
+    tokenSequenceNumber: number;
+    tokenPeriodKey: string;
 }> => {
     const db = tx || pg;
-    const settings =
-        (await getSaleNumberSettings(organizationId, storeId, tx)) ??
-        ({
-            resetPeriod: "never",
-            timezone: DEFAULT_SALE_NUMBER_TIMEZONE,
-            tokenNumberEnabled: false,
-            tokenNumberResetPeriod: "daily",
-            kotNumberResetPeriod: "daily",
-        } as const);
-    const periodKey = getSaleNumberPeriodKey(settings.resetPeriod, committedAt, settings.timezone);
+    const settings = await getSaleNumberSettings(organizationId, storeId, tx);
+    const timezone = settings?.timezone?.trim() || DEFAULT_SALE_NUMBER_TIMEZONE;
+    const periodKey = getSaleNumberPeriodKey(committedAt, timezone);
     const [result] = await db`
+        WITH existing_max AS (
+            SELECT COALESCE(MAX(sale_sequence_number), 0) AS max_seq
+            FROM sales
+            WHERE store_id = ${storeId}
+              AND organization_id = ${organizationId}
+              AND sale_period_key = ${periodKey}
+        )
         INSERT INTO store_sale_sequences (
+            store_id,
+            organization_id,
+            period_key,
+            next_sequence_number
+        )
+        SELECT
+            ${storeId},
+            ${organizationId},
+            ${periodKey},
+            existing_max.max_seq + 2
+        FROM existing_max
+        ON CONFLICT (store_id, period_key)
+        DO UPDATE SET
+            next_sequence_number = GREATEST(
+                store_sale_sequences.next_sequence_number,
+                (SELECT max_seq + 1 FROM existing_max)
+            ) + 1,
+            updated_at = NOW()
+        RETURNING next_sequence_number - 1 AS sequence_number
+    `;
+
+    const saleSequenceNumber = Number(result?.sequence_number ?? 1);
+    const tokenPeriodKey = getTokenNumberPeriodKey(committedAt, timezone);
+    const [tokenResult] = await db`
+        INSERT INTO store_token_sequences (
             store_id,
             organization_id,
             period_key,
@@ -1197,50 +1242,22 @@ export const allocateSaleNumber = async (
         ) VALUES (
             ${storeId},
             ${organizationId},
-            ${periodKey},
+            ${tokenPeriodKey},
             2
         )
         ON CONFLICT (store_id, period_key)
         DO UPDATE SET
-            next_sequence_number = store_sale_sequences.next_sequence_number + 1,
+            next_sequence_number = store_token_sequences.next_sequence_number + 1,
             updated_at = NOW()
         RETURNING next_sequence_number - 1 AS sequence_number
     `;
-
-    const saleSequenceNumber = Number(result?.sequence_number ?? 1);
-    let tokenNumber: string | null = null;
-    let tokenSequenceNumber: number | null = null;
-    let tokenPeriodKey: string | null = null;
-
-    if (settings.tokenNumberEnabled) {
-        tokenPeriodKey = getTokenNumberPeriodKey(settings.tokenNumberResetPeriod, committedAt, settings.timezone);
-        const [tokenResult] = await db`
-            INSERT INTO store_token_sequences (
-                store_id,
-                organization_id,
-                period_key,
-                next_sequence_number
-            ) VALUES (
-                ${storeId},
-                ${organizationId},
-                ${tokenPeriodKey},
-                2
-            )
-            ON CONFLICT (store_id, period_key)
-            DO UPDATE SET
-                next_sequence_number = store_token_sequences.next_sequence_number + 1,
-                updated_at = NOW()
-            RETURNING next_sequence_number - 1 AS sequence_number
-        `;
-        tokenSequenceNumber = Number(tokenResult?.sequence_number ?? 1);
-        tokenNumber = formatTokenNumber(tokenSequenceNumber);
-    }
+    const tokenSequenceNumber = Number(tokenResult?.sequence_number ?? 1);
 
     return {
-        saleNumber: formatSaleNumber(settings.resetPeriod, periodKey, saleSequenceNumber),
+        saleNumber: formatSaleNumber(saleSequenceNumber),
         saleSequenceNumber,
         salePeriodKey: periodKey,
-        tokenNumber,
+        tokenNumber: formatTokenNumber(tokenSequenceNumber),
         tokenSequenceNumber,
         tokenPeriodKey,
     };

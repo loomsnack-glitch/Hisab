@@ -1196,8 +1196,7 @@ ALTER TABLE ONLY public.sales
 -- Name: sales sales_store_id_sale_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.sales
-    ADD CONSTRAINT sales_store_id_sale_number_key UNIQUE (store_id, sale_number);
+-- Dropped: sale numbers are unique per store + financial-year period (see sales_store_sale_period_sequence_key).
 
 
 --
@@ -1757,6 +1756,13 @@ CREATE UNIQUE INDEX sales_store_completion_request_id_key ON public.sales USING 
 --
 
 CREATE UNIQUE INDEX sales_store_token_period_sequence_key ON public.sales USING btree (store_id, token_period_key, token_sequence_number) WHERE ((token_period_key IS NOT NULL) AND (token_sequence_number IS NOT NULL));
+
+
+--
+-- Name: sales_store_sale_period_sequence_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX sales_store_sale_period_sequence_key ON public.sales USING btree (store_id, sale_period_key, sale_sequence_number) WHERE ((sale_period_key IS NOT NULL) AND (sale_sequence_number IS NOT NULL));
 
 
 --

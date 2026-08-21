@@ -13,7 +13,6 @@ import type {
     KotItemBundleComponentAddOnDTO,
     KotItemBundleComponentDTO,
     KotItemDTO,
-    KotNumberResetPeriod,
     TableOrderDTO,
 } from "@repo/types";
 import {
@@ -89,19 +88,16 @@ export const allocateKotNumber = async (
 }> => {
     const db = tx || pg;
     const [settingsRow] = await db`
-        SELECT
-            kot_number_reset_period,
-            sale_number_timezone
+        SELECT sale_number_timezone
         FROM store_billing_settings
         WHERE organization_id = ${organizationId}
           AND store_id = ${storeId}
     `;
-    const resetPeriod = (settingsRow?.kot_number_reset_period as KotNumberResetPeriod | undefined) ?? "daily";
     const timezone =
         typeof settingsRow?.sale_number_timezone === "string" && settingsRow.sale_number_timezone.trim()
             ? settingsRow.sale_number_timezone
             : DEFAULT_SALE_NUMBER_TIMEZONE;
-    const periodKey = getKotNumberPeriodKey(resetPeriod, generatedAt, timezone);
+    const periodKey = getKotNumberPeriodKey(generatedAt, timezone);
     const [result] = await db`
         INSERT INTO store_kot_sequences (
             store_id,

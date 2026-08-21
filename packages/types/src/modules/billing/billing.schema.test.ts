@@ -61,63 +61,45 @@ describe("Configured sale billing contracts", () => {
         expect(result.success).toBe(true);
     });
 
-    test("sale number settings accept every supported reset period", () => {
-        const base = {
+    test("sale number settings are fixed to financial-year bills with daily token and KOT numbers", () => {
+        const result = SaleNumberSettingsDTOSchema.safeParse({
             storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
             organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
             timezone: "Asia/Kolkata",
-            tokenNumberEnabled: false,
+            resetPeriod: "financial_yearly",
+            tokenNumberEnabled: true,
             tokenNumberResetPeriod: "daily",
             kotNumberResetPeriod: "daily",
             createdAt: new Date("2026-08-07T12:00:00.000Z"),
             updatedAt: new Date("2026-08-07T12:00:00.000Z"),
-        };
-        const periods = [
-            "never",
-            "daily",
-            "weekly",
-            "monthly",
-            "quarterly",
-            "half_yearly",
-            "yearly",
-            "financial_yearly",
-        ] as const;
-
-        for (const resetPeriod of periods) {
-            expect(SaleNumberSettingsDTOSchema.safeParse({ ...base, resetPeriod }).success).toBe(true);
-            for (const tokenNumberResetPeriod of periods) {
-                expect(
-                    UpdateSaleNumberSettingsSchema.safeParse({
-                        resetPeriod,
-                        tokenNumberEnabled: true,
-                        tokenNumberResetPeriod,
-                    }).success,
-                ).toBe(true);
-            }
-            for (const kotNumberResetPeriod of periods) {
-                expect(
-                    UpdateSaleNumberSettingsSchema.safeParse({
-                        resetPeriod,
-                        tokenNumberEnabled: false,
-                        tokenNumberResetPeriod: "daily",
-                        kotNumberResetPeriod,
-                    }).success,
-                ).toBe(true);
-            }
-        }
-    });
-
-    test("KOT Number settings default to a daily reset period", () => {
-        const result = UpdateSaleNumberSettingsSchema.safeParse({
-            resetPeriod: "never",
-            tokenNumberEnabled: false,
-            tokenNumberResetPeriod: "weekly",
         });
 
         expect(result.success).toBe(true);
-        if (result.success) {
-            expect(result.data.kotNumberResetPeriod).toBe("daily");
-        }
+        expect(
+            SaleNumberSettingsDTOSchema.safeParse({
+                storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                timezone: "Asia/Kolkata",
+                resetPeriod: "never",
+                tokenNumberEnabled: false,
+                tokenNumberResetPeriod: "weekly",
+                kotNumberResetPeriod: "monthly",
+                createdAt: new Date("2026-08-07T12:00:00.000Z"),
+                updatedAt: new Date("2026-08-07T12:00:00.000Z"),
+            }).success,
+        ).toBe(false);
+    });
+
+    test("sale number settings updates accept an empty body because rules are fixed", () => {
+        const result = UpdateSaleNumberSettingsSchema.safeParse({});
+        expect(result.success).toBe(true);
+        expect(
+            UpdateSaleNumberSettingsSchema.safeParse({
+                resetPeriod: "never",
+                tokenNumberEnabled: false,
+                tokenNumberResetPeriod: "weekly",
+            }).success,
+        ).toBe(false);
     });
 
     test("sale item input accepts selection-only product and add-on ids with quantities", () => {

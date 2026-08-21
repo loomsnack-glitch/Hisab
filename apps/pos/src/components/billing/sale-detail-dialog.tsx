@@ -335,13 +335,19 @@ const SaleDetailDialog = ({
                                 <DialogHeader className="min-w-0 flex-1 space-y-3">
                                     <div className="flex flex-wrap items-end gap-3">
                                         <div className="min-w-0">
-                                            {sale.kotNumbers && sale.kotNumbers.length > 0 ? (
-                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-                                                    Token {sale.kotNumbers.join(", ")}
-                                                </p>
-                                            ) : sale.tokenNumber ? (
+                                            {sale.tokenNumber ? (
                                                 <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
                                                     Token {sale.tokenNumber}
+                                                </p>
+                                            ) : null}
+                                            {sale.kotNumbers && sale.kotNumbers.length > 0 ? (
+                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                                    KOT token numbers {sale.kotNumbers.join(", ")}
+                                                </p>
+                                            ) : null}
+                                            {sale.serviceTableLabel ? (
+                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                                    Table {sale.serviceTableLabel}
                                                 </p>
                                             ) : null}
                                             <DialogTitle className="whitespace-nowrap font-display text-3xl font-semibold tracking-tight">

@@ -105,9 +105,9 @@ const renderStoreDetail = (path: string) => {
             settings: {
                 storeId,
                 organizationId,
-                resetPeriod: "never",
+                resetPeriod: "financial_yearly",
                 timezone: "Asia/Kolkata",
-                tokenNumberEnabled: false,
+                tokenNumberEnabled: true,
                 tokenNumberResetPeriod: "daily",
                 kotNumberResetPeriod: "daily",
                 createdAt: now,
@@ -170,18 +170,19 @@ describe("Store detail page", () => {
         expect(markup).not.toContain("Bill numbering");
     });
 
-    test("shows bill, token, and KOT numbering controls on settings", () => {
+    test("shows fixed bill, token, and KOT numbering rules on settings", () => {
         const markup = renderStoreDetail(`/organizations/${organizationId}/stores/${storeId}/settings`);
 
         expect(markup).toContain("Bill numbering");
         expect(markup).toContain("Store features");
         expect(markup).toContain("KOT system");
         expect(markup).toContain("Table management");
-        expect(markup).toContain("Reset period");
-        expect(markup).toContain("Token numbering");
-        expect(markup).toContain("Reset KOT number");
+        expect(markup).toContain("financial year");
+        expect(markup).toContain("Token numbers");
+        expect(markup).toContain("KOT Numbers");
         expect(markup).toContain("KOT-001");
-        expect(markup).toContain("Save settings");
+        expect(markup).toContain("cannot be customized");
+        expect(markup).not.toContain("Reset period");
         expect(markup).not.toContain("Add device");
         expect(markup).not.toContain("Counter 1");
     });
