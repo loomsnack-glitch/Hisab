@@ -494,6 +494,12 @@ describe("Platform Billing inspection contracts", () => {
                 },
             ],
             pagination: { page: 1, limit: 20, totalCount: 1 },
+            summary: {
+                completedCount: 1,
+                salesTotal: 50.5,
+                collectedTotal: 50.5,
+                dueTotal: 0,
+            },
         });
 
         expect(parsed.sales[0]?.store.name).toBe("Front Hall");

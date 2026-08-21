@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
+import { useDeferredValue, useEffect, useState, type MouseEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Building2, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, RotateCcw, Search } from "lucide-react";
 import {
     getPlatformOrganization as getPlatformOrganizationRequest,
     getPlatformOrganizationSales as getPlatformOrganizationSalesRequest,
@@ -32,23 +32,24 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
+import { DataTableSortFilter } from "@repo/ui/components/data-table-sort-filter";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui/components/table";
 
-import PlatformOrganizationDetailPage from "@/components/platform-organization-detail-page";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui/components/table";
 import {
     organizationDirectoryPath,
     organizationInspectionPath,
     parseOrganizationInspectionPath,
 } from "@/lib/organization-inspection-url";
 
+import PlatformOrganizationDetailPage from "@/components/platform-organization-detail-page";
+
 const organizationsQueryKey = ["platform-owner", "organizations"] as const;
 
-type ActivityFilter = PlatformOrganizationActivityFilter;
-type DirectorySort = PlatformOrganizationDirectorySort;
+type StatusSelection = "active" | "inactive";
 
 type PlatformOrganizationsPageProps = {
     reportingQuery?: PlatformDashboardQueryJSON;
@@ -75,8 +76,10 @@ type PlatformOrganizationsPageProps = {
     onUnauthorized?: () => Promise<void>;
 };
 
-const activityOptions = [
-    { value: "all", label: "All" },
+type ActivityFilter = PlatformOrganizationActivityFilter;
+type DirectorySort = PlatformOrganizationDirectorySort;
+
+const statusFilterOptions = [
     { value: "active", label: "Active" },
     { value: "inactive", label: "Inactive" },
 ] as const;
@@ -89,6 +92,18 @@ const sortOptions = [
     { value: "sales_value_asc", label: "Lowest sales value" },
 ] as const;
 
+const activityFromInitial = (activity: ActivityFilter): Set<StatusSelection> => {
+    if (activity === "active") return new Set(["active"]);
+    if (activity === "inactive") return new Set(["inactive"]);
+    return new Set();
+};
+
+const activityFromStatusSelection = (selection: Set<StatusSelection>): ActivityFilter => {
+    if (selection.size === 1 && selection.has("active")) return "active";
+    if (selection.size === 1 && selection.has("inactive")) return "inactive";
+    return "all";
+};
+
 const formatCompletedSalesValue = (value: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(value);
 
@@ -99,17 +114,6 @@ const formatLastCompletedSale = (value: string | Date | null) => {
         dateStyle: "medium",
         timeStyle: "short",
     }).format(new Date(value));
-};
-
-const reportingPeriodLabel = (query: PlatformDashboardQueryJSON) => {
-    const period = query.period ?? "all-time";
-    if (period === "custom") {
-        return `${query.startDate ?? ""} – ${query.endDate ?? ""}`;
-    }
-    if (period === "7d") return "7-day";
-    if (period === "30d") return "30-day";
-    if (period === "90d") return "90-day";
-    return "All-time";
 };
 
 const creatorName = (organization: PlatformOrganizationListItemDTO) =>
@@ -161,11 +165,12 @@ const PlatformOrganizationsPage = ({
 }: PlatformOrganizationsPageProps) => {
     const [pathname, setPathname] = useState(() => window.location.pathname);
     const [searchInput, setSearchInput] = useState(initialSearch);
-    const [appliedSearch, setAppliedSearch] = useState(initialSearch.trim());
-    const [activity, setActivity] = useState<ActivityFilter>(initialActivity);
+    const deferredSearch = useDeferredValue(searchInput.trim());
+    const [statusSelection, setStatusSelection] = useState<Set<StatusSelection>>(() => activityFromInitial(initialActivity));
     const [sort, setSort] = useState<DirectorySort>(initialSort);
     const [page, setPage] = useState(1);
-    const listQuery = toListQuery(reportingQuery, appliedSearch, activity, sort, page);
+    const activity = activityFromStatusSelection(statusSelection);
+    const listQuery = toListQuery(reportingQuery, deferredSearch, activity, sort, page);
     const inspection = parseOrganizationInspectionPath(pathname);
 
     const organizationsQuery = useQuery({
@@ -180,7 +185,8 @@ const PlatformOrganizationsPage = ({
     const totalCount = list?.pagination.totalCount ?? 0;
     const limit = list?.pagination.limit ?? 20;
     const totalPages = Math.max(1, Math.ceil(totalCount / limit));
-    const hasFilter = Boolean(appliedSearch) || activity !== "all";
+    const hasFilter = Boolean(deferredSearch) || activity !== "all";
+    const hasDropdownFilters = statusSelection.size > 0 || sort !== "recent_activity";
     const errorCode = (organizationsQuery.error as { code?: number } | null)?.code
         ?? (organizationsQuery.data?.status === "error" ? organizationsQuery.data.code : undefined);
 
@@ -189,6 +195,10 @@ const PlatformOrganizationsPage = ({
         window.addEventListener("popstate", syncPath);
         return () => window.removeEventListener("popstate", syncPath);
     }, []);
+
+    useEffect(() => {
+        setPage(1);
+    }, [deferredSearch, activity, sort]);
 
     useEffect(() => {
         if (errorCode === 401) void onUnauthorized?.();
@@ -208,21 +218,20 @@ const PlatformOrganizationsPage = ({
         go(path);
     };
 
-    const applySearch = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        const submitted = String(new FormData(event.currentTarget).get("search") ?? searchInput).trim();
-        setSearchInput(submitted);
-        setAppliedSearch(submitted);
-        setPage(1);
-    };
-
-    const selectActivity = (next: ActivityFilter) => {
-        setActivity(next);
-        setPage(1);
-    };
-
     const selectSort = (next: DirectorySort) => {
         setSort(next);
+    };
+
+    const clearDropdownFilters = () => {
+        setStatusSelection(new Set());
+        setSort("recent_activity");
+        setPage(1);
+    };
+
+    const resetFilters = () => {
+        setSearchInput("");
+        setStatusSelection(new Set());
+        setSort("recent_activity");
         setPage(1);
     };
 
@@ -287,92 +296,51 @@ const PlatformOrganizationsPage = ({
         );
     }
 
-    const periodLabel = reportingPeriodLabel(reportingQuery);
-
     return (
-        <section className="space-y-6">
-            <Card className="overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardContent className="relative p-6 sm:p-8">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_25%),radial-gradient(circle_at_bottom_right,_rgba(251,191,36,0.10),_transparent_30%)]" />
-                    <div className="relative max-w-2xl space-y-2">
-                        <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
-                            Organization Directory
-                        </Badge>
-                        <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">Organizations</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Read-only Organization Directory for finding and opening an Organization Inspection Workspace.
-                        </p>
-                    </div>
-                </CardContent>
-            </Card>
+        <section className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="relative min-w-0 w-full sm:max-w-md group/search">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
+                    <Input
+                        id="organization-search"
+                        name="search"
+                        type="search"
+                        value={searchInput}
+                        onChange={(event) => setSearchInput(event.target.value)}
+                        aria-label="Search organization or creator"
+                        placeholder="Search organization or creator"
+                        className="h-10 w-full rounded-full border-border/60 bg-card/60 pl-10 text-sm shadow-2xs transition-all duration-200 focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/30"
+                    />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <DataTableFacetedFilter
+                        title="Status"
+                        options={statusFilterOptions}
+                        selectedValues={statusSelection}
+                        onSelectedValuesChange={(values) => setStatusSelection(new Set(Array.from(values) as StatusSelection[]))}
+                    />
+                    <DataTableSortFilter
+                        title="Sort"
+                        value={sort}
+                        onValueChange={(value) => selectSort(value as DirectorySort)}
+                        options={sortOptions}
+                    />
+                    {hasDropdownFilters ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 rounded-full px-2.5 text-muted-foreground"
+                            onClick={clearDropdownFilters}
+                        >
+                            <RotateCcw className="size-3.5" />
+                            Clear
+                        </Button>
+                    ) : null}
+                </div>
+            </div>
 
-            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardHeader className="gap-1">
-                    <CardTitle className="font-display text-2xl">
-                        All organizations
-                        {totalCount > 0 ? (
-                            <span className="ml-2 text-lg font-normal text-muted-foreground">({totalCount})</span>
-                        ) : null}
-                    </CardTitle>
-                    <CardDescription>
-                        {periodLabel} metrics from Dashboard · Activity uses last 7 days in Asia/Kolkata
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex flex-col gap-3">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <form className="flex w-full max-w-xl items-center gap-2" onSubmit={applySearch} role="search">
-                                <div className="relative min-w-0 flex-1">
-                                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        id="organization-search"
-                                        name="search"
-                                        type="search"
-                                        value={searchInput}
-                                        onChange={(event) => setSearchInput(event.target.value)}
-                                        aria-label="Search organization or creator"
-                                        placeholder="Search organization or creator"
-                                        className="h-10 rounded-xl pl-9"
-                                    />
-                                </div>
-                                <Button type="submit" size="sm" className="shrink-0 rounded-full">
-                                    Search
-                                </Button>
-                            </form>
-                            <div className="flex flex-wrap gap-2" role="group" aria-label="Organization activity filter">
-                                {activityOptions.map((option) => (
-                                    <Button
-                                        key={option.value}
-                                        type="button"
-                                        size="sm"
-                                        className="rounded-full"
-                                        variant={activity === option.value ? "default" : "outline"}
-                                        aria-pressed={activity === option.value}
-                                        onClick={() => selectActivity(option.value)}
-                                    >
-                                        {option.label}
-                                    </Button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2" role="group" aria-label="Organization directory sort">
-                            {sortOptions.map((option) => (
-                                <Button
-                                    key={option.value}
-                                    type="button"
-                                    size="sm"
-                                    className="rounded-full"
-                                    variant={sort === option.value ? "default" : "outline"}
-                                    aria-pressed={sort === option.value}
-                                    onClick={() => selectSort(option.value)}
-                                >
-                                    {option.label}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {organizationsQuery.isLoading ? (
+            {organizationsQuery.isLoading ? (
                         <div
                             className="flex items-center justify-center py-16"
                             role="status"
@@ -416,23 +384,17 @@ const PlatformOrganizationsPage = ({
                                         type="button"
                                         variant="outline"
                                         className="rounded-full"
-                                        onClick={() => {
-                                            setSearchInput("");
-                                            setAppliedSearch("");
-                                            setActivity("all");
-                                            setSort("recent_activity");
-                                            setPage(1);
-                                        }}
+                                        onClick={resetFilters}
                                     >
                                         Clear filters
                                     </Button>
                                 </EmptyContent>
                             ) : null}
                         </Empty>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="hidden overflow-x-auto rounded-xl border border-border/60 md:block">
-                                <Table>
+            ) : (
+                <div className="space-y-4">
+                    <div className="hidden overflow-x-auto md:block">
+                        <Table>
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead aria-sort={columnAriaSort("name")}>
@@ -523,9 +485,9 @@ const PlatformOrganizationsPage = ({
                                             );
                                         })}
                                     </TableBody>
-                                </Table>
-                            </div>
-                            <div className="grid gap-3 md:hidden">
+                        </Table>
+                    </div>
+                    <div className="grid gap-3 md:hidden">
                                 {organizations.map((organization) => {
                                     const href = organizationInspectionPath(organization.id);
                                     return (
@@ -580,40 +542,38 @@ const PlatformOrganizationsPage = ({
                                         </a>
                                     );
                                 })}
+                    </div>
+                    {totalCount > limit ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-sm text-muted-foreground">
+                                Page {page} of {totalPages}
+                            </p>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page <= 1}
+                                    onClick={() => setPage((current) => current - 1)}
+                                >
+                                    <ChevronLeft className="size-4" />
+                                    Previous
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page >= totalPages}
+                                    onClick={() => setPage((current) => current + 1)}
+                                >
+                                    Next
+                                    <ChevronRight className="size-4" />
+                                </Button>
                             </div>
-                            {totalCount > limit ? (
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <p className="text-sm text-muted-foreground">
-                                        Page {page} of {totalPages}
-                                    </p>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={page <= 1}
-                                            onClick={() => setPage((current) => current - 1)}
-                                        >
-                                            <ChevronLeft className="size-4" />
-                                            Previous
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={page >= totalPages}
-                                            onClick={() => setPage((current) => current + 1)}
-                                        >
-                                            Next
-                                            <ChevronRight className="size-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            ) : null}
                         </div>
-                    )}
-                </CardContent>
-            </Card>
+                    ) : null}
+                </div>
+            )}
         </section>
     );
 };

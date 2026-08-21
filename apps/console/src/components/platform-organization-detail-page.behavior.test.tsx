@@ -607,6 +607,18 @@ const successSales = (
         stores: mixedStores.map((store) => ({ id: store.id, name: store.name })),
         sales,
         pagination: { page: 1, limit: 20, totalCount: sales.length },
+        summary: {
+            completedCount: sales.filter((sale) => sale.status === "completed").length,
+            salesTotal: sales
+                .filter((sale) => sale.status === "completed")
+                .reduce((total, sale) => total + sale.grandTotal, 0),
+            collectedTotal: sales
+                .filter((sale) => sale.status === "completed")
+                .reduce((total, sale) => total + sale.paidTotal, 0),
+            dueTotal: sales
+                .filter((sale) => sale.status === "completed")
+                .reduce((total, sale) => total + sale.dueTotal, 0),
+        },
     },
     message: "Platform Organization Sales retrieved successfully",
     code: 200,
@@ -996,7 +1008,9 @@ describe("Organization Inspection Workspace", () => {
         fireEvent.click(view.getByRole("link", { name: "Overview" }));
         expect(await view.findByRole("heading", { name: "Store performance" })).toBeTruthy();
         fireEvent.click(view.getByRole("link", { name: "12" }));
-        expect(window.location.pathname).toBe(organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id));
+        expect(`${window.location.pathname}${window.location.search}`).toBe(
+            organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id),
+        );
         expect(await view.findByRole("heading", { name: "Bill 12" })).toBeTruthy();
         expect(view.getByText("Receipt preview")).toBeTruthy();
         expect(view.queryByText("Collect Payment")).toBeNull();

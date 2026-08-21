@@ -71,6 +71,7 @@ import { cn } from "@repo/ui/lib/utils";
 
 import ConsoleBillingInspection from "@/components/console-billing-inspection";
 import {
+    billingInspectionSearchString,
     catalogInspectionPath,
     organizationInspectionPath,
     organizationInspectionSections,
@@ -80,6 +81,8 @@ import {
     parseReportInspectionSearch,
     parseTableInspectionSearch,
     parsePurchaseInspectionSearch,
+    resolveBillingInspectionFilters,
+    toBillingInspectionApiQuery,
     type BillingInspectionFilters,
     type CatalogInspectionFilters,
     type CustomerInspectionFilters,
@@ -300,7 +303,9 @@ const PlatformOrganizationDetailPage = ({
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
     const [billingFilters, setBillingFilters] = useState<BillingInspectionFilters>(() =>
-        parseBillingInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+        resolveBillingInspectionFilters(
+            parseBillingInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
+        ),
     );
     const [billingSearchInput, setBillingSearchInput] = useState(billingFilters.search ?? "");
     const [catalogFilters, setCatalogFilters] = useState<CatalogInspectionFilters>(() =>
@@ -345,8 +350,8 @@ const PlatformOrganizationDetailPage = ({
         enabled: section === "stores" && Boolean(resourceId),
     });
     const salesQuery = useQuery({
-        queryKey: [...organizationSalesQueryKey, organizationId, billingFilters],
-        queryFn: () => getPlatformOrganizationSales(organizationId, billingFilters),
+        queryKey: [...organizationSalesQueryKey, organizationId, toBillingInspectionApiQuery(billingFilters)],
+        queryFn: () => getPlatformOrganizationSales(organizationId, toBillingInspectionApiQuery(billingFilters)),
         retry: false,
         placeholderData: keepPreviousData,
         enabled: section === "billing",
@@ -657,7 +662,7 @@ const PlatformOrganizationDetailPage = ({
     useEffect(() => {
         if (section !== "billing") return;
         const syncBillingFilters = () => {
-            const nextFilters = parseBillingInspectionSearch(window.location.search);
+            const nextFilters = resolveBillingInspectionFilters(parseBillingInspectionSearch(window.location.search));
             setBillingFilters(nextFilters);
             setBillingSearchInput(nextFilters.search ?? "");
         };
@@ -703,10 +708,23 @@ const PlatformOrganizationDetailPage = ({
     }, [section, resourceId]);
 
     const navigateBilling = (nextFilters: BillingInspectionFilters, nextResourceId?: string) => {
-        const path = organizationInspectionPath(organizationId, "billing", nextResourceId, nextFilters);
-        setBillingFilters(nextFilters);
+        const resolvedFilters = resolveBillingInspectionFilters(nextFilters);
+        const path = organizationInspectionPath(organizationId, "billing", nextResourceId, resolvedFilters);
+        setBillingFilters(resolvedFilters);
         go(path);
     };
+
+    useEffect(() => {
+        if (section !== "billing") return;
+        const parsed = parseBillingInspectionSearch(window.location.search);
+        const resolved = resolveBillingInspectionFilters(parsed);
+        const expectedSearch = billingInspectionSearchString(resolved);
+        if (window.location.search !== expectedSearch) {
+            const path = organizationInspectionPath(organizationId, "billing", resourceId, resolved);
+            setBillingFilters(resolved);
+            go(path);
+        }
+    }, [section, organizationId, resourceId]);
 
     const updateBillingFilters = (patch: Partial<BillingInspectionFilters>, nextResourceId?: string) => {
         navigateBilling({ ...billingFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
@@ -788,7 +806,7 @@ const PlatformOrganizationDetailPage = ({
             <div className="flex gap-1 overflow-x-auto pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {organizationInspectionSections.map((item) => {
                     const href = item === "billing"
-                        ? organizationInspectionPath(organizationId, item, undefined, billingFilters)
+                        ? organizationInspectionPath(organizationId, item, undefined, resolveBillingInspectionFilters(billingFilters))
                         : item === "catalog"
                             ? catalogInspectionPath(organizationId, { view: "list", filters: catalogFilters })
                             : item === "customers"

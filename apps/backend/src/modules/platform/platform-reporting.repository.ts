@@ -757,10 +757,18 @@ export type PlatformOrganizationSaleSummaryMetricsRow = {
     storeName: string;
 };
 
+export type PlatformOrganizationSalesSummaryMetrics = {
+    completedCount: number;
+    salesTotal: number;
+    collectedTotal: number;
+    dueTotal: number;
+};
+
 export type PlatformOrganizationSalesMetrics = {
     stores: Array<{ id: string; name: string }>;
     sales: PlatformOrganizationSaleSummaryMetricsRow[];
     totalCount: number;
+    summary: PlatformOrganizationSalesSummaryMetrics;
 };
 
 export type PlatformOrganizationSaleContextMetrics = {
@@ -805,10 +813,29 @@ export const listOrganizationSales = async (
     const offset = (query.page - 1) * query.limit;
     const sort = query.sort;
 
-    const [countRow] = await pg`
-        SELECT COUNT(*)::int AS total_count
+    const [aggregateRow] = await pg`
+        SELECT
+            COUNT(*)::int AS total_count,
+            COUNT(*) FILTER (WHERE s.status = 'completed')::int AS completed_count,
+            COALESCE(SUM(s.grand_total) FILTER (WHERE s.status = 'completed'), 0) AS sales_total,
+            COALESCE(
+                SUM(COALESCE(payment_stats.paid_total, 0)) FILTER (WHERE s.status = 'completed'),
+                0
+            ) AS collected_total,
+            COALESCE(
+                SUM(GREATEST(s.grand_total - COALESCE(payment_stats.paid_total, 0), 0))
+                    FILTER (WHERE s.status = 'completed'),
+                0
+            ) AS due_total
         FROM sales s
         LEFT JOIN customers c ON c.id = s.customer_id
+        LEFT JOIN (
+            SELECT
+                sale_id,
+                COALESCE(SUM(amount), 0) AS paid_total
+            FROM payments
+            GROUP BY sale_id
+        ) payment_stats ON payment_stats.sale_id = s.id
         WHERE s.organization_id = ${query.organizationId}
           AND (${storeId} = '' OR s.store_id::text = ${storeId})
           AND (${status} = '' OR s.status::text = ${status})
@@ -936,7 +963,13 @@ export const listOrganizationSales = async (
                 storeName: String(row.store_name),
             }];
         }),
-        totalCount: asCount(countRow?.total_count),
+        totalCount: asCount(aggregateRow?.total_count),
+        summary: {
+            completedCount: asCount(aggregateRow?.completed_count),
+            salesTotal: asMoney(aggregateRow?.sales_total),
+            collectedTotal: asMoney(aggregateRow?.collected_total),
+            dueTotal: asMoney(aggregateRow?.due_total),
+        },
     };
 };
 

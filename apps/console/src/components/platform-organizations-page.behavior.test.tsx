@@ -121,6 +121,22 @@ const renderList = (
     );
 };
 
+const openStatusFilter = (view: ReturnType<typeof render>) => {
+    fireEvent.click(view.getByRole("button", { name: "Status" }));
+};
+
+const selectStatusFilter = async (view: ReturnType<typeof render>, label: string) => {
+    openStatusFilter(view);
+    const option = await waitFor(() => view.getByRole("option", { name: label }));
+    fireEvent.click(option);
+};
+
+const selectSortFilter = async (view: ReturnType<typeof render>, label: string) => {
+    fireEvent.click(view.getByRole("button", { name: /^Sort/ }));
+    const option = await waitFor(() => view.getByRole("option", { name: label }));
+    fireEvent.click(option);
+};
+
 describe("Organization Directory", () => {
     test("opens Organizations from the console home", async () => {
         const view = render(
@@ -138,7 +154,6 @@ describe("Organization Directory", () => {
         );
 
         fireEvent.click(view.getAllByRole("button", { name: "Organizations" })[0]!);
-        expect(await view.findByRole("heading", { name: "Organizations" })).toBeTruthy();
         expect(await view.findByRole("link", { name: "Active Cafe" })).toBeTruthy();
         expect(view.queryByText("Outreach")).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();
@@ -150,7 +165,6 @@ describe("Organization Directory", () => {
         const view = renderList();
 
         expect(await view.findByRole("link", { name: "Active Cafe" })).toBeTruthy();
-        expect(view.getByText("Organization Directory")).toBeTruthy();
         expect(view.queryByText("Outreach")).toBeNull();
         expect(view.getByRole("table")).toBeTruthy();
         expect(view.getByRole("columnheader", { name: "Organization" })).toBeTruthy();
@@ -166,7 +180,6 @@ describe("Organization Directory", () => {
         expect(view.getAllByText("Last sale").length).toBeGreaterThan(0);
         expect(view.getAllByText("161.25", { exact: false }).length).toBeGreaterThan(0);
         expect(view.getAllByText("—").length).toBeGreaterThan(0);
-        expect(view.getByText(/Activity uses last 7 days in Asia\/Kolkata/)).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.queryByText("Edit Organization")).toBeNull();
     });
@@ -180,14 +193,13 @@ describe("Organization Directory", () => {
         });
 
         await view.findByRole("link", { name: "Active Cafe" });
-        fireEvent.click(view.getByRole("button", { name: "Inactive" }));
+        await selectStatusFilter(view, "Inactive");
         await waitFor(() => {
             expect(requested.some((query) => query.activity === "inactive")).toBe(true);
             expect(view.queryAllByRole("link", { name: "Active Cafe" }).length).toBe(0);
         });
         expect(view.getByRole("link", { name: "New Stand" })).toBeTruthy();
         expect(view.getByRole("link", { name: "Quiet Mart" })).toBeTruthy();
-        expect(view.getByText(/Activity uses last 7 days in Asia\/Kolkata/)).toBeTruthy();
         expect(view.queryByText("Create Sale") === null).toBe(true);
     });
 
@@ -216,7 +228,6 @@ describe("Organization Directory", () => {
         }, { reportingQuery: { period: "7d" } });
 
         await view.findByRole("link", { name: "Active Cafe" });
-        expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
         fireEvent.click(view.getByRole("button", { name: "Next" }));
         await waitFor(() => {
             expect(requested.some((query) => query.page === 2 && query.period === "7d")).toBe(true);
@@ -270,7 +281,6 @@ describe("Organization Directory", () => {
         await waitFor(() => {
             expect(requested.some((query) => query.period === "7d")).toBe(true);
         });
-        expect(view.getByText(/7-day metrics from Dashboard/)).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
     });
 
@@ -320,11 +330,11 @@ describe("Organization Directory", () => {
 
         await view.findByRole("link", { name: "Active Cafe" });
         expect(requested[0]?.sort).toBe("recent_activity");
-        fireEvent.click(view.getByRole("button", { name: "Name A–Z" }));
+        await selectSortFilter(view, "Name A–Z");
         await waitFor(() => {
             expect(requested.some((query) => query.sort === "name_asc" && query.page === 1)).toBe(true);
         });
-        fireEvent.click(view.getByRole("button", { name: "Highest sales value" }));
+        await selectSortFilter(view, "Highest sales value");
         await waitFor(() => {
             expect(requested.some((query) => query.sort === "sales_value_desc")).toBe(true);
         });

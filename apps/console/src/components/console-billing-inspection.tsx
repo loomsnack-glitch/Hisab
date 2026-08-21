@@ -7,6 +7,7 @@ import {
     type PlatformSaleInspectionDetailDTO,
     type PlatformSaleInspectionListDTO,
     type PlatformSaleInspectionSummaryDTO,
+    type SalesListSummary,
     type SalesSort,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
@@ -162,6 +163,70 @@ const formatDiscountPercentage = (
     }
     const percentage = Math.min(100, Math.round((discountAmount / baseAmount) * 1000) / 10);
     return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(percentage)}%`;
+};
+
+const getAverageBillPerOrder = (
+    salesTotal: number | string | null | undefined,
+    completedCount: number | string | null | undefined,
+) => {
+    const total = Number(salesTotal ?? 0);
+    const count = Number(completedCount ?? 0);
+    if (!Number.isFinite(total) || !Number.isFinite(count) || count <= 0) {
+        return 0;
+    }
+    return total / count;
+};
+
+const SalesSummaryBar = ({ summary }: { summary: SalesListSummary | null }) => {
+    if (!summary) return null;
+
+    return (
+        <div className="mb-4 grid grid-cols-3 gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-3.5 text-xs sm:grid-cols-5 sm:gap-4 sm:px-4">
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Sales</p>
+                <p className="whitespace-nowrap text-sm font-semibold sm:text-base">{summary.completedCount}</p>
+            </div>
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+                <p className="whitespace-nowrap text-sm font-bold text-primary sm:text-base">
+                    {formatCurrency(summary.salesTotal)}
+                </p>
+            </div>
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Collected</p>
+                <p className="whitespace-nowrap text-sm font-semibold text-emerald-600 dark:text-emerald-400 sm:text-base">
+                    {formatCurrency(summary.collectedTotal)}
+                </p>
+            </div>
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Due</p>
+                <p className="whitespace-nowrap text-sm font-semibold text-amber-600 dark:text-amber-400 sm:text-base">
+                    {formatCurrency(summary.dueTotal)}
+                </p>
+            </div>
+            <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Avg bill</p>
+                <p className="whitespace-nowrap text-sm font-semibold sm:text-base">
+                    {formatCurrency(getAverageBillPerOrder(summary.salesTotal, summary.completedCount))}
+                </p>
+            </div>
+        </div>
+    );
+};
+
+const inferBillingDatePreset = (filters: BillingInspectionFilters, today: string): SalesDatePreset => {
+    if (filters.dateScope === "all") return "all";
+    const startDate = filters.startDate;
+    const endDate = filters.endDate;
+    if (!startDate && !endDate) return "today";
+    if (startDate && endDate && startDate === endDate) {
+        if (startDate === today) return "today";
+        if (startDate === addCalendarDays(today, -1)) return "yesterday";
+        return "custom";
+    }
+    if (startDate === kolkataWeekStart(today) && endDate === today) return "this-week";
+    if (startDate === `${today.slice(0, 7)}-01` && endDate === today) return "this-month";
+    return "custom";
 };
 
 const FilterPill = ({
@@ -648,37 +713,43 @@ const ConsoleBillingInspection = ({
     sale,
 }: ConsoleBillingInspectionProps) => {
     const today = kolkataCalendarDate(new Date());
-    const appliedStartDate = filters.startDate;
-    const appliedEndDate = filters.endDate;
+    const appliedStartDate = filters.dateScope === "all" ? undefined : filters.startDate;
+    const appliedEndDate = filters.dateScope === "all" ? undefined : filters.endDate;
     const appliedIsSingleDate = Boolean(appliedStartDate && appliedEndDate && appliedStartDate === appliedEndDate);
     const [datePopoverOpen, setDatePopoverOpen] = useState(false);
     const [dateMode, setDateMode] = useState<SalesDateMode>(appliedIsSingleDate ? "date" : "range");
-    const [datePreset, setDatePreset] = useState<SalesDatePreset>(appliedStartDate || appliedEndDate ? "custom" : "all");
+    const [datePreset, setDatePreset] = useState<SalesDatePreset>(() => inferBillingDatePreset(filters, today));
     const [specificDate, setSpecificDate] = useState<Date>(appliedIsSingleDate ? parseCalendarDate(appliedStartDate!) : parseCalendarDate(today));
     const [customFromDate, setCustomFromDate] = useState<Date | null>(appliedStartDate ? parseCalendarDate(appliedStartDate) : null);
     const [customToDate, setCustomToDate] = useState<Date | null>(appliedEndDate ? parseCalendarDate(appliedEndDate) : null);
 
     useEffect(() => {
         if (datePopoverOpen) return;
-        const isSingle = Boolean(filters.startDate && filters.endDate && filters.startDate === filters.endDate);
+        const startDate = filters.dateScope === "all" ? undefined : filters.startDate;
+        const endDate = filters.dateScope === "all" ? undefined : filters.endDate;
+        const isSingle = Boolean(startDate && endDate && startDate === endDate);
         setDateMode(isSingle ? "date" : "range");
-        setDatePreset(filters.startDate || filters.endDate ? "custom" : "all");
-        if (isSingle && filters.startDate) setSpecificDate(parseCalendarDate(filters.startDate));
-        setCustomFromDate(filters.startDate ? parseCalendarDate(filters.startDate) : null);
-        setCustomToDate(filters.endDate ? parseCalendarDate(filters.endDate) : null);
-    }, [datePopoverOpen, filters.endDate, filters.startDate]);
+        setDatePreset(inferBillingDatePreset(filters, today));
+        if (isSingle && startDate) setSpecificDate(parseCalendarDate(startDate));
+        setCustomFromDate(startDate ? parseCalendarDate(startDate) : null);
+        setCustomToDate(endDate ? parseCalendarDate(endDate) : null);
+    }, [datePopoverOpen, filters, today]);
 
     const stores = salesList?.stores ?? [];
     const sales = salesList?.sales ?? [];
     const selectedStoreName = stores.find((store) => store.id === filters.storeId)?.name;
-    const dateLabel = !appliedStartDate && !appliedEndDate
+    const dateLabel = filters.dateScope === "all" || (!appliedStartDate && !appliedEndDate)
         ? "All dates"
         : appliedIsSingleDate
             ? formatSalesDate(appliedStartDate!)
             : `${formatSalesDate(appliedStartDate ?? appliedEndDate!)} — ${formatSalesDate(appliedEndDate ?? appliedStartDate!)}`;
 
-    const applyDateRange = (startDate?: string, endDate?: string) => {
-        onUpdateFilters({ startDate, endDate });
+    const applyDateRange = (startDate?: string, endDate?: string, dateScope?: "all") => {
+        if (dateScope === "all") {
+            onUpdateFilters({ startDate: undefined, endDate: undefined, dateScope: "all" });
+        } else {
+            onUpdateFilters({ startDate, endDate, dateScope: undefined });
+        }
         setDatePopoverOpen(false);
     };
 
@@ -715,7 +786,7 @@ const ConsoleBillingInspection = ({
 
     const confirmDateFilter = () => {
         if (datePreset === "all" && dateMode === "range") {
-            applyDateRange(undefined, undefined);
+            applyDateRange(undefined, undefined, "all");
             return;
         }
         if (dateMode === "date") {
@@ -960,6 +1031,8 @@ const ConsoleBillingInspection = ({
                             ))}
                         </div>
                     </div>
+
+                    <SalesSummaryBar summary={salesList?.summary ?? null} />
 
                     {isSalesLoading ? (
                         <div className="flex min-h-[320px] items-center justify-center" aria-busy="true" aria-label="Loading bills">

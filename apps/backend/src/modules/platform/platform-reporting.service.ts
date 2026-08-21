@@ -707,6 +707,7 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                     limit: query.limit,
                     totalCount: metrics.totalCount,
                 },
+                summary: metrics.summary,
             },
             code: STATUS_CODES.SUCCESS,
         };

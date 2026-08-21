@@ -17,6 +17,7 @@ Object.assign(globalThis, {
     Node: testWindow.Node,
     MutationObserver: testWindow.MutationObserver,
     ResizeObserver: testWindow.ResizeObserver,
+    getComputedStyle: testWindow.getComputedStyle.bind(testWindow),
     navigator: testWindow.navigator,
     window: testWindow,
     requestAnimationFrame,

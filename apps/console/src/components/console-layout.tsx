@@ -21,6 +21,7 @@ type ConsoleLayoutProps = {
     activeDestination: ConsoleDestination;
     onNavigate: (destination: ConsoleDestination) => void;
     onLogout: () => Promise<void>;
+    fullWidth?: boolean;
     children: ReactNode;
 };
 
@@ -29,6 +30,7 @@ const ConsoleLayout = ({
     activeDestination,
     onNavigate,
     onLogout,
+    fullWidth = false,
     children,
 }: ConsoleLayoutProps) => {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readSidebarCollapsed);
@@ -160,7 +162,7 @@ const ConsoleLayout = ({
                     </header>
 
                     <main className="flex-1 min-w-0 w-full px-3.5 py-4 sm:px-6 lg:px-8 lg:py-8">
-                        <div className="mx-auto w-full min-w-0 max-w-7xl">{children}</div>
+                        <div className={cn("mx-auto w-full min-w-0", !fullWidth && "max-w-7xl")}>{children}</div>
                     </main>
                 </div>
             </div>

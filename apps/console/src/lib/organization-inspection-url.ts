@@ -9,6 +9,7 @@ import type {
     SaleStatus,
     SalesSort,
 } from "@repo/types";
+import { kolkataCalendarDate } from "@repo/types";
 
 export const organizationInspectionSections = [
     "overview",
@@ -35,7 +36,9 @@ export type OrganizationInspectionLocation =
     }
     | { kind: "invalid"; reason: "missing-organization" | "unknown-section" };
 
-export type BillingInspectionFilters = PlatformBillingInspectionQueryJSON;
+export type BillingInspectionFilters = PlatformBillingInspectionQueryJSON & {
+    dateScope?: "all";
+};
 
 export type CustomerInspectionFilters = PlatformCustomerInspectionQueryJSON;
 
@@ -122,10 +125,42 @@ const billingFilterKeys = [
     "search",
     "startDate",
     "endDate",
+    "dateScope",
     "sort",
     "page",
     "limit",
 ] as const;
+
+export const defaultBillingInspectionDate = () => kolkataCalendarDate(new Date());
+
+export const resolveBillingInspectionFilters = (
+    filters: BillingInspectionFilters = {},
+): BillingInspectionFilters => {
+    if (filters.dateScope === "all") {
+        const { startDate: _startDate, endDate: _endDate, ...rest } = filters;
+        return { ...rest, dateScope: "all" };
+    }
+
+    if (filters.startDate || filters.endDate) {
+        const { dateScope: _dateScope, ...rest } = filters;
+        return rest;
+    }
+
+    const today = defaultBillingInspectionDate();
+    return { ...filters, startDate: today, endDate: today };
+};
+
+export const toBillingInspectionApiQuery = (
+    filters: BillingInspectionFilters,
+): PlatformBillingInspectionQueryJSON => {
+    const resolved = resolveBillingInspectionFilters(filters);
+    const { dateScope, ...apiQuery } = resolved;
+    if (dateScope === "all") {
+        delete apiQuery.startDate;
+        delete apiQuery.endDate;
+    }
+    return apiQuery;
+};
 
 export const parseBillingInspectionSearch = (search: string): BillingInspectionFilters => {
     const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -163,6 +198,9 @@ export const parseBillingInspectionSearch = (search: string): BillingInspectionF
 
     const endDate = params.get("endDate");
     if (endDate) filters.endDate = endDate;
+
+    const dateScope = params.get("dateScope");
+    if (dateScope === "all") filters.dateScope = "all";
 
     const sort = params.get("sort");
     if (sort === "newest" || sort === "oldest" || sort === "highest" || sort === "lowest") {
@@ -383,7 +421,7 @@ export const organizationInspectionPath = (
     }
 
     if (section === "billing") {
-        return `${pathname}${billingInspectionSearchString(sectionFilters as BillingInspectionFilters | undefined)}`;
+        return `${pathname}${billingInspectionSearchString(resolveBillingInspectionFilters(sectionFilters as BillingInspectionFilters | undefined))}`;
     }
 
     if (section === "customers") {

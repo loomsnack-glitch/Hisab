@@ -12,6 +12,7 @@ import {
     SaleDeviceAuditDTOSchema,
     SaleItemDTOSchema,
     SaleStatusSchema,
+    SalesListSummarySchema,
     SalesSortSchema,
 } from "../billing/billing.schema";
 import {
@@ -359,6 +360,7 @@ export const PlatformSaleInspectionListDTOSchema = z.object({
         limit: z.number().int().min(1).max(100),
         totalCount: nonNegativeIntSchema,
     }),
+    summary: SalesListSummarySchema,
 });
 
 export const PlatformSaleInspectionReceiptDTOSchema = z.object({

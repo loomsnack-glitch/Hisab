@@ -129,6 +129,7 @@ const ConsoleEntry = ({
             activeDestination={destination}
             onNavigate={navigate}
             onLogout={onLogout}
+            fullWidth={destination === "organizations"}
         >
             {pageContent}
         </ConsoleLayout>

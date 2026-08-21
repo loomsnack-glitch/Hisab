@@ -620,6 +620,7 @@ const createReportingMetrics = (
 
         const start = (query.page - 1) * query.limit;
         const pageRows = filtered.slice(start, start + query.limit);
+        const completedRows = filtered.filter((sale) => sale.status === "completed");
 
         return {
             stores: organizationStores.map((store) => ({ id: store.id, name: store.name })),
@@ -646,6 +647,15 @@ const createReportingMetrics = (
                 };
             }),
             totalCount: filtered.length,
+            summary: {
+                completedCount: completedRows.length,
+                salesTotal: completedRows.reduce((sum, sale) => sum + sale.grandTotal, 0),
+                collectedTotal: completedRows.reduce((sum, sale) => sum + (sale.paidTotal ?? (sale.paymentStatus === "paid" ? sale.grandTotal : 0)), 0),
+                dueTotal: completedRows.reduce((sum, sale) => {
+                    const paidTotal = sale.paidTotal ?? (sale.paymentStatus === "paid" ? sale.grandTotal : 0);
+                    return sum + Math.max(sale.grandTotal - paidTotal, 0);
+                }, 0),
+            },
         };
     };
 
