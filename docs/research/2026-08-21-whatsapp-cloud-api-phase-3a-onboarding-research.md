@@ -2,6 +2,10 @@
 
 Date: 2026-08-21
 
+Status: implemented security/provisioning contract; live onboarding gate open.
+
+Canonical status: [Cloud API migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
+
 ## Decision
 
 Build the onboarding security and provisioning contract before connecting the
@@ -10,7 +14,7 @@ must bind a short-lived authorization state to one authenticated Organization
 administrator, prevent replay or tampering, and make each external provisioning
 step resumable and idempotent.
 
-The first implementation slice will not store a Meta access token, call Meta,
+The implemented contract does not store a Meta access token, call Meta,
 or mark an account connected. Those actions require the credential-management
 seam and configured Meta App from the readiness gates. A successful embedded
 flow is only considered connected after all required external identifiers and
@@ -69,9 +73,9 @@ It does not implement:
 
 ## Verification
 
-The state and transition modules will be pure and deterministic when their
-clock/random/signing dependencies are injected. Focused tests will cover all
-security and transition branches; the existing backend and types suites will
-remain green. No local test can prove real Embedded Signup, Meta permission,
+The state and transition modules are pure and deterministic when their
+clock/random/signing dependencies are injected. Focused tests cover the
+security and transition branches. The repository-wide test gate is not green
+after the main merge. No local test can prove real Embedded Signup, Meta permission,
 phone eligibility, webhook subscription, or billing behavior without a
 controlled Meta test App/WABA.

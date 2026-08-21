@@ -2,6 +2,10 @@
 
 Date: 2026-08-21
 
+Status: implemented contract; database/runtime exit gate open.
+
+Canonical status: [Cloud API migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
+
 Scope: define the smallest safe translation boundary from the durable Cloud
 webhook receipt to Hisab's existing Store-scoped WhatsApp message model.
 
@@ -54,8 +58,7 @@ webhook receipt to Hisab's existing Store-scoped WhatsApp message model.
 
 ## Phase 2B boundary
 
-Phase 2B will add a pure normalizer and pure status-transition rules with
-fixtures. It will not claim receipt rows or write conversations/messages yet.
-That database processor is the next slice, where leases, unknown-account
-reconciliation, media jobs, and transaction boundaries can be tested against
-the already-defined normalized event contract.
+Phase 2B now provides the pure normalizer and status-transition rules with
+fixtures. The contract intentionally does not own receipt claiming or database
+transactions. Phase 2C contains the processor boundary; its runtime scheduler,
+media jobs, and production message-writer integration remain pending.

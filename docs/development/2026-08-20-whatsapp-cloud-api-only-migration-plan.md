@@ -1,8 +1,13 @@
 # WhatsApp Cloud API-only migration plan
 
-Status: proposed
-Date: 2026-08-20
+Status: in progress — repository baseline audited; Cloud API migration not yet production-ready
+Date: 2026-08-21
 Owner: Hisab platform
+
+This document is the source of truth for the Cloud API migration. The status
+below is based on the `feat/whatsapp` branch after the main-branch merge and
+must not be inferred from the presence of a migration file or a passing unit
+test alone.
 
 ## Decision
 
@@ -118,7 +123,7 @@ The repository already has useful durable messaging infrastructure:
 - bill, due-reminder, promotion, image, and document-related flows;
 - local Hisab message templates and campaign recipient records.
 
-The current implementation is still Baileys-shaped:
+The current production path is still Baileys-shaped:
 
 - `packages/types/src/services/whatsapp.schema.ts` exposes `baileys`, QR
   statuses, QR images, and worker status contracts;
@@ -132,6 +137,45 @@ The current implementation is still Baileys-shaped:
   usage/quota accounting;
 - the older global Cloud API notification service is not a multi-tenant
   customer-account implementation and must not be reused with one global token.
+
+The branch now also contains a Cloud API contract foundation:
+
+- additive Cloud account, webhook receipt, status-timestamp, and onboarding
+  state migrations are present in `apps/backend/db/migrations/20260821180000`
+  through `20260821183000`;
+- signed onboarding state, durable replay protection, callback validation, and
+  injected token-exchange orchestration exist under
+  `apps/backend/src/modules/tenant/whatsapp/cloud-api/`;
+- webhook verification, receipt persistence, normalization, processing, and
+  outbound payload/error contracts exist as fixture-tested module boundaries;
+- the public webhook route is mounted at `/webhooks/whatsapp`, and the
+  authenticated onboarding-start route is mounted with the existing WhatsApp
+  routes;
+- no Cloud account is created from the onboarding result, no Meta WABA/phone
+  provisioning is wired to the Graph client, and no Cloud dispatcher claims
+  the existing outbox;
+- no Admin Cloud account/template/usage UI is wired; the current account UI and
+  `apps/whatsapp-worker` still serve the Baileys flow.
+
+### Verified implementation status (2026-08-21)
+
+| Area | Status | Evidence and remaining gate |
+| --- | --- | --- |
+| Phase 0 Meta/product readiness | Not started | Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions are not verified in this repository. |
+| Phase 1 account/database foundation | Partial | Additive schema is applied to the configured development database: 62 applied, 0 pending. Credential storage, backfill checks, production-shaped copy, and account provisioning persistence remain. |
+| Phase 2A–2D Cloud contracts | Contract slices implemented | Focused Cloud fixture tests pass. Runtime scheduling, Cloud outbox wiring, media handling, and controlled Meta verification remain. |
+| Phase 3A–3D onboarding contracts | Contract slices implemented | State, persistence, result validation, and exchange seams exist. Embedded Signup UI, live exchange, WABA discovery, phone registration, webhook subscription, credential binding, and Store assignment remain. |
+| Phase 3 account operations | Not started | No connected Cloud account lifecycle is exposed end to end. |
+| Phase 4 templates/policy | Not started | Existing Hisab templates/promotions are Baileys/local-template features; Meta template approval/binding/sync and policy admission are absent. |
+| Phase 5 quotas/usage/safety | Not started | Existing queue limits/cooldowns are not the append-only usage ledger, atomic quota reservation, Meta-limit sync, or reconciliation model required here. |
+| Phase 6 feature migration | Blocked | Must wait for the Phase 2–5 exit gates. |
+| Phase 7 Baileys retirement | Not started | Baileys code, auth state, UI, deployment, and port `8100` remain intentionally. |
+
+The current repository-wide test baseline is not green after the main merge:
+the latest full run reported 765 passing, 39 failing, and 1 skipped test. The
+focused Cloud contract suite passed, but the full-suite exit gates in this
+plan remain open until the merged test fixtures and behavior expectations are
+reconciled.
 
 Relevant existing areas:
 
@@ -151,7 +195,15 @@ Work is delivered in vertical phases. A phase is not complete because its
 code compiles; its exit gate requires the listed database, security, and
 controlled-provider evidence.
 
+The implementation order is intentionally different from the order in which
+the contract files appeared in Git. Contract slices may be implemented ahead
+of external setup, but they do not authorize live onboarding or production
+sends. The next implementation targets are the missing Phase 2 runtime wiring
+and then the Phase 3 account-operations seam, not Phase 6 feature delivery.
+
 ### Phase 0: Meta and product readiness
+
+Status: **not started / external gate**.
 
 Dependencies: none.
 
@@ -170,6 +222,10 @@ verified, and the agreed billing/consent decisions are documented.
 
 ### Phase 1: Secure account and database foundation
 
+Status: **partial**. The additive development migrations are applied, but the
+credential, backfill, production-shaped database, and security exit gates are
+not complete.
+
 Dependencies: Phase 0 Meta App and secret-management decisions.
 
 Deliverables:
@@ -186,6 +242,11 @@ Exit gate: migrations apply cleanly to a copy of the target database, all
 existing rows remain readable, and no secret is present in DTOs or logs.
 
 ### Phase 2: Cloud API module and webhook
+
+Status: **contract slices implemented; runtime exit gate open**. Phase 2A–2D
+have focused fixture coverage, but the processor and outbound transport are
+not wired into a production scheduler/outbox path and have not been tested
+against Meta.
 
 Dependencies: Phase 1 account/credential model.
 
@@ -231,8 +292,9 @@ Non-goals for Phase 2A:
 
 Exit gate: the route authenticates the raw request, persists one durable receipt
 per delivery digest, acknowledges duplicates safely, does not expose secrets,
-and all fixture tests pass. This slice was kept uncommitted until explicitly
-approved and is now the committed ingress baseline.
+and all fixture tests pass. The ingress contract is now the committed baseline;
+Meta verification, production HTTPS, and target-database execution remain
+outside this slice.
 
 #### Phase 2B: Cloud message and status normalization contract
 
@@ -266,8 +328,8 @@ Non-goals for Phase 2B:
 
 Exit gate: every supported payload produces a typed normalized event, unsupported
 payloads produce an explicit deferred outcome, status transitions are monotonic,
-and the focused/full test suites pass. This normalization slice was reviewed
-and committed before the receipt processor was started.
+and the focused/full test suites pass. The normalization contract exists and
+focused tests pass; the repository-wide test gate remains open.
 
 #### Phase 2C: Durable Cloud receipt processing
 
@@ -302,8 +364,9 @@ Non-goals for Phase 2C:
 
 Exit gate: a claimed receipt is processed exactly once from the application's
 perspective, retries are bounded and observable, Store/account scoping is
-preserved, focused/full tests pass, and changes remain uncommitted until
-explicitly approved.
+preserved, focused/full tests pass, and a scheduler invokes the processor with
+operational metrics and dead-letter handling. The processor is currently a
+module boundary; runtime scheduling and the full-suite gate remain open.
 
 #### Phase 2D: Cloud outbound transport boundary
 
@@ -334,8 +397,10 @@ Non-goals for Phase 2D:
 - no production Cloud sends and no changes to the Baileys worker.
 
 Exit gate: the transport boundary is typed, redacted, deterministic, and
-fully fixture-tested; all existing tests pass; and changes remain uncommitted
-until explicitly approved.
+fully fixture-tested; all existing tests pass; and credential binding,
+outbox-claim wiring, uncertain-send reconciliation, and controlled Meta
+verification are complete. The current code is only an injected transport
+boundary.
 
 #### Phase 3A: Embedded Signup authorization and provisioning contract
 
@@ -368,8 +433,9 @@ Non-goals for Phase 3A:
 
 Exit gate: onboarding state cannot be forged, expired, or accepted for another
 Organization/user; the one-time replay decision is explicit at the persistence
-boundary; provisioning transitions are deterministic and resumable; focused/full
-tests pass; and the slice remains uncommitted until explicitly approved.
+boundary; provisioning transitions are deterministic and resumable; and the
+focused contract tests pass. This contract slice is committed; live Meta
+onboarding remains outside its gate.
 
 #### Phase 3B: Durable onboarding launch and replay boundary
 
@@ -405,8 +471,9 @@ Non-goals for Phase 3B:
 
 Exit gate: the start boundary is organization-scoped, secrets and raw state
 are not persisted or returned in logs, the replay adapter is atomic and
-expiry-aware by construction, focused/full tests pass, and the changes remain
-uncommitted until explicitly approved.
+expiry-aware by construction, and focused contract tests pass. This persistence
+slice is committed; target-database and live Embedded Signup verification
+remain outside its gate.
 
 #### Phase 3C: Embedded Signup result-intake contract
 
@@ -436,8 +503,8 @@ Non-goals for Phase 3C:
 
 Exit gate: callback input is strictly validated, state binding is
 Organization/user scoped, secrets and callback values are not logged or
-persisted, focused/full tests pass, and the slice remains uncommitted until
-explicitly approved.
+persisted, and focused contract tests pass. This result-intake slice is
+committed; live callback wiring remains outside its gate.
 
 #### Phase 3D: Server-side exchange and replay orchestration
 
@@ -468,10 +535,15 @@ Non-goals for Phase 3D:
 
 Exit gate: provider-specific exchange is isolated behind a testable port,
 state is consumed only after a valid exchange, sensitive values never enter
-logs or persistence, focused/full tests pass, and the slice remains uncommitted
-until explicitly approved.
+logs or persistence, and focused contract tests pass. This exchange slice is
+committed; the real Graph exchange and account provisioning remain outside its
+gate.
 
 ### Phase 3: Embedded Signup and account operations
+
+Status: **contract slices implemented; account operations not started**. The
+3A–3D state, persistence, result, and exchange contracts exist, but they stop
+before provider discovery and account creation.
 
 Dependencies: Phases 0–2.
 
@@ -486,8 +558,14 @@ Deliverables:
 
 Exit gate: one test Organization can connect, reload, reconnect, assign the
 account to multiple Stores, and receive a deterministic inbound message.
+This is the next major implementation gate after the current repository
+baseline is reconciled.
 
 ### Phase 4: Templates and policy enforcement
+
+Status: **not started**. The existing local Hisab template manager and
+promotion UI must not be treated as Meta template approval or policy
+enforcement.
 
 Dependencies: Phases 2–3 and approved test WABA.
 
@@ -505,6 +583,10 @@ templates are blocked, approval changes are reflected, and marketing cannot
 send without consent.
 
 ### Phase 5: Quotas, usage, and campaign safety
+
+Status: **not started**. Existing promotion cooldowns, pending-outbox limits,
+and campaign counters are useful local safeguards but do not satisfy the
+append-only ledger and atomic reservation requirements below.
 
 Dependencies: Phase 4 template and consent contracts.
 
@@ -524,6 +606,10 @@ summary totals.
 
 ### Phase 6: Feature migration
 
+Status: **blocked by Phases 2–5**. Do not route POS bills, due reminders, or
+promotions to Cloud API until the preceding account, template, policy, quota,
+and dispatcher gates pass.
+
 Dependencies: Phases 2–5.
 
 Deliverables:
@@ -541,6 +627,9 @@ enforcement.
 
 ### Phase 7: Customer migration and Baileys retirement
 
+Status: **not started**. Keep the Baileys worker, QR-compatible contracts, and
+port `8100` until the Phase 6 controlled checklist and migration gates pass.
+
 Dependencies: Phases 0–6 and migration runbook approval.
 
 Deliverables:
@@ -555,6 +644,48 @@ Exit gate: zero active Baileys accounts or unsafely recoverable Baileys sends;
 Cloud API-only production monitoring and support runbooks are live.
 
 No implementation phase may skip its exit gate to reach the cleanup phase.
+
+## Current execution sequence
+
+The main-branch merge and the recent TypeScript/database alignment commit are
+repository maintenance, not a completed Cloud migration phase. From the
+current branch, work proceeds in this order:
+
+1. **Close the baseline gate.** Reconcile the 39 full-suite failures present
+   after the merged application contracts, then keep the focused Cloud contract
+   suite and production-source type checks green. Do not treat the current
+   74-pass focused run as proof that the whole repository is ready.
+2. **Finish Phase 0 decisions and external setup.** Record billing owner,
+   consent wording, quota/budget policy, secret manager/region, phone-migration
+   policy, Meta App access, test WABA/number, and verified HTTPS webhook.
+3. **Finish Phase 1 security/account persistence.** Add the credential-vault
+   adapter and key-version/rotation contract, complete WABA/sender identity
+   reconciliation, and prove additive migrations against a production-shaped
+   database copy without exposing secrets.
+4. **Finish Phase 2 runtime wiring.** Add the backend-owned Cloud receipt
+   scheduler, connect the processor to the Store-scoped message writer,
+   connect the outbox lease path to the injected Cloud transport, implement
+   uncertain-send reconciliation, and add metrics/dead-letter operations.
+5. **Finish Phase 3 account operations.** Implement server-side exchange and
+   provider discovery, create/reuse WABA and sender records idempotently,
+   subscribe the WABA webhook, synchronize account snapshots, expose safe
+   connect/reconnect/revoke/refresh actions, and add Store assignment/default
+   inbound routing UI.
+6. **Implement Phase 4.** Separate Hisab presets from Meta-approved bindings,
+   synchronize approval/rejection/paused status, and enforce consent,
+   suppression, template variables, message category, and the 24-hour window.
+7. **Implement Phase 5.** Add the append-only usage ledger, atomic quota and
+   budget reservations, Meta limit/quality snapshots, rolling recipient
+   windows, cooldown/duplicate admission, campaign stop, and reconciliation.
+8. **Only then implement Phase 6.** Migrate bill documents, due reminders,
+   promotions/media, inbound replies, and delivery statuses behind an explicit
+   Cloud feature flag while Baileys remains available for controlled rollback.
+9. **Only after the Phase 6 checklist passes, execute Phase 7.** Freeze and
+   drain Baileys, migrate Organizations one by one, verify historical data, and
+   remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
+
+The next code slice is therefore Phase 2 runtime wiring followed by Phase 3
+account operations—not direct Cloud sending from POS and not Baileys removal.
 
 ## Target architecture
 
@@ -701,6 +832,13 @@ migration.
 
 ### Migration A: Cloud account foundation
 
+Status: **partial and additive migration applied to development only**. The
+current migrations add Cloud lifecycle enums, WABA/sender snapshot columns,
+provisioning-attempt storage, webhook timestamps, `reconciling` outbox status,
+webhook receipts, and onboarding-state replay storage. They do not yet provide
+encrypted credential storage, live provisioning persistence, or a
+production-shaped backfill verification.
+
 Add Cloud API fields and constraints while the old Baileys fields still exist:
 
 - `whatsapp_business_accounts` parent records for WABA identity and
@@ -732,6 +870,10 @@ key failures.
 
 ### Migration B: Template and binding model
 
+Status: **not started**. The existing `whatsapp_message_templates` table is a
+Hisab-local preset model; it is not the Meta WABA template/binding model
+defined below.
+
 Separate the existing Hisab template preset from Meta's template asset:
 
 - Hisab preset: kind, name, local preview, token mapping, active/default state;
@@ -746,6 +888,11 @@ later edits cannot change a message already queued.
 
 ### Migration C: Consent and suppression
 
+Status: **partial local behavior only; schema/decision gate open**. Existing
+marketing opt-out fields and campaign selection rules must be audited and
+extended with auditable opt-in source, wording/version, utility consent, and
+suppression precedence before marketing is enabled through Cloud API.
+
 Add auditable customer messaging consent:
 
 - marketing opt-in state and timestamp;
@@ -759,6 +906,9 @@ Existing customers must not be silently treated as opted in. Provide an
 explicit migration/default policy before enabling promotions.
 
 ### Migration D: Quota, usage, and cost ledger
+
+Status: **not started**. Existing pending-outbox limits, cooldown records, and
+campaign statistics are not a replacement for this append-only ledger.
 
 Add append-only usage accounting rather than mutable counters alone:
 
@@ -791,6 +941,10 @@ it and must never be the only record.
 
 ### Migration E: Outbox/provider cleanup
 
+Status: **deferred until Phase 7**. Keep the provider discriminator, QR/session
+columns, Baileys worker, and historical rows until the migration inventory and
+drain/reconciliation gates pass.
+
 During migration, retain enough old columns to drain and audit Baileys rows.
 After the final cutover and retention window:
 
@@ -805,6 +959,10 @@ After the final cutover and retention window:
   selection earlier.
 
 ### Migration F: legacy platform notifications
+
+Status: **decision required**. The global platform notification path must be
+explicitly migrated to a separately scoped platform account or retired; it
+must not be silently folded into customer-owned WABAs.
 
 The existing global OTP/invite notification path is a separate credential and
 tenant model. Before final Baileys/legacy cleanup, choose one explicit route:

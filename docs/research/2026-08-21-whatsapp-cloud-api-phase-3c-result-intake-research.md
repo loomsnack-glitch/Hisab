@@ -2,6 +2,11 @@
 
 Date: 2026-08-21
 
+Status: implemented result-intake contract; live exchange/provisioning gate
+open.
+
+Canonical status: [Cloud API migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
+
 ## Question
 
 What is the smallest production-safe backend boundary for accepting the
@@ -44,13 +49,14 @@ Add a strict, typed result-intake boundary with four bounded fields:
 - the WABA identifier needed by the documented WABA operations;
 - the phone-number identifier needed by the documented phone operations.
 
-The boundary will trim and size-limit values, require numeric Meta identifiers,
-reject unknown fields, and verify the state against the authenticated
-Organization and user. It will not consume replay state yet: consumption must
+The implemented boundary trims and size-limits values, requires numeric Meta
+identifiers, rejects unknown fields, and verifies the state against the
+authenticated Organization and user. It does not consume replay state yet:
+consumption must
 happen only after the next phase successfully performs the server-side
 exchange, otherwise a transient exchange failure would strand the user.
 
-No access token, authorization code, or raw callback payload will be stored or
+No access token, authorization code, or raw callback payload is stored or
 logged by this phase. No Graph request, credential persistence, sender-account
 creation, Store assignment, or Baileys change belongs here.
 

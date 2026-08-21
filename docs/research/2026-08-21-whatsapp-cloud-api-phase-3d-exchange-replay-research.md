@@ -2,6 +2,11 @@
 
 Date: 2026-08-21
 
+Status: implemented exchange/replay orchestration contract; provider adapter
+and provisioning gate open.
+
+Canonical status: [Cloud API migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
+
 ## Question
 
 What should the backend guarantee between receiving the Embedded Signup result
@@ -54,6 +59,7 @@ a replay-safe failure rather than creating duplicate provisioning work.
 
 This phase does not call Meta, discover WABAs, validate phone ownership,
 persist credentials, create WABA/sender/provisioning rows, or assign Stores.
-The next phase should implement the approved provider adapter and discovery
+The next implementation should add the approved provider adapter and discovery
 fixtures, then create or resume the idempotent provisioning attempt only after
-the returned WABA and phone data are verified.
+the returned WABA and phone data are verified. The current exchange port is
+injected and fixture-tested; it does not call Meta or persist credentials.

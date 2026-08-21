@@ -2,6 +2,11 @@
 
 Date: 2026-08-21
 
+Status: contract foundation implemented; runtime and controlled-provider gates
+open.
+
+Canonical status: [Cloud API migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
+
 Scope: Cloud API module and webhook implementation for Hisab. This note covers
 webhook verification and authentication, WhatsApp webhook payloads, duplicate
 and out-of-order handling, Graph API sending and pagination, media handling,
@@ -55,7 +60,7 @@ Relevant plan sections:
 
 Source: [Hisab Phase 2 migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
 
-The current first-slice code already provides a useful base:
+The current branch now provides a useful contract foundation:
 
 - `WhatsAppCloudApiClient` sends bearer-authenticated requests to the versioned
   Graph API and maps Graph error fields into a safe error object.
@@ -71,12 +76,21 @@ The current first-slice code already provides a useful base:
   webhook must resolve `metadata.phone_number_id` to an internal account and
   then carry the resolved organization/store scope through normalization.
 
-The current application mounts authenticated tenant routes and worker-internal
-routes. It has no public Meta webhook route. Its global device middleware adds
-or reads a browser device cookie, which is not an authentication mechanism Meta
-will provide; a public webhook route must bypass tenant auth, worker auth, and
-browser-device assumptions while retaining request-size and operational
-logging controls.
+The current application mounts authenticated tenant routes, worker-internal
+routes, and a public Meta webhook route at `/webhooks/whatsapp`. Its global
+device middleware adds or reads a browser device cookie, which is not an
+authentication mechanism Meta provides; the webhook route must remain
+independent of tenant auth, worker auth, and browser-device assumptions while
+retaining request-size and operational logging controls.
+
+## Implementation status
+
+The webhook route, raw-body signature verification, bounded parsing, durable
+Cloud receipt table, normalizer, receipt processor, and outbound transport
+contracts are implemented with focused fixture tests. The Cloud client still
+needs bounded pagination, credential binding, media orchestration, scheduler
+wiring, and outbox integration. Meta setup and controlled-provider behavior
+have not been verified. The repository-wide test gate is also still open.
 
 ## 1. Webhook verification and signature validation
 

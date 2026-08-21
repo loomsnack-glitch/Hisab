@@ -2,12 +2,16 @@
 
 Date: 2026-08-21
 
+Status: implemented transport contract; credential/outbox/runtime gate open.
+
+Canonical status: [Cloud API migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
+
 ## Decision
 
-Add a typed Cloud outbound transport boundary before connecting the existing
-outbox to Graph API. The boundary will build only explicit Cloud message
-payloads, validate the provider acceptance ID, and classify failures as
-accepted, retryable, permanent, or reconciling. It will not claim database
+The branch now has a typed Cloud outbound transport boundary before connecting
+the existing outbox to Graph API. The boundary builds only explicit Cloud
+message payloads, validates the provider acceptance ID, and classifies failures
+as accepted, retryable, permanent, or reconciling. It does not claim database
 outbox rows or send production traffic yet.
 
 The current outbox does not persist the approved Meta template binding,
@@ -62,7 +66,7 @@ Sources:
 
 ## Verification
 
-Unit tests will cover payload construction, invalid input, accepted `wamid`
+Focused unit tests cover payload construction, invalid input, accepted `wamid`
 responses, malformed success responses, retryable HTTP errors, permanent
-provider errors, and uncertain network/timeout failures. The existing Cloud
-API client tests will remain green.
+provider errors, and uncertain network/timeout failures. Credential resolution,
+outbox claiming, scheduler wiring, and controlled Cloud sends remain pending.

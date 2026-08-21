@@ -2,6 +2,11 @@
 
 Date: 2026-08-21
 
+Status: implemented onboarding-state persistence boundary; provisioning gate
+open.
+
+Canonical status: [Cloud API migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
+
 ## Question
 
 How should the backend persist the short-lived Embedded Signup state and expose
@@ -45,8 +50,9 @@ boundary:
   WABA ID, phone ID, or credential is accepted or persisted in this phase.
 
 The database record is deliberately separate from `whatsapp_cloud_provisioning_attempts`.
-A later exchange/provisioning phase will create a provisioning attempt only
-after validated provider data has identified the Cloud account/sender row.
+A later exchange/provisioning phase must create a provisioning attempt only
+after validated provider data has identified the Cloud account/sender row. The
+current code intentionally stops before that operation.
 
 ## Security and reliability requirements
 

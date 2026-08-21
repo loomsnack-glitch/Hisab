@@ -2,6 +2,11 @@
 
 Date: 2026-08-21
 
+Status: processor contract implemented; scheduler and production runtime gate
+open.
+
+Canonical status: [Cloud API migration plan](../development/2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
+
 ## Decision
 
 Build a bounded database processor for the durable Cloud webhook receipt table.
@@ -59,8 +64,8 @@ Sources:
 
 ## Verification
 
-The processor will have unit tests for leasing classification, unknown-account
+The processor has focused tests for leasing classification, unknown-account
 retry, deferred-event ignoring, text dispatch, status dispatch, and retry to
-dead-letter behavior. Focused tests and the existing backend suite will be run;
-repository-wide TypeScript failures will be reported separately if they are
-unrelated pre-existing errors.
+dead-letter behavior. Focused tests pass. Scheduler wiring, media handling,
+production database verification, and the repository-wide test gate remain
+open; current full-suite failures are tracked in the canonical migration plan.
