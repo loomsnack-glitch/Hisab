@@ -10,6 +10,7 @@ import PosCustomersPage from "@/pages/pos-customers-page";
 import PosReportsPage from "@/pages/pos-reports-page";
 import PosPurchasesPage from "@/pages/pos-purchases-page";
 import PosAppearancePage from "@/pages/pos-appearance-page";
+import { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
 import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import { getDocumentTitle } from "@/lib/app-identity";
@@ -33,6 +34,7 @@ const App = () => {
                         <Route path="customers" element={<PosCustomersPage />} />
                         <Route path="reports" element={<PosReportsPage />} />
                         <Route path="purchases" element={<PosPurchasesPage />} />
+                        <Route path="whatsapp" element={<PosWhatsAppInboxPage />} />
                         <Route path="bills" element={<PosBillsPage />} />
                         <Route path="appearance" element={<PosAppearancePage />} />
                         <Route path="settings" element={<Navigate to="/appearance" replace />} />

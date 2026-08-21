@@ -27,6 +27,7 @@ import { toast } from "sonner";
 
 import { formatLongDate } from "@/lib/format";
 import { deviceAuthKeys } from "@/lib/query-keys";
+import { getPosPanelPath } from "@/pages/pos-route-context";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import PosMobileBottomNav from "@/components/pos/pos-mobile-bottom-nav";
@@ -305,7 +306,7 @@ const PosLayout = ({
                         variant="outline"
                         size="icon"
                         className={`relative size-9 rounded-full transition-colors ${getWhatsAppButtonClassName(whatsappButtonState)}`}
-                        aria-label={whatsappStatus === "connected" ? "WhatsApp connected" : "Connect WhatsApp"}
+                        aria-label={whatsappStatus === "connected" ? "Open WhatsApp inbox" : "Connect WhatsApp"}
                         aria-busy={whatsappIsBusy || whatsappStatus === "connecting"}
                         title={
                             whatsappAccountQuery.isError
@@ -317,7 +318,7 @@ const PosLayout = ({
                                     : whatsappStatus === "connecting" || whatsappIsBusy
                                       ? "Connecting WhatsApp"
                                       : whatsappStatus === "connected"
-                                        ? "WhatsApp connected"
+                                        ? "Open WhatsApp inbox"
                                       : whatsappIsLinked
                                         ? "Connect WhatsApp"
                                         : "Link WhatsApp from Store settings"
@@ -334,6 +335,7 @@ const PosLayout = ({
                                 return;
                             }
                             if (whatsappStatus === "connected") {
+                                navigate(getPosPanelPath("whatsapp"));
                                 return;
                             }
                             if (whatsappStatus === "connecting" || whatsappStatus === "pending_qr") {
