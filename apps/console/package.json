@@ -6,7 +6,7 @@
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
     "check-types": "tsc --noEmit --pretty false -p tsconfig.json",
-    "test": "bun test src"
+    "test": "bun test --preload ./src/test-setup.ts src"
   },
   "dependencies": {
     "@repo/assets": "workspace:*",
