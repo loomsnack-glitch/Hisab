@@ -771,6 +771,7 @@ export const LabelTemplateDTOSchema = LabelTemplateDocumentSchema.extend({
 });
 
 export const CreateLabelTemplateSchema = LabelTemplateDocumentSchema.safeExtend({
+  // @ts-expect-error Zod 4 infers this overlapping optional status field as `never`.
   status: LabelTemplateStatusSchema.optional(),
 });
 

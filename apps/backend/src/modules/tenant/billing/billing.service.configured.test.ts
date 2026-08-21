@@ -31,7 +31,7 @@ const deviceSession = {
         status: "active",
         lastSeenAt: null,
     },
-    store: { ...store, address: null },
+    store: { ...store, address: null, kotSystemEnabled: false, tableManagementEnabled: false },
     organization: { ...organization, username: "demo", tagline: null },
 } satisfies DeviceSessionDTO;
 
@@ -400,6 +400,11 @@ mock.module("@/modules/tenant/table-service/table-service.repository", () => ({
     lockServiceTableForSale,
     markReadyDraftAsEngaged,
     setCommittedSaleTableState,
+    getServiceTableById: mock(async () => null),
+}));
+
+mock.module("@/modules/tenant/kot/kot.repository", () => ({
+    getKotNumbersBySaleId: mock(async () => []),
 }));
 
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");

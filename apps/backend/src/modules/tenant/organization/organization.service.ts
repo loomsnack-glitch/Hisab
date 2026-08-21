@@ -507,6 +507,14 @@ export const updateStore = async (
         ? (store.socialMediaLink ?? null)
         : normalizeOptionalText(storeData.socialMediaLink),
     whatsappLinks: storeData.whatsappLinks ?? store.whatsappLinks,
+    kotSystemEnabled:
+      storeData.kotSystemEnabled === undefined
+        ? store.kotSystemEnabled
+        : storeData.kotSystemEnabled,
+    tableManagementEnabled:
+      storeData.tableManagementEnabled === undefined
+        ? store.tableManagementEnabled
+        : storeData.tableManagementEnabled,
     updatedBy: userId,
   });
 

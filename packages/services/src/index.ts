@@ -4,10 +4,12 @@ export * from "./device-id";
 export * from "./modules/common";
 export * from "./modules/access-control";
 export * from "./modules/pos";
+export * from "./modules/platform";
 export {
   collectPosPayment,
   commitPosSale,
   completePosSale,
+  createPosParcelKot,
   createPosCustomer,
   createPosDraftSale,
   deletePosDraftSale,
@@ -28,6 +30,10 @@ export {
   startPosServiceTableOrder,
   getPosServiceTableOrder,
   cancelPosServiceTableOrder,
+  updatePosServiceTableOrder,
+  createPosTableKot,
+  updatePosTableKot,
+  checkoutPosTableOrder,
   getPosSale,
   getPosSales,
   replacePosSale,

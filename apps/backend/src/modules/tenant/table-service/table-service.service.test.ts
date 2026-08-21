@@ -19,9 +19,9 @@ const table: ServiceTableDTO = {
   serviceAreaId: null,
   tableLabel: "A1",
   capacity: 4,
-  position: { x: 0.05, y: 0.05 },
   state: "free",
   currentSaleId: null,
+  currentTableOrderId: null,
   currentSaleTotal: null,
   createdBy: userId,
   updatedBy: null,
@@ -50,7 +50,14 @@ const deviceSession: DeviceSessionDTO = {
     status: "active",
     lastSeenAt: null,
   },
-  store: { id: storeId, organizationId, name: "Main Store", address: null },
+  store: {
+    id: storeId,
+    organizationId,
+    name: "Main Store",
+    address: null,
+    kotSystemEnabled: false,
+    tableManagementEnabled: true,
+  },
   organization: {
     id: organizationId,
     name: "Demo Org",
@@ -81,14 +88,13 @@ const createServiceTableRepo = mock(
     storeId: string;
     tableLabel: string;
     capacity: number | null;
-    position: { x: number; y: number };
     createdBy: string;
   }) => ({ ...table, ...data }),
 );
 const updateServiceTableRepo = mock(
-  async (data: { position?: { x: number; y: number } }) => ({
+  async (data: { capacity?: number | null; tableLabel?: string }) => ({
     ...table,
-    position: data.position ?? table.position,
+    ...data,
     updatedBy: userId,
   }),
 );
@@ -262,6 +268,55 @@ mock.module("@/modules/tenant/billing/billing.repository", () => ({
 mock.module("@/modules/tenant/billing/billing.service", () => ({
   getSaleDetailsForDevice,
 }));
+const startActiveTableOrderForDevice = mock(async () => ({
+  status: "success" as const,
+  data: {
+    table: {
+      ...allocatedTable,
+      state: "engaged" as const,
+      currentSaleId: null,
+      currentTableOrderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+    },
+    sale: null,
+    tableOrder: {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+      status: "active" as const,
+      kots: [],
+    },
+  },
+  message: "Table order started",
+  code: 201,
+}));
+const getActiveTableOrderForDevice = mock(async () => ({
+  status: "success" as const,
+  data: {
+    table: {
+      ...allocatedTable,
+      state: "engaged" as const,
+      currentSaleId: null,
+      currentTableOrderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+    },
+    sale: null,
+    tableOrder: {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+      status: "active" as const,
+      kots: [],
+    },
+  },
+  message: "Table order loaded",
+  code: 200,
+}));
+const discardActiveTableOrderForDevice = mock(async () => ({
+  status: "success" as const,
+  data: { table: allocatedTable },
+  message: "Table order cancelled",
+  code: 200,
+}));
+mock.module("@/modules/tenant/kot/kot.service", () => ({
+  startActiveTableOrderForDevice,
+  getActiveTableOrderForDevice,
+  discardActiveTableOrderForDevice,
+}));
 
 const tableService = await import("./table-service.service");
 
@@ -322,6 +377,9 @@ describe("Service Table application service", () => {
     lockDraftSale.mockClear();
     deleteDraftSale.mockClear();
     getSaleDetailsForDevice.mockClear();
+    startActiveTableOrderForDevice.mockClear();
+    getActiveTableOrderForDevice.mockClear();
+    discardActiveTableOrderForDevice.mockClear();
     begin.mockClear();
   });
 
@@ -343,7 +401,6 @@ describe("Service Table application service", () => {
         storeId,
         tableLabel: "Patio-2",
         capacity: null,
-        position: { x: 0.05, y: 0.05 },
         createdBy: userId,
       }),
       expect.anything(),
@@ -379,7 +436,7 @@ describe("Service Table application service", () => {
       otherStoreId,
       tableId,
       {
-        position: { x: 0.8, y: 0.8 },
+        capacity: 6,
       },
     );
 
@@ -389,14 +446,14 @@ describe("Service Table application service", () => {
     expect(updateServiceTableRepo).not.toHaveBeenCalled();
   });
 
-  test("updates only the normalized floor position through the Store-scoped table", async () => {
+  test("updates table capacity through the Store-scoped table", async () => {
     const response = await tableService.updateServiceTable(
       userId,
       organizationId,
       storeId,
       tableId,
       {
-        position: { x: 0.74, y: 0.31 },
+        capacity: 6,
       },
     );
 
@@ -406,7 +463,7 @@ describe("Service Table application service", () => {
         id: tableId,
         organizationId,
         storeId,
-        position: { x: 0.74, y: 0.31 },
+        capacity: 6,
         updatedBy: userId,
       }),
     );
@@ -511,6 +568,28 @@ describe("Service Table application service", () => {
     );
   });
 
+  test("starts an Active Table Order instead of a Draft Sale when both Store features are enabled", async () => {
+    getStoreById.mockResolvedValueOnce({
+      ...store,
+      kotSystemEnabled: true,
+      tableManagementEnabled: true,
+    });
+
+    const response = await tableService.startServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response.status).toBe("success");
+    expect(response.data?.sale).toBe(null);
+    expect(response.data?.tableOrder?.status).toBe("active");
+    expect(createSale).not.toHaveBeenCalled();
+    expect(startActiveTableOrderForDevice).toHaveBeenCalledWith(
+      deviceSession,
+      tableId,
+    );
+  });
+
   test("rejects a competing start when the table already has an active order", async () => {
     lockServiceTableForDevice.mockResolvedValueOnce({
       ...allocatedTable,
@@ -554,6 +633,79 @@ describe("Service Table application service", () => {
     expect(getSaleDetailsForDevice).toHaveBeenCalledWith(
       deviceSession,
       "sale-id",
+    );
+  });
+
+  test("opens a leftover Draft Sale after Table Orders are enabled", async () => {
+    getStoreById.mockResolvedValueOnce({
+      ...store,
+      kotSystemEnabled: true,
+      tableManagementEnabled: true,
+    });
+    getServiceTableById.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentTableOrderId: null,
+      currentSaleTotal: 42,
+    });
+
+    const response = await tableService.getServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: {
+        table: { state: "engaged", currentSaleId: "sale-id" },
+        sale: { id: "sale-id", status: "draft" },
+      },
+    });
+    expect(getActiveTableOrderForDevice).not.toHaveBeenCalled();
+    expect(getSaleDetailsForDevice).toHaveBeenCalledWith(
+      deviceSession,
+      "sale-id",
+    );
+  });
+
+  test("cancels a leftover Draft Sale after Table Orders are enabled", async () => {
+    getStoreById.mockResolvedValueOnce({
+      ...store,
+      kotSystemEnabled: true,
+      tableManagementEnabled: true,
+    });
+    getServiceTableById.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentTableOrderId: null,
+      currentSaleTotal: 42,
+    });
+    lockServiceTableForDevice.mockResolvedValueOnce({
+      ...allocatedTable,
+      state: "engaged",
+      currentSaleId: "sale-id",
+      currentTableOrderId: null,
+      currentSaleTotal: 0,
+    });
+
+    const response = await tableService.cancelServiceTableOrderForDevice(
+      deviceSession,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: { table: { state: "free", currentSaleId: null } },
+    });
+    expect(discardActiveTableOrderForDevice).not.toHaveBeenCalled();
+    expect(clearDraftSale).toHaveBeenCalled();
+    expect(deleteDraftSale).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      "sale-id",
+      expect.anything(),
     );
   });
 

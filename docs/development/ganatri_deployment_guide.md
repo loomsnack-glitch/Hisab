@@ -1,5 +1,11 @@
 # Ganatri Deployment Guide
 
+> **Still the live host.** This guide deploys **ganatri.loomsnack.com** only.
+> The new parallel stack is **ganatri.in** (Admin / POS / Console + API on
+> port 8181). Use `docs/development/ganatri_in_deployment_guide.md` for that.
+> Do not rsync new builds into the paths below until you are ready to take
+> this host down.
+
 Deploy **ganatri.loomsnack.com** on the Ubuntu VPS at `216.158.228.89` (same machine as `loomsnack.com` and `boxmap.loomsnack.com`).
 
 | Piece | Stack | Server path |

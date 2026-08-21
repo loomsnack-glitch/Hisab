@@ -123,6 +123,8 @@ export const StoreDTOSchema = z.object({
   socialMediaName: z.string().max(100).nullable().optional(),
   socialMediaLink: z.string().max(2048).nullable().optional(),
   whatsappLinks: z.array(StoreMessageLinkSchema).default([]),
+  kotSystemEnabled: z.boolean(),
+  tableManagementEnabled: z.boolean(),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,
@@ -172,6 +174,8 @@ export const UpdateStoreSchema = z
     socialMediaName: optionalEngagementNameSchema,
     socialMediaLink: optionalEngagementLinkSchema,
     whatsappLinks: z.array(StoreMessageLinkSchema).max(20).optional(),
+    kotSystemEnabled: z.boolean().optional(),
+    tableManagementEnabled: z.boolean().optional(),
   })
   .superRefine((store, context) => {
     if (Boolean(store.reviewPlatform) !== Boolean(store.reviewLink)) {

@@ -4,6 +4,85 @@ Hisab is a multi-tenant retail/POS system for managing stores, products, sales, 
 
 ## Language
 
+**Platform Administrator**:
+A Ganatri owner or internal operator authorized to inspect cross-organization platform data. A Platform Administrator is represented by a separate Owner User, is distinct from an Organization's administrators, and has read-only access in Ganatri Console.
+_Avoid_: Organization admin, tenant admin, superuser
+
+**Owner User**:
+An internal Ganatri identity stored separately from customer Users and used to sign in to Ganatri Console with a WhatsApp-enabled phone number and password. An active Owner User may create additional Owner Users and activate or deactivate them.
+_Avoid_: Organization user, tenant user, customer administrator
+
+**Active Owner User**:
+An Owner User permitted to authenticate to Ganatri Console and use its read-only capabilities. An inactive Owner User is denied console access, including from an already-open session on its next authenticated request. Owner Users cannot deactivate themselves, and the final active Owner User cannot be deactivated.
+_Avoid_: Enabled Organization User, active store device
+
+**Seed Owner User**:
+The first Owner User, created through a secure operator-run CLI command rather than a public registration route. Seed Owner Users and later Owner Users are managed only by active Owner Users through Ganatri Console.
+_Avoid_: Public owner signup, organization registration
+
+**Ganatri Console**:
+The read-only internal Ganatri application at `console.ganatri.in` used by Platform Administrators to analyze Organization adoption and operational activity across the platform.
+_Avoid_: Organization admin, customer dashboard, POS back office
+
+**Ganatri Admin**:
+The user-authenticated Ganatri application used by an Organization's administrators to manage that Organization's settings and business data. It is separate from Ganatri Console and Ganatri POS.
+_Avoid_: Ganatri Console, POS, platform administration
+
+**Ganatri POS**:
+The device-authenticated Ganatri application used by a Store Device to perform its Store-Scoped POS Workflow. It is separate from Ganatri Admin and does not live under an Admin URL path.
+_Avoid_: Admin POS route, embedded admin billing page, Ganatri Console
+**Organization Inspection Workspace**:
+The read-only Ganatri Console workspace selected from the Organization list, providing Platform Administrators a consistent, Admin-like way to inspect that Organization's Stores, Catalog, Billing, Customers, Reports, Tables, Purchases, and WhatsApp information without allowing mutations.
+_Avoid_: Console edit mode, tenant administration workspace, organization impersonation
+
+**Inspection URL**:
+An authorization-protected Ganatri Console route that identifies an Organization Inspection Workspace state, including its selected Organization, section, resource detail, and supported filters. It survives refresh and participates in ordinary browser navigation.
+_Avoid_: in-memory-only drill-down, unauthenticated shared link, modal-only inspection state
+
+**Store-Filtered Billing Inspection**:
+The Billing view in an Organization Inspection Workspace. It shows that Organization's bills across all Stores by default and can be limited to one Store; every bill retains its Store attribution.
+_Avoid_: Organization-wide billing ownership, storeless bill list, tenant billing mutation
+
+**Read-Only Sale Inspection**:
+The Console presentation of a Sale's full lifecycle and historical record, including draft, completed, and voided Sales; line items; discounts; payments; Customer; Store; Store Device attribution; and receipt data. It never offers commands that create, change, settle, void, print, or message a Sale.
+_Avoid_: Console checkout, payment collection, billing administration
+
+**Console-Safe Operational Metadata**:
+Non-secret configuration and operational state that a Platform Administrator may inspect in Ganatri Console, such as Store Device name, status, and last seen time or WhatsApp connection status. Reusable credentials—including Store Device Secrets, WhatsApp/API credentials, passwords, and authentication tokens—are never Console data.
+_Avoid_: Console-visible secret, credential inspection, token export
+
+**Active Store**:
+A Store with at least one completed Sale in the preceding seven calendar days. This metric measures actual POS usage for Ganatri Console adoption analysis.
+_Avoid_: Logged-in store, registered store, enabled store
+
+**Active Organization**:
+An Organization with at least one Active Store. An Organization with no Stores or no completed Sale from any Store in the preceding seven calendar days is inactive for Ganatri Console outreach analysis.
+_Avoid_: Registered organization, enabled organization, active user account
+
+**Platform Reporting Period**:
+The bounded time interval used to calculate Ganatri Console activity and completed-Sale metrics. The console supports both all-time totals and operator-selected reporting periods, and its calendar-day boundaries use Asia/Kolkata time.
+_Avoid_: Dashboard refresh time, organization lifetime
+
+**Inspection Page Filter**:
+A filter owned by one Organization Inspection Workspace page, such as Billing's Store, Sale status, payment, and date filters or a Report's date range. It defaults to that page's available Organization data and is independent of the Platform Reporting Period, which affects only Console adoption metrics.
+_Avoid_: Dashboard-period detail filter, hidden drill-down restriction
+
+**Organization Adoption Health**:
+The set of platform-level usage signals used to prioritize outreach to an Organization, including its Store count, Active Store count, completed-Sale activity, customer count, and most recent completed Sale. It is visible in Ganatri Console's Organization list and detail view.
+_Avoid_: Subscription status, account enabled state, customer health score
+
+**Organization Directory**:
+The responsive Ganatri Console list used to find and open an Organization Inspection Workspace. It presents each Organization's identity, creator, adoption health, and selected-period completed-sales value; supports organization-or-creator search, active/inactive filtering, and sorting; and defaults to most recently active Organizations.
+_Avoid_: static tenant table, organization editor, unsorted account registry
+
+**Completed Sales Value**:
+The sum of `grand_total` across completed Sales in a Platform Reporting Period. It measures the value of bills generated through Hisab and is distinct from money collected through Payments.
+_Avoid_: Revenue, collected payment total, cash received
+
+**Customer Count**:
+The number of Customer records an Organization has created, regardless of each Customer's current active status. In Ganatri Console it measures customer-data adoption, not the number of currently trading customers.
+_Avoid_: Active customer count, customer engagement rate, registered user count
+
 **Billing**:
 The part of the system that records a sale, its line items, and the payments collected against it. In this project, Billing is modeled through Sales and Payments rather than a separate invoice domain.
 _Avoid_: Invoicing, bill book
@@ -29,8 +108,16 @@ A record of money collected against a Sale. A Sale may have many Payments across
 _Avoid_: Settlement row, transaction row
 
 **Sale Number**:
-A human-friendly bill identifier assigned when a Sale is committed. It is unique within a Store.
-_Avoid_: UUID, internal id
+A human-friendly bill identifier assigned when a Sale is committed. It is unique within a Store for the current financial year, prints as a plain sequence (1, 2, 3…), and resets each financial year with no Store customization.
+_Avoid_: UUID, internal id, FY-prefixed bill number, configurable reset period
+
+**Token Number**:
+A human-friendly queue token assigned when a Sale is committed. It is always enabled, resets daily in the Store timezone, and prints separately from KOT Numbers.
+_Avoid_: Optional token toggle, configurable token reset period, KOT Number
+
+**KOT Number**:
+A human-friendly identifier assigned when a KOT is generated. Table and Parcel KOTs share one Store-local sequence that is separate from Sale Numbers and Token Numbers; it always resets daily with no Store customization. On the final bill, linked KOT Numbers print as KOT token numbers.
+_Avoid_: Sale Number, Token Number, UUID, separate table and parcel sequences, configurable KOT reset period
 
 **Sale Status**:
 The lifecycle state of a Sale. In billing v1, a Sale may be draft, completed, or voided.
@@ -108,17 +195,33 @@ _Avoid_: Floor section, zone, room, named layout region
 A Service Table that does not belong to any Service Area. It can be assigned to a Service Area only while unassigned; moving it to another area requires unassigning it first.
 _Avoid_: Unallocated table when referring to area membership, free-floating table
 
-**Active Table Sale**:
-The single Draft Sale currently linked to a Service Table. A Service Table may have at most one Active Table Sale at a time, and that Sale is its current order.
-_Avoid_: Parallel table drafts, duplicate current bill, table cart
+**Active Table Order**:
+The single open Table Order currently linked to a Service Table. It groups that table's KOTs and becomes one Sale only at checkout.
+_Avoid_: Active Table Sale, parallel table drafts, duplicate current bill, table cart
 
 **Allocated Service Table**:
-A Service Table that has been occupied by guests but has no Active Table Sale yet. Allocation reserves the physical table without creating a Draft Sale.
+A Service Table that has been occupied by guests but has no Active Table Order yet. Allocation reserves the physical table without creating a Sale.
 _Avoid_: Empty draft, free seated table, unstarted order
 
-**Discarded Table Draft**:
-An Active Table Sale intentionally abandoned before checkout because the guests left or the order is no longer wanted. Discarding it removes the uncommitted draft and frees its Service Table without creating a financial bill.
-_Avoid_: Void completed sale, unpaid cancellation, retained abandoned cart
+**Discarded Table Order**:
+An Active Table Order intentionally abandoned before checkout because the guests left or the order is no longer wanted. Discarding it removes its uncommitted KOTs and frees its Service Table without creating a financial bill.
+_Avoid_: Discarded Table Draft, void completed sale, unpaid cancellation, retained abandoned cart
+
+**KOT System**:
+An optional Store feature that enables parcel KOTs; table KOTs are available only when the Store also enables Table Management.
+_Avoid_: Table Management, required restaurant workflow, table-only KOT feature
+
+**Table Order**:
+The non-financial parent record for a seated party's service, which collects one or more KOTs before checkout. A Table Order belongs to exactly one Service Table and produces at most one final Sale.
+_Avoid_: Draft Sale, table cart, parallel table bill
+
+**Kitchen Order Ticket (KOT)**:
+An editable, non-financial kitchen work order for food or drink items, associated either with a Table Order or a parcel order. Each KOT item retains the trusted product configuration and price at KOT generation; editing a KOT does not require a change printout for the kitchen, and only its remaining items at checkout contribute to the final Sale.
+_Avoid_: Final bill, completed sale, immutable kitchen ticket
+
+**Parcel KOT**:
+A KOT for a takeaway order that has no Table Order. Generating it immediately creates the final Sale with a pending payment status.
+_Avoid_: Table KOT, unpaid draft sale, tableless table order
 
 **Table-Linked Sale**:
 A Sale associated with a Service Table as the setting in which it was ordered. The association may remain as historical context after the table is released for another guest.
@@ -160,9 +263,9 @@ _Avoid_: Partial device checkout, mixed-auth billing flow
 A Device-Authenticated Billing Session that uses a separate auth channel from admin user auth so billing access cannot be unlocked by an admin session alone.
 _Avoid_: Shared admin/POS session, fallback user-auth billing
 
-**POS Route Tree**:
-A dedicated frontend route tree and layout for device-authenticated billing, separate from the admin dashboard routes and user-authenticated management workspace.
-_Avoid_: Embedded admin billing page, shared dashboard POS shell
+**POS Application Route Tree**:
+The root route tree of Ganatri POS, dedicated to device-authenticated billing and separate from Ganatri Admin's user-authenticated management routes.
+_Avoid_: Embedded admin billing page, Admin `/pos` route, shared dashboard POS shell
 
 **POS Device Login**:
 The billing login flow where a Store Device opens the POS route tree and authenticates by entering its device id and device secret directly.
@@ -184,16 +287,16 @@ _Avoid_: Waiter-only device, cashier-only device, table role authorization
 A user-authenticated management view that may inspect a Store's bills but cannot create or mutate billing data. Writing billing data requires a Device-Authenticated Billing Session.
 _Avoid_: Admin-created bill, fallback user-auth POS action
 
-**Dual-Mode Billing Workspace**:
-A single billing workspace that renders in admin read-only mode for user sessions and in full POS mode for device sessions. In admin mode, billing creation controls are hidden; in device mode, the full Store-Scoped POS Workflow is available.
-_Avoid_: Separate duplicated billing UIs, shared full-access admin POS
+**Separated Billing Views**:
+Ganatri Admin provides user-authenticated, read-only billing inspection, while Ganatri POS provides the full device-authenticated Store-Scoped POS Workflow. The two views are delivered by separate applications but retain their respective authorization boundaries.
+_Avoid_: Shared dual-mode workspace, shared full-access admin POS, admin-created bill
 
 **Read-Only Draft Inspection**:
 The rule that admin mode may view draft bills alongside committed and voided bills, but cannot create, edit, commit, collect payment for, or void any of them.
 _Avoid_: Draft mutation from admin mode, committed-only admin history
 
-**Mode-Scoped Store Selection**:
-In the Dual-Mode Billing Workspace, admin mode may switch between stores for inspection, while device mode is locked to the authenticated Store Device's single Store.
+**Application-Scoped Store Selection**:
+Ganatri Admin may switch between Stores for read-only inspection, while Ganatri POS is locked to the authenticated Store Device's single Store.
 _Avoid_: Admin-locked inspection store, switchable device POS store
 
 **Persistent POS Session**:

@@ -22,6 +22,11 @@ import {
   WhatsAppAttachConversationCustomerSchema,
   WhatsAppSendConversationTextSchema,
   WhatsAppDueReminderRequestSchema,
+  CreateParcelKotSchema,
+  CreateTableKotSchema,
+  UpdateTableKotSchema,
+  UpdateTableOrderSchema,
+  CheckoutTableOrderSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { deviceAuthMiddleware } from "@/middlewares/device-auth.middleware";
@@ -32,6 +37,7 @@ import * as catalogService from "@/modules/tenant/catalog/catalog.service";
 import * as purchaseService from "@/modules/tenant/purchase/purchase.service";
 import * as organizationService from "@/modules/tenant/organization/organization.service";
 import * as tableService from "@/modules/tenant/table-service/table-service.service";
+import * as kotService from "@/modules/tenant/kot/kot.service";
 import * as whatsappService from "@/modules/tenant/whatsapp/whatsapp.service";
 
 const FILE_NAME = "pos.routes";
@@ -176,6 +182,98 @@ router.delete("/tables/:tableId/order", async (c) => {
     return handleError(FILE_NAME, "cancelServiceTableOrderForDevice", c, error);
   }
 });
+
+router.patch(
+  "/tables/:tableId/order",
+  validateSchema("json", UpdateTableOrderSchema),
+  async (c) => {
+    try {
+      const tableId = c.req.param("tableId");
+      const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+      if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.updateActiveTableOrderForDevice(
+          c.get("authDevice"),
+          tableId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "updateActiveTableOrderForDevice", c, error);
+    }
+  },
+);
+
+router.post(
+  "/tables/:tableId/kots",
+  validateSchema("json", CreateTableKotSchema),
+  async (c) => {
+    try {
+      const tableId = c.req.param("tableId");
+      const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+      if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.createTableKotForDevice(
+          c.get("authDevice"),
+          tableId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "createTableKotForDevice", c, error);
+    }
+  },
+);
+
+router.patch(
+  "/tables/:tableId/kots/:kotId",
+  validateSchema("json", UpdateTableKotSchema),
+  async (c) => {
+    try {
+      const tableId = c.req.param("tableId");
+      const kotId = c.req.param("kotId");
+      const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+      if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+      const invalidKotId = validateUuidParam(kotId, "Invalid KOT id");
+      if (invalidKotId) return c.json(invalidKotId, invalidKotId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.updateTableKotForDevice(
+          c.get("authDevice"),
+          tableId,
+          kotId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "updateTableKotForDevice", c, error);
+    }
+  },
+);
+
+router.post(
+  "/tables/:tableId/checkout",
+  validateSchema("json", CheckoutTableOrderSchema),
+  async (c) => {
+    try {
+      const tableId = c.req.param("tableId");
+      const invalidTableId = validateUuidParam(tableId, "Invalid table id");
+      if (invalidTableId) return c.json(invalidTableId, invalidTableId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.checkoutTableOrderForDevice(
+          c.get("authDevice"),
+          tableId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "checkoutTableOrderForDevice", c, error);
+    }
+  },
+);
 
 router.post("/tables/:tableId/free-paid", async (c) => {
   try {
@@ -781,6 +879,22 @@ router.post(
       return handleServiceResponse(c, serviceResponse);
     } catch (error) {
       return handleError(FILE_NAME, "completeSaleForDevice", c, error);
+    }
+  },
+);
+
+router.post(
+  "/kots/parcel",
+  validateSchema("json", CreateParcelKotSchema),
+  async (c) => {
+    try {
+      const serviceResponse = await kotService.createParcelKotForDevice(
+        c.get("authDevice"),
+        c.req.valid("json"),
+      );
+      return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+      return handleError(FILE_NAME, "createParcelKotForDevice", c, error);
     }
   },
 );

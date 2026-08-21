@@ -28,7 +28,7 @@ describe("API base URL resolution", () => {
     for (const key of environmentKeys) delete process.env[key];
     delete globalThis.__TENDERSENSE_BASE_API_URL__;
 
-    expect(resolveBaseApiUrl()).toBe("https://ganatri.loomsnack.com/api");
+    expect(resolveBaseApiUrl()).toBe("https://ganatri.in/api");
   });
 });
 

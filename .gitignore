@@ -26,7 +26,8 @@ coverage
 out/
 build
 dist
-apps/web/public/version.json
+apps/admin/public/version.json
+apps/pos/public/version.json
 
 # WhatsApp worker local encrypted auth state
 apps/whatsapp-worker/data/

@@ -4,7 +4,6 @@ import type {
   CreateServiceTableREPO,
   ServiceAreaDTO,
   ServiceTableDTO,
-  ServiceTablePosition,
   ServiceTableState,
   UpdateServiceAreaREPO,
   UpdateServiceTableREPO,
@@ -36,12 +35,10 @@ const mapRow = (row: Record<string, unknown>): ServiceTableDTO => ({
     row.capacity === null || row.capacity === undefined
       ? null
       : Number(row.capacity),
-  position: {
-    x: Number(row.position_x),
-    y: Number(row.position_y),
-  },
   state: row.state as ServiceTableDTO["state"],
   currentSaleId: (row.current_sale_id as string | null | undefined) ?? null,
+  currentTableOrderId:
+    (row.current_table_order_id as string | null | undefined) ?? null,
   currentSaleTotal:
     row.current_sale_total === null || row.current_sale_total === undefined
       ? null
@@ -54,7 +51,7 @@ const mapRow = (row: Record<string, unknown>): ServiceTableDTO => ({
 
 const selectColumns = `
   id, organization_id, store_id, service_area_id, table_label, capacity,
-  position_x, position_y, state, current_sale_id,
+  state, current_sale_id, current_table_order_id,
   created_by, updated_by, created_at, updated_at
 `;
 
@@ -65,19 +62,27 @@ const selectColumnsWithSaleTotal = `
   service_tables.service_area_id,
   service_tables.table_label,
   service_tables.capacity,
-  service_tables.position_x,
-  service_tables.position_y,
   service_tables.state,
   service_tables.current_sale_id,
+  service_tables.current_table_order_id,
   CASE
-    WHEN current_sale.id IS NULL THEN NULL
-    WHEN current_sale.status = 'draft' THEN current_sale.grand_total
-    WHEN current_sale.payment_status = 'paid' THEN current_sale.grand_total
-    ELSE current_sale.grand_total - COALESCE((
-      SELECT SUM(payment.amount)
-      FROM payments AS payment
-      WHERE payment.sale_id = current_sale.id
+    WHEN current_sale.id IS NOT NULL THEN
+      CASE
+        WHEN current_sale.status = 'draft' THEN current_sale.grand_total
+        WHEN current_sale.payment_status = 'paid' THEN current_sale.grand_total
+        ELSE current_sale.grand_total - COALESCE((
+          SELECT SUM(payment.amount)
+          FROM payments AS payment
+          WHERE payment.sale_id = current_sale.id
+        ), 0)
+      END
+    WHEN service_tables.current_table_order_id IS NOT NULL THEN COALESCE((
+      SELECT SUM(kot_items.line_total)
+      FROM kots
+      JOIN kot_items ON kot_items.kot_id = kots.id
+      WHERE kots.table_order_id = service_tables.current_table_order_id
     ), 0)
+    ELSE NULL
   END AS current_sale_total,
   service_tables.created_by,
   service_tables.updated_by,
@@ -99,7 +104,7 @@ export const getServiceTables = async (
      AND current_sale.status IN ('draft', 'completed')
     WHERE service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
-    ORDER BY position_y ASC, position_x ASC, created_at ASC, id ASC
+    ORDER BY LOWER(TRIM(service_tables.table_label)) ASC, service_tables.created_at ASC, service_tables.id ASC
   `;
   return rows.map((row: Record<string, unknown>) => mapRow(row));
 };
@@ -153,11 +158,10 @@ export const createServiceTable = async (
   const db: Db = tx || pg;
   const [row] = await db`
     INSERT INTO service_tables (
-      id, organization_id, store_id, table_label, capacity,
-      position_x, position_y, created_by
+      id, organization_id, store_id, table_label, capacity, created_by
     ) VALUES (
       ${table.id}, ${table.organizationId}, ${table.storeId}, ${table.tableLabel}, ${table.capacity},
-      ${table.position.x}, ${table.position.y}, ${table.createdBy}
+      ${table.createdBy}
     )
     RETURNING ${db.unsafe(selectColumns)}
   `;
@@ -177,13 +181,10 @@ export const updateServiceTable = async (
   const nextLabel = table.tableLabel ?? current.tableLabel;
   const nextCapacity =
     table.capacity === undefined ? current.capacity : table.capacity;
-  const nextPosition = table.position ?? current.position;
   const [row] = await pg`
     UPDATE service_tables
     SET table_label = ${nextLabel},
         capacity = ${nextCapacity},
-        position_x = ${nextPosition.x},
-        position_y = ${nextPosition.y},
         updated_by = ${table.updatedBy},
         updated_at = NOW()
     WHERE id = ${table.id}
@@ -239,6 +240,82 @@ export const lockServiceTableForDevice = async (
   return row ? mapRow(row) : null;
 };
 
+export const attachTableOrder = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  tableOrderId: string,
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = 'engaged',
+        current_table_order_id = ${tableOrderId},
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND state = 'allocated'
+      AND current_sale_id IS NULL
+      AND current_table_order_id IS NULL
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
+export const clearTableOrder = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  tableOrderId: string,
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = 'free',
+        current_table_order_id = NULL,
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND state IN ('engaged', 'ready_to_bill')
+      AND current_table_order_id = ${tableOrderId}
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
+export const attachCheckedOutSale = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  tableOrderId: string,
+  saleId: string,
+  state: "payment_due" | "paid",
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<ServiceTableDTO | null> => {
+  const [row] = await tx`
+    UPDATE service_tables
+    SET state = ${state},
+        current_sale_id = ${saleId},
+        current_table_order_id = NULL,
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND current_table_order_id = ${tableOrderId}
+      AND state IN ('engaged', 'ready_to_bill')
+    RETURNING ${tx.unsafe(selectColumns)}
+  `;
+  return row ? mapRow(row) : null;
+};
+
 export const attachDraftSale = async (
   organizationId: string,
   storeId: string,
@@ -258,6 +335,7 @@ export const attachDraftSale = async (
       AND store_id = ${storeId}
       AND state = 'allocated'
       AND current_sale_id IS NULL
+      AND current_table_order_id IS NULL
     RETURNING ${tx.unsafe(selectColumns)}
   `;
   return row ? mapRow(row) : null;
@@ -482,13 +560,6 @@ export const unassignServiceTableFromArea = async (
   `;
   return row ? mapRow(row) : null;
 };
-
-export const normalizePosition = (
-  position: ServiceTablePosition,
-): ServiceTablePosition => ({
-  x: Math.min(1, Math.max(0, position.x)),
-  y: Math.min(1, Math.max(0, position.y)),
-});
 
 const mapAreaRow = (row: Record<string, unknown>): ServiceAreaDTO => ({
   id: row.id as string,

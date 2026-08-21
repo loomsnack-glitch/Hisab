@@ -1,0 +1,199 @@
+import { useEffect, useState } from "react";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm, type SubmitHandler } from "react-hook-form";
+import { deviceAuthenticate, deviceLogin } from "@repo/services";
+import { DeviceLoginSchema, type DeviceLoginJSON } from "@repo/types";
+import { Button } from "@repo/ui/components/button";
+import { Card, CardContent } from "@repo/ui/components/card";
+import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
+import { Input } from "@repo/ui/components/input";
+import { PasswordInput } from "@repo/ui/components/password-input";
+import { Spinner } from "@repo/ui/components/spinner";
+import { toast } from "sonner";
+
+import AuthShell from "@/components/auth/auth-shell";
+import { deviceAuthKeys } from "@/lib/query-keys";
+import { getPosReturnPath } from "@/pages/pos-route-context";
+
+const PosLoginPage = () => {
+    const navigate = useNavigate();
+    const queryClient = useQueryClient();
+    const [searchParams] = useSearchParams();
+    const returnTo = getPosReturnPath(searchParams.get("returnTo"));
+
+    const deviceAuthQuery = useQuery({
+        queryKey: deviceAuthKeys.me,
+        queryFn: deviceAuthenticate,
+        retry: false,
+    });
+
+    const form = useForm<DeviceLoginJSON>({
+        resolver: zodResolver(DeviceLoginSchema),
+        defaultValues: {
+            organizationUsername: searchParams.get("org") ?? "",
+            deviceUsername: searchParams.get("device") ?? "",
+            deviceSecret: "",
+        },
+    });
+
+    useEffect(() => {
+        const org = searchParams.get("org");
+        const device = searchParams.get("device");
+        if (org !== null) {
+            form.setValue("organizationUsername", org, { shouldValidate: false });
+        }
+        if (device !== null) {
+            form.setValue("deviceUsername", device, { shouldValidate: false });
+        }
+    }, [searchParams, form]);
+
+    const [copiedDeviceSecret, setCopiedDeviceSecret] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            setCopiedDeviceSecret(localStorage.getItem("copied_device_secret"));
+        }
+    }, []);
+
+    const handlePasteDeviceSecret = () => {
+        if (copiedDeviceSecret) {
+            form.setValue("deviceSecret", copiedDeviceSecret, { shouldValidate: true });
+            toast.success("Device secret pasted");
+        }
+    };
+
+    const isPending = deviceAuthQuery.isPending;
+
+    useEffect(() => {
+        if (!isPending) {
+            form.setFocus("organizationUsername");
+        }
+    }, [isPending, form.setFocus]);
+
+    const loginMutation = useMutation({
+        mutationFn: (payload: DeviceLoginJSON) => deviceLogin(payload),
+        onSuccess: async (response) => {
+            if (response.status !== "success" || !response.data?.session) {
+                toast.error(response.message || "Unable to start POS session");
+                return;
+            }
+
+            queryClient.setQueryData(deviceAuthKeys.me, {
+                status: "success",
+                data: { session: response.data.session },
+                message: "Device authenticated successfully",
+                code: 200,
+            });
+
+            toast.success("POS unlocked");
+            navigate(returnTo, { replace: true });
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error?.message || "Unable to start POS session");
+        },
+    });
+
+    const onSubmit: SubmitHandler<DeviceLoginJSON> = (values) => {
+        loginMutation.mutate(values);
+    };
+
+    const activeSession =
+        deviceAuthQuery.data?.status === "success"
+            ? deviceAuthQuery.data.data?.session ?? null
+            : null;
+
+    if (!deviceAuthQuery.isPending && activeSession) {
+        return <Navigate to={returnTo} replace />;
+    }
+
+    return (
+        <AuthShell
+            title="POS login"
+            subtitle="Enter your business username, device username, and device secret to start a POS session."
+        >
+            <div className="space-y-3">
+                <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 px-3 py-2 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <span>Want to manage store instead?</span>
+                    </div>
+                    <a
+                        href={`${import.meta.env.VITE_ADMIN_ORIGIN || "http://localhost:5173"}/login`}
+                        className="font-semibold text-violet-700 dark:text-violet-300 hover:underline shrink-0"
+                    >
+                        Admin login &rarr;
+                    </a>
+                </div>
+
+                <Card className="border-border/70 shadow-sm">
+                    <CardContent className="space-y-4 p-4 sm:p-6">
+                        {deviceAuthQuery.isPending ? (
+                            <div className="flex min-h-32 items-center justify-center">
+                                <Spinner className="size-5 text-primary" />
+                            </div>
+                        ) : (
+                            <form className="space-y-3.5" onSubmit={form.handleSubmit(onSubmit)}>
+                                <Field data-invalid={!!form.formState.errors.organizationUsername} className="space-y-1">
+                                    <FieldLabel required className="text-xs">Business username</FieldLabel>
+                                    <FieldContent>
+                                        <Input
+                                            className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                            placeholder="e.g. demo-grocery-mart"
+                                            {...form.register("organizationUsername")}
+                                        />
+                                        <FieldError errors={[form.formState.errors.organizationUsername]} className="text-[10px]" />
+                                    </FieldContent>
+                                </Field>
+
+                                <Field data-invalid={!!form.formState.errors.deviceUsername} className="space-y-1">
+                                    <FieldLabel required className="text-xs">Device username</FieldLabel>
+                                    <FieldContent>
+                                        <Input
+                                            className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                            placeholder="e.g. counter1"
+                                            {...form.register("deviceUsername")}
+                                        />
+                                        <FieldError errors={[form.formState.errors.deviceUsername]} className="text-[10px]" />
+                                    </FieldContent>
+                                </Field>
+
+                                <Field data-invalid={!!form.formState.errors.deviceSecret} className="space-y-1">
+                                    <FieldLabel required className="text-xs">Device secret</FieldLabel>
+                                    <FieldContent>
+                                        <PasswordInput
+                                            className="h-10 rounded-xl transition-colors duration-200 text-sm"
+                                            placeholder="Enter the device secret"
+                                            visibilityLabel={{ show: "Show device secret", hide: "Hide device secret" }}
+                                            trailingContent={copiedDeviceSecret ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={handlePasteDeviceSecret}
+                                                    className="rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 text-[10px] sm:text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95 border border-emerald-500/20 shadow-xs cursor-pointer flex items-center"
+                                                >
+                                                    Paste
+                                                </button>
+                                            ) : undefined}
+                                            {...form.register("deviceSecret")}
+                                        />
+                                        <FieldError errors={[form.formState.errors.deviceSecret]} className="text-[10px]" />
+                                    </FieldContent>
+                                </Field>
+
+                                <Button
+                                    type="submit"
+                                    className="h-10 w-full rounded-xl transition-all duration-200 text-sm font-semibold"
+                                    disabled={loginMutation.isPending}
+                                >
+                                    {loginMutation.isPending ? "Opening POS..." : "Start POS session"}
+                                </Button>
+                            </form>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+        </AuthShell>
+    );
+};
+
+export default PosLoginPage;

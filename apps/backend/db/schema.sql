@@ -835,8 +835,6 @@ CREATE TABLE public.service_tables (
     store_id uuid NOT NULL,
     table_label character varying(64) NOT NULL,
     capacity integer,
-    position_x numeric(8,7) DEFAULT 0.05 NOT NULL,
-    position_y numeric(8,7) DEFAULT 0.05 NOT NULL,
     state public.service_table_state_enum DEFAULT 'free'::public.service_table_state_enum NOT NULL,
     current_sale_id uuid,
     created_by uuid NOT NULL,
@@ -844,9 +842,7 @@ CREATE TABLE public.service_tables (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT service_tables_table_label_check CHECK ((length(TRIM(BOTH FROM table_label)) > 0)),
-    CONSTRAINT service_tables_capacity_check CHECK ((capacity IS NULL OR capacity > 0)),
-    CONSTRAINT service_tables_position_x_check CHECK (((position_x >= (0)::numeric) AND (position_x <= (1)::numeric))),
-    CONSTRAINT service_tables_position_y_check CHECK (((position_y >= (0)::numeric) AND (position_y <= (1)::numeric)))
+    CONSTRAINT service_tables_capacity_check CHECK ((capacity IS NULL OR capacity > 0))
 );
 
 
@@ -1200,8 +1196,7 @@ ALTER TABLE ONLY public.sales
 -- Name: sales sales_store_id_sale_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.sales
-    ADD CONSTRAINT sales_store_id_sale_number_key UNIQUE (store_id, sale_number);
+-- Dropped: sale numbers are unique per store + financial-year period (see sales_store_sale_period_sequence_key).
 
 
 --
@@ -1345,12 +1340,6 @@ CREATE INDEX idx_add_ons_organization_id ON public.add_ons USING btree (organiza
 
 CREATE UNIQUE INDEX service_tables_store_table_label_lower_unique ON public.service_tables USING btree (store_id, lower(TRIM(BOTH FROM table_label)));
 
-
---
--- Name: idx_service_tables_store_position; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_service_tables_store_position ON public.service_tables USING btree (organization_id, store_id, position_y, position_x, id);
 
 --
 -- Name: service_tables_current_sale_unique; Type: INDEX; Schema: public; Owner: -
@@ -1767,6 +1756,13 @@ CREATE UNIQUE INDEX sales_store_completion_request_id_key ON public.sales USING 
 --
 
 CREATE UNIQUE INDEX sales_store_token_period_sequence_key ON public.sales USING btree (store_id, token_period_key, token_sequence_number) WHERE ((token_period_key IS NOT NULL) AND (token_sequence_number IS NOT NULL));
+
+
+--
+-- Name: sales_store_sale_period_sequence_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX sales_store_sale_period_sequence_key ON public.sales USING btree (store_id, sale_period_key, sale_sequence_number) WHERE ((sale_period_key IS NOT NULL) AND (sale_sequence_number IS NOT NULL));
 
 
 --

@@ -42,6 +42,7 @@ import {
 } from "@repo/types";
 import * as billingRepository from "./billing.repository";
 import * as tableRepository from "@/modules/tenant/table-service/table-service.repository";
+import * as kotRepository from "@/modules/tenant/kot/kot.repository";
 import { decodeSalesCursor } from "./sales-pagination";
 import { DEFAULT_SALE_NUMBER_TIMEZONE } from "./sale-numbering";
 
@@ -466,10 +467,7 @@ export const getSaleNumberSettings = async (
     (await billingRepository.upsertSaleNumberSettings(
       organizationId,
       storeId,
-      "never",
       DEFAULT_SALE_NUMBER_TIMEZONE,
-      false,
-      "daily",
     ));
 
   if (!settings) {
@@ -493,7 +491,7 @@ export const updateSaleNumberSettings = async (
   userId: string,
   organizationId: string,
   storeId: string,
-  settingsData: UpdateSaleNumberSettingsSVC,
+  _settingsData: UpdateSaleNumberSettingsSVC,
 ): Promise<ServiceResponse<SaleNumberSettingsResponse | null>> => {
   const invalid = await verifyOrganizationAndStore(
     userId,
@@ -507,10 +505,7 @@ export const updateSaleNumberSettings = async (
   const settings = await billingRepository.upsertSaleNumberSettings(
     organizationId,
     storeId,
-    settingsData.resetPeriod,
     DEFAULT_SALE_NUMBER_TIMEZONE,
-    settingsData.tokenNumberEnabled,
-    settingsData.tokenNumberResetPeriod,
   );
 
   if (!settings) {
@@ -570,16 +565,31 @@ const buildSaleDetails = async (
     return null;
   }
 
-  const [items, payments] = await Promise.all([
-    billingRepository.getSaleItemsBySaleId(saleId, tx),
-    billingRepository.getPaymentsBySaleId(saleId, tx),
-  ]);
+  const items = await billingRepository.getSaleItemsBySaleId(saleId, tx);
+  const payments = await billingRepository.getPaymentsBySaleId(saleId, tx);
   const lineDiscountTotal = getSaleLineDiscountTotal(items);
+  const kotNumbers = await kotRepository.getKotNumbersBySaleId(
+    organizationId,
+    storeId,
+    saleId,
+    tx,
+  );
+  const serviceTableLabel = sale.serviceTableId
+    ? ((
+        await tableRepository.getServiceTableById(
+          organizationId,
+          storeId,
+          sale.serviceTableId,
+        )
+      )?.tableLabel ?? null)
+    : null;
 
   return {
     ...sale,
     items,
     payments,
+    ...(kotNumbers.length > 0 ? { kotNumbers } : {}),
+    ...(serviceTableLabel ? { serviceTableLabel } : {}),
     orderDiscountAmount: deriveOrderDiscountAmount(
       sale.discountTotal,
       lineDiscountTotal,
@@ -2560,6 +2570,7 @@ type CompletedSaleTransactionParams = {
   committedAt: Date;
   requestId: string;
   replacementOfSaleId?: string | null;
+  serviceTableId?: string | null;
 };
 
 const persistCompletedSale = async (
@@ -2604,6 +2615,7 @@ const persistCompletedSale = async (
       userId: params.actor.userId ?? null,
       completionRequestId: params.requestId,
       replacementOfSaleId: params.replacementOfSaleId ?? null,
+      serviceTableId: params.serviceTableId ?? null,
     },
     tx,
   );
@@ -3929,3 +3941,47 @@ export const voidSaleForDevice = async (
     voidData,
   );
 };
+
+export const prepareTrustedSaleLines = (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  items: SaleItemInput[],
+  orderDiscountAmount?: number | string | null,
+  existingItems: SaleItemDTO[] = [],
+) =>
+  prepareSaleItems(
+    organizationId,
+    storeId,
+    saleId,
+    items,
+    orderDiscountAmount,
+    existingItems,
+  );
+
+export const totalsFromTrustedSaleLines = (
+  lines: Array<{
+    item: { lineSubtotal: number; discountAmount: number };
+    addOns: Array<{ lineSubtotal: number; discountAmount: number }>;
+  }>,
+  orderDiscountAmount?: number | string | null,
+) =>
+  buildSalePricingTotals(
+    getParentAndAddOnSubtotal(
+      lines.map((line) => ({
+        lineSubtotal: line.item.lineSubtotal,
+        addOns: line.addOns,
+      })),
+    ),
+    getSaleLineDiscountTotal(
+      lines.map((line) => ({
+        discountAmount: line.item.discountAmount,
+        addOns: line.addOns,
+      })),
+    ),
+    orderDiscountAmount,
+  );
+
+export const persistCompletedSaleFromTrustedLines = persistCompletedSale;
+
+export const resolveCustomerAssignment = validateCustomerAssignment;
