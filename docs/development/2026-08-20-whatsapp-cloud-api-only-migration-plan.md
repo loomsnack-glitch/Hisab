@@ -161,8 +161,8 @@ The branch now also contains a Cloud API contract foundation:
 
 | Area | Status | Evidence and remaining gate |
 | --- | --- | --- |
-| Phase 0 Meta/product readiness | Readiness researched; external gate open | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions still require external completion. |
-| Phase 1 account/database foundation | Hardening slice complete; exit gate open | 63 migrations are applied to the configured development database. Credential-vault integration, key rotation, backfill checks, production-shaped copy, and account provisioning persistence remain. |
+| Phase 0 Meta/product readiness | Readiness researched; external gate deferred | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions remain a release/integration gate. |
+| Phase 1 account/database foundation | Code-first foundation implemented; exit gate open | The injected credential-vault/key-version port, atomic WABA/sender persistence, credential-binding rotation seam, and read-only integrity verification script are implemented and fixture-tested. Applying the migration set to a production-shaped copy, wiring the real secret manager, and running the database/security exit checks remain. |
 | Phase 2A–2D Cloud contracts | Contract slices implemented | Focused Cloud fixture tests pass. Runtime scheduling, Cloud outbox wiring, media handling, and controlled Meta verification remain. |
 | Phase 3A–3D onboarding contracts | Contract slices implemented | State, persistence, result validation, and exchange seams exist. Embedded Signup UI, live exchange, WABA discovery, phone registration, webhook subscription, credential binding, and Store assignment remain. |
 | Phase 3 account operations | Not started | No connected Cloud account lifecycle is exposed end to end. |
@@ -226,11 +226,13 @@ verified, and the agreed billing/consent decisions are documented.
 
 ### Phase 1: Secure account and database foundation
 
-Status: **partial**. The additive development migrations are applied, but the
-credential, backfill, production-shaped database, and security exit gates are
-not complete.
+Status: **code-first foundation implemented; exit gate open**. The additive
+development migrations and the credential/account persistence seams are in
+place, but the real secret-manager adapter, production-shaped database copy,
+and security/backfill evidence are not complete.
 
-Dependencies: Phase 0 Meta App and secret-management decisions.
+Dependencies: the code uses injected credential and provider ports; live
+verification still depends on Phase 0 Meta App and secret-management decisions.
 
 Deliverables:
 
@@ -648,6 +650,9 @@ Exit gate: zero active Baileys accounts or unsafely recoverable Baileys sends;
 Cloud API-only production monitoring and support runbooks are live.
 
 No implementation phase may skip its exit gate to reach the cleanup phase.
+Code-only contract and runtime work may proceed with the external Phase 0 gate
+deferred, but no live onboarding, provider send, or production cutover is
+authorized until the external gate passes.
 
 ## Current execution sequence
 
@@ -659,14 +664,17 @@ current branch, work proceeds in this order:
    merged application contract mismatches are aligned, the affected focused
    regression set passes, and the remaining broad-suite failures are isolated
    Bun test-harness contamination rather than confirmed source failures.
-2. **Finish Phase 0 decisions and external setup.** **Blocking.** Record billing owner,
-   consent wording, quota/budget policy, secret manager/region, phone-migration
-   policy, Meta App access, test WABA/number, and verified HTTPS webhook.
-3. **Finish Phase 1 security/account persistence.** **Hardening slice complete;
-   exit gate open.** Add the credential-vault
-   adapter and key-version/rotation contract, complete WABA/sender identity
-   reconciliation, and prove additive migrations against a production-shaped
-   database copy without exposing secrets.
+2. **Defer Phase 0 external setup until integration.** **Release gate.** Keep
+   the billing owner, consent wording, quota/budget policy, secret manager/
+   region, phone-migration policy, Meta App access, test WABA/number, and
+   verified HTTPS webhook checklist documented; these do not block code-only
+   implementation but must pass before live verification.
+3. **Close the Phase 1 database/security gate.** **Code-first implementation
+   complete; evidence open.** Wire the deployment-selected credential-vault
+   adapter, run `verify-whatsapp-cloud-foundation`, and prove additive
+   migrations against a production-shaped database copy without exposing
+   secrets. The atomic WABA/sender persistence and key-version rotation seams
+   are already implemented.
 4. **Finish Phase 2 runtime wiring.** Add the backend-owned Cloud receipt
    scheduler, connect the processor to the Store-scoped message writer,
    connect the outbox lease path to the injected Cloud transport, implement

@@ -1,11 +1,49 @@
 import {
   WhatsAppCloudAccountSnapshotSchema,
   type WhatsAppCloudAccountSnapshot,
+  normalizePhoneNumber,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
+import {
+  normalizeCloudCredentialBinding,
+  type CloudCredentialBinding,
+} from "./cloud-credentials";
 
 type CloudAccountSnapshotRow = Record<string, unknown>;
+
+export type ProvisionCloudAccountInput = {
+  organizationId: string;
+  createdBy: string;
+  wabaId: string;
+  displayName: string | null;
+  credential: CloudCredentialBinding;
+  phoneNumberId: string;
+  phoneNumber: string;
+  verifiedName: string | null;
+};
+
+export type CloudCredentialBindingRecord = CloudCredentialBinding & {
+  businessAccountId: string;
+};
+
+const providerId = (value: string, label: string): string => {
+  const normalized = value.trim();
+  if (!/^\d{1,64}$/.test(normalized)) {
+    throw new Error(`Invalid WhatsApp Cloud ${label}`);
+  }
+  return normalized;
+};
+
+const nullableText = (value: string | null, maxLength: number): string | null => {
+  if (value === null) return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized.length > maxLength || /[\r\n]/.test(normalized)) {
+    throw new Error("WhatsApp Cloud account metadata is invalid");
+  }
+  return normalized;
+};
 
 /**
  * Map only safe Cloud account metadata. Credential references and key versions
@@ -83,4 +121,160 @@ export const listCloudAccountSnapshots = async (
     [organizationId],
   )) as CloudAccountSnapshotRow[];
   return rows.map((row: CloudAccountSnapshotRow) => mapCloudAccountSnapshot(row));
+};
+
+/**
+ * Persist an already provider-validated WABA and sender identity atomically.
+ * This method deliberately accepts a credential binding, never an access token.
+ */
+export const persistProvisionedCloudAccount = async (
+  input: ProvisionCloudAccountInput,
+): Promise<WhatsAppCloudAccountSnapshot> => {
+  const wabaId = providerId(input.wabaId, "WABA ID");
+  const phoneNumberId = providerId(input.phoneNumberId, "Phone Number ID");
+  const phoneNumber = normalizePhoneNumber(input.phoneNumber);
+  if (!phoneNumber) throw new Error("Invalid WhatsApp Cloud phone number");
+  const credential = normalizeCloudCredentialBinding(input.credential);
+  const displayName = nullableText(input.displayName, 255);
+  const verifiedName = nullableText(input.verifiedName, 255);
+
+  return pg.begin(async (tx) => {
+    const [business] = await tx`
+      INSERT INTO whatsapp_business_accounts (
+        organization_id,
+        waba_id,
+        display_name,
+        credential_reference,
+        credential_key_version,
+        status,
+        created_by,
+        updated_by
+      )
+      VALUES (
+        ${input.organizationId},
+        ${wabaId},
+        ${displayName},
+        ${credential.reference},
+        ${credential.keyVersion},
+        'connected',
+        ${input.createdBy},
+        ${input.createdBy}
+      )
+      ON CONFLICT (waba_id) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        credential_reference = EXCLUDED.credential_reference,
+        credential_key_version = EXCLUDED.credential_key_version,
+        status = 'connected',
+        last_error_code = NULL,
+        last_error_message = NULL,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = NOW()
+      RETURNING id, organization_id
+    `;
+    if (!business || String(business.organization_id) !== input.organizationId) {
+      throw new Error("WhatsApp Cloud WABA is owned by another organization");
+    }
+
+    await tx`
+      INSERT INTO whatsapp_accounts (
+        organization_id,
+        store_id,
+        provider,
+        phone_number,
+        phone_number_normalized,
+        status,
+        whatsapp_business_account_id,
+        cloud_phone_number_id,
+        cloud_verified_name,
+        cloud_status,
+        created_by,
+        updated_by
+      )
+      VALUES (
+        ${input.organizationId},
+        NULL,
+        'cloud_api',
+        ${phoneNumber},
+        ${phoneNumber},
+        'connected',
+        ${business.id},
+        ${phoneNumberId},
+        ${verifiedName},
+        'connected',
+        ${input.createdBy},
+        ${input.createdBy}
+      )
+      ON CONFLICT (cloud_phone_number_id) WHERE cloud_phone_number_id IS NOT NULL
+      DO UPDATE SET
+        whatsapp_business_account_id = EXCLUDED.whatsapp_business_account_id,
+        phone_number = EXCLUDED.phone_number,
+        phone_number_normalized = EXCLUDED.phone_number_normalized,
+        status = 'connected',
+        cloud_verified_name = EXCLUDED.cloud_verified_name,
+        cloud_status = 'connected',
+        updated_by = EXCLUDED.updated_by,
+        updated_at = NOW()
+      WHERE whatsapp_accounts.organization_id = EXCLUDED.organization_id
+    `;
+
+    const [snapshot] = await tx.unsafe(
+      `
+        SELECT ${cloudAccountSnapshotColumns("account")}
+        FROM whatsapp_accounts account
+        LEFT JOIN whatsapp_business_accounts business
+          ON business.id = account.whatsapp_business_account_id
+         AND business.organization_id = account.organization_id
+        WHERE account.organization_id = $1
+          AND account.cloud_phone_number_id = $2
+          AND account.provider = 'cloud_api'
+      `,
+      [input.organizationId, phoneNumberId],
+    );
+    if (!snapshot) throw new Error("Provisioned WhatsApp Cloud account was not found");
+    return mapCloudAccountSnapshot(snapshot as CloudAccountSnapshotRow);
+  });
+};
+
+export const getCloudCredentialBinding = async (
+  organizationId: string,
+  accountId: string,
+): Promise<CloudCredentialBindingRecord | null> => {
+  const [row] = await pg`
+    SELECT business.id AS business_account_id,
+           business.credential_reference,
+           business.credential_key_version
+    FROM whatsapp_accounts account
+    INNER JOIN whatsapp_business_accounts business
+      ON business.id = account.whatsapp_business_account_id
+     AND business.organization_id = account.organization_id
+    WHERE account.organization_id = ${organizationId}
+      AND account.id = ${accountId}
+      AND account.provider = 'cloud_api'
+  `;
+  if (!row?.credential_reference || !row.credential_key_version) return null;
+  const credential = normalizeCloudCredentialBinding({
+    reference: String(row.credential_reference),
+    keyVersion: String(row.credential_key_version),
+  });
+  return { businessAccountId: String(row.business_account_id), ...credential };
+};
+
+export const rotateCloudCredentialBinding = async (input: {
+  organizationId: string;
+  businessAccountId: string;
+  credential: CloudCredentialBinding;
+  updatedBy: string;
+}): Promise<boolean> => {
+  const credential = normalizeCloudCredentialBinding(input.credential);
+  const rows = await pg`
+    UPDATE whatsapp_business_accounts
+    SET credential_reference = ${credential.reference},
+        credential_key_version = ${credential.keyVersion},
+        updated_by = ${input.updatedBy},
+        updated_at = NOW()
+    WHERE id = ${input.businessAccountId}
+      AND organization_id = ${input.organizationId}
+      AND status NOT IN ('revoked', 'failed')
+  `;
+  return rows.count === 1;
 };
