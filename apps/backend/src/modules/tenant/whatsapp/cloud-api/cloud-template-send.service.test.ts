@@ -58,7 +58,7 @@ describe("Cloud template send service", () => {
     });
     expect(response.status).toBe("success");
     expect(queuedSnapshotVersion as unknown as number).toBe(2);
-    expect(queuedIdempotencyKey).toBe("promotion:campaign-1:recipient-1");
+    expect(queuedIdempotencyKey as unknown as string).toBe("promotion:campaign-1:recipient-1");
   });
 
   test("blocks a rejected template before enqueue", async () => {

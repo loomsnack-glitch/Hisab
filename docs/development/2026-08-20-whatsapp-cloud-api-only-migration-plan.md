@@ -166,10 +166,10 @@ The branch now also contains a Cloud API contract foundation:
 | Area | Status | Evidence and remaining gate |
 | --- | --- | --- |
 | Phase 0 Meta/product readiness | Readiness researched; external gate deferred | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions remain a release/integration gate. |
-| Phase 1 account/database foundation | Code-first foundation implemented; exit gate open | The injected credential-vault/key-version port, atomic WABA/sender persistence, credential-binding rotation seam, and read-only integrity verification script are implemented and fixture-tested. Applying the migration set to a production-shaped copy, wiring the real secret manager, and running the database/security exit checks remain. |
-| Phase 2A–2D Cloud contracts | Webhook and gated outbox runtime implemented; provider exit gate open | Signed receipt replay, gated outbox dispatch, and callback-based reconciliation for uncertain sends are wired and focused fixtures pass. A real credential-vault/private-storage assembly, migration execution, Meta verification, and production observation remain. |
+| Phase 1 account/database foundation | Code-first foundation implemented; exit gate open | The injected credential-vault/key-version port, atomic WABA/sender persistence, credential-binding rotation seam, resumable provisioning columns, and read-only integrity verification script are implemented and fixture-tested. Applying the migration set to a production-shaped copy, wiring the real secret manager, and running the database/security exit checks remain. |
+| Phase 2A–2D Cloud contracts | Webhook and gated outbox runtime implemented; provider exit gate open | Signed receipt replay, webhook heartbeat persistence, gated outbox dispatch, and callback-based reconciliation for uncertain sends are wired and focused fixtures pass. A real credential-vault/private-storage assembly, migration execution, Meta verification, and production observation remain. |
 | Phase 3A–3D onboarding contracts | Implemented | State, persistence, result validation, and server-side exchange seams are covered by focused fixtures. |
-| Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, refresh/revoke endpoints, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, durable provisioning-attempt execution, and production-shaped Store/inbound testing remain. |
+| Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, resumable provisioning attempts, refresh/revoke endpoints, durable refresh error state, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, migration execution, and production-shaped Store/inbound testing remain. |
 | Phase 4 templates/policy | Code-first admission complete; caller migration pending | Phase 4A–4C template, consent, and send-admission seams are implemented. Legacy invoice, due, promotion, and inbox callers are now blocked from sending through Cloud accounts until they migrate to the Cloud template route. |
 | Phase 5 quotas/usage/safety | Not started | Existing queue limits/cooldowns are not the append-only usage ledger, atomic quota reservation, Meta-limit sync, or reconciliation model required here. |
 | Phase 6 feature migration | Blocked | Must wait for the Phase 2–5 exit gates. |
@@ -760,8 +760,14 @@ Last updated: 2026-08-22
 - Verification: Cloud-focused suite passes 91 tests; `git diff --check` passes;
   the full backend TypeScript check still reports only the repository's
   pre-existing unrelated test-contract errors.
-- Loop 4 — **next**: make Cloud account provisioning resumable and make account
-  health changes durable instead of refresh-only UI state.
+- Loop 4 — **complete**: persist resumable provisioning state and opaque vault
+  bindings, resume failed attempts without exchanging the authorization code,
+  record refresh failures durably, and persist webhook heartbeats.
+- Verification: Cloud-focused suite passes 92 tests; `git diff --check` passes;
+  the full backend TypeScript check still reports only the repository's
+  pre-existing unrelated test-contract errors.
+- Loop 5 — **next**: implement quota reservation and append-only usage/cost
+  accounting before any Cloud caller migration.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 
@@ -793,13 +799,13 @@ current branch, work proceeds in this order:
    now carry a bounded callback token and settle from a later provider status;
    unresolved rows still require an operational timeout/dead-letter policy.
 5. **Close the Phase 3 account-operations gate.** **Code-first implementation
-   in progress; evidence open.** The server-side exchange and provider
+   complete; evidence open.** The server-side exchange and provider
    discovery, idempotent WABA/sender persistence, WABA subscription, safe
    connect, reconnect, revoke, refresh, and Store assignment paths are
-   implemented. The next code slice makes provisioning attempts durable and
-   consumes account health changes; deployment-selected secret-manager
-   assembly, Meta test-WABA verification, and the production-shaped
-   reload/reconnect/inbound acceptance run remain.
+   implemented, including resumable provisioning attempts, durable refresh
+   failures, and webhook heartbeats. Deployment-selected secret-manager
+   assembly, Meta test-WABA verification, migration execution, and the
+   production-shaped reload/reconnect/inbound acceptance run remain.
 6. **Complete the Phase 4 external gate.** The 4A asset/binding, 4B consent/
    suppression, and 4C send-time admission seams are code-first complete. Apply
    migrations, connect the Admin/POS commands, and run the controlled Meta
@@ -814,9 +820,9 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The next code slice is therefore Loop 4 provisioning resumability and durable
-Cloud account health handling. Phase 5 remains blocked until the
-provider/runtime gates are closed.
+The next code slice is therefore Loop 5 quota reservation and append-only
+usage/cost accounting. Phase 6 remains blocked until the provider/runtime and
+quota gates are closed.
 
 ## Target architecture
 

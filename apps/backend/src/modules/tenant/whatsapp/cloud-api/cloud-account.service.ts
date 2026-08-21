@@ -8,7 +8,20 @@ import {
   CloudOnboardingExchangeError,
   type CloudOnboardingTokenExchange,
 } from "./cloud-onboarding-exchange";
-import { cloudOnboardingReplayStore } from "./cloud-onboarding.repository";
+import { cloudOnboardingReplayStore, hashCloudOnboardingNonce } from "./cloud-onboarding.repository";
+import { verifyCloudOnboardingResult } from "./cloud-onboarding-result";
+import {
+  completeCloudProvisioningStep,
+  createCloudProvisioningState,
+  failCloudProvisioning,
+  resumeCloudProvisioning,
+} from "./cloud-provisioning";
+import {
+  createCloudProvisioningAttempt,
+  getCloudProvisioningAttempt,
+  updateCloudProvisioningAttempt,
+  type CloudProvisioningAttemptRecord,
+} from "./cloud-provisioning.repository";
 import {
   CloudCredentialError,
   type WhatsAppCloudCredentialVault,
@@ -19,9 +32,11 @@ import {
   listCloudAccountSnapshots,
   persistProvisionedCloudAccount,
   refreshCloudAccountMetadata,
+  recordCloudAccountHealth,
   revokeCloudAccount,
 } from "./cloud-account.repository";
 import { createCloudAuthorizationCodeExchange, createConfiguredCloudClient } from "./cloud-provider";
+import { WhatsAppCloudApiError } from "./cloud-api.client";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 
 type CloudPhoneRecord = {
@@ -47,6 +62,11 @@ type CloudAccountServiceDependencies = {
   getCredentialBinding: typeof getCloudCredentialBinding;
   refreshMetadata: typeof refreshCloudAccountMetadata;
   revokeAccount: typeof revokeCloudAccount;
+  recordHealth: typeof recordCloudAccountHealth;
+  getProvisioningAttempt: typeof getCloudProvisioningAttempt;
+  createProvisioningAttempt: typeof createCloudProvisioningAttempt;
+  updateProvisioningAttempt: typeof updateCloudProvisioningAttempt;
+  syncTemplates: (userId: string, organizationId: string, accountId: string, vault: WhatsAppCloudCredentialVault) => Promise<unknown>;
 };
 
 const unavailableVault: WhatsAppCloudCredentialVault = {
@@ -82,6 +102,14 @@ const defaultDependencies = (): CloudAccountServiceDependencies => ({
   getCredentialBinding: getCloudCredentialBinding,
   refreshMetadata: refreshCloudAccountMetadata,
   revokeAccount: revokeCloudAccount,
+  recordHealth: recordCloudAccountHealth,
+  getProvisioningAttempt: getCloudProvisioningAttempt,
+  createProvisioningAttempt: createCloudProvisioningAttempt,
+  updateProvisioningAttempt: updateCloudProvisioningAttempt,
+  syncTemplates: async (userId, organizationId, accountId, vault) => {
+    const { syncCloudTemplatesForAccount } = await import("./cloud-template.service");
+    return syncCloudTemplatesForAccount(userId, organizationId, accountId, { vault });
+  },
 });
 
 const stringField = (value: unknown, label: string): string => {
@@ -109,54 +137,132 @@ export const completeCloudAccountProvisioning = async (
   injected: Partial<CloudAccountServiceDependencies> = {},
 ): Promise<ServiceResponse<WhatsAppCloudAccountSnapshot | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
+  let attempt: CloudProvisioningAttemptRecord | null = null;
+  let state = createCloudProvisioningState();
   try {
-    const exchanged = await completeCloudOnboardingExchange({
+    const secret = process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET?.trim() ?? "";
+    const verified = verifyCloudOnboardingResult({
       result,
       organizationId,
       userId,
-      secret: process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET?.trim() ?? "",
-      exchange: deps.exchange,
-      replayStore: deps.consumeReplayStore,
+      secret,
     });
-    const client = deps.createClient(exchanged.accessToken);
-    const business = await client.getBusinessAccount(exchanged.wabaId);
-    if (String(business.id ?? "") !== exchanged.wabaId) {
+
+    const idempotencyKey = hashCloudOnboardingNonce(verified.claims.nonce);
+    attempt = await deps.getProvisioningAttempt(organizationId, idempotencyKey);
+    if (attempt?.state.status === "completed" && attempt.whatsappAccountId) {
+      const existing = await deps.getSnapshot(organizationId, attempt.whatsappAccountId);
+      if (existing) {
+        return { status: "success", message: "WhatsApp Cloud account already connected", data: existing, code: STATUS_CODES.SUCCESS };
+      }
+    }
+
+    let accessToken: string;
+    let credential: { reference: string; keyVersion: string };
+    let wabaId = attempt?.providerWabaId ?? verified.wabaId;
+    let phoneNumberId = attempt?.providerPhoneNumberId ?? verified.phoneNumberId;
+    if (attempt?.credentialReference && attempt.credentialKeyVersion) {
+      credential = { reference: attempt.credentialReference, keyVersion: attempt.credentialKeyVersion };
+      accessToken = await deps.vault.resolve(credential);
+      state = attempt.state.status === "failed" ? resumeCloudProvisioning(attempt.state) : attempt.state;
+    } else {
+      const exchanged = await completeCloudOnboardingExchange({
+        result,
+        organizationId,
+        userId,
+        secret,
+        exchange: deps.exchange,
+        replayStore: deps.consumeReplayStore,
+      });
+      accessToken = exchanged.accessToken;
+      wabaId = exchanged.wabaId;
+      phoneNumberId = exchanged.phoneNumberId;
+      credential = await deps.vault.store({
+        organizationId,
+        ownerKey: `waba:${wabaId}`,
+        accessToken,
+      });
+      state = completeCloudProvisioningStep(state, "authorization_received");
+      try {
+        attempt = await deps.createProvisioningAttempt({
+          organizationId,
+          createdBy: userId,
+          idempotencyKey,
+          providerWabaId: wabaId,
+          providerPhoneNumberId: phoneNumberId,
+          credentialReference: credential.reference,
+          credentialKeyVersion: credential.keyVersion,
+          state,
+        });
+      } catch (error) {
+        await deps.vault.revoke(credential).catch(() => undefined);
+        throw error;
+      }
+    }
+
+    if (!attempt) throw new Error("Cloud provisioning attempt is unavailable");
+    const activeAttempt: CloudProvisioningAttemptRecord = attempt;
+    const client = deps.createClient(accessToken);
+    const business = await client.getBusinessAccount(wabaId);
+    if (String(business.id ?? "") !== wabaId) {
       throw new Error("Cloud WABA identity did not match onboarding result");
     }
-    const phones = await client.getPhoneNumbers(exchanged.wabaId);
+    if (!state.completedSteps.includes("waba_resolved")) {
+      state = completeCloudProvisioningStep(state, "waba_resolved");
+      state = completeCloudProvisioningStep(state, "system_user_assigned");
+      await deps.updateProvisioningAttempt({ organizationId, attemptId: activeAttempt.id, state });
+    }
+    const phones = await client.getPhoneNumbers(wabaId);
     const phone = (phones.data ?? [])
       .map(phoneFromProvider)
-      .find((candidate) => candidate.id === exchanged.phoneNumberId);
+      .find((candidate) => candidate.id === phoneNumberId);
     if (!phone) throw new Error("Cloud phone identity was not found in the WABA");
-    await client.subscribeBusinessAccount(exchanged.wabaId);
-
-    const credential = await deps.vault.store({
-      organizationId,
-      ownerKey: `waba:${exchanged.wabaId}`,
-      accessToken: exchanged.accessToken,
-    });
-    try {
-      const account = await deps.persist({
-        organizationId,
-        createdBy: userId,
-        wabaId: exchanged.wabaId,
-        displayName: typeof business.name === "string" ? business.name : null,
-        credential,
-        phoneNumberId: phone.id,
-        phoneNumber: phone.display_phone_number,
-        verifiedName: phone.verified_name ?? null,
-      });
-      return {
-        status: "success",
-        message: "WhatsApp Cloud account connected",
-        data: account,
-        code: STATUS_CODES.CREATED,
-      };
-    } catch (error) {
-      await deps.vault.revoke(credential).catch(() => undefined);
-      throw error;
+    if (!state.completedSteps.includes("phone_registered")) {
+      state = completeCloudProvisioningStep(state, "phone_registered");
+      await deps.updateProvisioningAttempt({ organizationId, attemptId: activeAttempt.id, state });
     }
+    if (!state.completedSteps.includes("webhook_subscribed")) {
+      await client.subscribeBusinessAccount(wabaId);
+      state = completeCloudProvisioningStep(state, "webhook_subscribed");
+      await deps.updateProvisioningAttempt({ organizationId, attemptId: activeAttempt.id, state });
+    }
+
+    const account = await deps.persist({
+      organizationId,
+      createdBy: userId,
+      wabaId,
+      displayName: typeof business.name === "string" ? business.name : null,
+      credential,
+      phoneNumberId: phone.id,
+      phoneNumber: phone.display_phone_number,
+      verifiedName: phone.verified_name ?? null,
+    });
+    if (!state.completedSteps.includes("templates_synced")) {
+      const sync = await deps.syncTemplates(userId, organizationId, account.id, deps.vault);
+      if (sync && typeof sync === "object" && "status" in sync && sync.status === "error") {
+        throw new Error("Cloud templates could not be synchronized");
+      }
+      state = completeCloudProvisioningStep(state, "templates_synced");
+    }
+    state = completeCloudProvisioningStep(state, "completed");
+    await deps.updateProvisioningAttempt({
+      organizationId,
+      attemptId: activeAttempt.id,
+      state,
+      whatsappAccountId: account.id,
+      whatsappBusinessAccountId: activeAttempt.whatsappBusinessAccountId,
+    });
+    return {
+      status: "success",
+      message: "WhatsApp Cloud account connected",
+      data: account,
+      code: STATUS_CODES.CREATED,
+    };
   } catch (error) {
+    if (attempt && state.status !== "completed" && state.status !== "cancelled") {
+      const failed = failCloudProvisioning(state, providerError(error), "Cloud account provisioning could not be completed");
+      await deps.updateProvisioningAttempt({ organizationId, attemptId: attempt.id, state: failed }).catch(() => undefined);
+    }
     const code = providerError(error);
     const serviceCode =
       code === "vault_unavailable" ? STATUS_CODES.SERVICE_UNAVAILABLE : STATUS_CODES.BAD_REQUEST;
@@ -208,11 +314,13 @@ export const refreshCloudAccountForOrganization = async (
   injected: Partial<CloudAccountServiceDependencies> = {},
 ): Promise<ServiceResponse<WhatsAppCloudAccountSnapshot | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
+  let snapshotForError: WhatsAppCloudAccountSnapshot | null = null;
   try {
     if (!await deps.organizationAccess(organizationId, userId)) {
       return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
     }
     const snapshot = await deps.getSnapshot(organizationId, accountId);
+    snapshotForError = snapshot;
     if (!snapshot) {
       return { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
     }
@@ -245,6 +353,20 @@ export const refreshCloudAccountForOrganization = async (
       : { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
   } catch (error) {
     const code = providerError(error);
+    if (snapshotForError) {
+      const status = error instanceof CloudCredentialError
+        ? "needs_action"
+        : error instanceof WhatsAppCloudApiError && [401, 403].includes(error.status ?? 0)
+          ? "disconnected"
+          : undefined;
+      await deps.recordHealth({
+        organizationId,
+        accountId,
+        status,
+        errorCode: code,
+        errorMessage: "Cloud account refresh failed; reconnect or retry the account",
+      }).catch(() => undefined);
+    }
     return {
       status: "error",
       message: code === "vault_unavailable" ? "WhatsApp Cloud credential storage is not configured" : "WhatsApp Cloud account could not be refreshed",

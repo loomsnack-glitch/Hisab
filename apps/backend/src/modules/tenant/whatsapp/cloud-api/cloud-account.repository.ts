@@ -27,6 +27,13 @@ export type CloudCredentialBindingRecord = CloudCredentialBinding & {
   businessAccountId: string;
 };
 
+export type CloudAccountHealthStatus =
+  | "connected"
+  | "needs_action"
+  | "disconnected"
+  | "suspended"
+  | "failed";
+
 const providerId = (value: string, label: string): string => {
   const normalized = value.trim();
   if (!/^\d{1,64}$/.test(normalized)) {
@@ -354,6 +361,44 @@ export const refreshCloudAccountMetadata = async (input: {
     return snapshot ? mapCloudAccountSnapshot(snapshot as CloudAccountSnapshotRow) : null;
   });
 };
+
+export const recordCloudAccountHealth = async (input: {
+  organizationId: string;
+  accountId: string;
+  status?: CloudAccountHealthStatus;
+  errorCode: string;
+  errorMessage: string;
+}): Promise<boolean> => pg.begin(async tx => {
+  const [account] = await tx`
+    UPDATE whatsapp_accounts
+    SET cloud_status = COALESCE(${input.status ?? null}::whatsapp_cloud_account_status_enum, cloud_status),
+        status = CASE
+          WHEN ${input.status ?? null}::text IN ('disconnected', 'suspended', 'failed') THEN ${input.status ?? null}::whatsapp_account_status_enum
+          ELSE status
+        END,
+        cloud_last_error_code = LEFT(${input.errorCode}, 100),
+        cloud_last_error_message = LEFT(${input.errorMessage}, 1_000),
+        updated_at = NOW()
+    WHERE id = ${input.accountId}
+      AND organization_id = ${input.organizationId}
+      AND provider = 'cloud_api'
+    RETURNING whatsapp_business_account_id
+  `;
+  if (!account) return false;
+  await tx`
+    UPDATE whatsapp_business_accounts
+    SET status = CASE
+          WHEN ${input.status ?? null}::text IN ('disconnected', 'suspended', 'failed') THEN ${input.status ?? null}::whatsapp_cloud_account_status_enum
+          ELSE status
+        END,
+        last_error_code = LEFT(${input.errorCode}, 100),
+        last_error_message = LEFT(${input.errorMessage}, 1_000),
+        updated_at = NOW()
+    WHERE id = ${account.whatsapp_business_account_id}
+      AND organization_id = ${input.organizationId}
+  `;
+  return true;
+});
 
 export const revokeCloudAccount = async (input: {
   organizationId: string;

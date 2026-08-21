@@ -86,6 +86,29 @@ export const persistCloudWebhookEvent = async (
   `;
 
   if (inserted) {
+    if (accountId) {
+      try {
+        await pg`
+          UPDATE whatsapp_accounts
+          SET cloud_last_webhook_at = NOW(), updated_at = NOW()
+          WHERE id = ${accountId} AND provider = 'cloud_api'
+        `;
+        await pg`
+          UPDATE whatsapp_business_accounts business
+          SET last_webhook_at = NOW(), updated_at = NOW()
+          WHERE id = (
+            SELECT whatsapp_business_account_id
+            FROM whatsapp_accounts
+            WHERE id = ${accountId} AND provider = 'cloud_api'
+          )
+        `;
+      } catch (error) {
+        console.warn(
+          "[whatsapp] Cloud webhook heartbeat update failed",
+          error instanceof Error ? error.message : "unknown error",
+        );
+      }
+    }
     return {
       eventId: String(inserted.id),
       accountId: inserted.whatsapp_account_id

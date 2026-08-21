@@ -13,7 +13,7 @@ export const CLOUD_PROVISIONING_STEP_ORDER = [
   "completed",
 ] as const satisfies readonly WhatsAppCloudProvisioningStep[];
 
-type ProvisioningStep = (typeof CLOUD_PROVISIONING_STEP_ORDER)[number];
+export type ProvisioningStep = (typeof CLOUD_PROVISIONING_STEP_ORDER)[number];
 
 export type CloudProvisioningState = {
   status: WhatsAppCloudProvisioningStatus;

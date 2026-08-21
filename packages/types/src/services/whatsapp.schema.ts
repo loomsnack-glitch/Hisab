@@ -156,7 +156,7 @@ export const WhatsAppCloudAccountSnapshotSchema = z.object({
 export const WhatsAppCloudProvisioningAttemptSchema = z.object({
     id: z.uuid("Invalid provisioning attempt id"),
     organizationId: z.uuid("Invalid organization id"),
-    whatsappAccountId: z.uuid("Invalid WhatsApp account id"),
+    whatsappAccountId: z.uuid("Invalid WhatsApp account id").nullable(),
     whatsappBusinessAccountId: z.uuid("Invalid WABA id").nullable(),
     idempotencyKey: z.string().trim().min(1).max(255),
     status: WhatsAppCloudProvisioningStatusSchema,
