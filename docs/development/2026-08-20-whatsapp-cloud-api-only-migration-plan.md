@@ -157,12 +157,12 @@ The branch now also contains a Cloud API contract foundation:
 - no Admin Cloud account/template/usage UI is wired; the current account UI and
   `apps/whatsapp-worker` still serve the Baileys flow.
 
-### Verified implementation status (2026-08-21)
+### Verified implementation status (2026-08-22)
 
 | Area | Status | Evidence and remaining gate |
 | --- | --- | --- |
 | Phase 0 Meta/product readiness | Readiness researched; external gate open | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions still require external completion. |
-| Phase 1 account/database foundation | Partial | Additive schema is applied to the configured development database: 62 applied, 0 pending. Credential storage, backfill checks, production-shaped copy, and account provisioning persistence remain. |
+| Phase 1 account/database foundation | Hardening slice complete; exit gate open | 63 migrations are applied to the configured development database. Credential-vault integration, key rotation, backfill checks, production-shaped copy, and account provisioning persistence remain. |
 | Phase 2A–2D Cloud contracts | Contract slices implemented | Focused Cloud fixture tests pass. Runtime scheduling, Cloud outbox wiring, media handling, and controlled Meta verification remain. |
 | Phase 3A–3D onboarding contracts | Contract slices implemented | State, persistence, result validation, and exchange seams exist. Embedded Signup UI, live exchange, WABA discovery, phone registration, webhook subscription, credential binding, and Store assignment remain. |
 | Phase 3 account operations | Not started | No connected Cloud account lifecycle is exposed end to end. |
@@ -659,10 +659,11 @@ current branch, work proceeds in this order:
    merged application contract mismatches are aligned, the affected focused
    regression set passes, and the remaining broad-suite failures are isolated
    Bun test-harness contamination rather than confirmed source failures.
-2. **Finish Phase 0 decisions and external setup.** Record billing owner,
+2. **Finish Phase 0 decisions and external setup.** **Blocking.** Record billing owner,
    consent wording, quota/budget policy, secret manager/region, phone-migration
    policy, Meta App access, test WABA/number, and verified HTTPS webhook.
-3. **Finish Phase 1 security/account persistence.** Add the credential-vault
+3. **Finish Phase 1 security/account persistence.** **Hardening slice complete;
+   exit gate open.** Add the credential-vault
    adapter and key-version/rotation contract, complete WABA/sender identity
    reconciliation, and prove additive migrations against a production-shaped
    database copy without exposing secrets.
