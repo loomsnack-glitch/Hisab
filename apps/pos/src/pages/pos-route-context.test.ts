@@ -13,15 +13,18 @@ describe("POS route context", () => {
     test("maps core POS panels to root-based routes", () => {
         expect(getPosPanelPath("products")).toBe("/");
         expect(getPosPanelPath("tables")).toBe("/tables");
+        expect(getPosPanelPath("customers")).toBe("/customers");
         expect(getPosPanelPath("bills")).toBe("/bills");
         expect(posPanelConfig.products.path).toBe("/");
         expect(posPanelConfig.tables.path).toBe("/tables");
+        expect(posPanelConfig.customers.path).toBe("/customers");
         expect(posPanelConfig.bills.path).toBe("/bills");
     });
 
     test("falls back to products for the POS root and unknown paths", () => {
         expect(getPosPanelTabFromPath("/")).toBe("products");
         expect(getPosPanelTabFromPath("/tables")).toBe("tables");
+        expect(getPosPanelTabFromPath("/customers")).toBe("customers");
         expect(getPosPanelTabFromPath("/bills")).toBe("bills");
         expect(getPosPanelTabFromPath("/unknown")).toBe("products");
     });
@@ -29,12 +32,14 @@ describe("POS route context", () => {
     test("sends unauthenticated workspace requests to POS login", () => {
         expect(getPosLoginPath("/")).toBe("/login?returnTo=%2F");
         expect(getPosLoginPath("/tables")).toBe("/login?returnTo=%2Ftables");
+        expect(getPosLoginPath("/customers")).toBe("/login?returnTo=%2Fcustomers");
         expect(getPosLoginPath("/bills")).toBe("/login?returnTo=%2Fbills");
         expect(getPosLoginPath("/appearance")).toBe("/login?returnTo=%2Fappearance");
     });
 
     test("preserves only internal POS return paths after login", () => {
         expect(getPosReturnPath("/tables")).toBe("/tables");
+        expect(getPosReturnPath("/customers")).toBe("/customers");
         expect(getPosReturnPath("/bills")).toBe("/bills");
         expect(getPosReturnPath("/appearance")).toBe("/appearance");
         expect(getPosReturnPath("https://example.com")).toBe("/");
@@ -43,16 +48,20 @@ describe("POS route context", () => {
         expect(getPosReturnPath(null)).toBe("/");
     });
 
-    test("exposes Tables in POS navigation and marks it active in the mobile More menu", () => {
+    test("exposes Tables and Customers in POS navigation and marks them active in the mobile More menu", () => {
         expect(posWorkspaceDestinations.map((destination) => destination.id)).toEqual([
             "products",
             "tables",
+            "customers",
             "bills",
             "appearance",
         ]);
         const tablesDestination = posWorkspaceDestinations.find((destination) => destination.id === "tables");
         expect(tablesDestination).toMatchObject({ label: "Tables", path: "/tables", tab: "tables" });
+        const customersDestination = posWorkspaceDestinations.find((destination) => destination.id === "customers");
+        expect(customersDestination).toMatchObject({ label: "Customers", path: "/customers", tab: "customers" });
         expect(isPosMoreDestinationActive("/tables")).toBe(true);
+        expect(isPosMoreDestinationActive("/customers")).toBe(true);
         expect(isPosMoreDestinationActive("/appearance")).toBe(true);
     });
 

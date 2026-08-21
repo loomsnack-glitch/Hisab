@@ -3,6 +3,7 @@ import {
     ReceiptText,
     Settings2,
     Store,
+    Users,
     type LucideIcon,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ export type PosNavDestination = {
 export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "products", label: "Products", mobileLabel: "POS", icon: Store, path: getPosPanelPath("products"), tab: "products" },
     { id: "tables", label: "Tables", icon: Armchair, path: getPosPanelPath("tables"), tab: "tables" },
+    { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
     { id: "bills", label: "Bills", icon: ReceiptText, path: getPosPanelPath("bills"), tab: "bills" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
 ];
@@ -36,5 +38,5 @@ export const isPosMoreDestinationActive = (pathname: string) => {
     }
 
     const tab = posWorkspaceDestinations.find((destination) => destination.path === pathname)?.tab;
-    return tab === "tables";
+    return tab === "tables" || tab === "customers";
 };

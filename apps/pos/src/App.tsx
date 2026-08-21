@@ -6,6 +6,7 @@ import PosPage from "@/pages/pos-page";
 import PosBillsPage from "@/pages/pos-bills-page";
 import PosProductsPage from "@/pages/pos-products-page";
 import PosTablesPage from "@/pages/pos-tables-page";
+import PosCustomersPage from "@/pages/pos-customers-page";
 import PosAppearancePage from "@/pages/pos-appearance-page";
 import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
@@ -27,6 +28,7 @@ const App = () => {
                     <Route path="/" element={<PosPage />}>
                         <Route index element={<PosProductsPage />} />
                         <Route path="tables" element={<PosTablesPage />} />
+                        <Route path="customers" element={<PosCustomersPage />} />
                         <Route path="bills" element={<PosBillsPage />} />
                         <Route path="appearance" element={<PosAppearancePage />} />
                         <Route path="settings" element={<Navigate to="/appearance" replace />} />
