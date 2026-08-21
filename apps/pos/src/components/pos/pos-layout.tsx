@@ -282,6 +282,7 @@ const PosLayout = ({
                         isCollapsed={isSidebarCollapsed}
                         onToggle={toggleSidebar}
                         billsCount={billsCount}
+                        tableManagementEnabled={session.store.tableManagementEnabled}
                     />
                 </div>
             </aside>
@@ -488,7 +489,10 @@ const PosLayout = ({
 
             <main className="min-h-0 w-full flex-1 overflow-hidden px-0 max-lg:pb-[var(--pos-mobile-nav-height)]">{children}</main>
 
-            <PosMobileBottomNav billsCount={billsCount} />
+            <PosMobileBottomNav
+                billsCount={billsCount}
+                tableManagementEnabled={session.store.tableManagementEnabled}
+            />
             </div>
         </div>
     );

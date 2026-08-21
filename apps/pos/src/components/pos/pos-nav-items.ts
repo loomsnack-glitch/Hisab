@@ -32,9 +32,23 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
 
 export const posPrimaryMobileNavIds = ["products", "tables", "bills"] as const;
 
-export const posPrimaryMobileDestinations = posWorkspaceDestinations.filter((destination) =>
-    (posPrimaryMobileNavIds as readonly string[]).includes(destination.id),
-);
+export const getVisiblePosWorkspaceDestinations = ({
+    tableManagementEnabled,
+}: {
+    tableManagementEnabled: boolean;
+}) =>
+    posWorkspaceDestinations.filter(
+        (destination) => destination.id !== "tables" || tableManagementEnabled,
+    );
+
+export const getVisiblePosPrimaryMobileDestinations = ({
+    tableManagementEnabled,
+}: {
+    tableManagementEnabled: boolean;
+}) =>
+    getVisiblePosWorkspaceDestinations({ tableManagementEnabled }).filter((destination) =>
+        (posPrimaryMobileNavIds as readonly string[]).includes(destination.id),
+    );
 
 export const isPosMoreDestinationActive = (pathname: string) => {
     if (pathname === "/appearance" || pathname === "/settings") {

@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/too
 import { cn } from "@repo/ui/lib/utils";
 
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
-import { posWorkspaceDestinations } from "@/components/pos/pos-nav-items";
+import { getVisiblePosWorkspaceDestinations } from "@/components/pos/pos-nav-items";
 import { getPosPanelTabFromPath } from "@/pages/pos-route-context";
 
 const SIDEBAR_STORAGE_KEY = "ganatri_pos_sidebar_collapsed";
@@ -14,6 +14,7 @@ type PosSidebarProps = {
     isCollapsed: boolean;
     onToggle: () => void;
     billsCount?: number;
+    tableManagementEnabled: boolean;
 };
 
 export const readPosSidebarCollapsed = () => {
@@ -28,13 +29,14 @@ export const persistPosSidebarCollapsed = (collapsed: boolean) => {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
 };
 
-const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0 }: PosSidebarProps) => {
+const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnabled }: PosSidebarProps) => {
     const location = useLocation();
     const activePanelTab = getPosPanelTabFromPath(location.pathname);
     const isAppearanceRoute = location.pathname === "/appearance" || location.pathname === "/settings";
+    const destinations = getVisiblePosWorkspaceDestinations({ tableManagementEnabled });
 
-    const mainDestinations = posWorkspaceDestinations.filter((destination) => destination.id !== "appearance");
-    const appearanceDestination = posWorkspaceDestinations.find((destination) => destination.id === "appearance");
+    const mainDestinations = destinations.filter((destination) => destination.id !== "appearance");
+    const appearanceDestination = destinations.find((destination) => destination.id === "appearance");
 
     const expandedNavRowClass = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3";
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";

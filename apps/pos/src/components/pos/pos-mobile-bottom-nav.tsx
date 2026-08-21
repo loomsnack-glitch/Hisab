@@ -5,22 +5,25 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@repo/ui/component
 import { cn } from "@repo/ui/lib/utils";
 
 import {
+    getVisiblePosPrimaryMobileDestinations,
+    getVisiblePosWorkspaceDestinations,
     isPosMoreDestinationActive,
-    posPrimaryMobileDestinations,
-    posWorkspaceDestinations,
 } from "@/components/pos/pos-nav-items";
 import { getPosPanelTabFromPath } from "@/pages/pos-route-context";
 
 type PosMobileBottomNavProps = {
     billsCount?: number;
+    tableManagementEnabled: boolean;
 };
 
-const PosMobileBottomNav = ({ billsCount = 0 }: PosMobileBottomNavProps) => {
+const PosMobileBottomNav = ({ billsCount = 0, tableManagementEnabled }: PosMobileBottomNavProps) => {
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
     const activeTab = getPosPanelTabFromPath(location.pathname);
     const isAppearanceRoute = location.pathname === "/appearance" || location.pathname === "/settings";
     const isMoreActive = isPosMoreDestinationActive(location.pathname) || moreOpen;
+    const primaryDestinations = getVisiblePosPrimaryMobileDestinations({ tableManagementEnabled });
+    const workspaceDestinations = getVisiblePosWorkspaceDestinations({ tableManagementEnabled });
 
     const navButtonClassName = (isActive: boolean) =>
         cn(
@@ -35,7 +38,7 @@ const PosMobileBottomNav = ({ billsCount = 0 }: PosMobileBottomNavProps) => {
                 className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/95 px-2 pt-0.5 pb-[calc(0.25rem+env(safe-area-inset-bottom,0px))] backdrop-blur-xl lg:hidden"
             >
                 <div className="mx-auto flex max-w-lg items-stretch gap-0.5">
-                    {posPrimaryMobileDestinations.map((destination) => {
+                    {primaryDestinations.map((destination) => {
                         const Icon = destination.icon;
                         const isActive = !isAppearanceRoute && destination.tab === activeTab;
 
@@ -77,7 +80,7 @@ const PosMobileBottomNav = ({ billsCount = 0 }: PosMobileBottomNavProps) => {
                     </SheetHeader>
 
                     <div className="grid grid-cols-3 gap-3">
-                        {posWorkspaceDestinations.map((destination) => {
+                        {workspaceDestinations.map((destination) => {
                             const Icon = destination.icon;
                             const isActive =
                                 destination.path === "/appearance"

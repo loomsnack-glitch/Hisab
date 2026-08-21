@@ -77,6 +77,7 @@ const renderTablesPage = (
   tables: ServiceTableDTO[],
   Page: typeof PosTablesPage | typeof PosTablesWorkspace,
   areaResult: "success" | "error" = "success",
+  tableManagementEnabled = true,
 ) => {
   const queryClient = new QueryClient();
   queryClient.setQueryData(serviceTableKeys.pos(organizationId, storeId), {
@@ -95,7 +96,13 @@ const renderTablesPage = (
     code: areaResult === "success" ? 200 : 500,
   });
   const context: PosRouteContext = {
-    session,
+    session: {
+      ...session,
+      store: {
+        ...session.store,
+        tableManagementEnabled,
+      },
+    },
     searchValue: "",
     onSearchChange: () => {},
     onPanelTabChange: () => {},
@@ -155,6 +162,16 @@ describe("POS Service Table behavior", () => {
 
     expect(markup).toContain("Allocate table A1");
     expect(markup).not.toContain("under-development");
+    expect(markup).not.toContain("service-disabled");
+  });
+
+  test("shows service disabled when Table Management is turned off", () => {
+    const markup = renderTablesPage([table("free")], PosTablesPage, "success", false);
+
+    expect(markup).toContain("service-disabled");
+    expect(markup).toContain("Service disabled");
+    expect(markup).toContain("Table management is disabled for this store.");
+    expect(markup).not.toContain("Allocate table A1");
   });
 
   test("renders the aligned table grid", () => {

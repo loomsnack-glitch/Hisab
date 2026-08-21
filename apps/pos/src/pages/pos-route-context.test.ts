@@ -7,7 +7,12 @@ import {
     getPosReturnPath,
     posPanelConfig,
 } from "@/pages/pos-route-context";
-import { isPosMoreDestinationActive, posWorkspaceDestinations } from "@/components/pos/pos-nav-items";
+import {
+    getVisiblePosPrimaryMobileDestinations,
+    getVisiblePosWorkspaceDestinations,
+    isPosMoreDestinationActive,
+    posWorkspaceDestinations,
+} from "@/components/pos/pos-nav-items";
 
 describe("POS route context", () => {
     test("maps core POS panels to root-based routes", () => {
@@ -86,6 +91,29 @@ describe("POS route context", () => {
         expect(isPosMoreDestinationActive("/purchases")).toBe(true);
         expect(isPosMoreDestinationActive("/reports")).toBe(true);
         expect(isPosMoreDestinationActive("/appearance")).toBe(true);
+    });
+
+    test("hides Tables from POS navigation when Table Management is disabled", () => {
+        expect(
+            getVisiblePosWorkspaceDestinations({ tableManagementEnabled: true }).map(
+                (destination) => destination.id,
+            ),
+        ).toContain("tables");
+        expect(
+            getVisiblePosWorkspaceDestinations({ tableManagementEnabled: false }).map(
+                (destination) => destination.id,
+            ),
+        ).not.toContain("tables");
+        expect(
+            getVisiblePosPrimaryMobileDestinations({ tableManagementEnabled: false }).map(
+                (destination) => destination.id,
+            ),
+        ).toEqual(["products", "bills"]);
+        expect(
+            getVisiblePosPrimaryMobileDestinations({ tableManagementEnabled: true }).map(
+                (destination) => destination.id,
+            ),
+        ).toEqual(["products", "tables", "bills"]);
     });
 
     test("keeps the POS settings alias inside POS Appearance", () => {
