@@ -163,7 +163,7 @@ The branch now also contains a Cloud API contract foundation:
 | --- | --- | --- |
 | Phase 0 Meta/product readiness | Readiness researched; external gate deferred | The repository checklist and primary-source findings are recorded in `docs/research/2026-08-21-whatsapp-cloud-api-phase-0-readiness-research.md`; Meta App, Embedded Signup, production webhook, secret manager, billing, consent, and migration decisions remain a release/integration gate. |
 | Phase 1 account/database foundation | Code-first foundation implemented; exit gate open | The injected credential-vault/key-version port, atomic WABA/sender persistence, credential-binding rotation seam, and read-only integrity verification script are implemented and fixture-tested. Applying the migration set to a production-shaped copy, wiring the real secret manager, and running the database/security exit checks remain. |
-| Phase 2A–2D Cloud contracts | Contract slices implemented | Focused Cloud fixture tests pass. Runtime scheduling, Cloud outbox wiring, media handling, and controlled Meta verification remain. |
+| Phase 2A–2D Cloud contracts | Runtime seams implemented; provider gate open | Signed receipt replay is scheduled, Baileys claims are provider-scoped, Cloud outbox leasing/dispatch/media upload and uncertain-send reconciliation are implemented behind injected credential/storage ports, and focused fixtures pass. Live vault assembly, Meta verification, and production observation remain. |
 | Phase 3A–3D onboarding contracts | Contract slices implemented | State, persistence, result validation, and exchange seams exist. Embedded Signup UI, live exchange, WABA discovery, phone registration, webhook subscription, credential binding, and Store assignment remain. |
 | Phase 3 account operations | Not started | No connected Cloud account lifecycle is exposed end to end. |
 | Phase 4 templates/policy | Not started | Existing Hisab templates/promotions are Baileys/local-template features; Meta template approval/binding/sync and policy admission are absent. |
@@ -249,10 +249,11 @@ existing rows remain readable, and no secret is present in DTOs or logs.
 
 ### Phase 2: Cloud API module and webhook
 
-Status: **contract slices implemented; runtime exit gate open**. Phase 2A–2D
-have focused fixture coverage, but the processor and outbound transport are
-not wired into a production scheduler/outbox path and have not been tested
-against Meta.
+Status: **runtime seams implemented; provider exit gate open**. Phase 2A–2D
+have focused fixture coverage, the Cloud receipt processor is scheduled, the
+legacy Baileys claim path is provider-scoped, and the Cloud outbox/media
+dispatcher is wired behind injected credential and storage ports. The real
+vault assembly, live Graph verification, and production observation remain.
 
 Dependencies: Phase 1 account/credential model.
 
@@ -371,8 +372,8 @@ Non-goals for Phase 2C:
 Exit gate: a claimed receipt is processed exactly once from the application's
 perspective, retries are bounded and observable, Store/account scoping is
 preserved, focused/full tests pass, and a scheduler invokes the processor with
-operational metrics and dead-letter handling. The processor is currently a
-module boundary; runtime scheduling and the full-suite gate remain open.
+operational metrics and dead-letter handling. The backend scheduler and
+dead-letter path are implemented; live provider verification remains open.
 
 #### Phase 2D: Cloud outbound transport boundary
 
@@ -403,10 +404,10 @@ Non-goals for Phase 2D:
 - no production Cloud sends and no changes to the Baileys worker.
 
 Exit gate: the transport boundary is typed, redacted, deterministic, and
-fully fixture-tested; all existing tests pass; and credential binding,
-outbox-claim wiring, uncertain-send reconciliation, and controlled Meta
-verification are complete. The current code is only an injected transport
-boundary.
+fully fixture-tested; credential binding, provider-scoped outbox claiming,
+private-storage media upload, and uncertain-send reconciliation are wired
+behind injected ports. Controlled Meta verification and the deployment
+credential-vault assembly remain open.
 
 #### Phase 3A: Embedded Signup authorization and provisioning contract
 
@@ -675,10 +676,12 @@ current branch, work proceeds in this order:
    migrations against a production-shaped database copy without exposing
    secrets. The atomic WABA/sender persistence and key-version rotation seams
    are already implemented.
-4. **Finish Phase 2 runtime wiring.** Add the backend-owned Cloud receipt
-   scheduler, connect the processor to the Store-scoped message writer,
-   connect the outbox lease path to the injected Cloud transport, implement
-   uncertain-send reconciliation, and add metrics/dead-letter operations.
+4. **Close the Phase 2 provider gate.** **Code-first runtime seams complete;
+   evidence open.** Bind the deployment credential vault and private-storage
+   adapter, run the Cloud receipt/outbox fixture and database checks, and
+   complete controlled Meta verification. The scheduler, Store-scoped
+   processor, provider-scoped outbox lease path, media upload, and uncertain
+   reconciliation seams are already implemented.
 5. **Finish Phase 3 account operations.** Implement server-side exchange and
    provider discovery, create/reuse WABA and sender records idempotently,
    subscribe the WABA webhook, synchronize account snapshots, expose safe
@@ -697,8 +700,8 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The next code slice is therefore Phase 2 runtime wiring followed by Phase 3
-account operations—not direct Cloud sending from POS and not Baileys removal.
+The next code slice is therefore Phase 3 account operations—not direct Cloud
+sending from POS and not Baileys removal.
 
 ## Target architecture
 

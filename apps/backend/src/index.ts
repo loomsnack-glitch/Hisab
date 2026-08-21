@@ -2,6 +2,7 @@ import app from "./app";
 import { redis } from "./config/redis";
 import { handleShutdown } from "./helpers/server.helper";
 import { replayPendingMessageEvents } from "./modules/tenant/whatsapp/whatsapp.service";
+import { replayPendingCloudWebhookEvents } from "./modules/tenant/whatsapp/cloud-api/cloud-runtime";
 
 const port = Number(process.env.PORT) || 8001;
 const hostname = process.env.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0";
@@ -29,3 +30,17 @@ const stopProviderEventReplay = () => clearInterval(providerEventReplay);
 process.once("SIGINT", stopProviderEventReplay);
 process.once("SIGTERM", stopProviderEventReplay);
 process.once("SIGQUIT", stopProviderEventReplay);
+
+const cloudWebhookReplay = setInterval(() => {
+  void replayPendingCloudWebhookEvents().catch((error) => {
+    console.warn(
+      "[whatsapp-cloud] webhook replay failed",
+      error instanceof Error ? error.message : "unknown error",
+    );
+  });
+}, 5_000);
+cloudWebhookReplay.unref();
+const stopCloudWebhookReplay = () => clearInterval(cloudWebhookReplay);
+process.once("SIGINT", stopCloudWebhookReplay);
+process.once("SIGTERM", stopCloudWebhookReplay);
+process.once("SIGQUIT", stopCloudWebhookReplay);

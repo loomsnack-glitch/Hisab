@@ -140,4 +140,32 @@ describe("WhatsAppCloudApiClient", () => {
       client.sendMessage("phone-1", { type: "text", body: "Hello" }),
     ).rejects.toMatchObject({ uncertain: true, retryable: true });
   });
+
+  test("uploads private media as multipart without exposing the token in the body", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v23.0",
+      baseUrl: "https://graph.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return jsonResponse({ id: "media-1" });
+      },
+    });
+
+    await expect(
+      client.uploadMedia("9876543210", {
+        body: new TextEncoder().encode("pdf-bytes"),
+        mimeType: "application/pdf",
+        fileName: "invoice.pdf",
+      }),
+    ).resolves.toEqual({ id: "media-1" });
+    expect(calls[0]?.url).toBe(
+      "https://graph.example.test/v23.0/9876543210/media",
+    );
+    expect(calls[0]?.init?.headers).toEqual({
+      Authorization: "Bearer test-secret-token",
+    });
+    expect(String(calls[0]?.init?.body)).not.toContain("test-secret-token");
+  });
 });

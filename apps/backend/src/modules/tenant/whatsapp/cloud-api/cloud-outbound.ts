@@ -57,7 +57,7 @@ export type CloudDispatchOutcome =
   | { status: "permanent"; code: string; message: string }
   | { status: "reconciling"; code: "submission_uncertain"; message: string };
 
-type CloudMessageSender = {
+export type CloudMessageSender = {
   sendMessage: (
     phoneNumberId: string,
     payload: CloudOutboundPayload,

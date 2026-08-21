@@ -25,6 +25,12 @@ export type WhatsAppCloudApiRequestOptions = Omit<RequestInit, "headers"> & {
   headers?: Record<string, string> | Array<[string, string]> | Headers;
 };
 
+export type WhatsAppCloudMediaUpload = {
+  body: Uint8Array;
+  mimeType: string;
+  fileName: string;
+};
+
 export class WhatsAppCloudApiError extends Error {
   readonly status: number | null;
   readonly providerCode: string | null;
@@ -241,5 +247,79 @@ export class WhatsAppCloudApiClient {
         body: JSON.stringify(payload),
       },
     );
+  }
+
+  async uploadMedia(phoneNumberId: string, media: WhatsAppCloudMediaUpload) {
+    const normalizedPhoneNumberId = normalizeResourceId(
+      phoneNumberId,
+      "Phone Number ID",
+    );
+    const mimeType = media.mimeType.trim();
+    const fileName = media.fileName.trim();
+    if (!mimeType || !fileName || media.body.byteLength === 0) {
+      throw new WhatsAppCloudApiError({
+        message: "WhatsApp Cloud media upload is invalid",
+        retryable: false,
+      });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const form = new FormData();
+    form.set("messaging_product", "whatsapp");
+    form.set("type", mimeType);
+    form.set(
+      "file",
+      new Blob([media.body], { type: mimeType }),
+      fileName,
+    );
+    try {
+      let response: Response;
+      let text: string;
+      try {
+        response = await this.fetchImpl(
+          `${this.baseUrl}/${this.graphVersion}/${normalizedPhoneNumberId}/media`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${this.accessToken}` },
+            body: form,
+            signal: controller.signal,
+          },
+        );
+        text = await response.text();
+      } catch (error) {
+        throw new WhatsAppCloudApiError({
+          message: controller.signal.aborted
+            ? "WhatsApp Cloud media upload timed out"
+            : "WhatsApp Cloud media upload failed",
+          retryable: true,
+          uncertain: true,
+          cause: error,
+        });
+      }
+
+      let body: unknown;
+      try {
+        body = text.trim() ? JSON.parse(text) : undefined;
+      } catch {
+        throw new WhatsAppCloudApiError({
+          message: "WhatsApp Cloud media upload returned invalid JSON",
+          status: response.status,
+          retryable: false,
+        });
+      }
+      if (!response.ok) throw graphError(response.status, body);
+      const id = asString((body as { id?: unknown } | undefined)?.id);
+      if (!id) {
+        throw new WhatsAppCloudApiError({
+          message: "WhatsApp Cloud media upload returned no media ID",
+          status: response.status,
+          retryable: false,
+        });
+      }
+      return { id };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }

@@ -1106,6 +1106,7 @@ export const claimNextInvoiceOutbox = async (
             WHERE o.kind IN ('invoice', 'text', 'document', 'promotion')
               AND o.status IN ('pending', 'retryable')
               AND o.next_attempt_at <= NOW()
+              AND a.provider = 'baileys'
               AND a.status = 'connected'
               AND EXISTS (
                   SELECT 1
