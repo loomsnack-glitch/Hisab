@@ -25,6 +25,7 @@ import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
 import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
 import { enqueueCloudTemplateSend, enqueueCloudTemplateSendForDevice } from "./cloud-api/cloud-template-send.service";
 import { buildDueReminderCloudComponents } from "./due-reminder-cloud-components";
+import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
 import * as promotionService from "./promotion";
 import * as messageTemplate from "./message-template";
 
@@ -859,6 +860,7 @@ const queueDueReminderForStore = async (
     if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     const defaultTemplate = await messageTemplate.getDefaultTemplate(organizationId, storeId, "due_reminder");
     if (account.provider === "cloud_api") {
+        if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
         if (customMessage?.trim()) return { status: "error", message: "Cloud WhatsApp reminders must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
         if (!defaultTemplate || !defaultTemplate.isActive) return { status: "error", message: "No active due-reminder template is available for this Store", data: null, code: STATUS_CODES.CONFLICT };
         const scope = await getCloudAccountScope(organizationId, account.id);

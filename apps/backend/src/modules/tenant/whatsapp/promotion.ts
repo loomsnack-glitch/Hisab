@@ -19,6 +19,7 @@ import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-templ
 import { enqueueCloudTemplateSend } from "./cloud-api/cloud-template-send.service";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { buildPromotionCloudComponents } from "./promotion-cloud-components";
+import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_CAMPAIGN_RECIPIENTS = 1_000;
@@ -326,7 +327,10 @@ export const createPromotion = async (
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
-  if (account.provider === "cloud_api") return createCloudPromotion(userId, organizationId, storeId, account, { name: store.name, whatsappLinks: store.whatsappLinks }, data);
+  if (account.provider === "cloud_api") {
+    if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
+    return createCloudPromotion(userId, organizationId, storeId, account, { name: store.name, whatsappLinks: store.whatsappLinks }, data);
+  }
   const hasImage = Boolean(data.imageBase64 && data.imageFileName && data.imageMimeType);
   const bucket = privateBucket();
   if (hasImage && !bucket)

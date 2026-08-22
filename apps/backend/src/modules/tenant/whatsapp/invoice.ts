@@ -26,6 +26,7 @@ import {
 } from "./cloud-api/cloud-template-send.service";
 import { buildInvoiceCloudComponents } from "./invoice-cloud-components";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
+import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
@@ -250,6 +251,7 @@ export const queueInvoiceForStore = async (
       };
     }
     if (account.provider === "cloud_api") {
+      if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
       if (!selectedTemplate || !selectedTemplate.isActive) {
         return {
           status: "error",

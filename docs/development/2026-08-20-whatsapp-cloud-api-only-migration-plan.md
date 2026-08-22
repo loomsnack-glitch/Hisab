@@ -850,8 +850,8 @@ current branch, work proceeds in this order:
    cooldown/duplicate admission, campaign stop, and reconciliation controls
    are implemented. Apply policy in the target environment and run concurrent
    send, failure-release, and controlled provider checks.
-8. **Only then implement Phase 6.** **In progress: Sub-loop 7E complete;
-   7F next.** Migrate bill documents, due reminders, promotions/media, inbound
+8. **Only then implement Phase 6.** **Code-first Loop 7 complete; external
+   rollout gate open.** Migrate bill documents, due reminders, promotions/media, inbound
    replies, and delivery statuses behind an explicit Cloud feature flag while
    Baileys remains available for controlled rollback. The current working
    diff has migrated the planned feature callers; rollout evidence remains open.
@@ -860,14 +860,13 @@ current branch, work proceeds in this order:
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
 The current code slice is the Loop 7 implementation. Bill/document,
-due-reminder, and promotion/media enqueue are now migrated for Cloud accounts;
-inbound and status integration remain fail-closed or verification-only until
-their sub-loops are complete. Phase 6 remains blocked until the
-provider/runtime and quota external gates are closed.
+due-reminder, promotion/media, inbound, and status integration are implemented
+behind the caller gate. Phase 6 remains blocked until the provider/runtime,
+quota, consent, storage, and controlled Meta acceptance gates are closed.
 
 ## Loop 7 plan: migrate feature callers to Cloud templates
 
-Status: **in progress; Sub-loop 7E complete; 7F next**.
+Status: **code-first complete; external rollout gate open**.
 
 ### Objective and invariants
 
@@ -1092,6 +1091,17 @@ replay tests remain external gates.
   submission, quota rejection, campaign stop, and page reload/reconnect.
 - Update this plan with evidence and only then mark Phase 6 complete. Do not
   start Phase 7 or remove Baileys/QR/port 8100 in this loop.
+
+Implementation evidence: 7F adds the default-off
+`WHATSAPP_CLOUD_CALLERS_ENABLED` admission switch; the independent
+`WHATSAPP_CLOUD_OUTBOX_ENABLED` worker switch remains default-off. Focused
+tests for the complete WhatsApp module pass (123 tests, 0 failures), changed-
+file backend type checking reports no errors, `git diff --check` passes, and
+`dbmate status` from `apps/backend` reports 70 applied and 0 pending
+migrations. Full backend type checking still reports pre-existing unrelated
+platform/billing test-contract errors. No provider WABA, vault, production
+HTTPS storage, target-DB integrity, or controlled end-to-end acceptance run was
+claimed here.
 
 ### Loop 7 stop conditions and decisions required before coding
 
