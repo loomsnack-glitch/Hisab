@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
     STATUS_CODES,
     normalizePhoneNumber,
@@ -19,7 +20,11 @@ import * as repository from "./whatsapp.repository";
 import * as workerClient from "./whatsapp.worker-client";
 import * as invoiceService from "./invoice";
 import * as conversationService from "./conversation";
-import { formatDueReminderText } from "./due-reminder";
+import { formatDueReminderText, getDueReminderTemplateValues } from "./due-reminder";
+import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
+import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
+import { enqueueCloudTemplateSend, enqueueCloudTemplateSendForDevice } from "./cloud-api/cloud-template-send.service";
+import { buildDueReminderCloudComponents } from "./due-reminder-cloud-components";
 import * as promotionService from "./promotion";
 import * as messageTemplate from "./message-template";
 
@@ -833,11 +838,12 @@ export const deleteMessageTemplate = async (userId: string, organizationId: stri
 };
 
 const queueDueReminderForStore = async (
-    organizationId: string,
-    storeId: string,
-    customerId: string,
-    customMessage?: string,
-    saleId?: string,
+  organizationId: string,
+  storeId: string,
+  customerId: string,
+  customMessage?: string,
+  saleId?: string,
+  userId?: string,
 ): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
     const store = await organizationRepository.getStoreById(organizationId, storeId);
     const customer = await billingRepository.getCustomerById(organizationId, customerId);
@@ -850,9 +856,49 @@ const queueDueReminderForStore = async (
     if (reminderSales.length === 0) return { status: "error", message: "This bill has no remaining due amount", data: null, code: STATUS_CODES.CONFLICT };
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) return { status: "error", message: "Link the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
-    if (account.provider === "cloud_api") return { status: "error", message: "Cloud WhatsApp reminders require an approved Cloud template route", data: null, code: STATUS_CODES.CONFLICT };
     if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     const defaultTemplate = await messageTemplate.getDefaultTemplate(organizationId, storeId, "due_reminder");
+    if (account.provider === "cloud_api") {
+        if (customMessage?.trim()) return { status: "error", message: "Cloud WhatsApp reminders must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
+        if (!defaultTemplate || !defaultTemplate.isActive) return { status: "error", message: "No active due-reminder template is available for this Store", data: null, code: STATUS_CODES.CONFLICT };
+        const scope = await getCloudAccountScope(organizationId, account.id);
+        if (!scope?.businessAccountId) return { status: "error", message: "Cloud WhatsApp account is not ready for template sends", data: null, code: STATUS_CODES.CONFLICT };
+        const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "due_reminder", defaultTemplate.id);
+        if (!binding) return { status: "error", message: "No approved Cloud due-reminder template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+        const values = getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks);
+        let componentParameters;
+        try {
+            componentParameters = buildDueReminderCloudComponents(binding.asset.components, defaultTemplate.body, values);
+        } catch (error) {
+            return { status: "error", message: error instanceof Error ? error.message : "Cloud due-reminder template variables are invalid", data: null, code: STATUS_CODES.BAD_REQUEST };
+        }
+        const window = new Date().toISOString().slice(0, 10);
+        const fingerprint = createHash("sha256").update(JSON.stringify({
+            organizationId,
+            storeId,
+            customerId,
+            sales: reminderSales.map(sale => ({ id: sale.id, dueTotal: String(sale.dueTotal ?? "0") })).sort((a, b) => a.id.localeCompare(b.id)),
+            window,
+        })).digest("hex");
+        const idempotencyKey = saleId ? `due-reminder:${saleId}:${window}` : `due-reminder:${fingerprint}`;
+        const enqueue = userId
+            ? enqueueCloudTemplateSend(userId, organizationId, {
+                storeId, accountId: account.id, customerId, saleId: saleId ?? null,
+                bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
+            })
+            : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
+                storeId, accountId: account.id, customerId, saleId: saleId ?? null,
+                bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
+            });
+        const queued = await enqueue;
+        if (queued.status === "error" || !queued.data) return queued as ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
+        return {
+            status: "success",
+            message: "Due reminder queued for WhatsApp",
+            data: { customerId, saleId: saleId ?? null, ...queued.data } as WhatsAppReminderQueueResponseDTO,
+            code: STATUS_CODES.CREATED,
+        };
+    }
     try {
         const queued = await repository.createCustomerTextOutbox({
             organizationId,
@@ -879,7 +925,7 @@ const queueDueReminderForStore = async (
 export const queueDueReminder = async (userId: string, organizationId: string, storeId: string, customerId: string, customMessage?: string, saleId?: string) => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
-    return queueDueReminderForStore(organizationId, storeId, customerId, customMessage, saleId);
+    return queueDueReminderForStore(organizationId, storeId, customerId, customMessage, saleId, userId);
 };
 
 export const queueDueReminderForDevice = (session: DeviceSessionDTO, customerId: string, customMessage?: string, saleId?: string) =>

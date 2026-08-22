@@ -850,8 +850,8 @@ current branch, work proceeds in this order:
    cooldown/duplicate admission, campaign stop, and reconciliation controls
    are implemented. Apply policy in the target environment and run concurrent
    send, failure-release, and controlled provider checks.
-8. **Only then implement Phase 6.** **In progress: Sub-loops 7A–7B complete;
-   7C next.** Migrate bill documents, due reminders, promotions/media, inbound
+8. **Only then implement Phase 6.** **In progress: Sub-loops 7A–7C complete;
+   7D next.** Migrate bill documents, due reminders, promotions/media, inbound
    replies, and delivery statuses behind an explicit Cloud feature flag while
    Baileys remains available for controlled rollback. The current working
    diff has not migrated a feature caller and has not been committed.
@@ -859,15 +859,15 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The current code slice is the Loop 7 implementation. Bill/document enqueue is
-now migrated for Cloud accounts; due reminders, promotions/media, inbound, and
-status integration remain fail-closed or verification-only until their
-sub-loops are complete. Phase 6 remains blocked until the provider/runtime and
-quota external gates are closed.
+The current code slice is the Loop 7 implementation. Bill/document and
+due-reminder enqueue are now migrated for Cloud accounts; promotions/media,
+inbound, and status integration remain fail-closed or verification-only until
+their sub-loops are complete. Phase 6 remains blocked until the
+provider/runtime and quota external gates are closed.
 
 ## Loop 7 plan: migrate feature callers to Cloud templates
 
-Status: **in progress; Sub-loops 7A–7B complete; 7C next**.
+Status: **in progress; Sub-loops 7A–7C complete; 7D next**.
 
 ### Objective and invariants
 
@@ -984,6 +984,19 @@ Exit criteria: tests cover one bill, multiple bills, changed due amount,
 duplicate/replay, no due bills, consent/suppression, missing binding, quota
 rejection, and delivery status. A controlled provider test confirms the
 utility template and rendered values.
+
+Implementation evidence: 7C preserves the existing due-bill and status
+validation, routes Cloud accounts through the shared utility-template admission
+and outbox, rejects custom free-form text and media headers, and maps local
+tokens plus active Store links to approved component order. Per-bill sends use
+`due-reminder:<saleId>:<UTC-day>`; customer-wide sends use a SHA-256 fingerprint
+of the Store, customer, due-bill IDs/amounts, and UTC-day. Existing reminder
+status lookup recognizes Cloud template rows while preserving legacy text rows.
+
+Verification: due-reminder component and legacy formatter tests pass; changed-
+file backend type checking reports no errors; `git diff --check` passes. A
+controlled provider utility-template test and target-database consent/quota
+verification remain external gates.
 
 ### Sub-loop 7D — promotion campaign and media send
 

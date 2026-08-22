@@ -487,7 +487,10 @@ export const getCustomerReminderOutbox = async (
           AND o.store_id = ${storeId}
           AND o.whatsapp_account_id = ${whatsappAccountId}
           AND o.sale_id = ${saleId}
-          AND o.kind = 'text'
+          AND (
+              o.kind = 'text'
+              OR (o.kind = 'template' AND m.idempotency_key LIKE 'due-reminder:%')
+          )
         ORDER BY o.created_at DESC
         LIMIT 1
     `;
