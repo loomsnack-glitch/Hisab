@@ -32,6 +32,7 @@ import {
   type SaleItemInput,
   type SaleNumberSettingsResponse,
   type SaleResponse,
+  type SaleServiceMode,
   type UpdateSaleNumberSettingsSVC,
   type SalesListQuery,
   type SalesListResponse,
@@ -50,6 +51,13 @@ const normalizeOptionalText = (value?: string | null) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 };
+
+const DEFAULT_SALE_SERVICE_MODE: SaleServiceMode = "dine_in";
+
+const resolveSaleServiceMode = (
+  value: SaleServiceMode | undefined,
+  fallback?: SaleServiceMode | null,
+): SaleServiceMode => value ?? fallback ?? DEFAULT_SALE_SERVICE_MODE;
 
 const normalizeOptionalUuid = (value?: string | null) => {
   const trimmed = value?.trim();
@@ -1783,6 +1791,7 @@ const createDraftSaleInStore = async (
         discountTotal: prepared.totals.discountTotal,
         grandTotal: prepared.totals.grandTotal,
         notes: normalizeOptionalText(saleData.notes),
+        serviceMode: resolveSaleServiceMode(saleData.serviceMode),
       },
       tx,
     );
@@ -1894,6 +1903,10 @@ const updateSaleInStore = async (
     saleData.notes === undefined
       ? (existingSale.notes ?? null)
       : normalizeOptionalText(saleData.notes);
+  const nextServiceMode = resolveSaleServiceMode(
+    saleData.serviceMode,
+    existingSale.serviceMode,
+  );
   const nextOrderDiscountAmount =
     saleData.orderDiscountAmount === undefined
       ? moneyFrom(existingSale.orderDiscountAmount)
@@ -2045,6 +2058,7 @@ const updateSaleInStore = async (
         discountTotal: preparedItems.totals.discountTotal,
         grandTotal: preparedItems.totals.grandTotal,
         notes: nextNotes,
+        serviceMode: nextServiceMode,
         committedAt: null,
         saleNumber: null,
         voidedAt: null,
@@ -2413,6 +2427,10 @@ const commitSaleInStore = async (
       commitData.notes === undefined
         ? (existingSale.notes ?? null)
         : normalizeOptionalText(commitData.notes);
+    const nextServiceMode = resolveSaleServiceMode(
+      commitData.serviceMode,
+      existingSale.serviceMode,
+    );
     const committedAt = new Date();
     const saleNumber = await billingRepository.allocateSaleNumber(
       organizationId,
@@ -2436,6 +2454,7 @@ const commitSaleInStore = async (
         discountTotal: committedTotals.discountTotal,
         grandTotal,
         notes: nextNotes,
+        serviceMode: nextServiceMode,
         committedAt,
         saleNumber: saleNumber.saleNumber,
         saleSequenceNumber: saleNumber.saleSequenceNumber,
@@ -2571,6 +2590,7 @@ type CompletedSaleTransactionParams = {
   requestId: string;
   replacementOfSaleId?: string | null;
   serviceTableId?: string | null;
+  serviceMode: SaleServiceMode;
 };
 
 const persistCompletedSale = async (
@@ -2616,6 +2636,7 @@ const persistCompletedSale = async (
       completionRequestId: params.requestId,
       replacementOfSaleId: params.replacementOfSaleId ?? null,
       serviceTableId: params.serviceTableId ?? null,
+      serviceMode: params.serviceMode,
     },
     tx,
   );
@@ -2752,6 +2773,7 @@ const completeSaleInStore = async (
         notes,
         committedAt,
         requestId: saleData.requestId,
+        serviceMode: resolveSaleServiceMode(saleData.serviceMode),
       }),
     );
   } catch (error) {
@@ -2894,6 +2916,10 @@ const replaceSaleInStore = async (
         committedAt,
         requestId: saleData.requestId,
         replacementOfSaleId: originalSaleId,
+        serviceMode: resolveSaleServiceMode(
+          saleData.serviceMode,
+          originalSale.serviceMode,
+        ),
       });
 
       const updatedOriginal = await billingRepository.updateSale(

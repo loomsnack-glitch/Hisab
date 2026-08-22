@@ -34,6 +34,7 @@ import type {
   SaleItemInputSchema,
   SaleNumberResetPeriodSchema,
   SaleNumberSettingsDTOSchema,
+  SaleServiceModeSchema,
   TokenNumberResetPeriodSchema,
   KotNumberResetPeriodSchema,
   SaleSummaryDTOSchema,
@@ -137,6 +138,8 @@ export type ProductSalesSummaryResponse = z.infer<
   typeof ProductSalesSummaryResponseSchema
 >;
 
+export type SaleServiceMode = z.infer<typeof SaleServiceModeSchema>;
+
 export type SaleItemAddOnInput = z.infer<typeof SaleItemAddOnInputSchema>;
 export type SaleItemInput = z.infer<typeof SaleItemInputSchema>;
 export type CreateDraftSaleJSON = z.infer<typeof CreateDraftSaleSchema>;
@@ -177,6 +180,7 @@ export type CreateSaleREPO = Pick<
   updatedByDeviceId?: string | null;
   customerId?: string | null;
   serviceTableId?: string | null;
+  serviceMode?: SaleServiceMode;
   customerNameSnapshot?: string | null;
   customerPhoneSnapshot?: string | null;
   notes?: string | null;
@@ -204,6 +208,7 @@ export type UpdateSaleREPO = Pick<
 > & {
   updatedByDeviceId?: string | null;
   customerId?: string | null;
+  serviceMode?: SaleServiceMode;
   customerNameSnapshot?: string | null;
   customerPhoneSnapshot?: string | null;
   notes?: string | null;

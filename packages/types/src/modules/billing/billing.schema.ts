@@ -68,6 +68,8 @@ const positiveIntLimitSchema = z.coerce
   .min(1, "Limit must be at least 1")
   .max(100, "Limit must be at most 100");
 
+export const SaleServiceModeSchema = z.enum(["dine_in", "pick_up"]);
+
 export const SaleStatusSchema = z.enum(["draft", "completed", "voided"]);
 export const PaymentStatusSchema = z.enum(["pending", "partial", "paid"]);
 export const PaymentMethodSchema = z.enum([
@@ -236,6 +238,7 @@ export const SaleSummaryDTOSchema = z.object({
   customerId: z.uuid("Invalid customer id").nullable().optional(),
   serviceTableId: z.uuid("Invalid service table id").nullable().optional(),
   serviceTableLabel: z.string().nullable().optional(),
+  serviceMode: SaleServiceModeSchema,
   customerNameSnapshot: nameSchema.nullable().optional(),
   customerPhoneSnapshot: z.string().nullable().optional(),
   userId: z.uuid("Invalid user id").nullable().optional(),
@@ -358,6 +361,7 @@ export const CreateDraftSaleSchema = z.object({
     .optional(),
   orderDiscountAmount: moneySchema.optional(),
   notes: optionalNotesSchema,
+  serviceMode: SaleServiceModeSchema.default("dine_in"),
   items: z.array(SaleItemInputSchema).optional().default([]),
 });
 
@@ -369,6 +373,7 @@ export const UpdateDraftSaleSchema = z
       .optional(),
     orderDiscountAmount: moneySchema.optional(),
     notes: optionalNotesSchema,
+    serviceMode: SaleServiceModeSchema.optional(),
     items: z.array(SaleItemInputSchema).optional(),
   })
   .refine(
@@ -376,6 +381,7 @@ export const UpdateDraftSaleSchema = z
       value.customerId !== undefined ||
       value.orderDiscountAmount !== undefined ||
       value.notes !== undefined ||
+      value.serviceMode !== undefined ||
       value.items !== undefined,
     { message: "At least one field is required" },
   );
@@ -403,6 +409,7 @@ export const CommitSaleSchema = z.object({
     .optional(),
   orderDiscountAmount: moneySchema.optional(),
   notes: optionalNotesSchema,
+  serviceMode: SaleServiceModeSchema.optional(),
   items: z
     .array(SaleItemInputSchema)
     .min(1, "At least one item is required")
@@ -418,6 +425,7 @@ export const CompleteSaleSchema = z.object({
     .optional(),
   orderDiscountAmount: moneySchema.optional(),
   notes: optionalNotesSchema,
+  serviceMode: SaleServiceModeSchema,
   items: z.array(SaleItemInputSchema).min(1, "At least one item is required"),
   payments: z.array(CreatePaymentSchema).optional().default([]),
 });

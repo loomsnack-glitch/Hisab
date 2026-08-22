@@ -19,6 +19,7 @@ import {
     voidSale,
 } from "@repo/services";
 import type { CreatePaymentJSON, PaymentMethod, SaleDetailDTO, VoidSaleJSON } from "@repo/types";
+import { formatSaleServiceModeLabel } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
@@ -377,6 +378,9 @@ const SaleDetailDialog = ({
                                                 )}
                                             >
                                                 {sale.paymentStatus}
+                                            </Badge>
+                                            <Badge className="rounded-full border border-border/60 bg-muted/40 text-xs text-foreground">
+                                                {formatSaleServiceModeLabel(sale.serviceMode)}
                                             </Badge>
                                         </div>
                                     </div>

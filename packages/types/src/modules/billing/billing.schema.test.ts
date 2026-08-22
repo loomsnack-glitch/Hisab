@@ -36,6 +36,7 @@ describe("Configured sale billing contracts", () => {
         const result = CompleteSaleSchema.safeParse({
             requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
             customerId: null,
+            serviceMode: "dine_in",
             items: [
                 {
                     productId: "11111111-1111-4111-8111-111111111111",
@@ -183,6 +184,7 @@ describe("Configured sale billing contracts", () => {
             updatedByDeviceId: null,
             status: "draft",
             paymentStatus: "pending",
+            serviceMode: "dine_in",
             subtotal: 120,
             discountTotal: 0,
             grandTotal: 120,
@@ -261,6 +263,7 @@ describe("Configured sale billing contracts", () => {
             updatedByDeviceId: null,
             status: "draft",
             paymentStatus: "pending",
+            serviceMode: "dine_in",
             subtotal: 99,
             discountTotal: 0,
             grandTotal: 99,

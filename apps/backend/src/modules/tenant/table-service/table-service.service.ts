@@ -250,6 +250,7 @@ export const startServiceTableOrderForDevice = async (
         customerId: null,
         customerNameSnapshot: null,
         customerPhoneSnapshot: null,
+        serviceMode: "dine_in",
         notes: null,
       },
       tx,

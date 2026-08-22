@@ -352,6 +352,7 @@ export const updateSale = async (saleData: UpdateSaleREPO, tx?: Bun.TransactionS
         SET customer_id = ${saleData.customerId ?? null},
             customer_name_snapshot = ${saleData.customerNameSnapshot ?? null},
             customer_phone_snapshot = ${saleData.customerPhoneSnapshot ?? null},
+            service_mode = ${saleData.serviceMode ?? "dine_in"},
             status = ${saleData.status},
             payment_status = ${saleData.paymentStatus},
             updated_by_device_id = ${saleData.updatedByDeviceId ?? null},

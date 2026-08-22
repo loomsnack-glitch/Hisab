@@ -117,6 +117,7 @@ type ReportingSale = {
     createdAt?: Date;
     customerId?: string | null;
     customerName?: string | null;
+    serviceMode?: "dine_in" | "pick_up";
     saleNumber?: string | null;
     updatedAt?: Date;
     paymentMethods?: string | null;
@@ -642,6 +643,7 @@ const createReportingMetrics = (
                     itemsSummary: sale.itemsSummary ?? null,
                     paymentMethods: sale.paymentMethods ?? null,
                     customerName: sale.customerName ?? null,
+                    serviceMode: sale.serviceMode ?? "dine_in",
                     storeId: sale.storeId,
                     storeName: store?.name ?? "",
                 };
@@ -931,6 +933,7 @@ const createReportingMetrics = (
                     itemsSummary: sale.itemsSummary ?? null,
                     paymentMethods: sale.paymentMethods ?? null,
                     customerName: sale.customerName ?? customer.name,
+                    serviceMode: sale.serviceMode ?? "dine_in",
                     storeId: sale.storeId,
                     storeName: store?.name ?? "",
                 };
@@ -1765,6 +1768,7 @@ const createHarness = async () => {
                     voidedAt: sale.status === "voided" ? sale.committedAt?.toISOString() ?? null : null,
                     voidReason: sale.status === "voided" ? "Mistake" : null,
                     notes: null,
+                    serviceMode: sale.serviceMode ?? "dine_in",
                 };
             },
             getSaleItemsBySaleId: async (saleId) => {

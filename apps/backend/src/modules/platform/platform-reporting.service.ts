@@ -193,6 +193,7 @@ const toSaleInspectionSummary = (
     itemsSummary: sale.itemsSummary,
     paymentMethods: sale.paymentMethods,
     customerName: sale.customerName,
+    serviceMode: sale.serviceMode,
     store: {
         id: sale.storeId,
         name: sale.storeName,
@@ -789,6 +790,7 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                         itemsSummary: sale.itemsSummary ?? null,
                         paymentMethods: sale.paymentMethods ?? null,
                         customerName: sale.customer?.name ?? sale.customerNameSnapshot ?? null,
+                        serviceMode: sale.serviceMode ?? "dine_in",
                         storeId: context.storeId,
                         storeName: context.storeName,
                     }),

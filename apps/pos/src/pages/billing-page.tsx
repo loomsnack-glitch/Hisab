@@ -56,11 +56,12 @@ import type {
     SalesListSummary,
     SaleDetailDTO,
     SaleSummaryDTO,
+    SaleServiceMode,
     ServiceTableDTO,
     TableOrderDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
-import { normalizePhoneNumber } from "@repo/types";
+import { normalizePhoneNumber, formatSaleServiceModeLabel } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
     AlertDialog,
@@ -107,6 +108,7 @@ import {
     ShoppingCart,
     Store,
     Trash2,
+    Utensils,
     User,
     X,
     Boxes,
@@ -263,6 +265,15 @@ type SalesDateMode = "date" | "range";
 type SalesDatePreset = "today" | "yesterday" | "this-week" | "this-month" | "custom" | "all";
 type BillingPanelTab = "products" | "bills" | "reports" | "purchases" | "customers";
 type InvoiceAction = "print" | "whatsapp";
+
+const SERVICE_MODE_OPTIONS: Array<{
+    value: SaleServiceMode;
+    label: string;
+    icon: typeof Utensils;
+}> = [
+    { value: "dine_in", label: "Dine-In", icon: Utensils },
+    { value: "pick_up", label: "Pick-Up", icon: ShoppingCart },
+];
 
 const salesSortOptions: Array<{ value: SaleSort; label: string }> = [
     { value: "newest", label: "Newest" },
@@ -499,6 +510,7 @@ const BillingPage = ({
     const [invoiceActions, setInvoiceActions] = useState<InvoiceAction[]>(
         isDeviceMode && posPrinter?.connected ? ["print"] : [],
     );
+    const [serviceMode, setServiceMode] = useState<SaleServiceMode>("dine_in");
     const [settlementEditorOpen, setSettlementEditorOpen] = useState(false);
     const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
     const [replacingSaleId, setReplacingSaleId] = useState<string | null>(null);
@@ -1290,6 +1302,7 @@ const BillingPage = ({
         setDiscountInput("");
         setDiscountMode("percent");
         setInvoiceActions(isDeviceMode && posPrinter?.connected ? ["print"] : []);
+        setServiceMode("dine_in");
         setDiscountEditorOpen(false);
         setPlaceOrderDialogOpen(false);
         setCustomerPickerOpen(false);
@@ -1658,6 +1671,7 @@ const BillingPage = ({
         customerId: selectedCustomerId || null,
         orderDiscountAmount,
         notes: notes.trim() || null,
+        serviceMode,
         items: items.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
@@ -1681,6 +1695,7 @@ const BillingPage = ({
         customerId: selectedCustomerId || null,
         orderDiscountAmount,
         notes: notes.trim() || null,
+        serviceMode,
         items: buildDraftPayload().items,
         payments:
             settlementMode === "due"
@@ -2099,6 +2114,7 @@ const BillingPage = ({
         setSelectedCustomerFallback(null);
         setCustomerSearch(sale.customer?.phone || sale.customer?.name || "");
         setNotes(sale.notes ?? "");
+        setServiceMode(sale.serviceMode ?? "dine_in");
         setItems(
             sale.items.map((item) => ({
                 key: item.id,
@@ -3176,6 +3192,7 @@ const BillingPage = ({
                                                                     </p>
                                                                 ) : null}
                                                                 <p className="truncate text-[10px] text-muted-foreground/80">
+                                                                    {formatSaleServiceModeLabel(sale.serviceMode)} ·{" "}
                                                                     {sale.itemCount} item
                                                                     {sale.itemCount !== 1 ? "s" : ""} ·{" "}
                                                                     {formatDateTime(sale.createdAt)}
@@ -4268,6 +4285,39 @@ const BillingPage = ({
                                     ) : null}
                                 </div>
                             ) : null}
+                        </section>
+
+                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-foreground">Order type</p>
+                                <p className="text-[11px] text-muted-foreground">Required</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Order type">
+                                {SERVICE_MODE_OPTIONS.map((option) => {
+                                    const Icon = option.icon;
+                                    const isSelected = serviceMode === option.value;
+
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={isSelected}
+                                            disabled={completeSaleMutation.isPending}
+                                            onClick={() => setServiceMode(option.value)}
+                                            className={cn(
+                                                "flex h-8 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                                isSelected
+                                                    ? "border-primary bg-primary text-primary-foreground"
+                                                    : "border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
+                                            )}
+                                        >
+                                            <Icon className="size-3.5" aria-hidden="true" />
+                                            {option.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </section>
 
                         <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
