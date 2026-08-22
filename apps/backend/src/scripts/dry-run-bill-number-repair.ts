@@ -16,11 +16,14 @@
  */
 
 import { SQL } from "bun";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 type Arguments = {
   organizationId: string | null;
   storeId: string | null;
   limit: number;
+  outputDirectory: string | null;
 };
 
 type ReportRow = Record<string, unknown>;
@@ -28,6 +31,13 @@ type ReportRow = Record<string, unknown>;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_LIMIT = 200;
+const DEFAULT_REPORT_DIRECTORY = resolve(
+  import.meta.dir,
+  "..",
+  "..",
+  "reports",
+  "bill-number-dry-run",
+);
 
 const usage = () => {
   console.log(`
@@ -35,11 +45,13 @@ Usage:
   DATABASE_URL='...' bun run src/scripts/dry-run-bill-number-repair.ts
   DATABASE_URL='...' bun run src/scripts/dry-run-bill-number-repair.ts --store-id <uuid>
   DATABASE_URL='...' bun run src/scripts/dry-run-bill-number-repair.ts --organization-id <uuid> --limit 0
+  DATABASE_URL='...' bun run src/scripts/dry-run-bill-number-repair.ts --output-dir ./reports
 
 Options:
   --organization-id <uuid>  Restrict the report to one Organization.
   --store-id <uuid>         Restrict the report to one Store.
   --limit <count>           Detail rows per section (default: ${DEFAULT_LIMIT}; 0: unlimited).
+  --output-dir <path>       Parent folder for the timestamped report export.
 `);
 };
 
@@ -48,6 +60,7 @@ const parseArguments = (args: string[]): Arguments => {
     organizationId: null,
     storeId: null,
     limit: DEFAULT_LIMIT,
+    outputDirectory: null,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -86,6 +99,9 @@ const parseArguments = (args: string[]): Arguments => {
         parsed.limit = parsedLimit;
         break;
       }
+      case "--output-dir":
+        parsed.outputDirectory = value;
+        break;
       default:
         throw new Error(`Unknown argument: ${argument ?? ""}`);
     }
@@ -108,8 +124,202 @@ const printSection = (title: string, rows: ReportRow[]) => {
 const formatError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
+const slugifyPathSegment = (value: unknown, fallback: string) => {
+  const slug = String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return slug || fallback;
+};
+
+const shortId = (value: unknown) => String(value ?? "unknown").slice(0, 8);
+
+const reportTimestamp = () => new Date().toISOString().replace(/[:.]/g, "-");
+
+const writeJson = (filePath: string, value: unknown) => {
+  writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+};
+
+const csvCell = (value: unknown) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  const text = value instanceof Date ? value.toISOString() : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+};
+
+const toCsv = (rows: ReportRow[]) => {
+  const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))];
+  const header = columns.map(csvCell).join(",");
+  const dataRows = rows.map((row) =>
+    columns.map((column) => csvCell(row[column])).join(","),
+  );
+
+  return `${[header, ...dataRows].join("\n")}\n`;
+};
+
+const writeStoreSummary = (
+  filePath: string,
+  store: ReportRow,
+  repairPreview: ReportRow | undefined,
+  billCount: number,
+  printedCollisionCount: number,
+  sequenceCollisionCount: number,
+) => {
+  const lines = [
+    `# Bill-number dry run: ${String(store.organization_name)} / ${String(store.store_name)}`,
+    "",
+    `- Organization ID: \`${String(store.organization_id)}\``,
+    `- Store ID: \`${String(store.store_id)}\``,
+    `- Bills exported: ${billCount}`,
+    `- Exact duplicate printed bill numbers: ${printedCollisionCount}`,
+    `- Duplicate sequence numbers: ${sequenceCollisionCount}`,
+  ];
+
+  if (repairPreview) {
+    lines.push(
+      `- Current financial year: ${String(repairPreview.current_financial_year)}`,
+      `- Current allocator next number: ${String(repairPreview.allocator_next_without_repair)}`,
+      `- Proposed safe next number: ${String(repairPreview.proposed_next_sequence_number)}`,
+      `- Counter repair needed: ${String(repairPreview.needs_counter_repair)}`,
+    );
+  } else {
+    lines.push(
+      "- Counter repair needed: no current-financial-year risk detected.",
+    );
+  }
+
+  lines.push(
+    "",
+    "`report.json` contains the complete structured Store report. `bills.csv` lists every committed bill in this export scope.",
+  );
+  writeFileSync(filePath, `${lines.join("\n")}\n`, "utf8");
+};
+
+const writeReportExport = (
+  report: Record<string, ReportRow[]>,
+  outputDirectory: string | null,
+  scope: Pick<Arguments, "organizationId" | "storeId">,
+) => {
+  const runDirectory = join(
+    outputDirectory ? resolve(outputDirectory) : DEFAULT_REPORT_DIRECTORY,
+    `run-${reportTimestamp()}`,
+  );
+  const organizationsDirectory = join(runDirectory, "organizations");
+  mkdirSync(organizationsDirectory, { recursive: true });
+
+  const storeDirectories: Array<Record<string, unknown>> = [];
+  const storesByOrganization = new Map<string, ReportRow[]>();
+  for (const store of report.storeDirectory) {
+    const organizationId = String(store.organization_id);
+    const stores = storesByOrganization.get(organizationId) ?? [];
+    stores.push(store);
+    storesByOrganization.set(organizationId, stores);
+  }
+
+  for (const [organizationId, stores] of storesByOrganization) {
+    const organization = stores[0];
+    const organizationDirectory = join(
+      organizationsDirectory,
+      `${slugifyPathSegment(organization?.organization_name, "organization")}-${shortId(organizationId)}`,
+    );
+    const storesDirectory = join(organizationDirectory, "stores");
+    mkdirSync(storesDirectory, { recursive: true });
+
+    writeJson(join(organizationDirectory, "organization.json"), {
+      organizationId,
+      organizationName: organization?.organization_name,
+      storeCount: stores.length,
+    });
+
+    for (const store of stores) {
+      const storeId = String(store.store_id);
+      const storeDirectory = join(
+        storesDirectory,
+        `${slugifyPathSegment(store.store_name, "store")}-${shortId(storeId)}`,
+      );
+      mkdirSync(storeDirectory, { recursive: true });
+
+      const matchesStore = (row: ReportRow) => String(row.store_id) === storeId;
+      const bills = report.bills.filter(matchesStore);
+      const formatSummary = report.formatSummary.filter(matchesStore);
+      const repairPreview = report.repairPreview.find(matchesStore);
+      const printedNumberCollisions =
+        report.printedNumberCollisions.filter(matchesStore);
+      const sequenceCollisions = report.sequenceCollisions.filter(matchesStore);
+      const storeReport = {
+        generatedAt: new Date().toISOString(),
+        store,
+        repairPreview: repairPreview ?? null,
+        formatSummary,
+        exactPrintedBillNumberCollisions: printedNumberCollisions,
+        duplicateSequenceNumberCollisions: sequenceCollisions,
+        billCount: bills.length,
+      };
+
+      writeJson(join(storeDirectory, "report.json"), storeReport);
+      writeJson(
+        join(storeDirectory, "duplicate-printed-bill-numbers.json"),
+        printedNumberCollisions,
+      );
+      writeJson(
+        join(storeDirectory, "duplicate-sequence-numbers.json"),
+        sequenceCollisions,
+      );
+      writeFileSync(join(storeDirectory, "bills.csv"), toCsv(bills), "utf8");
+      writeStoreSummary(
+        join(storeDirectory, "SUMMARY.md"),
+        store,
+        repairPreview,
+        bills.length,
+        printedNumberCollisions.length,
+        sequenceCollisions.length,
+      );
+
+      storeDirectories.push({
+        organizationId,
+        organizationName: store.organization_name,
+        storeId,
+        storeName: store.store_name,
+        path: storeDirectory,
+        billCount: bills.length,
+        needsCounterRepair: repairPreview?.needs_counter_repair ?? false,
+        proposedNextSequenceNumber:
+          repairPreview?.proposed_next_sequence_number ?? null,
+        exactPrintedBillNumberCollisionCount: printedNumberCollisions.length,
+        sequenceCollisionCount: sequenceCollisions.length,
+      });
+    }
+  }
+
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    scope,
+    databaseMutations:
+      "none; report queries ran in a PostgreSQL READ ONLY transaction",
+    storeCount: storeDirectories.length,
+    billCount: report.bills.length,
+    stores: storeDirectories,
+  };
+  writeJson(join(runDirectory, "manifest.json"), manifest);
+  writeFileSync(
+    join(runDirectory, "README.md"),
+    `# Bill-number dry-run export\n\nGenerated: ${manifest.generatedAt}\n\n` +
+      "This report contains no database mutation. Each Organization and Store has its own folder. " +
+      "Open a Store's `SUMMARY.md` first, then share its `report.json` and `bills.csv` when deeper analysis is needed.\n",
+    "utf8",
+  );
+
+  return runDirectory;
+};
+
 const main = async () => {
-  const { organizationId, storeId, limit } = parseArguments(
+  const { organizationId, storeId, limit, outputDirectory } = parseArguments(
     process.argv.slice(2),
   );
   const databaseUrl = process.env.DATABASE_URL;
@@ -135,6 +345,80 @@ const main = async () => {
                     FROM schema_migrations
                     WHERE version = '20260821170000'
                 ) AS financial_year_numbering_migration_applied
+            `;
+
+        const storeDirectory = await tx`
+                SELECT
+                    st.organization_id,
+                    o.name AS organization_name,
+                    st.id AS store_id,
+                    st.name AS store_name,
+                    COALESCE(NULLIF(TRIM(sbs.sale_number_timezone), ''), 'Asia/Kolkata') AS timezone
+                FROM stores st
+                INNER JOIN organizations o ON o.id = st.organization_id
+                LEFT JOIN store_billing_settings sbs
+                    ON sbs.store_id = st.id AND sbs.organization_id = st.organization_id
+                WHERE (${organizationId}::uuid IS NULL OR st.organization_id = ${organizationId}::uuid)
+                  AND (${storeId}::uuid IS NULL OR st.id = ${storeId}::uuid)
+                ORDER BY o.name, st.name, st.id
+            `;
+
+        const bills = await tx`
+                WITH scoped_sales AS (
+                    SELECT
+                        s.id AS sale_id,
+                        s.organization_id,
+                        o.name AS organization_name,
+                        s.store_id,
+                        st.name AS store_name,
+                        s.status::text AS sale_status,
+                        s.sale_number,
+                        s.sale_sequence_number,
+                        s.sale_period_key,
+                        s.committed_at,
+                        COALESCE(NULLIF(TRIM(sbs.sale_number_timezone), ''), 'Asia/Kolkata') AS timezone
+                    FROM sales s
+                    INNER JOIN stores st ON st.id = s.store_id AND st.organization_id = s.organization_id
+                    INNER JOIN organizations o ON o.id = s.organization_id
+                    LEFT JOIN store_billing_settings sbs
+                        ON sbs.store_id = s.store_id AND sbs.organization_id = s.organization_id
+                    WHERE s.status <> 'draft'
+                      AND (${organizationId}::uuid IS NULL OR s.organization_id = ${organizationId}::uuid)
+                      AND (${storeId}::uuid IS NULL OR s.store_id = ${storeId}::uuid)
+                ),
+                classified_sales AS (
+                    SELECT
+                        *,
+                        FORMAT(
+                            'FY%s-%s',
+                            TO_CHAR((committed_at AT TIME ZONE timezone) - INTERVAL '3 months', 'YY'),
+                            TO_CHAR((committed_at AT TIME ZONE timezone) + INTERVAL '9 months', 'YY')
+                        ) AS actual_financial_year,
+                        CASE
+                            WHEN sale_number ~ '^[0-9]+$' THEN 'plain'
+                            WHEN sale_number ~ '^FY[0-9]{2}-[0-9]{2}-[0-9]+$' THEN 'financial-year-prefixed'
+                            WHEN sale_number ~ '^[0-9]{8}-[0-9]+$' THEN 'daily-prefixed'
+                            ELSE 'other'
+                        END AS bill_number_format
+                    FROM scoped_sales
+                )
+                SELECT
+                    sale_id,
+                    organization_id,
+                    organization_name,
+                    store_id,
+                    store_name,
+                    sale_status,
+                    sale_number,
+                    sale_sequence_number,
+                    sale_period_key,
+                    actual_financial_year,
+                    (sale_period_key <> actual_financial_year) AS is_legacy_period_for_actual_financial_year,
+                    bill_number_format,
+                    timezone,
+                    committed_at
+                FROM classified_sales
+                ORDER BY organization_name, store_name, committed_at, sale_id
             `;
 
         const formatSummary = await tx`
@@ -377,12 +661,27 @@ const main = async () => {
 
         return {
           migration,
+          storeDirectory,
+          bills,
           formatSummary,
           repairPreview,
           printedNumberCollisions,
           sequenceCollisions,
         };
       },
+    );
+
+    const reportDirectory = writeReportExport(
+      {
+        storeDirectory: report.storeDirectory,
+        bills: report.bills,
+        formatSummary: report.formatSummary,
+        repairPreview: report.repairPreview,
+        printedNumberCollisions: report.printedNumberCollisions,
+        sequenceCollisions: report.sequenceCollisions,
+      },
+      outputDirectory,
+      { organizationId, storeId },
     );
 
     console.log(
@@ -394,6 +693,7 @@ const main = async () => {
     console.log(
       `Financial-year numbering migration applied: ${String(report.migration?.financial_year_numbering_migration_applied ?? false)}`,
     );
+    console.log(`Shareable report files written to: ${reportDirectory}`);
     printSection(
       "Bill-number formats and persisted period buckets",
       report.formatSummary,
