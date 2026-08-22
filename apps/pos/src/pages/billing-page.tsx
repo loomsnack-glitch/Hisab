@@ -154,6 +154,7 @@ import {
     PosTableKotAction,
     PosTableKotList,
     remainingTableKotItemCount,
+    shouldOpenMobileCartOnComposerHandoff,
 } from "@/lib/pos-table-kot";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
@@ -2194,7 +2195,7 @@ const BillingPage = ({
             if (pendingComposerHandoff.table) {
                 loadTableOrderIntoComposer(pendingComposerHandoff.table, pendingComposerHandoff.tableOrder);
             }
-            setMobileCartOpen(true);
+            setMobileCartOpen(shouldOpenMobileCartOnComposerHandoff(pendingComposerHandoff));
             window.scrollTo({ top: 0, behavior: "smooth" });
             onComposerHandoffConsumed?.();
             toast.success(
@@ -2216,7 +2217,7 @@ const BillingPage = ({
 
         consumedComposerHandoffRef.current = handoffKey;
         loadSaleIntoComposer(pendingComposerHandoff.sale, pendingComposerHandoff.editSaleId);
-        setMobileCartOpen(true);
+        setMobileCartOpen(shouldOpenMobileCartOnComposerHandoff(pendingComposerHandoff));
         window.scrollTo({ top: 0, behavior: "smooth" });
         onComposerHandoffConsumed?.();
         toast.success(

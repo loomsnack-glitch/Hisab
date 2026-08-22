@@ -11,6 +11,7 @@ import {
   hasActiveTableWorkspace,
   remainingTableKotItemCount,
   selectedTableKotItems,
+  shouldOpenMobileCartOnComposerHandoff,
 } from "./pos-table-kot";
 
 const now = new Date("2026-08-21T12:00:00.000Z");
@@ -142,6 +143,12 @@ describe("Table KOT POS actions", () => {
         currentTableOrderId: null,
       }),
     ).toBe(false);
+  });
+
+  test("keeps the mobile cart closed when a table order is handed into POS", () => {
+    expect(shouldOpenMobileCartOnComposerHandoff({ tableOrder })).toBe(false);
+    expect(shouldOpenMobileCartOnComposerHandoff({ tableOrder: null })).toBe(true);
+    expect(shouldOpenMobileCartOnComposerHandoff({})).toBe(true);
   });
 
   test("loads the selected KOT's remaining items into the composer", () => {

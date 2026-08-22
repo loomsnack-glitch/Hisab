@@ -36,6 +36,10 @@ export const hasActiveTableWorkspace = (table: {
   (table.state === "engaged" || table.state === "ready_to_bill") &&
   Boolean(table.currentSaleId || table.currentTableOrderId);
 
+export const shouldOpenMobileCartOnComposerHandoff = (handoff: {
+  tableOrder?: unknown;
+}) => handoff.tableOrder == null;
+
 type PosTableKotActionProps = {
   available: boolean;
   disabled: boolean;

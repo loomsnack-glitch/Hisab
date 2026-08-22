@@ -30,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { cn } from "@repo/ui/lib/utils";
 import { Armchair, BookOpen, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,7 +39,11 @@ import PosServiceTableLegend from "@/components/table-service/pos-service-table-
 import ServiceTableAreaSections from "@/components/table-service/service-table-area-sections";
 import { groupServiceTablesByArea } from "@/lib/service-area-tables";
 import { serviceAreaKeys, serviceTableKeys } from "@/lib/query-keys";
-import type { PosServiceTableAction } from "@/lib/pos-service-table";
+import {
+  posTablesPageClassName,
+  posTablesScrollerClassName,
+  type PosServiceTableAction,
+} from "@/lib/pos-service-table";
 import type { PosRouteContext } from "@/pages/pos-route-context";
 
 type TableOperation = { tableId: string; action: PosServiceTableAction };
@@ -261,11 +266,11 @@ const PosTablesWorkspace = () => {
   );
 
   return (
-    <div
-      className="flex h-full min-h-0 flex-col overflow-hidden lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))]"
-      data-testid="pos-tables-page"
-    >
-      <div className="min-h-0 flex-1 touch-[pan-y_pinch-zoom] overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-6">
+    <div className={posTablesPageClassName} data-testid="pos-tables-page">
+      <div
+        className={cn(posTablesScrollerClassName, "p-3 sm:p-4 lg:p-6")}
+        data-testid="pos-tables-scroller"
+      >
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h1 className="sr-only">Tables</h1>

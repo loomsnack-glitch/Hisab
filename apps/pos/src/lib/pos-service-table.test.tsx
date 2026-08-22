@@ -172,6 +172,8 @@ describe("POS Service Table behavior", () => {
     expect(markup).toContain("Service disabled");
     expect(markup).toContain("Table management is disabled for this store.");
     expect(markup).not.toContain("Allocate table A1");
+    expect(markup).toContain('data-testid="pos-tables-scroller"');
+    expect(markup).toContain("touch-pan-y");
   });
 
   test("renders the aligned table grid", () => {
@@ -183,6 +185,34 @@ describe("POS Service Table behavior", () => {
     expect(markup).not.toContain("Manage the current floor");
     expect(markup).not.toContain("Grouped by area.");
     expect(markup).not.toContain("Main Store floor");
+  });
+
+  test("pins the tables floor to the nav with a definite one-finger scrollport", () => {
+    const markup = renderTableFloor([table("free")]);
+    const pageAttr = markup.indexOf('data-testid="pos-tables-page"');
+    const pageTag = markup.slice(markup.lastIndexOf("<div", pageAttr), markup.indexOf(">", pageAttr));
+    const scrollerAttr = markup.indexOf('data-testid="pos-tables-scroller"');
+    const scrollerTag = markup.slice(
+      markup.lastIndexOf("<div", scrollerAttr),
+      markup.indexOf(">", scrollerAttr),
+    );
+    const allocateOpen = markup.indexOf("Allocate table A1");
+    const allocateTag = markup.slice(
+      markup.lastIndexOf("<button", allocateOpen),
+      markup.indexOf(">", allocateOpen),
+    );
+
+    expect(pageTag).toContain("absolute");
+    expect(pageTag).toContain("inset-x-0");
+    expect(pageTag).toContain("top-0");
+    expect(pageTag).toContain("bottom-[var(--pos-mobile-nav-height)]");
+    expect(pageTag).not.toContain("h-full");
+    expect(pageTag).not.toContain("100dvh");
+    expect(scrollerTag).toContain("h-0");
+    expect(scrollerTag).toContain("flex-1");
+    expect(scrollerTag).toContain("overflow-y-auto");
+    expect(scrollerTag).toContain("touch-pan-y");
+    expect(allocateTag).toContain("touch-pan-y");
   });
 
   test("groups POS simple-view tables under their Service Area", () => {
