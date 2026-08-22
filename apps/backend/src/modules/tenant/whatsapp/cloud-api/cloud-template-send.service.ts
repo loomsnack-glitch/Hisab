@@ -37,6 +37,7 @@ export const enqueueCloudTemplateSend = async (
     storeId: string;
     accountId: string;
     customerId: string;
+    saleId?: string | null;
     bindingId: string;
     idempotencyKey: string;
     campaignKey?: string | null;
@@ -85,6 +86,7 @@ export const enqueueCloudTemplateSend = async (
       storeId: input.storeId,
       accountId: input.accountId,
       customerId: input.customerId,
+      saleId: input.saleId,
       customerPhone: customer.phone,
       customerName: customer.name,
       intent: input.intent,
@@ -98,3 +100,16 @@ export const enqueueCloudTemplateSend = async (
     return { status: "error", message: error instanceof Error ? error.message : "Cloud WhatsApp template could not be queued", data: null, code: STATUS_CODES.CONFLICT };
   }
 };
+
+export const enqueueCloudTemplateSendForDevice = async (
+  organizationId: string,
+  storeId: string,
+  input: Parameters<typeof enqueueCloudTemplateSend>[2],
+  injected: Partial<CloudTemplateSendDependencies> = {},
+): Promise<ServiceResponse<CloudTemplateOutboxRecord | null>> =>
+  enqueueCloudTemplateSend("device-session", organizationId, input, {
+    ...injected,
+    organizationAccess: async requestedOrganizationId =>
+      requestedOrganizationId === organizationId
+      && Boolean(await organizationRepository.getStoreById(organizationId, storeId)),
+  });

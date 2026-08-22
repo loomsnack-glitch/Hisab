@@ -352,3 +352,28 @@ export const getCloudTemplateBindingSnapshot = async (
     }),
   };
 };
+
+export const getCloudTemplateBindingSnapshotForStore = async (
+  organizationId: string,
+  storeId: string,
+  whatsappBusinessAccountId: string,
+  kind: WhatsAppMessageTemplateKind,
+  localTemplateId?: string,
+): Promise<CloudTemplateBindingSnapshot | null> => {
+  const [row] = await pg`
+    SELECT id
+    FROM whatsapp_cloud_template_bindings
+    WHERE organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND whatsapp_business_account_id = ${whatsappBusinessAccountId}
+      AND kind = ${kind}
+      AND is_active = TRUE
+      AND (${localTemplateId ?? null}::uuid IS NULL OR local_template_id = ${localTemplateId ?? null})
+    ORDER BY
+      CASE WHEN ${localTemplateId ?? null}::uuid IS NOT NULL AND local_template_id = ${localTemplateId ?? null} THEN 0 ELSE 1 END,
+      is_default DESC,
+      updated_at DESC
+    LIMIT 1
+  `;
+  return row ? getCloudTemplateBindingSnapshot(organizationId, String(row.id)) : null;
+};

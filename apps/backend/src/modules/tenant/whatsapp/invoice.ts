@@ -5,6 +5,8 @@ import {
   type SaleDetailDTO,
   type ServiceResponse,
   type WhatsAppInvoiceQueueResponseDTO,
+  type WhatsAppMessageTemplateDTO,
+  type StoreMessageLink,
   type WhatsAppWorkerOutboundJobDTO,
   type WhatsAppWorkerInvoiceResultJSON,
   type WhatsAppWorkerMessageStatusJSON,
@@ -13,14 +15,99 @@ import * as storage from "@/services/storage";
 import * as billingRepository from "@/modules/tenant/billing/billing.repository";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as repository from "./whatsapp.repository";
-import { formatInvoiceText } from "./invoice-text";
+import { formatInvoiceText, getInvoiceTemplateValues } from "./invoice-text";
 import { renderSalePdf } from "./invoice-pdf";
 import * as messageTemplate from "./message-template";
+import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
+import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
+import {
+  enqueueCloudTemplateSend,
+  enqueueCloudTemplateSendForDevice,
+} from "./cloud-api/cloud-template-send.service";
+import { buildInvoiceCloudComponents } from "./invoice-cloud-components";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
 const invoiceObjectKey = (organizationId: string, storeId: string, accountId: string, saleId: string) =>
   `whatsapp-invoices/${organizationId}/${storeId}/${accountId}/${saleId}.pdf`;
+
+const cloudMediaUrlTtlSeconds = (): number => {
+  const configured = Number(process.env.WHATSAPP_CLOUD_MEDIA_URL_TTL_SECONDS ?? 86_400);
+  return Number.isInteger(configured) && configured >= 300 && configured <= 604_800
+    ? configured
+    : 86_400;
+};
+
+
+const queueCloudInvoiceForStore = async (
+  userId: string | null,
+  organizationId: string,
+  storeId: string,
+  sale: SaleDetailDTO,
+  store: { name: string; address: string | null; whatsappLinks: StoreMessageLink[] },
+  organization: { name: string; tagline: string | null },
+  accountId: string,
+  customMessage: string | undefined,
+  selectedTemplate: WhatsAppMessageTemplateDTO,
+): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  if (customMessage?.trim()) {
+    return { status: "error", message: "Cloud WhatsApp bills must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  const scope = await getCloudAccountScope(organizationId, accountId);
+  if (!scope?.businessAccountId) {
+    return { status: "error", message: "Cloud WhatsApp account is not ready for template sends", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  const binding = await getCloudTemplateBindingSnapshotForStore(
+    organizationId,
+    storeId,
+    scope.businessAccountId,
+    "bill",
+    selectedTemplate.id,
+  );
+  if (!binding) {
+    return { status: "error", message: "No approved Cloud bill template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  const bucket = privateBucket();
+  if (!bucket) {
+    return { status: "error", message: "Private media storage is not configured for WhatsApp invoices", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+  }
+  const attachmentStorageKey = invoiceObjectKey(organizationId, storeId, accountId, sale.id);
+  try {
+    const pdf = await renderSalePdf(sale, {
+      organizationName: organization.name,
+      organizationTagline: organization.tagline,
+      storeName: store.name,
+      storeAddress: store.address,
+    });
+    if (pdf.byteLength > MAX_INVOICE_BYTES) {
+      return { status: "error", message: "Generated invoice PDF is too large to send", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+    }
+    await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
+    const documentLink = await storage.generateSignedUrl(bucket, attachmentStorageKey, cloudMediaUrlTtlSeconds());
+    const componentParameters = buildInvoiceCloudComponents(
+      binding.asset.components,
+      selectedTemplate.body,
+      getInvoiceTemplateValues(sale, { organizationName: organization.name, storeName: store.name, links: store.whatsappLinks }),
+      documentLink,
+    );
+    const enqueue = userId
+      ? enqueueCloudTemplateSend(userId, organizationId, {
+          storeId, accountId, customerId: sale.customerId!, saleId: sale.id,
+          bindingId: binding.binding.id, idempotencyKey: `invoice:${sale.id}`, intent: "bill", componentParameters,
+        })
+      : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
+          storeId, accountId, customerId: sale.customerId!, saleId: sale.id,
+          bindingId: binding.binding.id, idempotencyKey: `invoice:${sale.id}`, intent: "bill", componentParameters,
+        });
+    const queued = await enqueue;
+    if (queued.status === "error" || !queued.data) return queued as ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
+    return response(sale.id, queued.data, false);
+  } catch (error) {
+    try { await storage.deleteObject(bucket, attachmentStorageKey); } catch { /* preserve the queue failure */ }
+    console.error("[whatsapp] Cloud invoice preparation failed", error instanceof Error ? error.message : "unknown");
+    return { status: "error", message: error instanceof Error ? error.message : "Cloud invoice could not be queued", data: null, code: STATUS_CODES.CONFLICT };
+  }
+};
 
 const loadSaleDetail = async (
   organizationId: string,
@@ -48,7 +135,7 @@ const loadSaleDetail = async (
 
 const response = (
   saleId: string,
-  request: repository.InvoiceOutboxRecord,
+  request: { messageId: string; outboxId: string; messageStatus: string; outboxStatus: string },
   alreadyQueued: boolean,
 ): ServiceResponse<WhatsAppInvoiceQueueResponseDTO> => ({
   status: "success",
@@ -59,8 +146,8 @@ const response = (
     saleId,
     messageId: request.messageId,
     outboxId: request.outboxId,
-    messageStatus: request.messageStatus,
-    outboxStatus: request.outboxStatus,
+    messageStatus: request.messageStatus as repository.InvoiceOutboxRecord["messageStatus"],
+    outboxStatus: request.outboxStatus as repository.InvoiceOutboxRecord["outboxStatus"],
     alreadyQueued,
   },
   code: alreadyQueued ? STATUS_CODES.SUCCESS : STATUS_CODES.CREATED,
@@ -72,6 +159,7 @@ export const queueInvoiceForStore = async (
   saleId: string,
   customMessage?: string,
   templateId?: string,
+  userId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   const store = await organizationRepository.getStoreById(
     organizationId,
@@ -126,15 +214,6 @@ export const queueInvoiceForStore = async (
       code: STATUS_CODES.CONFLICT,
     };
   }
-  if (account.provider === "cloud_api") {
-    return {
-      status: "error",
-      message: "Cloud WhatsApp invoices require an approved Cloud template route",
-      data: null,
-      code: STATUS_CODES.CONFLICT,
-    };
-  }
-
   const existing = await repository.getInvoiceOutbox(
     organizationId,
     storeId,
@@ -163,15 +242,6 @@ export const queueInvoiceForStore = async (
   }
 
   const bucket = privateBucket();
-  if (!bucket) {
-    return {
-      status: "error",
-      message: "Private media storage is not configured for WhatsApp invoices",
-      data: null,
-      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-    };
-  }
-
   const attachmentStorageKey = invoiceObjectKey(organizationId, storeId, account.id, sale.id);
 
   try {
@@ -184,6 +254,35 @@ export const queueInvoiceForStore = async (
         message: "The selected bill template is unavailable",
         data: null,
         code: STATUS_CODES.NOT_FOUND,
+      };
+    }
+    if (account.provider === "cloud_api") {
+      if (!selectedTemplate || !selectedTemplate.isActive) {
+        return {
+          status: "error",
+          message: "No active bill template is available for this Store",
+          data: null,
+          code: STATUS_CODES.CONFLICT,
+        };
+      }
+      return queueCloudInvoiceForStore(
+        userId ?? null,
+        organizationId,
+        storeId,
+        sale,
+        { name: store.name, address: store.address ?? null, whatsappLinks: store.whatsappLinks },
+        { name: organization.name, tagline: organization.tagline ?? null },
+        account.id,
+        customMessage,
+        selectedTemplate!,
+      );
+    }
+    if (!bucket) {
+      return {
+        status: "error",
+        message: "Private media storage is not configured for WhatsApp invoices",
+        data: null,
+        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
       };
     }
     const pdf = await renderSalePdf(sale, {
@@ -281,7 +380,7 @@ export const queueInvoice = async (
       code: STATUS_CODES.NOT_FOUND,
     };
   }
-  return queueInvoiceForStore(organizationId, storeId, saleId, customMessage, templateId);
+  return queueInvoiceForStore(organizationId, storeId, saleId, customMessage, templateId, userId);
 };
 
 const getExistingInvoice = async (

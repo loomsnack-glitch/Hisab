@@ -17,6 +17,7 @@ export type CloudTemplateOutboxRequest = {
   customerId: string;
   customerPhone: string;
   customerName: string;
+  saleId?: string | null;
   intent: WhatsAppMessageTemplateKind;
   snapshot: CloudTemplateSendSnapshot;
   messageId: string;
@@ -175,10 +176,10 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
   }
   const [outbox] = await tx`
     INSERT INTO whatsapp_outbox (
-      organization_id, store_id, whatsapp_account_id, message_id, kind,
+      organization_id, store_id, whatsapp_account_id, message_id, sale_id, kind,
       status, cloud_template_binding_id, cloud_template_snapshot, cloud_quota_reservation_id
     ) VALUES (
-      ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${message.id}, 'template', 'pending',
+      ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${message.id}, ${params.saleId ?? null}, 'template', 'pending',
       ${params.snapshot.bindingId}, ${JSON.stringify(params.snapshot)}::jsonb, ${quota.id}
     )
     RETURNING id, status

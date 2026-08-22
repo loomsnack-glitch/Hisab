@@ -456,7 +456,8 @@ export const getInvoiceOutbox = async (
           AND o.store_id = ${storeId}
           AND o.whatsapp_account_id = ${whatsappAccountId}
           AND o.sale_id = ${saleId}
-          AND o.kind = 'invoice'
+          AND o.kind IN ('invoice', 'template')
+          AND m.idempotency_key LIKE 'invoice:%'
         LIMIT 1
     `;
     if (!row) return null;
@@ -1609,7 +1610,13 @@ export const retryInvoiceOutbox = async (
               AND store_id = ${storeId}
               AND whatsapp_account_id = ${accountId}
               AND sale_id = ${saleId}
-              AND kind = 'invoice'
+              AND kind IN ('invoice', 'template')
+              AND EXISTS (
+                  SELECT 1
+                  FROM whatsapp_messages invoice_message
+                  WHERE invoice_message.id = whatsapp_outbox.message_id
+                    AND invoice_message.idempotency_key LIKE 'invoice:%'
+              )
               AND status IN ('retryable', 'dead_letter')
             RETURNING id, message_id, status
         `;
@@ -1626,7 +1633,8 @@ export const retryInvoiceOutbox = async (
                   AND o.store_id = ${storeId}
                   AND o.whatsapp_account_id = ${accountId}
                   AND o.sale_id = ${saleId}
-                  AND o.kind = 'invoice'
+                  AND o.kind IN ('invoice', 'template')
+                  AND m.idempotency_key LIKE 'invoice:%'
                 LIMIT 1
             `;
             return existing

@@ -850,8 +850,8 @@ current branch, work proceeds in this order:
    cooldown/duplicate admission, campaign stop, and reconciliation controls
    are implemented. Apply policy in the target environment and run concurrent
    send, failure-release, and controlled provider checks.
-8. **Only then implement Phase 6.** **In progress: Sub-loop 7A complete; 7B
-   next.** Migrate bill documents, due reminders, promotions/media, inbound
+8. **Only then implement Phase 6.** **In progress: Sub-loops 7A–7B complete;
+   7C next.** Migrate bill documents, due reminders, promotions/media, inbound
    replies, and delivery statuses behind an explicit Cloud feature flag while
    Baileys remains available for controlled rollback. The current working
    diff has not migrated a feature caller and has not been committed.
@@ -859,14 +859,15 @@ current branch, work proceeds in this order:
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The current code slice is the Loop 7 plan. No Phase 6 caller has been migrated
-yet; the legacy callers remain fail-closed for Cloud accounts until the plan
-below is implemented and verified. Phase 6 remains blocked until the
-provider/runtime and quota external gates are closed.
+The current code slice is the Loop 7 implementation. Bill/document enqueue is
+now migrated for Cloud accounts; due reminders, promotions/media, inbound, and
+status integration remain fail-closed or verification-only until their
+sub-loops are complete. Phase 6 remains blocked until the provider/runtime and
+quota external gates are closed.
 
 ## Loop 7 plan: migrate feature callers to Cloud templates
 
-Status: **planned; not started**.
+Status: **in progress; Sub-loops 7A–7B complete; 7C next**.
 
 ### Objective and invariants
 
@@ -940,11 +941,26 @@ feature caller is migrated in this sub-loop.
 - Keep invoice status/retry endpoints working against the common Cloud outbox
   status model.
 
-Exit criteria: bill enqueue tests cover text-only and document-header
-templates, missing/oversized PDF, private-media failure, duplicate request,
-unapproved binding, consent failure, quota failure, and legacy Baileys
-regression. A controlled provider test confirms one document arrives and its
-status is reconciled.
+Exit criteria: bill enqueue tests cover document-header mapping and explicit
+rejection of text-only/image/video bill assets, missing/oversized PDF,
+private-media failure, duplicate request, unapproved binding, consent failure,
+quota failure, and legacy Baileys regression. A controlled provider test
+confirms one document arrives and its status is reconciled.
+
+Implementation evidence: 7B uses the existing private object storage path and
+generates a bounded HTTPS signed URL for the approved Cloud document header
+(`WHATSAPP_CLOUD_MEDIA_URL_TTL_SECONDS`, default 24 hours, maximum 7 days).
+Cloud bill sends reject custom free-form text and fail closed when the selected
+Store template is not bound to an approved document-header asset. Local bill
+tokens are mapped to the approved Cloud component order; mismatches are
+rejected before enqueue. The Cloud outbox stores `sale_id`, so existing invoice
+status and retry endpoints recognize both legacy invoice rows and Cloud
+template rows without broadening the match to unrelated templates.
+
+Verification: the focused Cloud, invoice-text, and invoice-component suites pass
+(107 tests, 0 failures); changed-file backend type checking reports no errors;
+`git diff --check` passes. A provider document delivery test and production
+storage/HTTPS verification remain external gates.
 
 ### Sub-loop 7C — due-reminder utility send
 
