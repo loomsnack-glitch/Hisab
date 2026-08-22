@@ -3,6 +3,10 @@ import { pg } from "@/config/db";
 import { completeInvoiceOutbox } from "../whatsapp.repository";
 import { releaseCloudQuota, settleCloudQuota } from "./cloud-quota.repository";
 import { cloudReconciliationTimeoutSeconds } from "./cloud-reconciliation-config";
+import {
+  mapCloudOutboxReconciliationSummary,
+  type CloudOutboxReconciliationSummary,
+} from "./cloud-outbox-summary";
 import type { CloudTemplateSendSnapshot } from "./cloud-template-admission";
 
 export type CloudOutboxJob = {
@@ -27,6 +31,26 @@ export type CloudOutboxJob = {
 };
 
 export type CloudOutboxPartition = { count: number; index: number };
+
+export const getCloudOutboxReconciliationSummary = async (
+  organizationId: string,
+): Promise<CloudOutboxReconciliationSummary> => {
+  const [row] = await pg`
+    SELECT
+      COUNT(*) FILTER (WHERE outbox.status = 'reconciling') AS reconciling_count,
+      MIN(outbox.updated_at) FILTER (WHERE outbox.status = 'reconciling') AS oldest_reconciling_at,
+      COUNT(*) FILTER (WHERE outbox.status = 'retryable') AS retryable_count,
+      COUNT(*) FILTER (WHERE outbox.status = 'dead_letter') AS dead_letter_count
+    FROM whatsapp_outbox outbox
+    INNER JOIN whatsapp_accounts account
+      ON account.id = outbox.whatsapp_account_id
+     AND account.organization_id = outbox.organization_id
+    WHERE outbox.organization_id = ${organizationId}
+      AND outbox.kind = 'template'
+      AND account.provider = 'cloud_api'
+  `;
+  return mapCloudOutboxReconciliationSummary(row as Record<string, unknown> | undefined);
+};
 
 const safeLimit = (limit: number): number =>
   Math.min(Math.max(Math.trunc(limit), 1), 100);
@@ -240,6 +264,7 @@ export const markCloudOutboxReconciling = async (
  */
 export const expireStaleCloudOutboxReconciliations = async (
   limit = 100,
+  organizationId?: string,
 ): Promise<number> => {
   const timeoutSeconds = cloudReconciliationTimeoutSeconds();
   return pg.begin(async tx => {
@@ -256,6 +281,7 @@ export const expireStaleCloudOutboxReconciliations = async (
           ON message.id = outbox.message_id
         WHERE outbox.status = 'reconciling'
           AND account.provider = 'cloud_api'
+          AND (${organizationId ?? null}::uuid IS NULL OR outbox.organization_id = ${organizationId ?? null})
           AND outbox.updated_at <= NOW() - make_interval(secs => ${timeoutSeconds})
         ORDER BY outbox.updated_at ASC, outbox.id ASC
         FOR UPDATE OF outbox SKIP LOCKED

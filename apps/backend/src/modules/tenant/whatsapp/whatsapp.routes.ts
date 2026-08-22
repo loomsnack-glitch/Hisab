@@ -188,6 +188,17 @@ userRouter.get("/:organizationId/whatsapp/cloud/safety", async c => {
     }
 });
 
+userRouter.post("/:organizationId/whatsapp/cloud/safety/reconcile", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.reconcileCloudOutboxNow(c.get("authUser").id, organizationId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
 userRouter.patch(
     "/:organizationId/whatsapp/cloud/safety/quota-policy",
     validateSchema("json", WhatsAppCloudQuotaPolicySchema),

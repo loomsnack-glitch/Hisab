@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cloudReconciliationTimeoutSeconds } from "./cloud-reconciliation-config";
+import { mapCloudOutboxReconciliationSummary } from "./cloud-outbox-summary";
 
 const previousTimeout = process.env.WHATSAPP_CLOUD_RECONCILIATION_TIMEOUT_SECONDS;
 
@@ -19,5 +20,43 @@ describe("Cloud outbox reconciliation configuration", () => {
       process.env.WHATSAPP_CLOUD_RECONCILIATION_TIMEOUT_SECONDS = value;
       expect(cloudReconciliationTimeoutSeconds()).toBe(3600);
     }
+  });
+});
+
+describe("Cloud outbox reconciliation summary", () => {
+  test("maps bounded counts and a valid oldest timestamp", () => {
+    expect(mapCloudOutboxReconciliationSummary({
+      reconciling_count: "2",
+      oldest_reconciling_at: "2026-08-23T05:00:00.000Z",
+      retryable_count: "3",
+      dead_letter_count: "4",
+    })).toEqual({
+      reconcilingCount: 2,
+      oldestReconcilingAt: "2026-08-23T05:00:00.000Z",
+      retryableCount: 3,
+      deadLetterCount: 4,
+    });
+  });
+
+  test("does not emit an invalid timestamp when the database value is absent or malformed", () => {
+    expect(mapCloudOutboxReconciliationSummary({ oldest_reconciling_at: "invalid" }).oldestReconcilingAt).toBeNull();
+    expect(mapCloudOutboxReconciliationSummary(undefined)).toEqual({
+      reconcilingCount: 0,
+      oldestReconcilingAt: null,
+      retryableCount: 0,
+      deadLetterCount: 0,
+    });
+  });
+
+  test("clamps malformed counts to safe non-negative integers", () => {
+    expect(mapCloudOutboxReconciliationSummary({
+      reconciling_count: "-2.5",
+      retryable_count: "not-a-number",
+      dead_letter_count: "3.9",
+    })).toMatchObject({
+      reconcilingCount: 0,
+      retryableCount: 0,
+      deadLetterCount: 3,
+    });
   });
 });

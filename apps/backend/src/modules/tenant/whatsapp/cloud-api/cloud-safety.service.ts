@@ -8,6 +8,11 @@ import {
   updateCloudQuotaPolicy,
   type CloudQuotaPolicy,
 } from "./cloud-quota.repository";
+import {
+  expireStaleCloudOutboxReconciliations,
+  getCloudOutboxReconciliationSummary,
+} from "./cloud-outbox.repository";
+import type { CloudOutboxReconciliationSummary } from "./cloud-outbox-summary";
 
 type CloudSafetyData = {
   policy: CloudQuotaPolicy;
@@ -19,6 +24,7 @@ type CloudSafetyData = {
     missingSettlementEvents: number;
     missingReleaseEvents: number;
   };
+  outbox: CloudOutboxReconciliationSummary;
 };
 
 const notFound = (): ServiceResponse<null> => ({
@@ -43,9 +49,37 @@ export const getCloudSafety = async (
       policy: await getCloudQuotaPolicy(organizationId),
       usage: await getCloudQuotaLedgerSummary(organizationId),
       reconciliation: await getCloudQuotaReconciliation(organizationId),
+      outbox: await getCloudOutboxReconciliationSummary(organizationId),
     },
     code: STATUS_CODES.SUCCESS,
   };
+};
+
+export const reconcileCloudOutboxNow = async (
+  userId: string,
+  organizationId: string,
+): Promise<ServiceResponse<{ reconciledCount: number } | null>> => {
+  if (!await access(userId, organizationId)) return notFound();
+  try {
+    const reconciledCount = await expireStaleCloudOutboxReconciliations(100, organizationId);
+    return {
+      status: "success",
+      message: reconciledCount > 0 ? "Cloud outbox reconciliation completed" : "No stale Cloud submissions found",
+      data: { reconciledCount },
+      code: STATUS_CODES.SUCCESS,
+    };
+  } catch (error) {
+    console.error(
+      "[whatsapp] Cloud outbox reconciliation failed",
+      error instanceof Error ? error.message : String(error),
+    );
+    return {
+      status: "error",
+      message: "Cloud outbox reconciliation failed",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
 };
 
 export const saveCloudQuotaPolicy = async (

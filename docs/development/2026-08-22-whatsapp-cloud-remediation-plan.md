@@ -22,10 +22,10 @@ No phase may enable Cloud sending, remove Baileys/QR/port `8100`, or claim a liv
 
 | Phase | Scope | Status | Exit condition |
 | --- | --- | --- | --- |
-| 1 | Shared contracts and state-transition correctness | **Complete in working tree; not committed** | Template DTOs accept Cloud values; late/duplicate failures cannot corrupt terminal delivery state; Cloud health cannot cast invalid legacy enums. |
+| 1 | Shared contracts and state-transition correctness | **Committed in `20fe26e`** | Template DTOs accept Cloud values; late/duplicate failures cannot corrupt terminal delivery state; Cloud health cannot cast invalid legacy enums. |
 | 2 | Unknown-submission reconciliation | **In progress** | Stale `reconciling` work has bounded recovery and quota/campaign accounting; metrics and operator-safe actions remain. |
 | 3 | Runtime credentials and deployment configuration | Blocked on infrastructure decision | A real secret-manager adapter and private media configuration are assembled in the default runtime, documented, and covered by assembly tests. |
-| 4 | Data invariants and template mapping | **Complete in working tree; not committed** | WABA/template relationships are database-enforced; bindings persist an explicit mapping and reject stale local templates. |
+| 4 | Data invariants and template mapping | **Committed in `20fe26e`** | WABA/template relationships are database-enforced; bindings persist an explicit mapping and reject stale local templates. |
 | 5 | Admin operator workflow | **In progress** | Cloud template sync/binding is reachable without raw provider identifiers; usage/safety, consent, and provider-health surfaces remain. |
 | 6 | Controlled acceptance and release readiness | Pending | Target-DB checks, live test WABA checklist, baseline typecheck cleanup, documentation update, staged rollout, and rollback evidence are complete. |
 | 7 | Baileys retirement | Intentionally blocked | Only starts after Phase 6 passes; removes QR/Baileys/auth-state/worker/port `8100` through a separate release. |
@@ -75,6 +75,22 @@ No phase may enable Cloud sending, remove Baileys/QR/port `8100`, or claim a liv
 - [x] Delivered/read rows settle quota and campaign state; unresolved rows are dead-lettered and release quota.
 - [x] Sweep runs from the backend runtime every 60 seconds when Cloud outbox sending is enabled.
 - [ ] Add operator metrics and authenticated replay/dead-letter controls.
+
+### Next loop: operator observability and bounded manual recovery
+
+Acceptance criteria:
+
+- The safety response reports Cloud outbox rows currently reconciling, oldest reconciliation age, retryable rows, and dead letters.
+- An authorized organization user can trigger one bounded stale-reconciliation sweep for that organization.
+- The manual action never resends an uncertain submission and is safe to repeat.
+- The Admin safety card displays the summary, warning state, and action result without exposing provider credentials or IDs.
+- Focused backend/Admin/shared-type checks pass, and the slice is committed independently.
+
+Evidence:
+
+- [x] Organization-scoped summary and bounded reconciliation action are implemented; unresolved submissions are never resent.
+- [x] Admin safety card exposes only counts, age, and action status.
+- [x] 133 WhatsApp tests pass; Admin and shared-type checks pass; changed Cloud files have no TypeScript errors.
 
 ## Phase 3 — Runtime credentials and deployment configuration
 

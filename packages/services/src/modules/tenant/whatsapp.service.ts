@@ -164,6 +164,15 @@ export const getWhatsAppCloudSafety = async (organizationId: string): Promise<Wh
     }
 };
 
+export const reconcileWhatsAppCloudOutbox = async (organizationId: string): Promise<ServiceResponse<{ reconciledCount: number } | null>> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/safety/reconcile`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const stopWhatsAppCloudCampaign = async (organizationId: string, campaignKey: string): Promise<ServiceResponse<{ cancelledCount: number } | null>> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/campaigns/${encodeURIComponent(campaignKey)}/stop`);

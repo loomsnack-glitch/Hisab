@@ -131,6 +131,12 @@ export const WhatsAppCloudSafetySchema = z.object({
         missingSettlementEvents: z.number().int().nonnegative(),
         missingReleaseEvents: z.number().int().nonnegative(),
     }),
+    outbox: z.object({
+        reconcilingCount: z.number().int().nonnegative(),
+        oldestReconcilingAt: dtoDateSchema.nullable(),
+        retryableCount: z.number().int().nonnegative(),
+        deadLetterCount: z.number().int().nonnegative(),
+    }),
 });
 
 export const WhatsAppCustomerConsentKindSchema = z.enum(["marketing", "utility"]);
