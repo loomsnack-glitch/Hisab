@@ -1,6 +1,6 @@
 # WhatsApp Cloud API-only migration plan
 
-Status: in progress — implementation loop 1 complete; Cloud API migration not yet production-ready
+Status: in progress — implementation loops 1–6 complete; Loop 7 plan ready; Cloud API migration not yet production-ready
 Date: 2026-08-21
 Owner: Hisab platform
 
@@ -171,8 +171,8 @@ The branch now also contains a Cloud API contract foundation:
 | Phase 3A–3D onboarding contracts | Implemented | State, persistence, result validation, and server-side exchange seams are covered by focused fixtures. |
 | Phase 3 account operations | Code-first implementation complete; external gate open | Graph discovery, sender validation, WABA subscription, opaque credential binding, safe account persistence, resumable provisioning attempts, refresh/revoke endpoints, durable refresh error state, provider-aware Admin UI, Meta Embedded Signup launch, and existing Store assignment paths are wired. Secret-manager assembly, live Meta verification, migration execution, and production-shaped Store/inbound testing remain. |
 | Phase 4 templates/policy | Code-first admission complete; caller migration pending | Phase 4A–4C template, consent, and send-admission seams are implemented. Legacy invoice, due, promotion, and inbox callers are now blocked from sending through Cloud accounts until they migrate to the Cloud template route. |
-| Phase 5 quotas/usage/safety | Not started | Existing queue limits/cooldowns are not the append-only usage ledger, atomic quota reservation, Meta-limit sync, or reconciliation model required here. |
-| Phase 6 feature migration | Blocked | Must wait for the Phase 2–5 exit gates. |
+| Phase 5 quotas/usage/safety | Code-first implementation complete; external gate open | The append-only usage ledger, atomic quota reservation/settlement/release, provider quality/limit snapshots, pacing, cooldown, campaign duplicate prevention, stop controls, and reconciliation reporting are implemented. Target-environment policy and controlled concurrency/provider checks remain. |
+| Phase 6 feature migration | Planned; blocked by external gates | The caller migration is planned as Loop 7 below. It must wait for the Phase 2–5 provider, credential, storage, template, consent, and quota exit gates. |
 | Phase 7 Baileys retirement | Not started | Baileys code, auth state, UI, deployment, and port `8100` remain intentionally. |
 
 The post-merge baseline reconciliation is complete for the confirmed source
@@ -789,9 +789,19 @@ Last updated: 2026-08-22
   --check` passes; the full backend TypeScript check still reports only the
   repository's pre-existing unrelated test-contract errors; database status
   remains fully applied with no pending migrations.
-- Loop 7 — **next**: migrate bill, due-reminder, promotion/media, and inbound
-  feature callers behind the Cloud feature flag; keep legacy paths fail-closed
-  until the controlled provider acceptance run passes.
+- Loop 7 — **in progress**: migrate bill, due-reminder, promotion/media, and
+  inbound feature callers behind the Cloud feature flag; keep legacy paths
+  fail-closed until the controlled provider acceptance run passes.
+- Loop 7A — **complete; caller migration not started**: deepen the shared Cloud
+  template enqueue seam with connected-account, Store, and WABA binding scope
+  checks, and add typed component construction for text, currency, date/time,
+  document, image, and URL-button parameters. Required placeholders, media
+  formats, HTTPS links, and button indexes are rejected before enqueue.
+- Loop 7A verification: Cloud-focused suite passes 102 tests; changed Cloud
+  files have no TypeScript errors; `git diff --check` passes. The full backend
+  TypeScript check still reports only the repository's existing unrelated
+  test-contract errors. No bill, due-reminder, promotion, or inbound caller
+  was migrated in this sub-loop.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 
@@ -840,15 +850,205 @@ current branch, work proceeds in this order:
    cooldown/duplicate admission, campaign stop, and reconciliation controls
    are implemented. Apply policy in the target environment and run concurrent
    send, failure-release, and controlled provider checks.
-8. **Only then implement Phase 6.** Migrate bill documents, due reminders,
-   promotions/media, inbound replies, and delivery statuses behind an explicit
-   Cloud feature flag while Baileys remains available for controlled rollback.
+8. **Only then implement Phase 6.** **In progress: Sub-loop 7A complete; 7B
+   next.** Migrate bill documents, due reminders, promotions/media, inbound
+   replies, and delivery statuses behind an explicit Cloud feature flag while
+   Baileys remains available for controlled rollback. The current working
+   diff has not migrated a feature caller and has not been committed.
 9. **Only after the Phase 6 checklist passes, execute Phase 7.** Freeze and
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The current code slice is Loop 7 feature-caller migration. Phase 6 remains
-blocked until the provider/runtime and quota external gates are closed.
+The current code slice is the Loop 7 plan. No Phase 6 caller has been migrated
+yet; the legacy callers remain fail-closed for Cloud accounts until the plan
+below is implemented and verified. Phase 6 remains blocked until the
+provider/runtime and quota external gates are closed.
+
+## Loop 7 plan: migrate feature callers to Cloud templates
+
+Status: **planned; not started**.
+
+### Objective and invariants
+
+Route the existing bill, due-reminder, promotion/media, inbound, and delivery
+status use cases through the Cloud template outbox without changing Sales,
+Payments, Customer Ledger, conversation ownership, or Store assignment
+semantics. A POS/Admin request must only prepare and enqueue durable work; it
+must never wait for a Graph API call.
+
+The implementation must preserve these invariants:
+
+1. Cloud sends use an approved, active, Store-scoped binding for the same WABA
+   as the assigned Cloud account.
+2. Every send passes the existing consent, suppression, category, cooldown,
+   recipient-window, account-pacing, quota, and campaign-duplicate controls.
+3. Every queued message has a caller-owned idempotency key and an immutable
+   template/component snapshot. Retrying a request or dispatcher lease cannot
+   create a second logical send.
+4. A bill document or promotion image is never put in a template body or
+   exposed through an unsafe private-storage URL. The selected media strategy
+   must be explicit and bounded.
+5. Baileys behavior remains unchanged for legacy accounts during the rollout;
+   Cloud accounts never fall back to Baileys. The feature flag fails closed.
+6. Inbound messages and provider statuses continue to use the existing
+   Store-scoped conversation/message model and remain idempotent.
+
+### Sub-loop 7A — shared Cloud feature-caller seam
+
+Research and design before editing:
+
+- Map each caller to its current account lookup, customer consent lookup,
+  message/template selection, idempotency key, conversation, outbox, status,
+  and UI response contract.
+- Define one shared Cloud caller helper that resolves the Store/account,
+  selects the default or explicitly requested Cloud binding, validates the
+  binding/account/WABA relationship, and calls
+  `enqueueCloudTemplateSend`.
+- Define a typed component-parameter builder for text, currency, date/time,
+  document, image, and URL-button parameters. It must validate the provider
+  component shape and reject missing/extra parameters before enqueue.
+- Decide the exact Cloud feature flag and rollout scope. It must be explicit,
+  observable, and fail closed; enabling the outbox worker alone must not
+  silently switch feature callers.
+- Define response/status mapping so existing POS/Admin screens can show
+  queued, sending, sent, delivered, read, failed, retryable, reconciling, and
+  stopped states without provider-specific identifiers.
+
+Exit criteria: one shared seam has unit tests for account/binding mismatch,
+inactive/unapproved templates, missing parameters, consent/suppression,
+idempotent replay, quota rejection, and legacy-account preservation. No
+feature caller is migrated in this sub-loop.
+
+### Sub-loop 7B — bill/document send
+
+- Reuse the existing sale validation, customer phone validation, invoice PDF
+  rendering, deterministic object key, size limit, and private upload path.
+- Replace the Cloud rejection in `invoice.ts` with a Cloud template enqueue
+  path using the Store's approved bill binding and typed sale/customer/store
+  variables.
+- Use a Cloud document header component only when the approved template
+  declares one. The document parameter must use a provider-accepted media ID
+  or a short-lived, authenticated-by-storage public link according to the
+  deployment storage decision; never pass a private MinIO key as a link.
+- Preserve `invoice:<saleId>` idempotency and make media cleanup safe when
+  admission/enqueue fails. A duplicate request must return the existing
+  queued record and must not render/upload/send a second invoice.
+- Keep custom free-form bill text out of the business-initiated Cloud path.
+  If the product keeps custom text, it must be represented by approved
+  template variables or be explicitly limited to a valid 24-hour customer
+  service window.
+- Keep invoice status/retry endpoints working against the common Cloud outbox
+  status model.
+
+Exit criteria: bill enqueue tests cover text-only and document-header
+templates, missing/oversized PDF, private-media failure, duplicate request,
+unapproved binding, consent failure, quota failure, and legacy Baileys
+regression. A controlled provider test confirms one document arrives and its
+status is reconciled.
+
+### Sub-loop 7C — due-reminder utility send
+
+- Replace the Cloud rejection in `queueDueReminderForStore` with the shared
+  Cloud utility-template route.
+- Build deterministic variables for customer name, total due, bill count,
+  store name, and the selected bill/invoice reference. If the approved
+  template supports a dynamic bill list, define its component contract; do
+  not insert an arbitrary rendered multi-line body into an unapproved
+  template.
+- Preserve per-bill idempotency/status behavior and prevent duplicate
+  reminders on retry. For a customer-wide reminder, use a stable fingerprint
+  of the Store, customer, due-bill set, and reminder policy window rather than
+  a random key.
+- Enforce utility consent, suppression, cooldown/duplicate policy, and due
+  amount revalidation inside the transaction boundary before reservation.
+- Keep the existing preview/status UI contract and return a useful conflict
+  when no approved due-reminder binding exists.
+
+Exit criteria: tests cover one bill, multiple bills, changed due amount,
+duplicate/replay, no due bills, consent/suppression, missing binding, quota
+rejection, and delivery status. A controlled provider test confirms the
+utility template and rendered values.
+
+### Sub-loop 7D — promotion campaign and media send
+
+- Replace the legacy per-recipient promotion inserts with Cloud template
+  admission and the Cloud campaign key/quota reservation path.
+- Keep recipient selection bounded, consent-aware, suppression-aware, and
+  deterministic. Record campaign and recipient rows against the common
+  message/outbox IDs so the current dashboard and pagination remain useful.
+- Require an approved marketing template and marketing opt-in for every
+  recipient. Do not use a free-form promotion body for Cloud business-
+  initiated sends.
+- Support optional image media only through an approved image header
+  component. Choose one shared media path: upload once to Meta and reuse its
+  media ID where valid, or generate a safe provider-accepted link per the
+  storage policy. Enforce MIME/type/size limits and delete private temporary
+  objects only after durable enqueue or a safe cleanup decision.
+- Preserve Redis Store cooldown as a fast UX guard, but make the database
+  campaign key, quota reservation, recipient uniqueness, and stop-campaign
+  operation authoritative under races.
+- Ensure partial failures return a resumable campaign state; they must not
+  silently report all recipients as queued.
+
+Exit criteria: tests cover text-only, image-header, mixed recipient eligibility,
+campaign duplicate, concurrent campaign creation, cooldown race, quota race,
+stop-before-dispatch, partial enqueue, media failure, and provider status
+aggregation. A controlled provider test confirms approved marketing delivery
+and a stopped campaign sends no new recipients.
+
+### Sub-loop 7E — inbound and delivery/status integration
+
+- Verify Cloud webhook normalization routes inbound messages to the existing
+  Store-scoped conversation using `(account, Store, external chat)` and does
+  not reuse another Store's conversation.
+- Verify inbound text/media, opt-out keywords, and provider status events are
+  idempotent and do not create orphan messages or cross-Store foreign-key
+  violations.
+- Reconcile accepted, delivered, read, failed, and uncertain statuses into
+  the existing message/outbox/campaign/invoice/due-reminder views. Preserve
+  provider failure details in bounded operator-safe fields.
+- Define the timeout/dead-letter policy for `reconciling` rows and make the
+  retry/replay operation safe before enabling feature callers.
+- Confirm the UI polls/refetches status without forcing a page reload and
+  avoids showing provider IDs as user-facing Store/account labels.
+
+Exit criteria: webhook fixtures plus database assertions cover duplicate
+events, status-before-message, unknown account, wrong Store, opt-out, inbound
+reply, uncertain send reconciliation, dead lettering, and replay.
+
+### Sub-loop 7F — controlled rollout and closeout review
+
+- Add an organization/account feature flag with a documented default-off
+  rollout and an immediate rollback switch that stops new Cloud feature
+  admissions without deleting queued work.
+- Run focused Cloud tests, affected legacy invoice/due/promotion tests,
+  database integrity checks, `dbmate status`, and `git diff --check`.
+- Run two-axis review: repository standards/architecture and Phase 6 spec
+  correctness. Review SQL transaction boundaries, idempotency, authorization,
+  PII/secret handling, media retention, logs, and error messages.
+- Execute a controlled test WABA run for one bill, one due reminder, one
+  promotion, one inbound reply, duplicate webhook, failed delivery, uncertain
+  submission, quota rejection, campaign stop, and page reload/reconnect.
+- Update this plan with evidence and only then mark Phase 6 complete. Do not
+  start Phase 7 or remove Baileys/QR/port 8100 in this loop.
+
+### Loop 7 stop conditions and decisions required before coding
+
+Coding pauses if any of these are unresolved because they change the public
+contract or create delivery risk:
+
+- deployment-selected credential vault and private/public media strategy;
+- exact approved Meta template names, languages, categories, and component
+  bindings for bill, due reminder, and promotion;
+- consent/opt-in evidence and opt-out behavior for utility and marketing;
+- whether bill PDFs are delivered as a template document header or as a
+  separately approved media flow;
+- Cloud feature-flag owner and rollback behavior;
+- reconciliation timeout/dead-letter policy for uncertain provider sends.
+
+The first coding pass after approval is Sub-loop 7A only. Each subsequent
+sub-loop is implemented, tested, reviewed, and committed separately; no
+caller migration is bundled with Baileys retirement.
 
 ## Target architecture
 

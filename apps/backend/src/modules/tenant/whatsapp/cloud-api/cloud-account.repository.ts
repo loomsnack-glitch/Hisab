@@ -36,6 +36,11 @@ export type CloudAccountHealthStatus =
   | "suspended"
   | "failed";
 
+export type CloudAccountScope = {
+  businessAccountId: string | null;
+  status: WhatsAppCloudAccountSnapshot["status"];
+};
+
 const providerId = (value: string, label: string): string => {
   const normalized = value.trim();
   if (!/^\d{1,64}$/.test(normalized)) {
@@ -117,6 +122,29 @@ export const getCloudAccountSnapshot = async (
     [organizationId, accountId],
   );
   return row ? mapCloudAccountSnapshot(row as CloudAccountSnapshotRow) : null;
+};
+
+/** Internal send-time scope; the business-account UUID is not public metadata. */
+export const getCloudAccountScope = async (
+  organizationId: string,
+  accountId: string,
+): Promise<CloudAccountScope | null> => {
+  const [row] = await pg`
+    SELECT account.whatsapp_business_account_id AS business_account_id,
+           account.cloud_status AS status
+    FROM whatsapp_accounts account
+    LEFT JOIN whatsapp_business_accounts business
+      ON business.id = account.whatsapp_business_account_id
+     AND business.organization_id = account.organization_id
+    WHERE account.organization_id = ${organizationId}
+      AND account.id = ${accountId}
+      AND account.provider = 'cloud_api'
+  `;
+  if (!row) return null;
+  return {
+    businessAccountId: row.business_account_id ? String(row.business_account_id) : null,
+    status: (row.status as CloudAccountScope["status"]) ?? null,
+  };
 };
 
 export const listCloudAccountSnapshots = async (

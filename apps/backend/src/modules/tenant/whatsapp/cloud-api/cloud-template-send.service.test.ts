@@ -7,6 +7,12 @@ const storeId = "33333333-3333-4333-8333-333333333333";
 const accountId = "44444444-4444-4444-8444-444444444444";
 const customerId = "55555555-5555-4555-8555-555555555555";
 const bindingId = "66666666-6666-4666-8666-666666666666";
+const account = {
+  id: accountId,
+  organizationId,
+  businessAccountId: "99999999-9999-4999-8999-999999999999",
+  status: "connected" as const,
+};
 
 const binding = {
   binding: {
@@ -52,6 +58,7 @@ describe("Cloud template send service", () => {
       intent: "promotion",
     }, {
       organizationAccess: async () => true,
+      getAccount: async () => account,
       getBinding: async () => binding,
       getCustomer: async () => ({ id: customerId, name: "Asha", phone: "+919876543210", marketingOptedIn: true, marketingOptedOut: false, utilityOptedIn: true, whatsappSuppressed: false }),
       enqueue: async input => { queuedSnapshotVersion = input.snapshot.version; queuedIdempotencyKey = input.idempotencyKey; return { messageId: "message-1", outboxId: "outbox-1", messageStatus: "queued", outboxStatus: "pending" }; },
@@ -65,6 +72,7 @@ describe("Cloud template send service", () => {
     let enqueueCalled = false;
     const response = await enqueueCloudTemplateSend(userId, organizationId, { storeId, accountId, customerId, bindingId, idempotencyKey: "promotion:campaign-1:recipient-2", intent: "promotion" }, {
       organizationAccess: async () => true,
+      getAccount: async () => account,
       getBinding: async () => ({ ...binding, asset: { ...binding.asset, status: "rejected" as const } }),
       getCustomer: async () => ({ id: customerId, name: "Asha", phone: "+919876543210", marketingOptedIn: true, marketingOptedOut: false, utilityOptedIn: true, whatsappSuppressed: false }),
       enqueue: async () => { enqueueCalled = true; return { messageId: "message-1", outboxId: "outbox-1", messageStatus: "queued", outboxStatus: "pending" }; },
@@ -72,5 +80,45 @@ describe("Cloud template send service", () => {
     expect(response.status).toBe("error");
     expect(response.message).toContain("not approved");
     expect(enqueueCalled).toBe(false);
+  });
+
+  test("blocks a binding from another Store before enqueue", async () => {
+    let enqueueCalled = false;
+    const response = await enqueueCloudTemplateSend(userId, organizationId, {
+      storeId,
+      accountId,
+      customerId,
+      bindingId,
+      idempotencyKey: "promotion:campaign-1:recipient-3",
+      intent: "promotion",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => account,
+      getBinding: async () => ({ ...binding, binding: { ...binding.binding, storeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } }),
+      getCustomer: async () => ({ id: customerId, name: "Asha", phone: "+919876543210", marketingOptedIn: true, marketingOptedOut: false, utilityOptedIn: true, whatsappSuppressed: false }),
+      enqueue: async () => { enqueueCalled = true; return { messageId: "message-1", outboxId: "outbox-1", messageStatus: "queued", outboxStatus: "pending" }; },
+    });
+    expect(response).toMatchObject({ status: "error", code: 409 });
+    expect(response.message).toContain("outside the Store scope");
+    expect(enqueueCalled).toBe(false);
+  });
+
+  test("blocks a binding from another Cloud account", async () => {
+    const response = await enqueueCloudTemplateSend(userId, organizationId, {
+      storeId,
+      accountId,
+      customerId,
+      bindingId,
+      idempotencyKey: "promotion:campaign-1:recipient-4",
+      intent: "promotion",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => ({ ...account, businessAccountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }),
+      getBinding: async () => binding,
+      getCustomer: async () => ({ id: customerId, name: "Asha", phone: "+919876543210", marketingOptedIn: true, marketingOptedOut: false, utilityOptedIn: true, whatsappSuppressed: false }),
+      enqueue: async () => ({ messageId: "message-1", outboxId: "outbox-1", messageStatus: "queued", outboxStatus: "pending" }),
+    });
+    expect(response).toMatchObject({ status: "error", code: 409 });
+    expect(response.message).toContain("selected account");
   });
 });
