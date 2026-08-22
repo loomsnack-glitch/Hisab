@@ -1573,37 +1573,60 @@ export const updateCloudMessageStatus = async (
         `;
         if (!row) return "stale";
 
-        if (existing.outbox_id && existing.outbox_status === "reconciling") {
-            if (status === "failed") {
-                await tx`
-                    UPDATE whatsapp_outbox
-                    SET status = 'dead_letter',
-                        lease_owner = NULL,
-                        lease_expires_at = NULL,
-                        last_error_code = LEFT(${failureCode ?? "cloud_delivery_failed"}, 100),
-                        last_error_message = LEFT(${failureMessage ?? "Cloud provider reported delivery failure"}, 1_000),
-                        updated_at = NOW()
-                    WHERE id = ${existing.outbox_id}
-                      AND status = 'reconciling'
-                `;
-                if (existing.cloud_quota_reservation_id) {
-                    await releaseCloudQuota(tx, String(existing.cloud_quota_reservation_id));
-                }
-            } else {
-                await tx`
-                    UPDATE whatsapp_outbox
-                    SET status = 'sent',
-                        lease_owner = NULL,
-                        lease_expires_at = NULL,
-                        last_error_code = NULL,
-                        last_error_message = NULL,
-                        updated_at = NOW()
-                    WHERE id = ${existing.outbox_id}
-                      AND status = 'reconciling'
-                `;
-                if (existing.cloud_quota_reservation_id) {
-                    await settleCloudQuota(tx, String(existing.cloud_quota_reservation_id));
-                }
+        if (existing.outbox_id && status === "failed") {
+            await tx`
+                UPDATE whatsapp_outbox
+                SET status = 'dead_letter',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    last_error_code = LEFT(${failureCode ?? "cloud_delivery_failed"}, 100),
+                    last_error_message = LEFT(${failureMessage ?? "Cloud provider reported delivery failure"}, 1_000),
+                    updated_at = NOW()
+                WHERE id = ${existing.outbox_id}
+                  AND status NOT IN ('dead_letter', 'cancelled')
+            `;
+            if (existing.cloud_quota_reservation_id) {
+                await releaseCloudQuota(tx, String(existing.cloud_quota_reservation_id));
+            }
+            await tx`
+                UPDATE whatsapp_campaign_recipients
+                SET status = 'dead_letter',
+                    failure_code = LEFT(${failureCode ?? "cloud_delivery_failed"}, 100),
+                    failure_message = LEFT(${failureMessage ?? "Cloud provider reported delivery failure"}, 1_000),
+                    updated_at = NOW()
+                WHERE outbox_id = ${existing.outbox_id}
+            `;
+            await tx`
+                UPDATE whatsapp_campaigns campaign
+                SET failed_recipients = (
+                        SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
+                        WHERE recipient.campaign_id = campaign.id AND recipient.status IN ('dead_letter', 'cancelled')
+                    ),
+                    status = CASE
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM whatsapp_campaign_recipients recipient
+                            WHERE recipient.campaign_id = campaign.id
+                              AND recipient.status IN ('pending', 'processing', 'retryable')
+                        ) THEN 'failed'::whatsapp_campaign_status_enum
+                        ELSE campaign.status
+                    END,
+                    updated_at = NOW()
+                WHERE id = (SELECT campaign_id FROM whatsapp_campaign_recipients WHERE outbox_id = ${existing.outbox_id} LIMIT 1)
+            `;
+        } else if (existing.outbox_id && existing.outbox_status === "reconciling") {
+            await tx`
+                UPDATE whatsapp_outbox
+                SET status = 'sent',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    last_error_code = NULL,
+                    last_error_message = NULL,
+                    updated_at = NOW()
+                WHERE id = ${existing.outbox_id}
+                  AND status = 'reconciling'
+            `;
+            if (existing.cloud_quota_reservation_id) {
+                await settleCloudQuota(tx, String(existing.cloud_quota_reservation_id));
             }
         }
         return "updated";

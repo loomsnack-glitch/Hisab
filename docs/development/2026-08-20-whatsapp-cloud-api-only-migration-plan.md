@@ -850,11 +850,11 @@ current branch, work proceeds in this order:
    cooldown/duplicate admission, campaign stop, and reconciliation controls
    are implemented. Apply policy in the target environment and run concurrent
    send, failure-release, and controlled provider checks.
-8. **Only then implement Phase 6.** **In progress: Sub-loops 7A–7D complete;
-   7E next.** Migrate bill documents, due reminders, promotions/media, inbound
+8. **Only then implement Phase 6.** **In progress: Sub-loop 7E complete;
+   7F next.** Migrate bill documents, due reminders, promotions/media, inbound
    replies, and delivery statuses behind an explicit Cloud feature flag while
    Baileys remains available for controlled rollback. The current working
-   diff has not migrated all feature callers and has not been committed.
+   diff has migrated the planned feature callers; rollout evidence remains open.
 9. **Only after the Phase 6 checklist passes, execute Phase 7.** Freeze and
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
@@ -867,7 +867,7 @@ provider/runtime and quota external gates are closed.
 
 ## Loop 7 plan: migrate feature callers to Cloud templates
 
-Status: **in progress; Sub-loops 7A–7D complete; 7E next**.
+Status: **in progress; Sub-loop 7E complete; 7F next**.
 
 ### Objective and invariants
 
@@ -1062,6 +1062,20 @@ gates.
 Exit criteria: webhook fixtures plus database assertions cover duplicate
 events, status-before-message, unknown account, wrong Store, opt-out, inbound
 reply, uncertain send reconciliation, dead lettering, and replay.
+
+Implementation evidence: 7E keeps Cloud inbound routing Store-scoped through
+the existing `(account, Store, external chat)` conversation writer, preserves
+durable webhook claim/replay/dead-letter behavior, and records exact inbound
+STOP/UNSUBSCRIBE/CANCEL/END/QUIT commands as auditable customer suppression
+events. Cloud provider failure callbacks now finalize any non-terminal outbox,
+release only still-reserved quota, and update linked promotion recipients and
+campaign aggregates; late failures after an accepted send no longer remain
+marked sent in the outbox. Legacy Baileys inbound behavior remains unchanged.
+
+Verification: Cloud webhook, normalization, processor, and opt-out tests pass;
+changed-file backend type checking reports no errors; `git diff --check` passes.
+Target-database foreign-key/integrity assertions and controlled webhook/status
+replay tests remain external gates.
 
 ### Sub-loop 7F — controlled rollout and closeout review
 

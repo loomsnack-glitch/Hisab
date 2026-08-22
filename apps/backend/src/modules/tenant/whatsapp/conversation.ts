@@ -17,6 +17,8 @@ import {
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as storage from "@/services/storage";
 import * as repository from "./whatsapp.repository";
+import * as consentRepository from "./cloud-api/customer-consent.repository";
+import { isWhatsAppOptOutKeyword } from "./opt-out";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
@@ -279,6 +281,15 @@ const processMessageEvent = async (
 
     try {
         const customer = await repository.getCustomerByPhone(account.organizationId, data.contactPhoneNumber);
+        const customerId = customer?.id ?? null;
+        if (account.provider === "cloud_api" && customerId && data.direction === "inbound" && data.messageType === "text" && isWhatsAppOptOutKeyword(data.body ?? "")) {
+            await consentRepository.setCustomerSuppression(account.organizationId, customerId, null, {
+                suppressed: true,
+                source: "customer_reply",
+                reason: "Customer sent a WhatsApp opt-out keyword",
+                evidenceReference: `provider:${data.providerMessageId}`,
+            });
+        }
         const result = await repository.createMessageEvent({
             organizationId: account.organizationId,
             storeId,

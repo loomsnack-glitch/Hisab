@@ -89,7 +89,7 @@ export const recordCustomerConsent = async (
 export const setCustomerSuppression = async (
   organizationId: string,
   customerId: string,
-  createdBy: string,
+  createdBy: string | null,
   input: WhatsAppSetCustomerSuppressionJSON,
 ): Promise<WhatsAppCustomerConsentEventDTO | null> => pg.begin(async tx => {
   const reason = bounded(input.reason, 1000);
