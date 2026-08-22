@@ -15,6 +15,7 @@ describe("Cloud due-reminder template components", () => {
         total_due: "₹400.00",
         link_pay: "https://pay.example/customer",
       },
+      { "body:1": "customer_name", "body:2": "bill_count", "body:3": "total_due", "button:0:1": "link_pay" },
     );
 
     expect(components).toEqual([
@@ -27,6 +28,7 @@ describe("Cloud due-reminder template components", () => {
     expect(() => buildDueReminderCloudComponents(
       [{ type: "header", format: "IMAGE" }],
       "Reminder",
+      {},
       {},
     )).toThrow("cannot use media headers");
   });

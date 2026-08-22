@@ -30,6 +30,8 @@ import type {
     WhatsAppCustomerConsentEventDTO,
     WhatsAppRecordCustomerConsentJSON,
     WhatsAppSetCustomerSuppressionJSON,
+    WhatsAppCloudQuotaPolicy,
+    WhatsAppCloudSafety,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -41,6 +43,7 @@ type WhatsAppCloudOnboardingResponse = ServiceResponse<WhatsAppCloudOnboardingSt
 type WhatsAppCloudTemplatesResponse = ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>;
 type WhatsAppCloudBindingsResponse = ServiceResponse<{ bindings: WhatsAppCloudTemplateBindingDTO[] } | null>;
 type WhatsAppCloudBindingResponse = ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>;
+type WhatsAppCloudSafetyResponse = ServiceResponse<WhatsAppCloudSafety | null>;
 type WhatsAppCustomerConsentResponse = ServiceResponse<WhatsAppCustomerConsentEventDTO | null>;
 type WhatsAppCustomerConsentHistoryResponse = ServiceResponse<{ events: WhatsAppCustomerConsentEventDTO[] } | null>;
 type WhatsAppInvoiceResponse = ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
@@ -146,6 +149,24 @@ export const getWhatsAppCloudTemplateBindings = async (
 ): Promise<WhatsAppCloudBindingsResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/whatsapp/cloud/template-bindings`, { params: whatsappBusinessAccountId ? { whatsappBusinessAccountId } : undefined });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppCloudSafety = async (organizationId: string): Promise<WhatsAppCloudSafetyResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/safety`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const stopWhatsAppCloudCampaign = async (organizationId: string, campaignKey: string): Promise<ServiceResponse<{ cancelledCount: number } | null>> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/campaigns/${encodeURIComponent(campaignKey)}/stop`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

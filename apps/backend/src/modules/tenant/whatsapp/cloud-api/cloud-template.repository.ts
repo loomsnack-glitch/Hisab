@@ -7,6 +7,11 @@ import {
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
+import {
+  buildDefaultCloudTemplateVariableMapping,
+  validateCloudTemplateVariableMapping,
+  type CloudTemplateVariableMapping,
+} from "./cloud-template-variable-mapping";
 
 export type CloudTemplateAssetInput = {
   organizationId: string;
@@ -150,6 +155,8 @@ const mapBinding = (row: Record<string, unknown>): WhatsAppCloudTemplateBindingD
     localTemplateId: mapped.localTemplateId,
     cloudTemplateId: mapped.cloudTemplateId,
     whatsappBusinessAccountId: mapped.whatsappBusinessAccountId,
+    localTemplateBody: (mapped.localTemplateBody as string | null | undefined) ?? null,
+    variableMapping: (mapped.variableMapping as CloudTemplateVariableMapping | undefined) ?? {},
     kind: mapped.kind,
     isDefault: Boolean(mapped.isDefault),
     isActive: Boolean(mapped.isActive),
@@ -224,12 +231,13 @@ export const createCloudTemplateBinding = async (input: {
   localTemplateId: string;
   cloudTemplateId: string;
   whatsappBusinessAccountId: string;
+  variableMapping?: CloudTemplateVariableMapping;
   kind: WhatsAppMessageTemplateKind;
   isDefault: boolean;
   createdBy: string;
 }): Promise<WhatsAppCloudTemplateBindingDTO> => pg.begin(async tx => {
   const [localTemplate] = await tx`
-    SELECT id, kind
+    SELECT id, kind, body
     FROM whatsapp_message_templates
     WHERE id = ${input.localTemplateId}
       AND organization_id = ${input.organizationId}
@@ -239,13 +247,22 @@ export const createCloudTemplateBinding = async (input: {
   `;
   if (!localTemplate) throw new Error("Local WhatsApp template is unavailable");
   const [asset] = await tx`
-    SELECT id
+    SELECT id, status, category, components
     FROM whatsapp_cloud_templates
     WHERE id = ${input.cloudTemplateId}
       AND organization_id = ${input.organizationId}
       AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
   `;
   if (!asset) throw new Error("Cloud WhatsApp template is unavailable");
+  const expectedCategory = input.kind === "promotion" ? "marketing" : "utility";
+  if (asset.status !== "approved" || asset.category !== expectedCategory) {
+    throw new Error("Cloud WhatsApp template must be approved and match the message category");
+  }
+  const variableMapping = validateCloudTemplateVariableMapping(
+    input.variableMapping ?? buildDefaultCloudTemplateVariableMapping(String(localTemplate.body), asset.components),
+    String(localTemplate.body),
+    asset.components,
+  );
   const [assignment] = await tx`
     SELECT 1
     FROM whatsapp_account_stores assignments
@@ -271,14 +288,18 @@ export const createCloudTemplateBinding = async (input: {
   const [row] = await tx`
     INSERT INTO whatsapp_cloud_template_bindings (
       organization_id, store_id, local_template_id, cloud_template_id,
-      whatsapp_business_account_id, kind, is_default, created_by, updated_by
+      whatsapp_business_account_id, local_template_body, variable_mapping,
+      kind, is_default, created_by, updated_by
     ) VALUES (
       ${input.organizationId}, ${input.storeId}, ${input.localTemplateId}, ${asset.id},
-      ${input.whatsappBusinessAccountId}, ${input.kind}, ${input.isDefault}, ${input.createdBy}, ${input.createdBy}
+      ${input.whatsappBusinessAccountId}, ${localTemplate.body}, ${JSON.stringify(variableMapping)}::jsonb,
+      ${input.kind}, ${input.isDefault}, ${input.createdBy}, ${input.createdBy}
     )
     ON CONFLICT (organization_id, store_id, local_template_id, cloud_template_id)
     DO UPDATE SET
       whatsapp_business_account_id = EXCLUDED.whatsapp_business_account_id,
+      local_template_body = EXCLUDED.local_template_body,
+      variable_mapping = EXCLUDED.variable_mapping,
       kind = EXCLUDED.kind,
       is_default = EXCLUDED.is_default,
       is_active = TRUE,

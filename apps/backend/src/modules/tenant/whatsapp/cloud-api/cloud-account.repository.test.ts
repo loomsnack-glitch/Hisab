@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  legacyAccountStatusForCloudHealth,
   mapCloudAccountSnapshot,
   persistProvisionedCloudAccount,
 } from "./cloud-account.repository";
@@ -7,10 +8,19 @@ import {
 const uuid = "11111111-1111-4111-8111-111111111111";
 
 describe("Cloud account persistence boundary", () => {
+  test("projects Cloud health into the compatible legacy account status", () => {
+    expect(legacyAccountStatusForCloudHealth("connected")).toBe("connected");
+    expect(legacyAccountStatusForCloudHealth("disconnected")).toBe("disconnected");
+    expect(legacyAccountStatusForCloudHealth("needs_action")).toBe("failed");
+    expect(legacyAccountStatusForCloudHealth("suspended")).toBe("failed");
+    expect(legacyAccountStatusForCloudHealth("failed")).toBe("failed");
+  });
+
   test("maps safe account metadata without exposing credential material", () => {
     const snapshot = mapCloudAccountSnapshot({
       id: uuid,
       organization_id: uuid,
+      whatsapp_business_account_id: uuid,
       waba_id: "1234567890",
       phone_number_id: "9876543210",
       verified_name: "Ganatri",
@@ -29,6 +39,7 @@ describe("Cloud account persistence boundary", () => {
     expect(snapshot).toEqual({
       id: uuid,
       organizationId: uuid,
+      whatsappBusinessAccountId: uuid,
       wabaId: "1234567890",
       phoneNumberId: "9876543210",
       verifiedName: "Ganatri",

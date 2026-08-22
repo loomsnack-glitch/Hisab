@@ -870,7 +870,7 @@ const queueDueReminderForStore = async (
         const values = getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks);
         let componentParameters;
         try {
-            componentParameters = buildDueReminderCloudComponents(binding.asset.components, defaultTemplate.body, values);
+            componentParameters = buildDueReminderCloudComponents(binding.asset.components, defaultTemplate.body, values, binding.binding.variableMapping);
         } catch (error) {
             return { status: "error", message: error instanceof Error ? error.message : "Cloud due-reminder template variables are invalid", data: null, code: STATUS_CODES.BAD_REQUEST };
         }

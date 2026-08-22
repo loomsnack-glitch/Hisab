@@ -5,6 +5,7 @@ import { replayPendingMessageEvents } from "./modules/tenant/whatsapp/whatsapp.s
 import {
   dispatchCloudOutbox,
   replayPendingCloudWebhookEvents,
+  reconcileStaleCloudOutbox,
 } from "./modules/tenant/whatsapp/cloud-api/cloud-runtime";
 
 const port = Number(process.env.PORT) || 8001;
@@ -61,3 +62,17 @@ const stopCloudOutboxDispatch = () => clearInterval(cloudOutboxDispatch);
 process.once("SIGINT", stopCloudOutboxDispatch);
 process.once("SIGTERM", stopCloudOutboxDispatch);
 process.once("SIGQUIT", stopCloudOutboxDispatch);
+
+const cloudOutboxReconciliation = setInterval(() => {
+  void reconcileStaleCloudOutbox().catch((error) => {
+    console.warn(
+      "[whatsapp-cloud] stale outbox reconciliation failed",
+      error instanceof Error ? error.message : "unknown error",
+    );
+  });
+}, 60_000);
+cloudOutboxReconciliation.unref();
+const stopCloudOutboxReconciliation = () => clearInterval(cloudOutboxReconciliation);
+process.once("SIGINT", stopCloudOutboxReconciliation);
+process.once("SIGTERM", stopCloudOutboxReconciliation);
+process.once("SIGQUIT", stopCloudOutboxReconciliation);

@@ -228,6 +228,7 @@ const createCloudPromotion = async (
       defaultTemplate.body,
       { customer_name: candidates[0]!.name, store_name: store.name, ...Object.fromEntries(store.whatsappLinks.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url])) },
       imageLink,
+      binding.binding.variableMapping,
     );
     await pg.begin(async tx => {
       const [campaign] = await tx`
@@ -258,6 +259,7 @@ const createCloudPromotion = async (
           defaultTemplate.body,
           { customer_name: candidate.name, store_name: store.name, ...Object.fromEntries(store.whatsappLinks.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url])) },
           imageLink,
+          binding.binding.variableMapping,
         );
         const queued = await enqueueCloudTemplateSend(userId, organizationId, {
           storeId,

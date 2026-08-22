@@ -83,6 +83,7 @@ const queueCloudInvoiceForStore = async (
       selectedTemplate.body,
       getInvoiceTemplateValues(sale, { organizationName: organization.name, storeName: store.name, links: store.whatsappLinks }),
       documentLink,
+      binding.binding.variableMapping,
     );
     const enqueue = userId
       ? enqueueCloudTemplateSend(userId, organizationId, {

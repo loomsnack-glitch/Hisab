@@ -1,24 +1,21 @@
 import type { CloudTemplateParameter } from "./cloud-api/cloud-outbound";
 import type { CloudTemplateComponentInput } from "./cloud-api/cloud-template-components";
-
-const templateTokenPattern = /{{\s*([^{}]+?)\s*}}/g;
-
-const templateTokensInOrder = (template: string): string[] =>
-  [...template.matchAll(templateTokenPattern)].map(match => match[1]?.trim().toLowerCase() ?? "").filter(Boolean);
+import { validateCloudTemplateVariableMapping, type CloudTemplateVariableMapping } from "./cloud-api/cloud-template-variable-mapping";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const componentTextParameters = (
   text: unknown,
-  tokenNames: string[],
+  componentKey: string,
+  mapping: CloudTemplateVariableMapping,
   values: Record<string, string>,
-  cursor: { value: number },
 ): CloudTemplateParameter[] => {
   if (typeof text !== "string") return [];
   const placeholders = [...text.matchAll(/\{\{\d+\}\}/g)];
-  return placeholders.map(() => {
-    const token = tokenNames[cursor.value++];
+  return placeholders.map((placeholder, index) => {
+    const providerIndex = placeholder[0]?.match(/\d+/)?.[0] ?? String(index + 1);
+    const token = mapping[`${componentKey}:${providerIndex}`];
     const value = token ? values[token] : undefined;
     if (!value?.trim()) throw new Error("Cloud bill template variables do not match the local template");
     return { type: "text", text: value };
@@ -30,9 +27,9 @@ export const buildInvoiceCloudComponents = (
   localTemplateBody: string,
   values: Record<string, string>,
   documentLink: string,
+  variableMapping: CloudTemplateVariableMapping,
 ): CloudTemplateComponentInput[] => {
-  const tokenNames = templateTokensInOrder(localTemplateBody);
-  const cursor = { value: 0 };
+  const mapping = validateCloudTemplateVariableMapping(variableMapping, localTemplateBody, definitions);
   const inputs: CloudTemplateComponentInput[] = [];
   let hasDocumentHeader = false;
 
@@ -49,7 +46,7 @@ export const buildInvoiceCloudComponents = (
       throw new Error("Cloud bill template must use a document header");
     }
     if (type === "header" || type === "body") {
-      const parameters = componentTextParameters(definition.text, tokenNames, values, cursor);
+      const parameters = componentTextParameters(definition.text, type, mapping, values);
       if (parameters.length > 0) inputs.push({ type, parameters });
       continue;
     }
@@ -57,12 +54,11 @@ export const buildInvoiceCloudComponents = (
       const buttons = Array.isArray(definition.buttons) ? definition.buttons : [];
       buttons.forEach((button, index) => {
         if (!isRecord(button)) return;
-        const parameters = componentTextParameters(button.url, tokenNames, values, cursor);
+        const parameters = componentTextParameters(button.url, `button:${index}`, mapping, values);
         if (parameters.length > 0) inputs.push({ type: "button", subType: "url", index: String(index), parameters });
       });
     }
   }
   if (!hasDocumentHeader) throw new Error("Cloud bill template must include a document header");
-  if (cursor.value !== tokenNames.length) throw new Error("Cloud bill template variables do not match the local template");
   return inputs;
 };

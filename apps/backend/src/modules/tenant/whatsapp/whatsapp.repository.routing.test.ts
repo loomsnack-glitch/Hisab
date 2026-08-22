@@ -7,7 +7,11 @@ const query = mock(async () => [{ store_id: defaultStoreId }]);
 
 mock.module("@/config/db", () => ({ pg: query }));
 
-const { claimPendingProviderEvents, resolveMessageEventStore } = await import("./whatsapp.repository?routing-test");
+const {
+    claimPendingProviderEvents,
+    resolveMessageEventStore,
+    shouldApplyCloudFailureSideEffects,
+} = await import("./whatsapp.repository?routing-test");
 
 const baseParams = {
     whatsappAccountId: "82eb216c-be36-4575-8007-bd04b743c4b2",
@@ -50,5 +54,14 @@ describe("WhatsApp message event Store routing", () => {
             providerEventId: baseParams.externalChatId,
             payload: { ...baseParams, direction: "inbound", source: "realtime" },
         }]);
+    });
+
+    test("does not apply Cloud failure side effects after terminal delivery or cancellation", () => {
+        expect(shouldApplyCloudFailureSideEffects("delivered", "sent")).toBe(false);
+        expect(shouldApplyCloudFailureSideEffects("read", "sent")).toBe(false);
+        expect(shouldApplyCloudFailureSideEffects("failed", "retryable")).toBe(false);
+        expect(shouldApplyCloudFailureSideEffects("sent", "sent")).toBe(true);
+        expect(shouldApplyCloudFailureSideEffects("sending", "processing")).toBe(true);
+        expect(shouldApplyCloudFailureSideEffects("sending", "cancelled")).toBe(false);
     });
 });

@@ -11,6 +11,7 @@ import {
     WhatsAppConversationListResponseSchema,
     WhatsAppCloudAccountSnapshotSchema,
     WhatsAppCloudProvisioningAttemptSchema,
+    WhatsAppMessageDTOSchema,
 } from "./whatsapp.schema";
 
 const uuid = "11111111-1111-4111-8111-111111111111";
@@ -42,6 +43,7 @@ describe("WhatsApp schemas", () => {
         expect(WhatsAppCloudAccountSnapshotSchema.safeParse({
             id: uuid,
             organizationId: uuid,
+            whatsappBusinessAccountId: uuid,
             wabaId: "waba-1",
             phoneNumberId: "phone-1",
             verifiedName: "Ganatri",
@@ -83,6 +85,29 @@ describe("WhatsApp schemas", () => {
             createdAt: new Date(),
             updatedAt: new Date(),
         }).success).toBe(false);
+    });
+
+    test("accepts Cloud template messages in the shared DTO contract", () => {
+        expect(WhatsAppMessageDTOSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            storeId: uuid,
+            whatsappAccountId: uuid,
+            conversationId: uuid,
+            direction: "outbound",
+            messageType: "template",
+            body: null,
+            caption: "Your bill is ready",
+            attachmentFileName: null,
+            attachmentMimeType: null,
+            status: "sent",
+            providerMessageId: "wamid.template-1",
+            failureCode: null,
+            createdAt: new Date(),
+            sentAt: new Date(),
+            deliveredAt: null,
+            readAt: null,
+        }).success).toBe(true);
     });
 
     test("rejects non-international customer phone numbers for WhatsApp sends", () => {

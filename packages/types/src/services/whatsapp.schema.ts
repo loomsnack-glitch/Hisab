@@ -11,9 +11,10 @@ export const WhatsAppAccountStatusSchema = z.enum([
     "revoked",
 ]);
 export const WhatsAppConversationMessageDirectionSchema = z.enum(["inbound", "outbound"]);
-export const WhatsAppMessageTypeSchema = z.enum(["text", "document", "image"]);
+export const WhatsAppLegacyMessageTypeSchema = z.enum(["text", "document", "image"]);
+export const WhatsAppMessageTypeSchema = z.enum(["text", "document", "image", "template"]);
 export const WhatsAppMessageStatusSchema = z.enum(["queued", "sending", "sent", "delivered", "read", "failed"]);
-export const WhatsAppOutboxKindSchema = z.enum(["invoice", "text", "document", "promotion"]);
+export const WhatsAppOutboxKindSchema = z.enum(["invoice", "text", "document", "promotion", "template"]);
 export const WhatsAppOutboxStatusSchema = z.enum([
     "pending",
     "processing",
@@ -92,6 +93,8 @@ export const WhatsAppCloudTemplateBindingSchema = z.object({
     localTemplateId: z.uuid("Invalid local template id"),
     cloudTemplateId: z.uuid("Invalid Cloud template id"),
     whatsappBusinessAccountId: z.uuid("Invalid WABA id"),
+    localTemplateBody: z.string().trim().min(1).max(4096).nullable(),
+    variableMapping: z.record(z.string(), z.string()).default({}),
     kind: WhatsAppMessageTemplateKindSchema,
     isDefault: z.boolean(),
     isActive: z.boolean(),
@@ -103,8 +106,31 @@ export const WhatsAppCreateCloudTemplateBindingSchema = z.object({
     localTemplateId: z.uuid("Invalid local template id"),
     cloudTemplateId: z.uuid("Invalid Cloud template id"),
     whatsappBusinessAccountId: z.uuid("Invalid WABA id"),
+    variableMapping: z.record(z.string(), z.string()).optional(),
     kind: WhatsAppMessageTemplateKindSchema,
     isDefault: z.boolean().optional(),
+});
+
+export const WhatsAppCloudQuotaPolicySchema = z.object({
+    monthlyMessageLimit: z.number().int().nonnegative().nullable(),
+    monthlyBudgetMinor: z.number().int().nonnegative().nullable(),
+    currencyCode: z.string().regex(/^[A-Z]{3}$/),
+    accountSendIntervalSeconds: z.number().int().min(0).max(86_400),
+    recipientWindowSeconds: z.number().int().min(60).max(2_592_000),
+    recipientWindowLimit: z.number().int().positive().nullable(),
+    customerCooldownSeconds: z.number().int().min(0).max(2_592_000),
+}).strict();
+
+export const WhatsAppCloudSafetySchema = z.object({
+    policy: WhatsAppCloudQuotaPolicySchema,
+    usage: z.object({ units: z.number().int().nonnegative(), costMinor: z.number().int().nonnegative() }),
+    reconciliation: z.object({
+        reservationCount: z.number().int().nonnegative(),
+        ledgerEventCount: z.number().int().nonnegative(),
+        missingReservedEvents: z.number().int().nonnegative(),
+        missingSettlementEvents: z.number().int().nonnegative(),
+        missingReleaseEvents: z.number().int().nonnegative(),
+    }),
 });
 
 export const WhatsAppCustomerConsentKindSchema = z.enum(["marketing", "utility"]);
@@ -141,6 +167,7 @@ export const WhatsAppSetCustomerSuppressionSchema = z.object({
 export const WhatsAppCloudAccountSnapshotSchema = z.object({
     id: z.uuid("Invalid WhatsApp account id"),
     organizationId: z.uuid("Invalid organization id"),
+    whatsappBusinessAccountId: z.uuid("Invalid internal Cloud business account id").nullable(),
     wabaId: z.string().trim().min(1).max(64).nullable(),
     phoneNumberId: z.string().trim().min(1).max(64).nullable(),
     verifiedName: z.string().trim().min(1).max(255).nullable(),
@@ -448,7 +475,7 @@ export const WhatsAppWorkerOutboundJobSchema = z.object({
     outboxId: z.uuid("Invalid outbox id"),
     messageId: z.uuid("Invalid message id"),
     phoneNumber: phoneSchema,
-    messageType: WhatsAppMessageTypeSchema,
+    messageType: WhatsAppLegacyMessageTypeSchema,
     body: z.string().nullable(),
     caption: z.string().max(4096).nullable(),
     attachmentFileName: z.string().trim().min(1).max(255).nullable(),
@@ -463,7 +490,7 @@ const WhatsAppWorkerMessageFields = {
     externalChatId: z.string().trim().min(1).max(255),
     contactPhoneNumber: phoneSchema,
     displayName: z.string().trim().min(1).max(255),
-    messageType: WhatsAppMessageTypeSchema,
+    messageType: WhatsAppLegacyMessageTypeSchema,
     body: z.string().max(4096).nullable(),
     caption: z.string().max(4096).nullable(),
     attachmentFileName: z.string().trim().min(1).max(255).nullable(),

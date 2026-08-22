@@ -22,6 +22,7 @@ import {
     WhatsAppCreateCloudTemplateBindingSchema,
     WhatsAppRecordCustomerConsentSchema,
     WhatsAppSetCustomerSuppressionSchema,
+    WhatsAppCloudQuotaPolicySchema,
 } from "@repo/types";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { handleServiceResponse } from "@/helpers/service.helper";
@@ -48,15 +49,6 @@ import * as consentService from "./cloud-api/customer-consent.service";
 import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
 
 const uuidSchema = z.uuid("Invalid id");
-const cloudQuotaPolicySchema = z.object({
-    monthlyMessageLimit: z.number().int().nonnegative().nullable(),
-    monthlyBudgetMinor: z.number().int().nonnegative().nullable(),
-    currencyCode: z.string().regex(/^[A-Z]{3}$/),
-    accountSendIntervalSeconds: z.number().int().min(0).max(86_400),
-    recipientWindowSeconds: z.number().int().min(60).max(2_592_000),
-    recipientWindowLimit: z.number().int().positive().nullable(),
-    customerCooldownSeconds: z.number().int().min(0).max(2_592_000),
-}).strict();
 const userRouter = new Hono<{ Variables: AppVariables }>();
 
 const invalidUuid = (value: string, message: string) => {
@@ -198,7 +190,7 @@ userRouter.get("/:organizationId/whatsapp/cloud/safety", async c => {
 
 userRouter.patch(
     "/:organizationId/whatsapp/cloud/safety/quota-policy",
-    validateSchema("json", cloudQuotaPolicySchema),
+    validateSchema("json", WhatsAppCloudQuotaPolicySchema),
     async c => {
         try {
             const organizationId = c.req.param("organizationId");

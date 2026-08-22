@@ -127,6 +127,15 @@ const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
 type WhatsAppMessageStatus = "queued" | "sending" | "sent" | "delivered" | "read" | "failed";
 type WhatsAppOutboxStatus = "pending" | "processing" | "reconciling" | "sent" | "retryable" | "dead_letter" | "cancelled";
 
+export const shouldApplyCloudFailureSideEffects = (
+    messageStatus: string,
+    outboxStatus: WhatsAppOutboxStatus | null,
+): boolean => {
+    if (!outboxStatus) return false;
+    return !["delivered", "read", "failed"].includes(messageStatus)
+        && !["dead_letter", "cancelled"].includes(outboxStatus);
+};
+
 export type WorkerPartition = {
     count: number;
     index: number;
@@ -1515,7 +1524,8 @@ export const updateCloudMessageStatus = async (
 ): Promise<"updated" | "stale" | "missing"> => {
     return pg.begin(async tx => {
         const [existing] = await tx`
-            SELECT message.id, outbox.id AS outbox_id, outbox.status AS outbox_status,
+            SELECT message.id, message.status AS message_status,
+                   outbox.id AS outbox_id, outbox.status AS outbox_status,
                    outbox.cloud_quota_reservation_id
             FROM whatsapp_messages message
             LEFT JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
@@ -1573,8 +1583,10 @@ export const updateCloudMessageStatus = async (
         `;
         if (!row) return "stale";
 
-        if (existing.outbox_id && status === "failed") {
-            await tx`
+        const shouldApplyFailure = status === "failed"
+            && shouldApplyCloudFailureSideEffects(String(existing.message_status), existing.outbox_status as WhatsAppOutboxStatus | null);
+        if (existing.outbox_id && shouldApplyFailure) {
+            const [deadLettered] = await tx`
                 UPDATE whatsapp_outbox
                 SET status = 'dead_letter',
                     lease_owner = NULL,
@@ -1583,9 +1595,10 @@ export const updateCloudMessageStatus = async (
                     last_error_message = LEFT(${failureMessage ?? "Cloud provider reported delivery failure"}, 1_000),
                     updated_at = NOW()
                 WHERE id = ${existing.outbox_id}
-                  AND status NOT IN ('dead_letter', 'cancelled')
+                  AND status IN ('pending', 'processing', 'retryable', 'reconciling')
+                RETURNING id
             `;
-            if (existing.cloud_quota_reservation_id) {
+            if (deadLettered && existing.cloud_quota_reservation_id) {
                 await releaseCloudQuota(tx, String(existing.cloud_quota_reservation_id));
             }
             await tx`
@@ -1613,7 +1626,7 @@ export const updateCloudMessageStatus = async (
                     updated_at = NOW()
                 WHERE id = (SELECT campaign_id FROM whatsapp_campaign_recipients WHERE outbox_id = ${existing.outbox_id} LIMIT 1)
             `;
-        } else if (existing.outbox_id && existing.outbox_status === "reconciling") {
+        } else if (status !== "failed" && existing.outbox_id && existing.outbox_status === "reconciling") {
             await tx`
                 UPDATE whatsapp_outbox
                 SET status = 'sent',

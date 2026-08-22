@@ -6,6 +6,7 @@ import { processCloudWebhookEvent } from "./cloud-webhook.processor";
 import {
   claimNextCloudOutbox,
   completeCloudOutbox,
+  expireStaleCloudOutboxReconciliations,
   markCloudOutboxReconciling,
 } from "./cloud-outbox.repository";
 import { dispatchCloudOutboxJob } from "./cloud-dispatcher";
@@ -67,3 +68,8 @@ export const processCloudWebhookClaims = async (
 };
 
 export const dispatchCloudOutbox = dispatchNextCloudOutbox;
+
+export const reconcileStaleCloudOutbox = async (): Promise<number> => {
+  if (!cloudOutboxEnabled()) return 0;
+  return expireStaleCloudOutboxReconciliations();
+};

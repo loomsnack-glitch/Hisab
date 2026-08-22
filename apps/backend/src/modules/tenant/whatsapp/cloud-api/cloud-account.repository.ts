@@ -36,6 +36,23 @@ export type CloudAccountHealthStatus =
   | "suspended"
   | "failed";
 
+export type LegacyWhatsAppAccountStatus = "connected" | "disconnected" | "failed";
+
+export const legacyAccountStatusForCloudHealth = (
+  status: CloudAccountHealthStatus,
+): LegacyWhatsAppAccountStatus => {
+  switch (status) {
+    case "connected":
+      return "connected";
+    case "disconnected":
+      return "disconnected";
+    case "needs_action":
+    case "suspended":
+    case "failed":
+      return "failed";
+  }
+};
+
 export type CloudAccountScope = {
   businessAccountId: string | null;
   status: WhatsAppCloudAccountSnapshot["status"];
@@ -76,6 +93,7 @@ export const mapCloudAccountSnapshot = (
   return WhatsAppCloudAccountSnapshotSchema.parse({
     id: mapped.id,
     organizationId: mapped.organizationId,
+    whatsappBusinessAccountId: mapped.whatsappBusinessAccountId ?? null,
     wabaId: mapped.wabaId ?? null,
     phoneNumberId: mapped.phoneNumberId ?? null,
     verifiedName: mapped.verifiedName ?? null,
@@ -92,6 +110,7 @@ export const mapCloudAccountSnapshot = (
 const cloudAccountSnapshotColumns = (accountAlias: string): string => `
     ${accountAlias}.id,
     ${accountAlias}.organization_id,
+    ${accountAlias}.whatsapp_business_account_id,
     business.waba_id,
     ${accountAlias}.cloud_phone_number_id AS phone_number_id,
     ${accountAlias}.cloud_verified_name AS verified_name,
@@ -420,14 +439,13 @@ export const recordCloudAccountHealth = async (input: {
   status?: CloudAccountHealthStatus;
   errorCode: string;
   errorMessage: string;
-}): Promise<boolean> => pg.begin(async tx => {
-  const [account] = await tx`
+}): Promise<boolean> => {
+  const legacyStatus = input.status ? legacyAccountStatusForCloudHealth(input.status) : null;
+  return pg.begin(async tx => {
+    const [account] = await tx`
     UPDATE whatsapp_accounts
     SET cloud_status = COALESCE(${input.status ?? null}::whatsapp_cloud_account_status_enum, cloud_status),
-        status = CASE
-          WHEN ${input.status ?? null}::text IN ('disconnected', 'suspended', 'failed') THEN ${input.status ?? null}::whatsapp_account_status_enum
-          ELSE status
-        END,
+        status = COALESCE(${legacyStatus}::whatsapp_account_status_enum, status),
         cloud_last_error_code = LEFT(${input.errorCode}, 100),
         cloud_last_error_message = LEFT(${input.errorMessage}, 1_000),
         updated_at = NOW()
@@ -436,21 +454,19 @@ export const recordCloudAccountHealth = async (input: {
       AND provider = 'cloud_api'
     RETURNING whatsapp_business_account_id
   `;
-  if (!account) return false;
-  await tx`
+    if (!account) return false;
+    await tx`
     UPDATE whatsapp_business_accounts
-    SET status = CASE
-          WHEN ${input.status ?? null}::text IN ('disconnected', 'suspended', 'failed') THEN ${input.status ?? null}::whatsapp_cloud_account_status_enum
-          ELSE status
-        END,
+    SET status = COALESCE(${input.status ?? null}::whatsapp_cloud_account_status_enum, status),
         last_error_code = LEFT(${input.errorCode}, 100),
         last_error_message = LEFT(${input.errorMessage}, 1_000),
         updated_at = NOW()
     WHERE id = ${account.whatsapp_business_account_id}
       AND organization_id = ${input.organizationId}
-  `;
-  return true;
-});
+    `;
+    return true;
+  });
+};
 
 export const revokeCloudAccount = async (input: {
   organizationId: string;

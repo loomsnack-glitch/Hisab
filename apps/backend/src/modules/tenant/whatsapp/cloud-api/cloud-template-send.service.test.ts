@@ -22,6 +22,8 @@ const binding = {
     localTemplateId: "77777777-7777-4777-8777-777777777777",
     cloudTemplateId: "88888888-8888-4888-8888-888888888888",
     whatsappBusinessAccountId: "99999999-9999-4999-8999-999999999999",
+    localTemplateBody: null,
+    variableMapping: {},
     kind: "promotion" as const,
     isDefault: true,
     isActive: true,

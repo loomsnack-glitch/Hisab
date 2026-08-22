@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, BarChart3, CheckCheck, Clock3, Eye, LoaderCircle, Megaphone, RefreshCw, Send, Users } from "lucide-react";
 import type { StoreMessageLink } from "@repo/types";
-import { getWhatsAppPromotionDashboard } from "@repo/services";
+import { getWhatsAppPromotionDashboard, stopWhatsAppCloudCampaign } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { formatDateTime } from "@/lib/format";
 import { whatsappKeys } from "@/lib/query-keys";
+import { toast } from "sonner";
 import PromotionDialog from "@/components/customers/promotion-dialog";
 
-type Props = { organizationId: string; storeId: string; storeName: string; links?: StoreMessageLink[] };
+type Props = { organizationId: string; storeId: string; storeName: string; links?: StoreMessageLink[]; cloudEnabled?: boolean };
 
 const formatRemaining = (seconds: number) => {
   const minutes = Math.max(1, Math.ceil(seconds / 60));
@@ -42,10 +43,11 @@ const Stat = ({ icon: Icon, label, value, tone = "text-foreground" }: { icon: ty
   </div>
 );
 
-const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links = [] }: Props) => {
+const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links = [], cloudEnabled = false }: Props) => {
   const isDevelopment = import.meta.env.DEV;
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
+  const [stoppingCampaignId, setStoppingCampaignId] = useState("");
   useEffect(() => setPage(1), [storeId]);
   const queryKey = whatsappKeys.promotions(organizationId, storeId, 30, page);
   const query = useQuery({
@@ -69,6 +71,16 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
   const pagination = dashboard?.pagination;
   const promotionStatusReady = query.data?.status === "success";
   const hasActiveCampaign = useMemo(() => campaigns.some(campaign => campaign.queuedRecipients > 0 || campaign.sendingRecipients > 0 || campaign.retryingRecipients > 0), [campaigns]);
+  const stopCampaign = async (campaignId: string) => {
+    if (!window.confirm("Stop the remaining messages in this promotion? Already delivered messages will not be changed.")) return;
+    setStoppingCampaignId(campaignId);
+    const response = await stopWhatsAppCloudCampaign(organizationId, campaignId);
+    setStoppingCampaignId("");
+    if (response.status === "success") {
+      toast.success("Promotion stopped");
+      await queryClient.invalidateQueries({ queryKey });
+    } else toast.error(response.message);
+  };
 
   return (
     <div className="space-y-4">
@@ -130,7 +142,10 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
                 <div key={campaign.id} className="rounded-2xl border border-border/60 bg-background/50 p-3 sm:p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 items-start gap-2.5"><div className="mt-0.5 rounded-lg bg-primary/10 p-2 text-primary"><Megaphone className="size-3.5" /></div><div className="min-w-0"><p className="truncate font-medium">{campaign.title}</p><p className="text-xs text-muted-foreground">{formatDateTime(campaign.createdAt)} · {campaign.totalRecipients.toLocaleString()} recipients</p></div></div>
-                    <Badge variant="outline" className={statusClass[campaign.status] ?? ""}>{statusLabel[campaign.status] ?? campaign.status}</Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className={statusClass[campaign.status] ?? ""}>{statusLabel[campaign.status] ?? campaign.status}</Badge>
+                      {cloudEnabled && (campaign.status === "queued" || campaign.status === "sending") ? <button type="button" className="rounded-lg border border-red-300/70 px-2 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30" disabled={stoppingCampaignId === campaign.id} onClick={() => void stopCampaign(campaign.id)}>{stoppingCampaignId === campaign.id ? "Stopping…" : "Stop"}</button> : null}
+                    </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground"><span>Delivered progress</span><span className="font-medium text-foreground">{progress}%</span></div>
                   <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>

@@ -32,6 +32,8 @@ import { whatsappKeys } from "@/lib/query-keys";
 import WhatsAppTemplateManager from "@/components/organizations/whatsapp-template-manager";
 import WhatsAppLinkManager from "@/components/organizations/whatsapp-link-manager";
 import WhatsAppPromotionDashboard from "@/components/organizations/whatsapp-promotion-dashboard";
+import WhatsAppCloudTemplateManager, { type WhatsAppCloudAccountOption } from "@/components/organizations/whatsapp-cloud-template-manager";
+import WhatsAppCloudSafetyCard from "@/components/organizations/whatsapp-cloud-safety-card";
 
 const ACCOUNT_STATUS_POLL_INTERVAL_MS = 2_000;
 const ACCOUNT_STATUS_POLL_WINDOW_MS = 60_000;
@@ -191,6 +193,13 @@ const WhatsAppOrganizationPage = () => {
         ? requestedStoreId!
         : stores[0]?.id ?? "";
     const selectedStore = stores.find(store => store.id === selectedStoreId);
+    const cloudAccountsForStore: WhatsAppCloudAccountOption[] = selectedStore
+        ? accounts.flatMap(account => {
+            if (account.provider !== "cloud_api" || !account.assignedStoreIds.includes(selectedStore.id)) return [];
+            const snapshot = cloudAccounts.find(cloudAccount => cloudAccount.id === account.id);
+            return snapshot ? [{ id: account.id, phoneNumber: account.phoneNumber, snapshot }] : [];
+        })
+        : [];
     const statusQueries = useQueries({
         queries: accounts.map(account => ({
             queryKey: whatsappKeys.organizationAccount(organizationId, account.id),
@@ -486,7 +495,6 @@ const WhatsAppOrganizationPage = () => {
                                     <p className="mt-2 text-sm text-muted-foreground">
                                         Assigned to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"}
                                     </p>
-                                    {isCloudAccount && cloudSnapshot?.wabaId ? <p className="mt-1 text-xs text-muted-foreground">WABA {cloudSnapshot.wabaId}</p> : null}
                                     {qrImageDataUrl ? (
                                         <div className="mt-4 flex flex-col items-start gap-2">
                                             <img src={qrImageDataUrl} alt={`QR code for ${account.phoneNumber}`} className="size-56 rounded-xl border bg-white p-2" />
@@ -552,6 +560,7 @@ const WhatsAppOrganizationPage = () => {
                         </Card>
                     );
                 })}
+                <WhatsAppCloudSafetyCard organizationId={organizationId} />
             </section> : organizationQuery.data?.status === "success" && selectedStore ? (
                 <section className="space-y-4">
                     {activeTab === "templates" ? (
@@ -565,12 +574,13 @@ const WhatsAppOrganizationPage = () => {
                                 <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="bill" links={selectedStore.whatsappLinks} />
                                 <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="due_reminder" links={selectedStore.whatsappLinks} />
                                 <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="promotion" links={selectedStore.whatsappLinks} />
+                                <WhatsAppCloudTemplateManager organizationId={organizationId} storeId={selectedStore.id} accounts={cloudAccountsForStore} />
                             </CardContent>
                         </Card>
                     ) : null}
 
                     {activeTab === "promotions" ? (
-                        <WhatsAppPromotionDashboard organizationId={organizationId} storeId={selectedStore.id} storeName={selectedStore.name} links={selectedStore.whatsappLinks} />
+                        <WhatsAppPromotionDashboard organizationId={organizationId} storeId={selectedStore.id} storeName={selectedStore.name} links={selectedStore.whatsappLinks} cloudEnabled={cloudAccountsForStore.length > 0} />
                     ) : null}
                 </section>
             ) : organizationQuery.data?.status === "success" ? (

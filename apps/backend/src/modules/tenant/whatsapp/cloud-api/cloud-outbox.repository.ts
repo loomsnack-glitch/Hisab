@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { pg } from "@/config/db";
 import { completeInvoiceOutbox } from "../whatsapp.repository";
+import { releaseCloudQuota, settleCloudQuota } from "./cloud-quota.repository";
+import { cloudReconciliationTimeoutSeconds } from "./cloud-reconciliation-config";
 import type { CloudTemplateSendSnapshot } from "./cloud-template-admission";
 
 export type CloudOutboxJob = {
@@ -229,6 +231,147 @@ export const markCloudOutboxReconciling = async (
       )
   `;
   return rows.count === 1;
+};
+
+/**
+ * Resolves an unknown provider submission after its bounded reconciliation
+ * window. A message already marked delivered/read is settled; all other
+ * unresolved submissions are dead-lettered and never automatically resent.
+ */
+export const expireStaleCloudOutboxReconciliations = async (
+  limit = 100,
+): Promise<number> => {
+  const timeoutSeconds = cloudReconciliationTimeoutSeconds();
+  return pg.begin(async tx => {
+    const rows = await tx`
+      WITH candidates AS (
+        SELECT outbox.id,
+               outbox.message_id,
+               outbox.cloud_quota_reservation_id,
+               message.status AS message_status
+        FROM whatsapp_outbox outbox
+        INNER JOIN whatsapp_accounts account
+          ON account.id = outbox.whatsapp_account_id
+        INNER JOIN whatsapp_messages message
+          ON message.id = outbox.message_id
+        WHERE outbox.status = 'reconciling'
+          AND account.provider = 'cloud_api'
+          AND outbox.updated_at <= NOW() - make_interval(secs => ${timeoutSeconds})
+        ORDER BY outbox.updated_at ASC, outbox.id ASC
+        FOR UPDATE OF outbox SKIP LOCKED
+        LIMIT ${safeLimit(limit)}
+      )
+      UPDATE whatsapp_outbox outbox
+      SET status = CASE
+            WHEN candidates.message_status IN ('delivered', 'read') THEN 'sent'::whatsapp_outbox_status_enum
+            ELSE 'dead_letter'::whatsapp_outbox_status_enum
+          END,
+          lease_owner = NULL,
+          lease_expires_at = NULL,
+          last_error_code = CASE
+            WHEN candidates.message_status IN ('delivered', 'read') THEN NULL
+            ELSE 'cloud_submission_unresolved'
+          END,
+          last_error_message = CASE
+            WHEN candidates.message_status IN ('delivered', 'read') THEN NULL
+            ELSE 'Cloud submission remained unresolved after the reconciliation window'
+          END,
+          updated_at = NOW()
+      FROM candidates
+      WHERE outbox.id = candidates.id
+      RETURNING outbox.id,
+                outbox.message_id,
+                outbox.cloud_quota_reservation_id,
+                outbox.status,
+                candidates.message_status
+    `;
+
+    for (const row of rows as Array<Record<string, unknown>>) {
+      const resolved = row.status === "sent";
+      if (resolved) {
+        await tx`
+          UPDATE whatsapp_messages
+          SET sent_at = COALESCE(sent_at, NOW())
+          WHERE id = ${row.message_id}
+        `;
+      } else {
+        await tx`
+          UPDATE whatsapp_messages
+          SET status = CASE
+                WHEN status IN ('queued', 'sending', 'sent') THEN 'failed'::whatsapp_message_status_enum
+                ELSE status
+              END,
+              failure_code = CASE
+                WHEN status IN ('queued', 'sending', 'sent') THEN 'cloud_submission_unresolved'
+                ELSE failure_code
+              END,
+              failure_message = CASE
+                WHEN status IN ('queued', 'sending', 'sent') THEN 'Cloud submission remained unresolved after the reconciliation window'
+                ELSE failure_message
+              END
+          WHERE id = ${row.message_id}
+        `;
+      }
+
+      if (row.cloud_quota_reservation_id) {
+        if (resolved) {
+          await settleCloudQuota(tx, String(row.cloud_quota_reservation_id));
+        } else {
+          await releaseCloudQuota(tx, String(row.cloud_quota_reservation_id));
+        }
+      }
+
+      await tx`
+        UPDATE whatsapp_campaign_recipients
+        SET status = ${resolved ? "sent" : "dead_letter"}::whatsapp_outbox_status_enum,
+            failure_code = ${resolved ? null : "cloud_submission_unresolved"},
+            failure_message = ${resolved ? null : "Cloud submission remained unresolved after the reconciliation window"},
+            updated_at = NOW()
+        WHERE outbox_id = ${row.id}
+          AND status NOT IN ('dead_letter', 'cancelled')
+      `;
+
+      await tx`
+        UPDATE whatsapp_campaigns campaign
+        SET sent_recipients = (
+              SELECT COUNT(*)
+              FROM whatsapp_campaign_recipients recipient
+              WHERE recipient.campaign_id = campaign.id
+                AND recipient.status = 'sent'
+            ),
+            failed_recipients = (
+              SELECT COUNT(*)
+              FROM whatsapp_campaign_recipients recipient
+              WHERE recipient.campaign_id = campaign.id
+                AND recipient.status IN ('dead_letter', 'cancelled')
+            ),
+            status = CASE
+              WHEN EXISTS (
+                SELECT 1
+                FROM whatsapp_campaign_recipients recipient
+                WHERE recipient.campaign_id = campaign.id
+                  AND recipient.status IN ('dead_letter', 'cancelled')
+              ) THEN 'failed'::whatsapp_campaign_status_enum
+              WHEN NOT EXISTS (
+                SELECT 1
+                FROM whatsapp_campaign_recipients recipient
+                WHERE recipient.campaign_id = campaign.id
+                  AND recipient.status IN ('pending', 'processing', 'retryable')
+              ) THEN 'completed'::whatsapp_campaign_status_enum
+              ELSE campaign.status
+            END,
+            updated_at = NOW()
+        WHERE id = (
+          SELECT campaign_id
+          FROM whatsapp_campaign_recipients
+          WHERE outbox_id = ${row.id}
+          LIMIT 1
+        )
+      `;
+    }
+
+    return rows.length;
+  });
 };
 
 export const completeCloudOutbox = completeInvoiceOutbox;

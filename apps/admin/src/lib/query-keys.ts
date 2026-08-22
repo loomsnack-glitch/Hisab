@@ -134,6 +134,8 @@ export const whatsappKeys = {
     [...whatsappKeys.all, "cloud-accounts", organizationId] as const,
   cloudTemplates: (organizationId: string, accountId: string) =>
     [...whatsappKeys.all, "cloud-templates", organizationId, accountId] as const,
+  cloudSafety: (organizationId: string) =>
+    [...whatsappKeys.all, "cloud-safety", organizationId] as const,
   organizationAccount: (organizationId: string, accountId: string) =>
     [...whatsappKeys.all, "organization-account", organizationId, accountId] as const,
   account: (organizationId: string, storeId: string) =>

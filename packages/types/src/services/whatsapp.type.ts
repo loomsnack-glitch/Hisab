@@ -54,6 +54,8 @@ import {
     WhatsAppCloudTemplateAssetSchema,
     WhatsAppCloudTemplateBindingSchema,
     WhatsAppCreateCloudTemplateBindingSchema,
+    WhatsAppCloudQuotaPolicySchema,
+    WhatsAppCloudSafetySchema,
     WhatsAppCustomerConsentKindSchema,
     WhatsAppCustomerConsentStateSchema,
     WhatsAppCustomerConsentSourceSchema,
@@ -97,6 +99,8 @@ export type WhatsAppCloudTemplateCategory = z.infer<typeof WhatsAppCloudTemplate
 export type WhatsAppCloudTemplateAssetDTO = z.infer<typeof WhatsAppCloudTemplateAssetSchema>;
 export type WhatsAppCloudTemplateBindingDTO = z.infer<typeof WhatsAppCloudTemplateBindingSchema>;
 export type WhatsAppCreateCloudTemplateBindingJSON = z.infer<typeof WhatsAppCreateCloudTemplateBindingSchema>;
+export type WhatsAppCloudQuotaPolicy = z.infer<typeof WhatsAppCloudQuotaPolicySchema>;
+export type WhatsAppCloudSafety = z.infer<typeof WhatsAppCloudSafetySchema>;
 export type WhatsAppCustomerConsentKind = z.infer<typeof WhatsAppCustomerConsentKindSchema>;
 export type WhatsAppCustomerConsentState = z.infer<typeof WhatsAppCustomerConsentStateSchema>;
 export type WhatsAppCustomerConsentSource = z.infer<typeof WhatsAppCustomerConsentSourceSchema>;
