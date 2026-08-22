@@ -13,6 +13,12 @@ import {
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import { redis } from "@/config/redis";
 import * as repository from "./whatsapp.repository";
+import * as messageTemplate from "./message-template";
+import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
+import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
+import { enqueueCloudTemplateSend } from "./cloud-api/cloud-template-send.service";
+import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
+import { buildPromotionCloudComponents } from "./promotion-cloud-components";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_CAMPAIGN_RECIPIENTS = 1_000;
@@ -116,6 +122,174 @@ const promotionBody = (
   });
 };
 
+type PromotionCandidate = { id: string; name: string; phone: string };
+
+const eligiblePromotionCustomers = async (organizationId: string): Promise<PromotionCandidate[]> => {
+  const rows = await pg`
+    SELECT id, name, phone
+    FROM customers
+    WHERE organization_id = ${organizationId}
+      AND is_active = TRUE
+      AND marketing_opted_in = TRUE
+      AND marketing_opted_out = FALSE
+      AND whatsapp_suppressed = FALSE
+      AND phone IS NOT NULL
+      AND phone ~ '^[+][1-9][0-9]{7,14}$'
+    ORDER BY created_at ASC
+    LIMIT ${MAX_CAMPAIGN_RECIPIENTS}
+  `;
+  return rows.flatMap((row: Record<string, unknown>) => {
+    const phone = normalizePhoneNumber(String(row.phone ?? ""));
+    return phone ? [{ id: String(row.id), name: String(row.name), phone }] : [];
+  });
+};
+
+const updateCloudCampaignAggregate = async (organizationId: string, campaignId: string) => {
+  await pg`
+    UPDATE whatsapp_campaigns campaign
+    SET failed_recipients = (
+          SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
+          WHERE recipient.campaign_id = campaign.id AND recipient.status = 'dead_letter'
+        ),
+        status = CASE
+          WHEN EXISTS (
+            SELECT 1 FROM whatsapp_campaign_recipients recipient
+            WHERE recipient.campaign_id = campaign.id
+              AND recipient.status IN ('pending', 'processing', 'retryable')
+          ) THEN 'queued'::whatsapp_campaign_status_enum
+          WHEN EXISTS (
+            SELECT 1 FROM whatsapp_campaign_recipients recipient
+            WHERE recipient.campaign_id = campaign.id AND recipient.status = 'dead_letter'
+          ) THEN 'failed'::whatsapp_campaign_status_enum
+          ELSE campaign.status
+        END,
+        updated_at = NOW()
+    WHERE campaign.organization_id = ${organizationId} AND campaign.id = ${campaignId}
+  `;
+};
+
+const markCloudPromotionRecipientFailed = async (
+  organizationId: string,
+  storeId: string,
+  campaignId: string,
+  customerId: string,
+  message: string,
+) => {
+  await pg`
+    UPDATE whatsapp_campaign_recipients
+    SET status = 'dead_letter',
+        failure_code = 'cloud_enqueue_failed',
+        failure_message = LEFT(${message}, 1_000),
+        updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND campaign_id = ${campaignId}
+      AND customer_id = ${customerId}
+      AND message_id IS NULL
+  `;
+};
+
+const createCloudPromotion = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  account: { id: string },
+  store: { name: string; whatsappLinks: StoreMessageLink[] },
+  data: WhatsAppCreatePromotionJSON,
+): Promise<ServiceResponse<WhatsAppPromotionResponseDTO | null>> => {
+  const defaultTemplate = await messageTemplate.getDefaultTemplate(organizationId, storeId, "promotion");
+  if (!defaultTemplate || !defaultTemplate.isActive) return { status: "error", message: "No active promotion template is available for this Store", data: null, code: STATUS_CODES.CONFLICT };
+  if (data.body.trim() !== defaultTemplate.body.trim()) return { status: "error", message: "Cloud promotions must use the approved promotion template", data: null, code: STATUS_CODES.CONFLICT };
+  const scope = await getCloudAccountScope(organizationId, account.id);
+  if (!scope?.businessAccountId) return { status: "error", message: "Cloud WhatsApp account is not ready for template sends", data: null, code: STATUS_CODES.CONFLICT };
+  const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "promotion", defaultTemplate.id);
+  if (!binding) return { status: "error", message: "No approved Cloud promotion template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+  const candidates = await eligiblePromotionCustomers(organizationId);
+  if (candidates.length === 0) return { status: "error", message: "No eligible customers with promotional consent and a phone number", data: null, code: STATUS_CODES.CONFLICT };
+
+  const hasImage = Boolean(data.imageBase64 && data.imageFileName && data.imageMimeType);
+  const bucket = privateBucket();
+  if (hasImage && !bucket) return { status: "error", message: "Private media storage is not configured", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+  const imageBytes = hasImage ? Buffer.from(data.imageBase64!, "base64") : null;
+  if (imageBytes && (!imageBytes.length || imageBytes.length > 10 * 1024 * 1024)) return { status: "error", message: "Promotion image must be 10 MB or smaller", data: null, code: STATUS_CODES.BAD_REQUEST };
+
+  const campaignId = crypto.randomUUID();
+  let cooldownReserved = false;
+  try {
+    const reservation = await reservePromotionCooldown(organizationId, storeId, campaignId);
+    if (!reservation.acquired) return { status: "error", message: `Promotion cooldown is active; try again in ${Math.ceil(reservation.remainingSeconds / 60)} minutes`, data: null, code: STATUS_CODES.TOO_MANY_REQUESTS };
+    cooldownReserved = true;
+    const objectKey = hasImage ? `whatsapp-campaigns/${organizationId}/${storeId}/${campaignId}/image` : null;
+    if (hasImage && objectKey) await storage.uploadBuffer(bucket, objectKey, imageBytes!, data.imageMimeType!);
+    const imageLink = hasImage && objectKey ? await storage.generateSignedUrl(bucket, objectKey, cloudMediaUrlTtlSeconds()) : null;
+    buildPromotionCloudComponents(
+      binding.asset.components,
+      defaultTemplate.body,
+      { customer_name: candidates[0]!.name, store_name: store.name, ...Object.fromEntries(store.whatsappLinks.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url])) },
+      imageLink,
+    );
+    await pg.begin(async tx => {
+      const [campaign] = await tx`
+        INSERT INTO whatsapp_campaigns (
+          id, organization_id, store_id, whatsapp_account_id, title, body,
+          image_storage_key, image_file_name, image_mime_type, status,
+          total_recipients, created_by
+        ) VALUES (
+          ${campaignId}, ${organizationId}, ${storeId}, ${account.id}, ${data.title}, ${defaultTemplate.body},
+          ${objectKey}, ${hasImage ? data.imageFileName : null}, ${hasImage ? data.imageMimeType : null}, 'queued', ${candidates.length}, ${userId}
+        ) RETURNING id
+      `;
+      if (!campaign) throw new Error("Failed to create promotion campaign");
+      for (const candidate of candidates) {
+        await tx`
+          INSERT INTO whatsapp_campaign_recipients (
+            organization_id, store_id, campaign_id, customer_id, phone_number, status
+          ) VALUES (${organizationId}, ${storeId}, ${campaignId}, ${candidate.id}, ${candidate.phone}, 'pending')
+        `;
+      }
+    });
+
+    let queuedCount = 0;
+    for (const candidate of candidates) {
+      try {
+        const componentParameters = buildPromotionCloudComponents(
+          binding.asset.components,
+          defaultTemplate.body,
+          { customer_name: candidate.name, store_name: store.name, ...Object.fromEntries(store.whatsappLinks.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url])) },
+          imageLink,
+        );
+        const queued = await enqueueCloudTemplateSend(userId, organizationId, {
+          storeId,
+          accountId: account.id,
+          customerId: candidate.id,
+          campaignId,
+          bindingId: binding.binding.id,
+          campaignKey: campaignId,
+          idempotencyKey: `promotion:${campaignId}:${candidate.id}`,
+          intent: "promotion",
+          componentParameters,
+        });
+        if (queued.status === "error" || !queued.data) {
+          await markCloudPromotionRecipientFailed(organizationId, storeId, campaignId, candidate.id, queued.message);
+          continue;
+        }
+        queuedCount += 1;
+      } catch (error) {
+        await markCloudPromotionRecipientFailed(organizationId, storeId, campaignId, candidate.id, error instanceof Error ? error.message : "Cloud promotion recipient could not be queued");
+      }
+    }
+    await updateCloudCampaignAggregate(organizationId, campaignId);
+    return { status: "success", message: "Promotion queued for eligible customers", data: { campaignId, recipientCount: candidates.length, queuedCount }, code: STATUS_CODES.CREATED };
+  } catch (error) {
+    const objectKey = `whatsapp-campaigns/${organizationId}/${storeId}/${campaignId}/image`;
+    try { if (bucket && hasImage) await storage.deleteObject(bucket, objectKey); } catch { /* preserve the original failure */ }
+    if (cooldownReserved) {
+      try { if ((await redis.get(cooldownKey(organizationId, storeId))) === campaignId) await redis.del(cooldownKey(organizationId, storeId)); } catch { /* database campaign remains the fallback */ }
+    }
+    return { status: "error", message: error instanceof Error ? error.message : "Cloud promotion could not be queued", data: null, code: STATUS_CODES.CONFLICT };
+  }
+};
+
 export const createPromotion = async (
   userId: string,
   organizationId: string,
@@ -145,13 +319,6 @@ export const createPromotion = async (
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
-  if (account.provider === "cloud_api")
-    return {
-      status: "error",
-      message: "Cloud WhatsApp promotions require an approved Cloud template route",
-      data: null,
-      code: STATUS_CODES.CONFLICT,
-    };
   if (account.status !== "connected")
     return {
       status: "error",
@@ -159,6 +326,7 @@ export const createPromotion = async (
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
+  if (account.provider === "cloud_api") return createCloudPromotion(userId, organizationId, storeId, account, { name: store.name, whatsappLinks: store.whatsappLinks }, data);
   const hasImage = Boolean(data.imageBase64 && data.imageFileName && data.imageMimeType);
   const bucket = privateBucket();
   if (hasImage && !bucket)

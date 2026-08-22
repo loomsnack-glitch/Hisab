@@ -18,6 +18,7 @@ export type CloudTemplateOutboxRequest = {
   customerPhone: string;
   customerName: string;
   saleId?: string | null;
+  campaignId?: string | null;
   intent: WhatsAppMessageTemplateKind;
   snapshot: CloudTemplateSendSnapshot;
   messageId: string;
@@ -172,6 +173,17 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
     if (String(raced.organization_id) !== params.organizationId || String(raced.store_id) !== params.storeId || String(raced.customer_id) !== params.customerId) {
       throw new Error("Cloud template idempotency key is already used for another send");
     }
+    if (params.campaignId) {
+      await tx`
+        INSERT INTO whatsapp_campaign_recipients (
+          organization_id, store_id, campaign_id, customer_id, phone_number, message_id, outbox_id, status
+        ) VALUES (
+          ${params.organizationId}, ${params.storeId}, ${params.campaignId}, ${params.customerId}, ${params.customerPhone}, ${raced.message_id}, ${raced.outbox_id}, 'pending'
+        )
+        ON CONFLICT (campaign_id, customer_id)
+        DO UPDATE SET message_id = EXCLUDED.message_id, outbox_id = EXCLUDED.outbox_id, status = 'pending', updated_at = NOW()
+      `;
+    }
     return recordFrom(raced as Record<string, unknown>);
   }
   const [outbox] = await tx`
@@ -185,6 +197,17 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
     RETURNING id, status
   `;
   if (!outbox) throw new Error("Failed to create Cloud template outbox");
+  if (params.campaignId) {
+    await tx`
+      INSERT INTO whatsapp_campaign_recipients (
+        organization_id, store_id, campaign_id, customer_id, phone_number, message_id, outbox_id, status
+      ) VALUES (
+        ${params.organizationId}, ${params.storeId}, ${params.campaignId}, ${params.customerId}, ${params.customerPhone}, ${message.id}, ${outbox.id}, 'pending'
+      )
+      ON CONFLICT (campaign_id, customer_id)
+      DO UPDATE SET message_id = EXCLUDED.message_id, outbox_id = EXCLUDED.outbox_id, status = 'pending', updated_at = NOW()
+    `;
+  }
   await tx`
     UPDATE whatsapp_conversations
     SET last_message_at = NOW(), updated_at = NOW()

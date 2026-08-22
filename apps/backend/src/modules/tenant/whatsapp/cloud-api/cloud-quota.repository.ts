@@ -371,8 +371,19 @@ export const cancelCloudCampaign = async (
           failure_message = 'Cloud campaign was stopped before dispatch'
       WHERE id = ${row.message_id}
     `;
+    await tx`
+      UPDATE whatsapp_campaign_recipients
+      SET status = 'cancelled', failure_code = 'campaign_cancelled', failure_message = 'Cloud campaign was stopped before dispatch', updated_at = NOW()
+      WHERE outbox_id = ${row.outbox_id}
+    `;
     await releaseCloudQuota(tx, String(row.reservation_id));
   }
+  await tx`
+    UPDATE whatsapp_campaigns
+    SET status = 'cancelled', updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND id::text = ${normalizedCampaignKey}
+  `;
   return rows.length;
 });
 

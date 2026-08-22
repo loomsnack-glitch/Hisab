@@ -25,19 +25,12 @@ import {
   enqueueCloudTemplateSendForDevice,
 } from "./cloud-api/cloud-template-send.service";
 import { buildInvoiceCloudComponents } from "./invoice-cloud-components";
+import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
 const invoiceObjectKey = (organizationId: string, storeId: string, accountId: string, saleId: string) =>
   `whatsapp-invoices/${organizationId}/${storeId}/${accountId}/${saleId}.pdf`;
-
-const cloudMediaUrlTtlSeconds = (): number => {
-  const configured = Number(process.env.WHATSAPP_CLOUD_MEDIA_URL_TTL_SECONDS ?? 86_400);
-  return Number.isInteger(configured) && configured >= 300 && configured <= 604_800
-    ? configured
-    : 86_400;
-};
-
 
 const queueCloudInvoiceForStore = async (
   userId: string | null,

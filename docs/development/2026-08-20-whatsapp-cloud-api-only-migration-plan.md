@@ -850,24 +850,24 @@ current branch, work proceeds in this order:
    cooldown/duplicate admission, campaign stop, and reconciliation controls
    are implemented. Apply policy in the target environment and run concurrent
    send, failure-release, and controlled provider checks.
-8. **Only then implement Phase 6.** **In progress: Sub-loops 7A–7C complete;
-   7D next.** Migrate bill documents, due reminders, promotions/media, inbound
+8. **Only then implement Phase 6.** **In progress: Sub-loops 7A–7D complete;
+   7E next.** Migrate bill documents, due reminders, promotions/media, inbound
    replies, and delivery statuses behind an explicit Cloud feature flag while
    Baileys remains available for controlled rollback. The current working
-   diff has not migrated a feature caller and has not been committed.
+   diff has not migrated all feature callers and has not been committed.
 9. **Only after the Phase 6 checklist passes, execute Phase 7.** Freeze and
    drain Baileys, migrate Organizations one by one, verify historical data, and
    remove QR/UI/auth-state/worker/port-8100 code in a separate cleanup release.
 
-The current code slice is the Loop 7 implementation. Bill/document and
-due-reminder enqueue are now migrated for Cloud accounts; promotions/media,
-inbound, and status integration remain fail-closed or verification-only until
+The current code slice is the Loop 7 implementation. Bill/document,
+due-reminder, and promotion/media enqueue are now migrated for Cloud accounts;
+inbound and status integration remain fail-closed or verification-only until
 their sub-loops are complete. Phase 6 remains blocked until the
 provider/runtime and quota external gates are closed.
 
 ## Loop 7 plan: migrate feature callers to Cloud templates
 
-Status: **in progress; Sub-loops 7A–7C complete; 7D next**.
+Status: **in progress; Sub-loops 7A–7D complete; 7E next**.
 
 ### Objective and invariants
 
@@ -1024,6 +1024,24 @@ campaign duplicate, concurrent campaign creation, cooldown race, quota race,
 stop-before-dispatch, partial enqueue, media failure, and provider status
 aggregation. A controlled provider test confirms approved marketing delivery
 and a stopped campaign sends no new recipients.
+
+Implementation evidence: 7D creates the local campaign and recipient shell
+before enqueue, then routes each recipient through the shared marketing
+template admission, consent, quota, idempotency, and campaign-key path. Cloud
+outbox creation atomically links its message/outbox to the campaign recipient;
+partial admission failures become recipient dead letters and the response
+reports the actual queued count. Campaign claim, retry, delivery, failure, and
+stop transitions now update recipient/dashboard state for Cloud template rows.
+Images use a bounded private object and HTTPS signed URL, and are accepted only
+when the approved asset declares an image header. Cloud promotions currently
+require the request body to match the Store's active local promotion template;
+arbitrary free-form marketing text is rejected.
+
+Verification: the combined Cloud, invoice, due-reminder, and promotion
+component suite passes (108 tests, 0 failures); changed-file backend type
+checking reports no errors; `git diff --check` passes. Campaign database
+assertions and controlled Meta marketing delivery/stop tests remain external
+gates.
 
 ### Sub-loop 7E — inbound and delivery/status integration
 

@@ -1239,6 +1239,13 @@ export const completeInvoiceOutbox = async (
             FOR UPDATE
         `;
         if (!outbox) return false;
+        const [campaignLink] = await tx`
+            SELECT campaign_id
+            FROM whatsapp_campaign_recipients
+            WHERE outbox_id = ${outbox.id}
+            LIMIT 1
+        `;
+        const isCampaignOutbox = outbox.kind === "promotion" || Boolean(campaignLink);
 
         if (providerMessageId) {
             await tx`
@@ -1263,7 +1270,7 @@ export const completeInvoiceOutbox = async (
             if (outbox.cloud_quota_reservation_id) {
                 await settleCloudQuota(tx, String(outbox.cloud_quota_reservation_id));
             }
-            if (outbox.kind === "promotion") {
+            if (isCampaignOutbox) {
                 await tx`
                     UPDATE whatsapp_campaign_recipients
                     SET status = 'sent', provider_message_id = ${providerMessageId}, updated_at = NOW()
@@ -1276,6 +1283,10 @@ export const completeInvoiceOutbox = async (
                             WHERE recipient.campaign_id = campaign.id AND recipient.status = 'sent'
                         ),
                         status = CASE
+                            WHEN EXISTS (
+                                SELECT 1 FROM whatsapp_campaign_recipients recipient
+                                WHERE recipient.campaign_id = campaign.id AND recipient.status IN ('dead_letter', 'cancelled')
+                            ) THEN 'failed'::whatsapp_campaign_status_enum
                             WHEN (
                                 SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
                                 WHERE recipient.campaign_id = campaign.id AND recipient.status IN ('pending', 'processing', 'retryable')
@@ -1313,7 +1324,7 @@ export const completeInvoiceOutbox = async (
         if (permanentlyFailed && outbox.cloud_quota_reservation_id) {
             await releaseCloudQuota(tx, String(outbox.cloud_quota_reservation_id));
         }
-        if (outbox.kind === "promotion" && permanentlyFailed) {
+        if (isCampaignOutbox && permanentlyFailed) {
             await tx`
                 UPDATE whatsapp_campaign_recipients
                 SET status = 'dead_letter', failure_code = ${failureCode}, failure_message = ${failureMessage}, updated_at = NOW()
@@ -1334,6 +1345,12 @@ export const completeInvoiceOutbox = async (
                     END,
                     updated_at = NOW()
                 WHERE id = (SELECT campaign_id FROM whatsapp_campaign_recipients WHERE outbox_id = ${outbox.id} LIMIT 1)
+            `;
+        } else if (isCampaignOutbox) {
+            await tx`
+                UPDATE whatsapp_campaign_recipients
+                SET status = 'retryable', failure_code = ${failureCode}, failure_message = ${failureMessage}, updated_at = NOW()
+                WHERE outbox_id = ${outbox.id}
             `;
         }
         return true;

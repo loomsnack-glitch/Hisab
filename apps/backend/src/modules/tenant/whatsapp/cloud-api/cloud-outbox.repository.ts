@@ -112,6 +112,23 @@ export const claimNextCloudOutbox = async (
       WHERE id = ${claimed.message_id}
         AND status IN ('queued', 'failed')
     `;
+    await tx`
+      UPDATE whatsapp_campaign_recipients
+      SET status = 'processing', updated_at = NOW()
+      WHERE outbox_id = ${claimed.id} AND status = 'pending'
+    `;
+    await tx`
+      UPDATE whatsapp_campaigns
+      SET status = 'sending', updated_at = NOW()
+      WHERE status = 'queued'
+        AND id = (
+          SELECT campaign_id
+          FROM whatsapp_campaign_recipients
+          WHERE outbox_id = ${claimed.id}
+            AND status IN ('pending', 'processing')
+          LIMIT 1
+        )
+    `;
 
     const [job] = await tx`
       SELECT

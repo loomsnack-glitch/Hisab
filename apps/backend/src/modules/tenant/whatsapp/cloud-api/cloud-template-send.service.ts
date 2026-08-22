@@ -38,6 +38,7 @@ export const enqueueCloudTemplateSend = async (
     accountId: string;
     customerId: string;
     saleId?: string | null;
+    campaignId?: string | null;
     bindingId: string;
     idempotencyKey: string;
     campaignKey?: string | null;
@@ -87,6 +88,7 @@ export const enqueueCloudTemplateSend = async (
       accountId: input.accountId,
       customerId: input.customerId,
       saleId: input.saleId,
+      campaignId: input.campaignId,
       customerPhone: customer.phone,
       customerName: customer.name,
       intent: input.intent,
