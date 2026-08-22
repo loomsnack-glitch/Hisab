@@ -3674,7 +3674,11 @@ const BillingPage = ({
                                         />
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div
+                                        className={cn(
+                                            (isReplacingSale || hasActiveTableOrder) && "grid grid-cols-2 gap-2",
+                                        )}
+                                    >
                                         {isReplacingSale ? (
                                             <Button
                                                 type="button"
@@ -3698,31 +3702,13 @@ const BillingPage = ({
                                             >
                                                 Tables
                                             </Button>
-                                        ) : (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="h-9 rounded-lg text-xs font-semibold"
-                                                disabled={
-                                                    saveDraftMutation.isPending ||
-                                                    completeSaleMutation.isPending ||
-                                                    parcelKotMutation.isPending ||
-                                                    tableKotMutation.isPending ||
-                                                    items.length === 0 ||
-                                                    hasInvalidDiscount
-                                                }
-                                                onClick={() => saveDraftMutation.mutate()}
-                                            >
-                                                {saveDraftMutation.isPending
-                                                    ? "Saving..."
-                                                    : activeDraftId
-                                                      ? "Update draft"
-                                                      : "Save draft"}
-                                            </Button>
-                                        )}
+                                        ) : null}
                                         <Button
                                             type="button"
-                                            className="h-9 rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+                                            className={cn(
+                                                "h-9 rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90",
+                                                !isReplacingSale && !hasActiveTableOrder && "w-full",
+                                            )}
                                             disabled={
                                                 completeSaleMutation.isPending ||
                                                 parcelKotMutation.isPending ||
@@ -3739,7 +3725,7 @@ const BillingPage = ({
                                                 setPlaceOrderDialogOpen(true);
                                             }}
                                         >
-                                            {completeSaleMutation.isPending ? "Completing..." : "Place Order"}
+                                            Checkout
                                         </Button>
                                     </div>
                                 </div>
@@ -4451,21 +4437,44 @@ const BillingPage = ({
                             </Button>
                         ) : (
                             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
-                                    onClick={() => {
-                                        setPlaceOrderDialogOpen(false);
-                                    }}
-                                >
-                                    Cancel
-                                </Button>
+                                {isReplacingSale || hasActiveTableOrder ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
+                                        disabled={completeSaleMutation.isPending}
+                                        onClick={() => {
+                                            setPlaceOrderDialogOpen(false);
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
+                                        disabled={
+                                            saveDraftMutation.isPending ||
+                                            completeSaleMutation.isPending ||
+                                            items.length === 0 ||
+                                            hasInvalidDiscount
+                                        }
+                                        onClick={() => saveDraftMutation.mutate()}
+                                    >
+                                        {saveDraftMutation.isPending
+                                            ? "Saving..."
+                                            : activeDraftId
+                                              ? "Update draft"
+                                              : "Save draft"}
+                                    </Button>
+                                )}
                                 <Button
                                     type="button"
                                     className="h-10 w-full rounded-xl px-3 text-xs font-semibold sm:w-auto sm:px-5"
                                     disabled={
                                         completeSaleMutation.isPending ||
+                                        saveDraftMutation.isPending ||
                                         hasInvalidDiscount ||
                                         hasInvalidPartialPayment
                                     }
