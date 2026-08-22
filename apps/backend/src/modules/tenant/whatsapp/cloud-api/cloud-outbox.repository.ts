@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { WhatsAppCloudOutboxOperationDTO } from "@repo/types";
 import { pg } from "@/config/db";
 import { completeInvoiceOutbox } from "../whatsapp.repository";
 import { releaseCloudQuota, settleCloudQuota } from "./cloud-quota.repository";
@@ -32,6 +33,16 @@ export type CloudOutboxJob = {
 
 export type CloudOutboxPartition = { count: number; index: number };
 
+export type CloudOutboxActionResult = {
+  outboxId: string;
+  previousStatus: "pending" | "retryable";
+  nextStatus: "pending" | "dead_letter";
+};
+
+export type CloudOutboxActionAttempt =
+  | { applied: true; result: CloudOutboxActionResult }
+  | { applied: false; reason: "not_found" | "not_actionable"; currentStatus?: string };
+
 export const getCloudOutboxReconciliationSummary = async (
   organizationId: string,
 ): Promise<CloudOutboxReconciliationSummary> => {
@@ -51,6 +62,243 @@ export const getCloudOutboxReconciliationSummary = async (
   `;
   return mapCloudOutboxReconciliationSummary(row as Record<string, unknown> | undefined);
 };
+
+const mapCloudOutboxOperation = (row: Record<string, unknown>): WhatsAppCloudOutboxOperationDTO => {
+  const attemptCount = Number(row.attempt_count ?? 0);
+  return {
+    id: String(row.id),
+    storeName: String(row.store_name),
+    kind: row.kind as WhatsAppCloudOutboxOperationDTO["kind"],
+    status: row.status as WhatsAppCloudOutboxOperationDTO["status"],
+    attemptCount: Number.isFinite(attemptCount) && attemptCount >= 0 ? Math.trunc(attemptCount) : 0,
+    lastErrorCode: row.last_error_code == null || String(row.last_error_code).trim() === "" ? null : String(row.last_error_code),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    nextAttemptAt: String(row.next_attempt_at),
+  };
+};
+
+export const listCloudOutboxOperations = async (
+  organizationId: string,
+  limit = 50,
+): Promise<WhatsAppCloudOutboxOperationDTO[]> => {
+  const rows = await pg`
+    SELECT outbox.id,
+           stores.name AS store_name,
+           outbox.kind,
+           outbox.status,
+           outbox.attempt_count,
+           outbox.last_error_code,
+           outbox.created_at,
+           outbox.updated_at,
+           outbox.next_attempt_at
+    FROM whatsapp_outbox outbox
+    INNER JOIN whatsapp_accounts account
+      ON account.id = outbox.whatsapp_account_id
+     AND account.organization_id = outbox.organization_id
+    INNER JOIN stores
+      ON stores.id = outbox.store_id
+     AND stores.organization_id = outbox.organization_id
+    WHERE outbox.organization_id = ${organizationId}
+      AND outbox.kind = 'template'
+      AND account.provider = 'cloud_api'
+      AND outbox.status IN ('pending', 'retryable', 'reconciling', 'dead_letter')
+    ORDER BY CASE outbox.status
+               WHEN 'reconciling' THEN 0
+               WHEN 'retryable' THEN 1
+               WHEN 'pending' THEN 2
+               ELSE 3
+             END,
+             outbox.updated_at ASC,
+             outbox.id ASC
+    LIMIT ${safeLimit(limit)}
+  `;
+  return rows.map((row: Record<string, unknown>) => mapCloudOutboxOperation(row));
+};
+
+const updateCampaignAfterDeadLetter = async (tx: Bun.TransactionSQL, outboxId: string): Promise<void> => {
+  await tx`
+    UPDATE whatsapp_campaign_recipients
+    SET status = 'dead_letter'::whatsapp_outbox_status_enum,
+        failure_code = 'operator_dead_letter',
+        failure_message = 'Cloud outbox entry was dead-lettered by an operator',
+        updated_at = NOW()
+    WHERE outbox_id = ${outboxId}
+      AND status NOT IN ('sent', 'dead_letter', 'cancelled')
+  `;
+  await tx`
+    UPDATE whatsapp_campaigns campaign
+    SET sent_recipients = (
+          SELECT COUNT(*)
+          FROM whatsapp_campaign_recipients recipient
+          WHERE recipient.campaign_id = campaign.id
+            AND recipient.status = 'sent'
+        ),
+        failed_recipients = (
+          SELECT COUNT(*)
+          FROM whatsapp_campaign_recipients recipient
+          WHERE recipient.campaign_id = campaign.id
+            AND recipient.status IN ('dead_letter', 'cancelled')
+        ),
+        status = CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM whatsapp_campaign_recipients recipient
+            WHERE recipient.campaign_id = campaign.id
+              AND recipient.status IN ('dead_letter', 'cancelled')
+          ) THEN 'failed'::whatsapp_campaign_status_enum
+          WHEN NOT EXISTS (
+            SELECT 1
+            FROM whatsapp_campaign_recipients recipient
+            WHERE recipient.campaign_id = campaign.id
+              AND recipient.status IN ('pending', 'processing', 'retryable')
+          ) THEN 'completed'::whatsapp_campaign_status_enum
+          ELSE campaign.status
+        END,
+        updated_at = NOW()
+    WHERE id = (
+      SELECT campaign_id
+      FROM whatsapp_campaign_recipients
+      WHERE outbox_id = ${outboxId}
+      LIMIT 1
+    )
+  `;
+};
+
+const recordCloudOperatorAction = async (
+  tx: Bun.TransactionSQL,
+  organizationId: string,
+  actorUserId: string,
+  outboxId: string,
+  action: "retry" | "dead_letter",
+  previousStatus: "pending" | "retryable",
+  nextStatus: "pending" | "dead_letter",
+): Promise<void> => {
+  await tx`
+    INSERT INTO whatsapp_cloud_operator_actions (
+      organization_id, actor_user_id, outbox_id, action, previous_status, next_status
+    ) VALUES (
+      ${organizationId}, ${actorUserId}, ${outboxId}, ${action},
+      ${previousStatus}::whatsapp_outbox_status_enum,
+      ${nextStatus}::whatsapp_outbox_status_enum
+    )
+  `;
+};
+
+export const retryCloudOutboxNow = async (
+  organizationId: string,
+  actorUserId: string,
+  outboxId: string,
+): Promise<CloudOutboxActionAttempt> => pg.begin(async tx => {
+  const [row] = await tx`
+    SELECT outbox.id, outbox.status, message.id AS message_id, campaign.status AS campaign_status
+    FROM whatsapp_outbox outbox
+    INNER JOIN whatsapp_accounts account
+      ON account.id = outbox.whatsapp_account_id
+     AND account.organization_id = outbox.organization_id
+    INNER JOIN whatsapp_messages message ON message.id = outbox.message_id
+    LEFT JOIN whatsapp_campaign_recipients recipient ON recipient.outbox_id = outbox.id
+    LEFT JOIN whatsapp_campaigns campaign ON campaign.id = recipient.campaign_id
+    WHERE outbox.id = ${outboxId}
+      AND outbox.organization_id = ${organizationId}
+      AND outbox.kind = 'template'
+      AND account.provider = 'cloud_api'
+    FOR UPDATE OF outbox
+  `;
+  if (!row) return { applied: false, reason: "not_found" };
+  if (row.status !== "retryable") return { applied: false, reason: "not_actionable", currentStatus: String(row.status) };
+  if (row.campaign_status === "cancelled") return { applied: false, reason: "not_actionable", currentStatus: "campaign_cancelled" };
+
+  await tx`
+    UPDATE whatsapp_messages
+    SET status = 'queued', failure_code = NULL, failure_message = NULL
+    WHERE id = ${row.message_id} AND status = 'failed'
+  `;
+  await tx`
+    UPDATE whatsapp_outbox
+    SET status = 'pending',
+        next_attempt_at = NOW(),
+        lease_owner = NULL,
+        lease_expires_at = NULL,
+        last_error_code = NULL,
+        last_error_message = NULL,
+        updated_at = NOW()
+    WHERE id = ${row.id} AND status = 'retryable'
+  `;
+  await tx`
+    UPDATE whatsapp_campaign_recipients
+    SET status = 'pending', failure_code = NULL, failure_message = NULL, updated_at = NOW()
+    WHERE outbox_id = ${row.id} AND status = 'retryable'
+  `;
+  await tx`
+    UPDATE whatsapp_campaigns campaign
+    SET status = CASE
+          WHEN campaign.status IN ('failed', 'completed') THEN 'sending'::whatsapp_campaign_status_enum
+          ELSE campaign.status
+        END,
+        updated_at = NOW()
+    WHERE id = (
+      SELECT campaign_id
+      FROM whatsapp_campaign_recipients
+      WHERE outbox_id = ${row.id}
+      LIMIT 1
+    )
+      AND status <> 'cancelled'
+  `;
+  await recordCloudOperatorAction(tx, organizationId, actorUserId, String(row.id), "retry", "retryable", "pending");
+  return {
+    applied: true,
+    result: { outboxId: String(row.id), previousStatus: "retryable", nextStatus: "pending" },
+  };
+});
+
+export const deadLetterCloudOutboxNow = async (
+  organizationId: string,
+  actorUserId: string,
+  outboxId: string,
+): Promise<CloudOutboxActionAttempt> => pg.begin(async tx => {
+  const [row] = await tx`
+    SELECT outbox.id, outbox.status, outbox.message_id, outbox.cloud_quota_reservation_id
+    FROM whatsapp_outbox outbox
+    INNER JOIN whatsapp_accounts account
+      ON account.id = outbox.whatsapp_account_id
+     AND account.organization_id = outbox.organization_id
+    WHERE outbox.id = ${outboxId}
+      AND outbox.organization_id = ${organizationId}
+      AND outbox.kind = 'template'
+      AND account.provider = 'cloud_api'
+    FOR UPDATE OF outbox
+  `;
+  if (!row) return { applied: false, reason: "not_found" };
+  if (!["pending", "retryable"].includes(String(row.status))) {
+    return { applied: false, reason: "not_actionable", currentStatus: String(row.status) };
+  }
+
+  await tx`
+    UPDATE whatsapp_messages
+    SET status = CASE WHEN status IN ('delivered', 'read', 'failed') THEN status ELSE 'failed'::whatsapp_message_status_enum END,
+        failure_code = CASE WHEN status IN ('delivered', 'read') THEN failure_code ELSE 'operator_dead_letter' END,
+        failure_message = CASE WHEN status IN ('delivered', 'read') THEN failure_message ELSE 'Cloud outbox entry was dead-lettered by an operator' END
+    WHERE id = ${row.message_id}
+  `;
+  await tx`
+    UPDATE whatsapp_outbox
+    SET status = 'dead_letter',
+        lease_owner = NULL,
+        lease_expires_at = NULL,
+        last_error_code = 'operator_dead_letter',
+        last_error_message = 'Cloud outbox entry was dead-lettered by an operator',
+        updated_at = NOW()
+    WHERE id = ${row.id} AND status IN ('pending', 'retryable')
+  `;
+  if (row.cloud_quota_reservation_id) await releaseCloudQuota(tx, String(row.cloud_quota_reservation_id));
+  await updateCampaignAfterDeadLetter(tx, String(row.id));
+  await recordCloudOperatorAction(tx, organizationId, actorUserId, String(row.id), "dead_letter", row.status as "pending" | "retryable", "dead_letter");
+  return {
+    applied: true,
+    result: { outboxId: String(row.id), previousStatus: row.status as "pending" | "retryable", nextStatus: "dead_letter" },
+  };
+});
 
 const safeLimit = (limit: number): number =>
   Math.min(Math.max(Math.trunc(limit), 1), 100);

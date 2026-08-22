@@ -139,6 +139,28 @@ export const WhatsAppCloudSafetySchema = z.object({
     }),
 });
 
+export const WhatsAppCloudOutboxOperationSchema = z.object({
+    id: z.uuid("Invalid Cloud outbox id"),
+    storeName: z.string().trim().min(1).max(255),
+    kind: WhatsAppOutboxKindSchema,
+    status: WhatsAppOutboxStatusSchema,
+    attemptCount: z.number().int().nonnegative(),
+    lastErrorCode: z.string().trim().min(1).max(100).nullable(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+    nextAttemptAt: dtoDateSchema,
+}).strict();
+
+export const WhatsAppCloudOutboxOperationsResponseSchema = z.object({
+    operations: z.array(WhatsAppCloudOutboxOperationSchema),
+});
+
+export const WhatsAppCloudOutboxActionResponseSchema = z.object({
+    outboxId: z.uuid("Invalid Cloud outbox id"),
+    previousStatus: WhatsAppOutboxStatusSchema,
+    nextStatus: WhatsAppOutboxStatusSchema,
+});
+
 export const WhatsAppCustomerConsentKindSchema = z.enum(["marketing", "utility"]);
 export const WhatsAppCustomerConsentStateSchema = z.enum(["opted_in", "opted_out"]);
 export const WhatsAppCustomerConsentSourceSchema = z.enum(["admin", "pos", "import", "customer_reply", "migration", "system"]);

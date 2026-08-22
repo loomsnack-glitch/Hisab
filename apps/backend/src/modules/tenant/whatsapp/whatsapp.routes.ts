@@ -199,6 +199,43 @@ userRouter.post("/:organizationId/whatsapp/cloud/safety/reconcile", async c => {
     }
 });
 
+userRouter.get("/:organizationId/whatsapp/cloud/outbox", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const requestedLimit = Number(c.req.query("limit") ?? 50);
+        const limit = Number.isInteger(requestedLimit) && requestedLimit >= 1 && requestedLimit <= 100 ? requestedLimit : 50;
+        return handleServiceResponse(c, await cloudSafetyService.getCloudOutboxOperations(c.get("authUser").id, organizationId, limit));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/outbox/:outboxId/retry", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const outboxId = c.req.param("outboxId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(outboxId, "Invalid Cloud outbox id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.retryCloudOutbox(c.get("authUser").id, organizationId, outboxId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/outbox/:outboxId/dead-letter", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const outboxId = c.req.param("outboxId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(outboxId, "Invalid Cloud outbox id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.deadLetterCloudOutbox(c.get("authUser").id, organizationId, outboxId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
 userRouter.patch(
     "/:organizationId/whatsapp/cloud/safety/quota-policy",
     validateSchema("json", WhatsAppCloudQuotaPolicySchema),

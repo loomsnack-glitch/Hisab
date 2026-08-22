@@ -74,7 +74,7 @@ No phase may enable Cloud sending, remove Baileys/QR/port `8100`, or claim a liv
 - [x] `reconciling` rows older than the bounded timeout are resolved without automatic resend.
 - [x] Delivered/read rows settle quota and campaign state; unresolved rows are dead-lettered and release quota.
 - [x] Sweep runs from the backend runtime every 60 seconds when Cloud outbox sending is enabled.
-- [ ] Add operator metrics and authenticated replay/dead-letter controls.
+- [x] Add organization-scoped operator metrics and authenticated, audited retry/dead-letter controls.
 
 ### Next loop: operator observability and bounded manual recovery
 
@@ -91,6 +91,24 @@ Evidence:
 - [x] Organization-scoped summary and bounded reconciliation action are implemented; unresolved submissions are never resent.
 - [x] Admin safety card exposes only counts, age, and action status.
 - [x] 133 WhatsApp tests pass; Admin and shared-type checks pass; changed Cloud files have no TypeScript errors.
+
+### Next loop: audited operator dispositions
+
+Acceptance criteria:
+
+- Authorized organization users can view a bounded list of Cloud outbox entries using internal status/error metadata only.
+- “Retry now” is accepted only for definitively `retryable` entries; `reconciling` entries can never be replayed by this action.
+- “Dead-letter” is accepted only for `pending` or `retryable` entries and releases any reserved quota without sending.
+- Every applied operator action records the actor, organization, outbox, previous status, next status, and timestamp.
+- Admin actions are explicit, responsive, and refresh the safety summary after completion.
+- Focused tests, type checks, migration syntax review, and diff checks pass before commit.
+
+Evidence:
+
+- [x] Bounded Cloud outbox operations list exposes only Store name, kind, status, attempts, timestamps, and safe error codes.
+- [x] Retry is limited to known `retryable` rows; dead-letter is limited to `pending`/`retryable` rows and releases quota without sending.
+- [x] Operator actions are stored with organization, actor, outbox, previous status, next status, and timestamp; migration applied locally.
+- [x] 133 WhatsApp tests and 8 WhatsApp schema tests pass; Admin/shared types pass; changed backend files have no TypeScript errors; diff check passes.
 
 ## Phase 3 — Runtime credentials and deployment configuration
 

@@ -11,6 +11,7 @@ import {
     WhatsAppConversationListResponseSchema,
     WhatsAppCloudAccountSnapshotSchema,
     WhatsAppCloudProvisioningAttemptSchema,
+    WhatsAppCloudOutboxOperationSchema,
     WhatsAppMessageDTOSchema,
 } from "./whatsapp.schema";
 
@@ -108,6 +109,32 @@ describe("WhatsApp schemas", () => {
             deliveredAt: null,
             readAt: null,
         }).success).toBe(true);
+    });
+
+    test("keeps Cloud outbox operations bounded to safe internal metadata", () => {
+        expect(WhatsAppCloudOutboxOperationSchema.safeParse({
+            id: uuid,
+            storeName: "Main Store",
+            kind: "template",
+            status: "retryable",
+            attemptCount: 2,
+            lastErrorCode: "cloud_rate_limited",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            nextAttemptAt: new Date(),
+        }).success).toBe(true);
+        expect(WhatsAppCloudOutboxOperationSchema.safeParse({
+            id: uuid,
+            storeName: "Main Store",
+            kind: "template",
+            status: "retryable",
+            attemptCount: 2,
+            lastErrorCode: "cloud_rate_limited",
+            providerMessageId: "wamid-secret",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            nextAttemptAt: new Date(),
+        }).success).toBe(false);
     });
 
     test("rejects non-international customer phone numbers for WhatsApp sends", () => {

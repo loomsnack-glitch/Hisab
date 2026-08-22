@@ -32,6 +32,8 @@ import type {
     WhatsAppSetCustomerSuppressionJSON,
     WhatsAppCloudQuotaPolicy,
     WhatsAppCloudSafety,
+    WhatsAppCloudOutboxOperationsResponseDTO,
+    WhatsAppCloudOutboxActionResponseDTO,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -167,6 +169,33 @@ export const getWhatsAppCloudSafety = async (organizationId: string): Promise<Wh
 export const reconcileWhatsAppCloudOutbox = async (organizationId: string): Promise<ServiceResponse<{ reconciledCount: number } | null>> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/safety/reconcile`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppCloudOutboxOperations = async (organizationId: string, limit = 50): Promise<ServiceResponse<WhatsAppCloudOutboxOperationsResponseDTO | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/outbox`, { params: { limit } });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const retryWhatsAppCloudOutbox = async (organizationId: string, outboxId: string): Promise<ServiceResponse<WhatsAppCloudOutboxActionResponseDTO | null>> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/outbox/${outboxId}/retry`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const deadLetterWhatsAppCloudOutbox = async (organizationId: string, outboxId: string): Promise<ServiceResponse<WhatsAppCloudOutboxActionResponseDTO | null>> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/outbox/${outboxId}/dead-letter`);
         return response.data;
     } catch (error) {
         return handleApiError(error);
