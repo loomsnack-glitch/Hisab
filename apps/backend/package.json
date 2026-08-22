@@ -11,7 +11,8 @@
     "console:create-owner": "bun --env-file=.env dist/scripts/console-create-owner.js",
     "owner:create": "bun --env-file=.env dist/scripts/console-create-owner.js",
     "add-initial-data": "bun run src/scripts/add-initial-data.ts",
-    "grant-all-permissions-in-admin-roles": "bun run src/scripts/admin-permissions.ts"
+    "grant-all-permissions-in-admin-roles": "bun run src/scripts/admin-permissions.ts",
+    "billing:numbering-dry-run": "bun run src/scripts/dry-run-bill-number-repair.ts"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
