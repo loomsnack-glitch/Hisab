@@ -899,6 +899,31 @@ router.post(
   },
 );
 
+router.get("/kots", async (c) => {
+  try {
+    return handleServiceResponse(
+      c,
+      await kotService.listKitchenKotsForDevice(c.get("authDevice")),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "listKitchenKotsForDevice", c, error);
+  }
+});
+
+router.post("/kots/:kotId/complete", async (c) => {
+  try {
+    const kotId = c.req.param("kotId");
+    const invalidKotId = validateUuidParam(kotId, "Invalid KOT id");
+    if (invalidKotId) return c.json(invalidKotId, invalidKotId.code);
+    return handleServiceResponse(
+      c,
+      await kotService.completeKitchenKotForDevice(c.get("authDevice"), kotId),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "completeKitchenKotForDevice", c, error);
+  }
+});
+
 router.get("/sales/:saleId", async (c) => {
   try {
     const saleId = c.req.param("saleId");

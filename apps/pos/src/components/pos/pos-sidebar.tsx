@@ -15,6 +15,7 @@ type PosSidebarProps = {
     onToggle: () => void;
     billsCount?: number;
     tableManagementEnabled: boolean;
+    kotSystemEnabled: boolean;
 };
 
 export const readPosSidebarCollapsed = () => {
@@ -29,11 +30,11 @@ export const persistPosSidebarCollapsed = (collapsed: boolean) => {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
 };
 
-const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnabled }: PosSidebarProps) => {
+const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnabled, kotSystemEnabled }: PosSidebarProps) => {
     const location = useLocation();
     const activePanelTab = getPosPanelTabFromPath(location.pathname);
     const isAppearanceRoute = location.pathname === "/appearance" || location.pathname === "/settings";
-    const destinations = getVisiblePosWorkspaceDestinations({ tableManagementEnabled });
+    const destinations = getVisiblePosWorkspaceDestinations({ tableManagementEnabled, kotSystemEnabled });
 
     const mainDestinations = destinations.filter((destination) => destination.id !== "appearance");
     const appearanceDestination = destinations.find((destination) => destination.id === "appearance");

@@ -115,11 +115,28 @@ export const KotDTOSchema = z.object({
   kotNumber: z.string().min(1).max(64),
   kotSequenceNumber: z.number().int().positive(),
   kotPeriodKey: z.string().min(1).max(32),
+  kitchenCompletedAt: dtoDateSchema.nullable().optional().default(null),
   createdByDeviceId: z.uuid("Invalid creator device id").nullable().optional(),
   updatedByDeviceId: z.uuid("Invalid updater device id").nullable().optional(),
   createdAt: dtoDateSchema,
   updatedAt: dtoDateSchema,
   items: z.array(KotItemDTOSchema).default([]),
+});
+
+export const KitchenKotItemSummarySchema = z.object({
+  productNameSnapshot: nameSchema,
+  quantity: quantitySchema,
+});
+
+export const KitchenKotDTOSchema = z.object({
+  id: z.uuid("Invalid KOT id"),
+  kotNumber: z.string().min(1).max(64),
+  tableLabel: z.string().nullable(),
+  items: z.array(KitchenKotItemSummarySchema).default([]),
+});
+
+export const KitchenKotsListResponseSchema = z.object({
+  kots: z.array(KitchenKotDTOSchema).default([]),
 });
 
 export const TableOrderStatusSchema = z.enum(["active", "checked_out", "discarded"]);

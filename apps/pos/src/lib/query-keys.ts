@@ -130,6 +130,11 @@ export const purchaseKeys = {
   posSummary: () => [...purchaseKeys.all, "pos", "summary"] as const,
 };
 
+export const kotKeys = {
+  all: ["kots"] as const,
+  posKitchen: () => [...kotKeys.all, "pos", "kitchen"] as const,
+};
+
 export const whatsappKeys = {
   all: ["whatsapp"] as const,
   accounts: (organizationId: string) =>

@@ -8,6 +8,7 @@ import type {
     CreateKotItemREPO,
     CreateKotREPO,
     CreateTableOrderREPO,
+    KitchenKotDTO,
     KotDTO,
     KotItemAddOnDTO,
     KotItemBundleComponentAddOnDTO,
@@ -27,6 +28,7 @@ const mapKot = (row: Record<string, unknown>, items: KotItemDTO[] = []): KotDTO 
     ...mapRow<Omit<KotDTO, "items">>(row),
     saleId: (row.sale_id as string | null | undefined) ?? null,
     tableOrderId: (row.table_order_id as string | null | undefined) ?? null,
+    kitchenCompletedAt: (row.kitchen_completed_at as Date | null | undefined) ?? null,
     items,
 });
 
@@ -622,6 +624,78 @@ export const replaceKotItems = async (
         SELECT *
         FROM kots
         WHERE id = ${kotId}
+    `;
+    if (!result) {
+        return null;
+    }
+    return mapKot(result, await getKotItemsByKotId(kotId, tx));
+};
+
+export const listPendingKitchenKots = async (
+    organizationId: string,
+    storeId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<KitchenKotDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT
+            kots.id,
+            kots.kot_number,
+            kots.kot_type,
+            service_tables.table_label
+        FROM kots
+        LEFT JOIN table_orders
+            ON table_orders.id = kots.table_order_id
+            AND table_orders.organization_id = kots.organization_id
+            AND table_orders.store_id = kots.store_id
+        LEFT JOIN service_tables
+            ON service_tables.id = table_orders.service_table_id
+            AND service_tables.organization_id = kots.organization_id
+            AND service_tables.store_id = kots.store_id
+        WHERE kots.organization_id = ${organizationId}
+          AND kots.store_id = ${storeId}
+          AND kots.kitchen_completed_at IS NULL
+        ORDER BY kots.created_at ASC, kots.kot_sequence_number ASC
+    `;
+
+    const kots: KitchenKotDTO[] = [];
+    for (const result of results) {
+        const kotId = String(result.id);
+        const items = await getKotItemsByKotId(kotId, tx);
+        kots.push({
+            id: kotId,
+            kotNumber: String(result.kot_number),
+            tableLabel:
+                result.kot_type === "parcel"
+                    ? null
+                    : ((result.table_label as string | null | undefined) ?? null),
+            items: items.map((item) => ({
+                productNameSnapshot: item.productNameSnapshot,
+                quantity: Number(item.quantity),
+            })),
+        });
+    }
+    return kots;
+};
+
+export const markKotKitchenCompleted = async (
+    organizationId: string,
+    storeId: string,
+    kotId: string,
+    updatedByDeviceId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<KotDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        UPDATE kots
+        SET kitchen_completed_at = NOW(),
+            updated_by_device_id = ${updatedByDeviceId},
+            updated_at = NOW()
+        WHERE id = ${kotId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND kitchen_completed_at IS NULL
+        RETURNING *
     `;
     if (!result) {
         return null;

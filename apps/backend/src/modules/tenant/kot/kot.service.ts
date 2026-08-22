@@ -12,6 +12,7 @@ import {
     type CreateTableKotSVC,
     type DeviceSessionDTO,
     type KotDTO,
+    type KitchenKotsListResponse,
     type KotItemDTO,
     type ParcelKotResponse,
     type SaleDetailDTO,
@@ -1344,4 +1345,114 @@ export const checkoutTableOrderForDevice = async (
         }
         throw error;
     }
+};
+
+const requireKotSystemStore = async (session: DeviceSessionDTO) => {
+    const store = await organizationRepository.getStoreById(
+        session.organization.id,
+        session.store.id,
+    );
+    if (!store) {
+        return {
+            ok: false as const,
+            response: {
+                status: "error" as const,
+                message: "Store not found",
+                data: null,
+                code: STATUS_CODES.NOT_FOUND,
+            },
+        };
+    }
+    if (!store.kotSystemEnabled) {
+        return {
+            ok: false as const,
+            response: {
+                status: "error" as const,
+                message: "KOT is available only when the KOT System is enabled",
+                data: null,
+                code: STATUS_CODES.FORBIDDEN,
+            },
+        };
+    }
+    return { ok: true as const, store };
+};
+
+export const listKitchenKotsForDevice = async (
+    session: DeviceSessionDTO,
+): Promise<ServiceResponse<KitchenKotsListResponse | null>> => {
+    const features = await requireKotSystemStore(session);
+    if (!features.ok) {
+        return features.response;
+    }
+
+    const kots = await kotRepository.listPendingKitchenKots(
+        session.organization.id,
+        session.store.id,
+    );
+
+    return {
+        status: "success",
+        data: { kots },
+        message: "Kitchen KOTs loaded",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const completeKitchenKotForDevice = async (
+    session: DeviceSessionDTO,
+    kotId: string,
+): Promise<ServiceResponse<KitchenKotsListResponse | null>> => {
+    const features = await requireKotSystemStore(session);
+    if (!features.ok) {
+        return features.response;
+    }
+
+    const existingKot = await kotRepository.getKotById(
+        session.organization.id,
+        session.store.id,
+        kotId,
+    );
+    if (!existingKot) {
+        return {
+            status: "error",
+            message: "KOT not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+    if (existingKot.kitchenCompletedAt) {
+        return {
+            status: "error",
+            message: "KOT is already completed",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    const completed = await kotRepository.markKotKitchenCompleted(
+        session.organization.id,
+        session.store.id,
+        kotId,
+        session.device.id,
+    );
+    if (!completed) {
+        return {
+            status: "error",
+            message: "KOT could not be completed",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+
+    const kots = await kotRepository.listPendingKitchenKots(
+        session.organization.id,
+        session.store.id,
+    );
+
+    return {
+        status: "success",
+        data: { kots },
+        message: "KOT marked as complete",
+        code: STATUS_CODES.SUCCESS,
+    };
 };

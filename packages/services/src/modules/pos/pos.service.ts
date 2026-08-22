@@ -51,6 +51,7 @@ import type {
   UpdateTableKotJSON,
   UpdateTableOrderJSON,
   CheckoutTableOrderJSON,
+  KitchenKotsListResponse,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -431,6 +432,28 @@ export const createPosParcelKot = async (
 ): Promise<ServiceResponse<ParcelKotResponse | null>> => {
   try {
     const response = await api.post("/pos/kots/parcel", data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const getPosKitchenKots = async (): Promise<
+  ServiceResponse<KitchenKotsListResponse | null>
+> => {
+  try {
+    const response = await api.get("/pos/kots");
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const completePosKitchenKot = async (
+  kotId: string,
+): Promise<ServiceResponse<KitchenKotsListResponse | null>> => {
+  try {
+    const response = await api.post(`/pos/kots/${kotId}/complete`);
     return response.data;
   } catch (error) {
     return handleApiError(error);

@@ -4,6 +4,8 @@ import type {
   CheckoutTableOrderSchema,
   CreateParcelKotSchema,
   CreateTableKotSchema,
+  KitchenKotDTOSchema,
+  KitchenKotsListResponseSchema,
   KotDTOSchema,
   KotItemAddOnDTOSchema,
   KotItemBundleComponentAddOnDTOSchema,
@@ -28,6 +30,8 @@ export type KotItemBundleComponentDTO = z.infer<
 >;
 export type KotItemDTO = z.infer<typeof KotItemDTOSchema>;
 export type KotDTO = z.infer<typeof KotDTOSchema>;
+export type KitchenKotDTO = z.infer<typeof KitchenKotDTOSchema>;
+export type KitchenKotsListResponse = z.infer<typeof KitchenKotsListResponseSchema>;
 
 export type CreateParcelKotJSON = z.infer<typeof CreateParcelKotSchema>;
 export type CreateParcelKotSVC = CreateParcelKotJSON;

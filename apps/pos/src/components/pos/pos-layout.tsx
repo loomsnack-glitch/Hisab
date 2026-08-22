@@ -288,6 +288,7 @@ const PosLayout = ({
                         onToggle={toggleSidebar}
                         billsCount={billsCount}
                         tableManagementEnabled={session.store.tableManagementEnabled}
+                        kotSystemEnabled={session.store.kotSystemEnabled}
                     />
                 </div>
             </aside>
@@ -497,6 +498,7 @@ const PosLayout = ({
             <PosMobileBottomNav
                 billsCount={billsCount}
                 tableManagementEnabled={session.store.tableManagementEnabled}
+                kotSystemEnabled={session.store.kotSystemEnabled}
             />
             </div>
         </div>
