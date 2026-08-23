@@ -31,6 +31,19 @@ export type WhatsAppCloudMediaUpload = {
   fileName: string;
 };
 
+export type WhatsAppCloudTemplateDefinition = {
+  name: string;
+  language: string;
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+  components: Array<Record<string, unknown>>;
+};
+
+export type WhatsAppCloudTemplateCreateResponse = {
+  id?: string;
+  status?: string;
+  category?: string;
+};
+
 export class WhatsAppCloudApiError extends Error {
   readonly status: number | null;
   readonly providerCode: string | null;
@@ -237,6 +250,44 @@ export class WhatsAppCloudApiClient {
     return this.getAllGraphPages<Record<string, unknown>>(
       `${normalizeResourceId(wabaId, "WABA ID")}/message_templates`,
     ).then(data => ({ data }));
+  }
+
+  createMessageTemplate(
+    wabaId: string,
+    definition: WhatsAppCloudTemplateDefinition,
+  ): Promise<WhatsAppCloudTemplateCreateResponse> {
+    return this.requestJson<WhatsAppCloudTemplateCreateResponse>(
+      `${normalizeResourceId(wabaId, "WABA ID")}/message_templates`,
+      {
+        method: "POST",
+        body: JSON.stringify(definition),
+      },
+    );
+  }
+
+  editMessageTemplate(
+    templateId: string,
+    definition: WhatsAppCloudTemplateDefinition,
+  ): Promise<{ success?: boolean }> {
+    return this.requestJson<{ success?: boolean }>(
+      normalizeResourceId(templateId, "template ID"),
+      {
+        method: "POST",
+        body: JSON.stringify(definition),
+      },
+    );
+  }
+
+  deleteMessageTemplate(
+    wabaId: string,
+    templateName: string,
+  ): Promise<{ success?: boolean }> {
+    const normalizedName = templateName.trim();
+    if (!normalizedName) throw new Error("Template name is required");
+    return this.requestJson<{ success?: boolean }>(
+      `${normalizeResourceId(wabaId, "WABA ID")}/message_templates?name=${encodeURIComponent(normalizedName)}`,
+      { method: "DELETE" },
+    );
   }
 
   private async getAllGraphPages<T>(initialPath: string): Promise<T[]> {

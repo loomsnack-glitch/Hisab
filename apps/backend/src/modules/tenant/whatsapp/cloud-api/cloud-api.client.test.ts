@@ -92,6 +92,55 @@ describe("WhatsAppCloudApiClient", () => {
     ]);
   });
 
+  test("creates a WABA template with the typed provider definition", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v26.0",
+      baseUrl: "https://graph.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return jsonResponse({ id: "meta-template-1", status: "PENDING", category: "UTILITY" });
+      },
+    });
+
+    await expect(client.createMessageTemplate("waba-1", {
+      name: "bill_receipt",
+      language: "en_US",
+      category: "UTILITY",
+      components: [{ type: "BODY", text: "Hello {{1}}" }],
+    })).resolves.toEqual({ id: "meta-template-1", status: "PENDING", category: "UTILITY" });
+    expect(calls[0]?.url).toBe("https://graph.example.test/v26.0/waba-1/message_templates");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(String(calls[0]?.init?.body)).toContain('"name":"bill_receipt"');
+    expect(String(calls[0]?.init?.body)).not.toContain("test-secret-token");
+  });
+
+  test("edits and deletes templates using provider-owned identifiers", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v26.0",
+      baseUrl: "https://graph.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return jsonResponse({ success: true });
+      },
+    });
+
+    await client.editMessageTemplate("meta-template-1", {
+      name: "bill_receipt",
+      language: "en_US",
+      category: "UTILITY",
+      components: [{ type: "BODY", text: "Updated {{1}}" }],
+    });
+    await client.deleteMessageTemplate("waba-1", "bill receipt");
+    expect(calls.map(call => [call.url, call.init?.method])).toEqual([
+      ["https://graph.example.test/v26.0/meta-template-1", "POST"],
+      ["https://graph.example.test/v26.0/waba-1/message_templates?name=bill%20receipt", "DELETE"],
+    ]);
+  });
+
   test("marks rate limits as retryable", async () => {
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",

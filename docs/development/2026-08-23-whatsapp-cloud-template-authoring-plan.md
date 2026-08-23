@@ -284,7 +284,7 @@ Evidence:
 
 ### Phase 2 — Meta create/update/delete adapter
 
-Status: **in progress**
+Status: **completed**
 
 Scope:
 
@@ -304,9 +304,18 @@ Exit criteria:
 - the generated payload matches Meta's WABA message-template contract;
 - an uncertain POST is never blindly repeated with a new identity.
 
+Evidence:
+
+- [x] `WhatsAppCloudApiClient` now exposes typed create, edit, and delete
+  operations using the WABA/template provider boundaries.
+- [x] Client tests cover pending creation, provider-owned edit/delete paths,
+  request URLs, method/body shape, token redaction, and existing error/retry
+  classification.
+- [x] Focused client suite passes: 10 tests, 0 failures.
+
 ### Phase 3 — Submission orchestration and approval reconciliation
 
-Status: **planned**
+Status: **in progress**
 
 Scope:
 
