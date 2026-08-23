@@ -85,6 +85,28 @@ export const SalesSortSchema = z.enum([
   "highest",
   "lowest",
 ]);
+
+export const SalesPaymentMethodsQuerySchema = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null || value === "") {
+      return undefined;
+    }
+
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      return value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+    }
+
+    return value;
+  },
+  z.array(PaymentMethodSchema).optional(),
+);
 export const CustomerLedgerEntryTypeSchema = z.enum([
   "sale",
   "payment",
@@ -471,6 +493,7 @@ export const SalesListQuerySchema = z.object({
   status: SaleStatusSchema.optional(),
   paymentStatus: PaymentStatusSchema.optional(),
   paymentMethod: PaymentMethodSchema.optional(),
+  paymentMethods: SalesPaymentMethodsQuerySchema,
   customerId: z.uuid("Invalid customer id").optional(),
   search: z
     .string()

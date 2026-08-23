@@ -51,6 +51,16 @@ import {
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 
+const resolveSalesPaymentMethods = (query: SalesListQuery): string[] => {
+    if (query.paymentMethods && query.paymentMethods.length > 0) {
+        return query.paymentMethods;
+    }
+    if (query.paymentMethod) {
+        return [query.paymentMethod];
+    }
+    return [];
+};
+
 type SaleSummaryRow = Record<string, unknown> & {
     customer_name?: string | null;
     customer_phone?: string | null;
@@ -497,7 +507,7 @@ export const getSalesByStore = async (
     const searchPattern = search ? `%${search}%` : "";
     const status = query.status ?? "";
     const paymentStatus = query.paymentStatus ?? "";
-    const paymentMethod = query.paymentMethod ?? "";
+    const paymentMethods = resolveSalesPaymentMethods(query);
     const customerId = query.customerId ?? "";
     const createdFrom = query.createdFrom ?? null;
     const createdTo = query.createdTo ?? null;
@@ -568,12 +578,12 @@ export const getSalesByStore = async (
           AND (${status} = '' OR s.status::text = ${status})
           AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
           AND (
-              ${paymentMethod} = ''
+              ${paymentMethods.length} = 0
               OR EXISTS (
                   SELECT 1
                   FROM payments payment_filter
                   WHERE payment_filter.sale_id = s.id
-                    AND payment_filter.method::text = ${paymentMethod}
+                    AND payment_filter.method::text IN ${pg(paymentMethods)}
               )
           )
           AND (${customerId} = '' OR s.customer_id::text = ${customerId})
@@ -701,7 +711,7 @@ export const getSalesSummaryByStore = async (
     const searchPattern = search ? `%${search}%` : "";
     const status = query.status ?? "";
     const paymentStatus = query.paymentStatus ?? "";
-    const paymentMethod = query.paymentMethod ?? "";
+    const paymentMethods = resolveSalesPaymentMethods(query);
     const customerId = query.customerId ?? "";
     const createdFrom = query.createdFrom ?? null;
     const createdTo = query.createdTo ?? null;
@@ -735,12 +745,12 @@ export const getSalesSummaryByStore = async (
           AND (${status} = '' OR s.status::text = ${status})
           AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
           AND (
-              ${paymentMethod} = ''
+              ${paymentMethods.length} = 0
               OR EXISTS (
                   SELECT 1
                   FROM payments payment_filter
                   WHERE payment_filter.sale_id = s.id
-                    AND payment_filter.method::text = ${paymentMethod}
+                    AND payment_filter.method::text IN ${pg(paymentMethods)}
               )
           )
           AND (${customerId} = '' OR s.customer_id::text = ${customerId})

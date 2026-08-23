@@ -10,6 +10,7 @@ import {
     SaleItemInputSchema,
     SaleDetailDTOSchema,
     SaleNumberSettingsDTOSchema,
+    SalesListQuerySchema,
     UpdateSaleNumberSettingsSchema,
 } from "./billing.schema";
 
@@ -414,5 +415,21 @@ describe("Configured sale billing contracts", () => {
 
         expect(query.success).toBe(true);
         expect(response.success).toBe(true);
+    });
+
+    test("sales list query accepts multiple payment methods", () => {
+        const fromArray = SalesListQuerySchema.safeParse({
+            paymentMethods: ["cash", "upi"],
+        });
+        const fromCsv = SalesListQuerySchema.safeParse({
+            paymentMethods: "cash,upi",
+        });
+
+        expect(fromArray.success).toBe(true);
+        expect(fromCsv.success).toBe(true);
+        if (fromArray.success && fromCsv.success) {
+            expect(fromArray.data.paymentMethods).toEqual(["cash", "upi"]);
+            expect(fromCsv.data.paymentMethods).toEqual(["cash", "upi"]);
+        }
     });
 });
