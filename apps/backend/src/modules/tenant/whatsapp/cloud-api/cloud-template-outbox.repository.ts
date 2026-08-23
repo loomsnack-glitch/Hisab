@@ -8,6 +8,7 @@ export type CloudTemplateOutboxRecord = {
   outboxId: string;
   messageStatus: string;
   outboxStatus: string;
+  deduplicated?: boolean;
 };
 
 export type CloudTemplateOutboxRequest = {
@@ -24,6 +25,7 @@ export type CloudTemplateOutboxRequest = {
   messageId: string;
   idempotencyKey: string;
   campaignKey?: string | null;
+  resendLockKey?: string | null;
 };
 
 const idempotencyKeyFor = (value: string): string => {
@@ -43,6 +45,25 @@ const recordFrom = (row: Record<string, unknown>): CloudTemplateOutboxRecord => 
 
 export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxRequest): Promise<CloudTemplateOutboxRecord> => pg.begin(async tx => {
   const idempotencyKey = idempotencyKeyFor(params.idempotencyKey);
+  if (params.resendLockKey) {
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${params.resendLockKey}))`;
+    const [current] = await tx`
+      SELECT message.id AS message_id, message.organization_id, message.store_id,
+             conversation.customer_id,
+             outbox.id AS outbox_id, message.status AS message_status,
+             outbox.status AS outbox_status
+      FROM whatsapp_campaign_recipients recipient
+      INNER JOIN whatsapp_messages message ON message.id = recipient.message_id
+      INNER JOIN whatsapp_conversations conversation ON conversation.id = message.conversation_id
+      INNER JOIN whatsapp_outbox outbox ON outbox.id = recipient.outbox_id
+      WHERE recipient.organization_id = ${params.organizationId}
+        AND recipient.store_id = ${params.storeId}
+        AND recipient.campaign_id = ${params.campaignId}
+        AND recipient.customer_id = ${params.customerId}
+      FOR UPDATE OF recipient, message, outbox
+    `;
+    if (current && String(current.outbox_status) !== "dead_letter") return { ...recordFrom(current as Record<string, unknown>), deduplicated: true };
+  }
   const [existing] = await tx`
     SELECT message.id AS message_id, message.organization_id, message.store_id,
            conversation.customer_id,

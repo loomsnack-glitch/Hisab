@@ -31,6 +31,10 @@ import {
     WhatsAppPromotionStatsSchema,
     WhatsAppPromotionCampaignDTOSchema,
     WhatsAppPromotionDashboardResponseSchema,
+    WhatsAppPromotionRecipientActionSchema,
+    WhatsAppPromotionRecipientDTOSchema,
+    WhatsAppPromotionRecipientsResponseSchema,
+    WhatsAppPromotionRecipientActionResponseSchema,
     WhatsAppSendTextSchema,
     WhatsAppSendConversationTextSchema,
     WhatsAppAttachConversationCustomerSchema,
@@ -155,6 +159,10 @@ export type WhatsAppPromotionCooldownDTO = z.infer<typeof WhatsAppPromotionCoold
 export type WhatsAppPromotionStatsDTO = z.infer<typeof WhatsAppPromotionStatsSchema>;
 export type WhatsAppPromotionCampaignDTO = z.infer<typeof WhatsAppPromotionCampaignDTOSchema>;
 export type WhatsAppPromotionDashboardResponseDTO = z.infer<typeof WhatsAppPromotionDashboardResponseSchema>;
+export type WhatsAppPromotionRecipientAction = z.infer<typeof WhatsAppPromotionRecipientActionSchema>;
+export type WhatsAppPromotionRecipientDTO = z.infer<typeof WhatsAppPromotionRecipientDTOSchema>;
+export type WhatsAppPromotionRecipientsResponseDTO = z.infer<typeof WhatsAppPromotionRecipientsResponseSchema>;
+export type WhatsAppPromotionRecipientActionResponseDTO = z.infer<typeof WhatsAppPromotionRecipientActionResponseSchema>;
 export type WhatsAppWorkerInvoiceJobDTO = z.infer<typeof WhatsAppWorkerInvoiceJobSchema>;
 export type WhatsAppWorkerInvoiceResultJSON = z.infer<typeof WhatsAppWorkerInvoiceResultSchema>;
 export type WhatsAppWorkerMessageStatusJSON = z.infer<typeof WhatsAppWorkerMessageStatusSchema>;

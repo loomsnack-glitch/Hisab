@@ -18,6 +18,18 @@ describe("Cloud promotion template components", () => {
     ]);
   });
 
+  test("sends one parameter for a repeated provider placeholder", () => {
+    expect(buildPromotionCloudComponents(
+      [{ type: "body", text: "Hello {{1}}, store {{2}}, again {{2}}" }],
+      "Hello {{customer_name}}, store {{store_name}}, again {{store_name}}",
+      { customer_name: "Asha", store_name: "Central Store" },
+      null,
+      { "body:1": "customer_name", "body:2": "store_name" },
+    )).toEqual([
+      { type: "body", parameters: [{ type: "text", text: "Asha" }, { type: "text", text: "Central Store" }] },
+    ]);
+  });
+
   test("rejects an image when the approved template has no image header", () => {
     expect(() => buildPromotionCloudComponents(
       [{ type: "body", text: "Hello {{1}}" }],

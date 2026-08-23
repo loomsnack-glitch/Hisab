@@ -34,6 +34,15 @@ describe("Cloud template component builder", () => {
     )).toThrow("Image header requires an image parameter");
   });
 
+  test("counts repeated provider placeholders once", () => {
+    expect(buildCloudTemplateComponents(
+      [{ type: "BODY", text: "Hello {{1}}, store {{2}}, again {{2}}" }],
+      [{ type: "body", parameters: [{ type: "text", text: "Asha" }, { type: "text", text: "Central Store" }] }],
+    )).toEqual([
+      { type: "body", parameters: [{ type: "text", text: "Asha" }, { type: "text", text: "Central Store" }] },
+    ]);
+  });
+
   test("requires HTTPS for link-based media parameters", () => {
     expect(() => buildCloudTemplateComponents(
       [{ type: "HEADER", format: "IMAGE" }],

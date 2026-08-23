@@ -11,10 +11,12 @@ import type {
     WhatsAppWorkerMessageEventJSON,
     WhatsAppPromotionCampaignDTO,
     WhatsAppPromotionStatsDTO,
+    WhatsAppPromotionRecipientDTO,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
 import { releaseCloudQuota, settleCloudQuota } from "./cloud-api/cloud-quota.repository";
+import { promotionRecipientResendAvailableAt, promotionRecipientResendIsBlocked } from "./promotion-recipient-actions";
 
 type AccountRow = Record<string, unknown>;
 
@@ -1490,6 +1492,78 @@ export const listPromotionCampaigns = async (
             failedRecipients: promotionNumber(statsRow, "failed_recipients"),
         },
     };
+};
+
+export const listPromotionRecipients = async (
+    organizationId: string,
+    storeId: string,
+    campaignId: string,
+    status: "all" | "failed" | "retryable" = "all",
+): Promise<WhatsAppPromotionRecipientDTO[]> => {
+    const rows = await pg`
+        SELECT
+            recipient.id,
+            customer.name AS customer_name,
+            recipient.phone_number,
+            recipient.status,
+            message.status AS delivery_status,
+            recipient.failure_code,
+            recipient.failure_message,
+            recipient.updated_at,
+            recipient.outbox_id,
+            outbox.status AS outbox_status,
+            outbox.cloud_template_snapshot
+        FROM whatsapp_campaign_recipients recipient
+        INNER JOIN whatsapp_campaigns campaign
+          ON campaign.id = recipient.campaign_id
+         AND campaign.organization_id = recipient.organization_id
+         AND campaign.store_id = recipient.store_id
+        LEFT JOIN customers customer
+          ON customer.id = recipient.customer_id
+         AND customer.organization_id = recipient.organization_id
+        LEFT JOIN whatsapp_outbox outbox
+          ON outbox.id = recipient.outbox_id
+         AND outbox.organization_id = recipient.organization_id
+         AND outbox.store_id = recipient.store_id
+        LEFT JOIN whatsapp_messages message
+          ON message.id = recipient.message_id
+         AND message.organization_id = recipient.organization_id
+         AND message.store_id = recipient.store_id
+        WHERE recipient.organization_id = ${organizationId}
+          AND recipient.store_id = ${storeId}
+          AND recipient.campaign_id = ${campaignId}
+          AND (
+            ${status} = 'all'
+            OR
+            (${status} = 'failed' AND recipient.status IN ('retryable', 'dead_letter', 'cancelled'))
+            OR (${status} = 'retryable' AND recipient.status = 'retryable')
+          )
+        ORDER BY recipient.updated_at DESC, recipient.id
+    `;
+    return rows.map((row: Record<string, unknown>) => {
+        const recipientStatus = String(row.status) as WhatsAppPromotionRecipientDTO["status"];
+        const outboxStatus = row.outbox_status ? String(row.outbox_status) : null;
+        const failureCode = (row.failure_code as string | null | undefined) ?? null;
+        const failureMessage = (row.failure_message as string | null | undefined) ?? null;
+        const updatedAt = String(row.updated_at);
+        const resendAvailableAt = promotionRecipientResendAvailableAt(failureCode, updatedAt);
+        return {
+            id: String(row.id),
+            customerName: String(row.customer_name ?? "Unknown customer"),
+            phoneNumber: String(row.phone_number),
+            status: recipientStatus,
+            deliveryStatus: (row.delivery_status as WhatsAppPromotionRecipientDTO["deliveryStatus"] | undefined) ?? null,
+            failureCode,
+            failureMessage,
+            updatedAt,
+            resendAvailableAt,
+            canRetry: recipientStatus === "retryable" && outboxStatus === "retryable",
+            canResend: recipientStatus === "dead_letter"
+                && outboxStatus === "dead_letter"
+                && row.cloud_template_snapshot != null
+                && !promotionRecipientResendIsBlocked(failureCode, updatedAt),
+        } satisfies WhatsAppPromotionRecipientDTO;
+    });
 };
 
 export const getLatestPromotionCreatedAt = async (

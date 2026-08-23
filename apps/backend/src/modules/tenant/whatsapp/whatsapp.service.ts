@@ -1039,6 +1039,21 @@ export const getPromotionDashboard = async (userId: string, organizationId: stri
         code: STATUS_CODES.SUCCESS,
     };
 };
+export const getPromotionRecipients = async (userId: string, organizationId: string, storeId: string, campaignId: string, status: "all" | "failed" | "retryable" = "all") => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return { status: "success" as const, message: "Promotion recipients fetched successfully", data: await promotionService.getPromotionRecipients(organizationId, storeId, campaignId, status), code: STATUS_CODES.SUCCESS };
+};
+export const retryPromotionRecipient = async (userId: string, organizationId: string, storeId: string, campaignId: string, recipientId: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return promotionService.retryPromotionRecipient(userId, organizationId, storeId, campaignId, recipientId);
+};
+export const resendPromotionRecipient = async (userId: string, organizationId: string, storeId: string, campaignId: string, recipientId: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return promotionService.resendPromotionRecipient(userId, organizationId, storeId, campaignId, recipientId);
+};
 export const getInvoiceStatusForDevice = invoiceService.getInvoiceStatusForDevice;
 export const retryInvoiceForDevice = invoiceService.retryInvoiceForDevice;
 export const getInvoiceStatus = invoiceService.getInvoiceStatus;

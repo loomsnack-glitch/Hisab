@@ -12,11 +12,15 @@ const textParameters = (
   values: Record<string, string>,
 ): CloudTemplateParameter[] => {
   if (typeof text !== "string") return [];
-  return [...text.matchAll(/\{\{(\d+)\}\}/g)].map(match => {
+  const seen = new Set<string>();
+  return [...text.matchAll(/\{\{(\d+)\}\}/g)].flatMap(match => {
+    const placeholder = match[1]!;
+    if (seen.has(placeholder)) return [];
+    seen.add(placeholder);
     const token = mapping[`${componentKey}:${match[1]}`];
     const value = token ? values[token] : undefined;
     if (!value?.trim()) throw new Error("Cloud promotion template variables do not match the local template");
-    return { type: "text", text: value };
+    return [{ type: "text", text: value }];
   });
 };
 

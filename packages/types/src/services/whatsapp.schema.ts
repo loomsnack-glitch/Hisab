@@ -522,6 +522,32 @@ export const WhatsAppPromotionDashboardResponseSchema = z.object({
     }),
 });
 
+export const WhatsAppPromotionRecipientActionSchema = z.enum(["retry", "resend"]);
+
+export const WhatsAppPromotionRecipientDTOSchema = z.object({
+    id: z.uuid("Invalid recipient id"),
+    customerName: z.string().trim().min(1).max(255),
+    phoneNumber: phoneSchema,
+    status: WhatsAppOutboxStatusSchema,
+    deliveryStatus: WhatsAppMessageStatusSchema.nullable(),
+    failureCode: z.string().trim().min(1).max(100).nullable(),
+    failureMessage: z.string().trim().min(1).max(1000).nullable(),
+    updatedAt: dtoDateSchema,
+    resendAvailableAt: dtoDateSchema.nullable(),
+    canRetry: z.boolean(),
+    canResend: z.boolean(),
+});
+
+export const WhatsAppPromotionRecipientsResponseSchema = z.object({
+    recipients: z.array(WhatsAppPromotionRecipientDTOSchema),
+});
+
+export const WhatsAppPromotionRecipientActionResponseSchema = z.object({
+    recipientId: z.uuid("Invalid recipient id"),
+    action: WhatsAppPromotionRecipientActionSchema,
+    outboxId: z.uuid("Invalid outbox id"),
+});
+
 export const WhatsAppInvoiceQueueResponseSchema = z.object({
     saleId: z.uuid("Invalid sale id"),
     messageId: z.uuid("Invalid message id"),

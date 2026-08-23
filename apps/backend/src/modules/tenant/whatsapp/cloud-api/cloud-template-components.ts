@@ -24,7 +24,9 @@ const normalizedType = (value: unknown): string =>
   typeof value === "string" ? value.trim().toLowerCase() : "";
 
 const parameterCount = (value: unknown): number =>
-  typeof value === "string" ? (value.match(/\{\{\d+\}\}/g) ?? []).length : 0;
+  typeof value === "string"
+    ? new Set(value.match(/\{\{\d+\}\}/g) ?? []).size
+    : 0;
 
 const safeText = (value: unknown, label: string, maxLength: number): string => {
   if (typeof value !== "string") {

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, BarChart3, CheckCheck, Clock3, Eye, LoaderCircle, Megaphone, RefreshCw, Send, Users } from "lucide-react";
-import type { StoreMessageLink, WhatsAppCloudAccountSnapshot } from "@repo/types";
-import { getWhatsAppCloudTemplateBindings, getWhatsAppCloudTemplateSubmissions, getWhatsAppCloudTemplates, getWhatsAppMessageTemplates, getWhatsAppPromotionDashboard, stopWhatsAppCloudCampaign } from "@repo/services";
+import type { StoreMessageLink, WhatsAppCloudAccountSnapshot, WhatsAppPromotionRecipientDTO } from "@repo/types";
+import { getWhatsAppCloudTemplateBindings, getWhatsAppCloudTemplateSubmissions, getWhatsAppCloudTemplates, getWhatsAppMessageTemplates, getWhatsAppPromotionDashboard, getWhatsAppPromotionRecipients, resendWhatsAppPromotionRecipient, retryWhatsAppPromotionRecipient, stopWhatsAppCloudCampaign } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { formatDateTime } from "@/lib/format";
@@ -24,9 +24,16 @@ const statusLabel: Record<string, string> = {
   queued: "Queued",
   sending: "Sending",
   completed: "Completed",
-  failed: "Needs attention",
+  failed: "Failed",
   cancelled: "Cancelled",
   draft: "Draft",
+};
+
+const campaignStatusLabel = (campaign: { status: string; queuedRecipients: number; sendingRecipients: number; failedRecipients: number }) => {
+  if (campaign.status === "queued") return `Queued · ${campaign.queuedRecipients}`;
+  if (campaign.status === "sending") return `Sending · ${campaign.sendingRecipients}`;
+  if (campaign.status === "failed") return `Failed · ${campaign.failedRecipients}`;
+  return statusLabel[campaign.status] ?? campaign.status;
 };
 
 const statusClass: Record<string, string> = {
@@ -34,6 +41,56 @@ const statusClass: Record<string, string> = {
   sending: "border-blue-300/60 bg-blue-50 text-blue-800 dark:bg-blue-950/30 dark:text-blue-200",
   completed: "border-emerald-300/60 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200",
   failed: "border-red-300/60 bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200",
+};
+
+const recipientStatusLabel: Record<string, string> = {
+  pending: "Queued",
+  processing: "Sending",
+  reconciling: "Checking delivery",
+  sent: "Sent",
+  delivered: "Delivered",
+  read: "Read",
+  retryable: "Retry waiting",
+  dead_letter: "Failed",
+  cancelled: "Cancelled",
+};
+
+const recipientStatusClass: Record<string, string> = {
+  pending: "border-amber-300/60 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200",
+  processing: "border-blue-300/60 bg-blue-50 text-blue-800 dark:bg-blue-950/30 dark:text-blue-200",
+  reconciling: "border-blue-300/60 bg-blue-50 text-blue-800 dark:bg-blue-950/30 dark:text-blue-200",
+  sent: "border-blue-300/60 bg-blue-50 text-blue-800 dark:bg-blue-950/30 dark:text-blue-200",
+  delivered: "border-emerald-300/60 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200",
+  read: "border-violet-300/60 bg-violet-50 text-violet-800 dark:bg-violet-950/30 dark:text-violet-200",
+  retryable: "border-amber-300/60 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200",
+  dead_letter: "border-red-300/60 bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200",
+  cancelled: "border-border/60 bg-muted text-muted-foreground",
+};
+
+const recipientActionStatuses = new Set(["retryable", "dead_letter", "cancelled"]);
+
+const actionErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") return error.message;
+  return fallback;
+};
+
+const deliveryStatusLabel: Record<string, string> = {
+  queued: "Queued",
+  sending: "Sending",
+  sent: "Sent",
+  delivered: "Delivered",
+  read: "Read",
+  failed: "Failed",
+};
+
+const deliveryStatusClass: Record<string, string> = {
+  queued: recipientStatusClass.pending,
+  sending: recipientStatusClass.processing,
+  sent: recipientStatusClass.sent,
+  delivered: recipientStatusClass.delivered,
+  read: recipientStatusClass.read,
+  failed: recipientStatusClass.dead_letter,
 };
 
 const Stat = ({ icon: Icon, label, value, tone = "text-foreground" }: { icon: typeof Users; label: string; value: number; tone?: string }) => (
@@ -48,6 +105,8 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
   const [stoppingCampaignId, setStoppingCampaignId] = useState("");
+  const [expandedCampaignId, setExpandedCampaignId] = useState("");
+  const [recipientActionId, setRecipientActionId] = useState("");
   useEffect(() => setPage(1), [storeId]);
   const queryKey = whatsappKeys.promotions(organizationId, storeId, 30, page);
   const businessAccountId = cloudAccount?.snapshot.whatsappBusinessAccountId ?? "";
@@ -89,6 +148,20 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
     },
     refetchIntervalInBackground: false,
   });
+  const recipientsQuery = useQuery({
+    queryKey: ["whatsapp", "promotion-recipients", organizationId, storeId, expandedCampaignId],
+    queryFn: () => getWhatsAppPromotionRecipients(organizationId, storeId, expandedCampaignId, "all"),
+    enabled: Boolean(expandedCampaignId),
+    staleTime: 5_000,
+  });
+  const recipientRows = recipientsQuery.data?.status === "success" ? recipientsQuery.data.data?.recipients ?? [] : [];
+  const [recipientClock, setRecipientClock] = useState(() => Date.now());
+  useEffect(() => {
+    const hasCooldown = recipientRows.some(recipient => recipient.resendAvailableAt && Date.parse(recipient.resendAvailableAt) > Date.now());
+    if (!hasCooldown) return;
+    const timer = window.setInterval(() => setRecipientClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [recipientRows]);
   const dashboard = query.data?.status === "success" ? query.data.data : null;
   const campaigns = dashboard?.campaigns ?? [];
   const stats = dashboard?.stats;
@@ -109,7 +182,7 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
         const localTemplate = localTemplatesById.get(binding.localTemplateId);
         const asset = assetsById.get(binding.cloudTemplateId);
         if (!localTemplate || !asset) return [];
-        const submission = submissions.find(item => item.metaTemplateId === asset.metaTemplateId && item.kind === "promotion" && item.storeId === storeId);
+        const submission = submissions.find(item => item.metaTemplateId === asset.metaTemplateId && item.kind === "promotion" && (item.originatingStoreId === storeId || item.originatingStoreId === null));
         return [{ bindingId: binding.id, name: asset.name, languageCode: asset.languageCode, body: localTemplate.body, components: asset.components, sampleValues: submission?.sampleValues ?? {} }];
       })
       .sort((left, right) => left.name.localeCompare(right.name) || left.languageCode.localeCompare(right.languageCode));
@@ -132,6 +205,29 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
       toast.success("Promotion stopped");
       await queryClient.invalidateQueries({ queryKey });
     } else toast.error(response.message);
+  };
+  const runRecipientAction = async (campaignId: string, recipient: WhatsAppPromotionRecipientDTO, action: "retry" | "resend") => {
+    if (action === "resend" && !window.confirm(`Send this promotion to ${recipient.customerName} again?`)) return;
+    setRecipientActionId(`${action}:${recipient.id}`);
+    try {
+      const response = action === "retry"
+        ? await retryWhatsAppPromotionRecipient(organizationId, storeId, campaignId, recipient.id)
+        : await resendWhatsAppPromotionRecipient(organizationId, storeId, campaignId, recipient.id);
+      if (response.status !== "success") {
+        toast.error(response.message);
+        return;
+      }
+      toast.success(action === "retry" ? "Recipient queued for retry" : "Recipient queued to send again");
+      try {
+        await Promise.all([queryClient.invalidateQueries({ queryKey }), recipientsQuery.refetch()]);
+      } catch (error) {
+        toast.error(actionErrorMessage(error, "Queued successfully, but the recipient list could not be refreshed"));
+      }
+    } catch (error) {
+      toast.error(actionErrorMessage(error, action === "retry" ? "Could not retry this recipient" : "Could not resend this recipient"));
+    } finally {
+      setRecipientActionId("");
+    }
   };
 
   return (
@@ -196,7 +292,7 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 items-start gap-2.5"><div className="mt-0.5 rounded-lg bg-primary/10 p-2 text-primary"><Megaphone className="size-3.5" /></div><div className="min-w-0"><p className="truncate font-medium">{campaign.title}</p><p className="text-xs text-muted-foreground">{formatDateTime(campaign.createdAt)} · {campaign.totalRecipients.toLocaleString()} recipients</p></div></div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className={statusClass[campaign.status] ?? ""}>{statusLabel[campaign.status] ?? campaign.status}</Badge>
+                      <Badge variant="outline" className={statusClass[campaign.status] ?? ""}>{campaignStatusLabel(campaign)}</Badge>
                       {cloudEnabled && (campaign.status === "queued" || campaign.status === "sending") ? <button type="button" className="rounded-lg border border-red-300/70 px-2 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30" disabled={stoppingCampaignId === campaign.id} onClick={() => void stopCampaign(campaign.id)}>{stoppingCampaignId === campaign.id ? "Stopping…" : "Stop"}</button> : null}
                     </div>
                   </div>
@@ -205,6 +301,45 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
                   <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-muted-foreground sm:grid-cols-5">
                     <span>Queued <strong className="font-medium text-foreground">{campaign.queuedRecipients}</strong></span><span>Sent <strong className="font-medium text-foreground">{campaign.sentRecipients}</strong></span><span>Delivered <strong className="font-medium text-foreground">{campaign.deliveredRecipients}</strong></span><span>Read <strong className="font-medium text-foreground">{campaign.readRecipients}</strong></span><span className={campaign.failedRecipients ? "text-red-600" : ""}>Failed <strong className="font-medium">{campaign.failedRecipients}</strong></span>
                   </div>
+                  {campaign.totalRecipients > 0 ? (
+                    <div className="mt-3 border-t border-border/60 pt-3">
+                      <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setExpandedCampaignId(current => current === campaign.id ? "" : campaign.id)}>
+                        {expandedCampaignId === campaign.id ? "Hide recipients" : "View recipients"}
+                      </button>
+                      {expandedCampaignId === campaign.id ? (
+                        <div className="mt-3 space-y-2">
+                          {recipientsQuery.isPending ? <p className="text-xs text-muted-foreground">Loading recipients…</p> : null}
+                          {recipientsQuery.data?.status === "error" ? <p className="text-xs text-red-600">{recipientsQuery.data.message}</p> : null}
+                          {recipientRows.map(recipient => {
+                            const retrying = recipientActionId === `retry:${recipient.id}`;
+                            const resending = recipientActionId === `resend:${recipient.id}`;
+                            const resendBlocked = Boolean(recipient.resendAvailableAt && Date.parse(recipient.resendAvailableAt) > recipientClock);
+                            const resendRemainingSeconds = recipient.resendAvailableAt ? Math.max(0, Math.ceil((Date.parse(recipient.resendAvailableAt) - recipientClock) / 1000)) : 0;
+                            return (
+                              <div key={recipient.id} className="rounded-xl border border-border/60 bg-muted/20 p-2.5">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-xs font-medium">{recipient.customerName} <span className="font-normal text-muted-foreground">· {recipient.phoneNumber}</span></p>
+                                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                      <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${recipientStatusClass[recipient.status] ?? "border-border/60 bg-muted text-muted-foreground"}`}>{recipientStatusLabel[recipient.status] ?? recipient.status}</span>
+                                      {recipient.deliveryStatus && recipient.deliveryStatus !== "sent" ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${deliveryStatusClass[recipient.deliveryStatus] ?? "border-border/60 bg-muted text-muted-foreground"}`}>{deliveryStatusLabel[recipient.deliveryStatus] ?? recipient.deliveryStatus}</span> : null}
+                                      {recipient.failureMessage || recipient.failureCode ? <span className="text-[11px] text-red-600">{recipient.failureMessage ?? recipient.failureCode}</span> : null}
+                                    </div>
+                                  </div>
+                                  <div className="flex shrink-0 gap-1.5">
+                                    {recipient.canRetry ? <button type="button" className="rounded-md border border-amber-300/70 px-2 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:text-amber-200 dark:hover:bg-amber-950/30" disabled={Boolean(recipientActionId)} onClick={() => void runRecipientAction(campaign.id, recipient, "retry")}>{retrying ? "Retrying…" : "Retry"}</button> : null}
+                                    {recipient.canResend ? <button type="button" className="rounded-md border border-primary/40 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/5 disabled:opacity-50" disabled={Boolean(recipientActionId)} onClick={() => void runRecipientAction(campaign.id, recipient, "resend")}>{resending ? "Resending…" : recipient.failureCode === "131049" ? "Reset & resend" : "Resend"}</button> : null}
+                                    {resendBlocked ? <button type="button" className="rounded-md border border-border/60 px-2 py-1 text-[11px] font-medium text-muted-foreground" disabled title={`Available after ${formatDateTime(recipient.resendAvailableAt!)}`}>Reset in {formatRemaining(resendRemainingSeconds)}</button> : null}
+                                    {recipientActionStatuses.has(recipient.status) && !recipient.canRetry && !recipient.canResend && !resendBlocked ? <span className="text-[11px] text-muted-foreground">No safe action available</span> : null}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

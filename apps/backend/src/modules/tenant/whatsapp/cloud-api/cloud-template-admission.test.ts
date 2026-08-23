@@ -43,6 +43,23 @@ describe("Cloud template send admission", () => {
     expect(admitCloudTemplateSend(base)).toMatchObject({ admitted: false, reason: "template_variables_missing" });
   });
 
+  test("counts repeated provider placeholders once", () => {
+    const result = admitCloudTemplateSend({
+      ...base,
+      asset: { ...base.asset, components: [{ type: "BODY", text: "Hello {{1}}, store {{2}}, again {{2}}" }] },
+      outboundComponents: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: "Asha" },
+            { type: "text", text: "Central Store" },
+          ],
+        },
+      ],
+    });
+    expect(result.admitted).toBe(true);
+  });
+
   test("allows free-form messages only inside the rolling 24-hour window", () => {
     const now = new Date("2026-08-22T12:00:00.000Z");
     expect(admitCloudTemplateSend({ ...base, mode: "freeform", lastInboundAt: "2026-08-22T01:00:00.000Z", now }).admitted).toBe(true);

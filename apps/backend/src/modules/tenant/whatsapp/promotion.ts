@@ -20,6 +20,10 @@ import { enqueueCloudTemplateSend } from "./cloud-api/cloud-template-send.servic
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { buildPromotionCloudComponents } from "./promotion-cloud-components";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
+import { retryCloudOutboxNow } from "./cloud-api/cloud-outbox.repository";
+import { createCloudTemplateOutbox } from "./cloud-api/cloud-template-outbox.repository";
+import type { CloudTemplateSendSnapshot } from "./cloud-api/cloud-template-admission";
+import { promotionRecipientResendAvailableAt, promotionRecipientResendIsBlocked } from "./promotion-recipient-actions";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_CAMPAIGN_RECIPIENTS = 1_000;
@@ -108,6 +112,141 @@ export const getPromotionDashboard = async (
       totalPages: Math.ceil(campaignData.stats.totalCampaigns / safeLimit),
     },
   };
+};
+
+const promotionRecipientActionTarget = async (
+  organizationId: string,
+  storeId: string,
+  campaignId: string,
+  recipientId: string,
+) => {
+  const [row] = await pg`
+    SELECT recipient.id, recipient.status, recipient.outbox_id,
+           recipient.customer_id, recipient.phone_number,
+           recipient.failure_code, recipient.updated_at,
+           customer.name AS customer_name,
+           outbox.status AS outbox_status,
+           outbox.whatsapp_account_id,
+           outbox.cloud_template_snapshot
+    FROM whatsapp_campaign_recipients recipient
+    INNER JOIN whatsapp_campaigns campaign
+      ON campaign.id = recipient.campaign_id
+     AND campaign.organization_id = recipient.organization_id
+     AND campaign.store_id = recipient.store_id
+    INNER JOIN customers customer
+      ON customer.id = recipient.customer_id
+     AND customer.organization_id = recipient.organization_id
+      LEFT JOIN whatsapp_outbox outbox
+        ON outbox.id = recipient.outbox_id
+       AND outbox.organization_id = recipient.organization_id
+       AND outbox.store_id = recipient.store_id
+    WHERE recipient.id = ${recipientId}
+      AND recipient.organization_id = ${organizationId}
+      AND recipient.store_id = ${storeId}
+      AND recipient.campaign_id = ${campaignId}
+  `;
+  return row as Record<string, unknown> | undefined;
+};
+
+const snapshotForResend = (value: unknown): CloudTemplateSendSnapshot | null => {
+  if (!value || typeof value !== "object") return null;
+  const snapshot = value as Record<string, unknown>;
+  if (
+    typeof snapshot.bindingId !== "string" ||
+    typeof snapshot.assetId !== "string" ||
+    typeof snapshot.version !== "number" ||
+    typeof snapshot.name !== "string" ||
+    typeof snapshot.languageCode !== "string" ||
+    typeof snapshot.category !== "string" ||
+    typeof snapshot.intent !== "string" ||
+    !Array.isArray(snapshot.components)
+  ) return null;
+  return snapshot as unknown as CloudTemplateSendSnapshot;
+};
+
+export const getPromotionRecipients = async (
+  organizationId: string,
+  storeId: string,
+  campaignId: string,
+  status: "all" | "failed" | "retryable" = "all",
+) => ({ recipients: await repository.listPromotionRecipients(organizationId, storeId, campaignId, status) });
+
+export const retryPromotionRecipient = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  campaignId: string,
+  recipientId: string,
+): Promise<ServiceResponse<{ recipientId: string; action: "retry"; outboxId: string } | null>> => {
+  const target = await promotionRecipientActionTarget(organizationId, storeId, campaignId, recipientId);
+  if (!target) return { status: "error", message: "Promotion recipient not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  if (target.status !== "retryable" || target.outbox_status !== "retryable" || !target.outbox_id) {
+    return { status: "error", message: "This recipient is no longer waiting for a retry", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  const result = await retryCloudOutboxNow(organizationId, userId, String(target.outbox_id));
+  if (!result.applied) return { status: "error", message: "This recipient is no longer waiting for a retry", data: null, code: STATUS_CODES.CONFLICT };
+  return { status: "success", message: "Promotion message queued for retry", data: { recipientId, action: "retry", outboxId: String(target.outbox_id) }, code: STATUS_CODES.SUCCESS };
+};
+
+export const resendPromotionRecipient = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  campaignId: string,
+  recipientId: string,
+): Promise<ServiceResponse<{ recipientId: string; action: "resend"; outboxId: string } | null>> => {
+  const target = await promotionRecipientActionTarget(organizationId, storeId, campaignId, recipientId);
+  if (!target) return { status: "error", message: "Promotion recipient not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  if (promotionRecipientResendIsBlocked(target.failure_code, target.updated_at)) {
+    const availableAt = promotionRecipientResendAvailableAt(target.failure_code, target.updated_at);
+    return {
+      status: "error",
+      message: `Meta temporarily limited this message to protect healthy engagement. Reset & resend is available after ${availableAt ? new Date(availableAt).toLocaleString() : "24 hours"}.`,
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+  const snapshot = snapshotForResend(target.cloud_template_snapshot);
+  if (target.status !== "dead_letter" || target.outbox_status !== "dead_letter" || !target.outbox_id || !snapshot) {
+    return { status: "error", message: "This failed recipient cannot be resent because its original Cloud template snapshot is unavailable", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  let queued: Awaited<ReturnType<typeof createCloudTemplateOutbox>>;
+  try {
+    queued = await createCloudTemplateOutbox({
+      organizationId,
+      storeId,
+      accountId: String(target.whatsapp_account_id),
+      customerId: String(target.customer_id),
+      customerPhone: String(target.phone_number),
+      customerName: String(target.customer_name),
+      campaignId,
+      campaignKey: campaignId,
+      intent: "promotion",
+      snapshot,
+      messageId: crypto.randomUUID(),
+      idempotencyKey: `promotion:${campaignId}:${recipientId}:resend:${crypto.randomUUID()}`,
+      resendLockKey: `promotion-resend:${campaignId}:${recipientId}`,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Cloud template changed after admission; retry with the current approved template") {
+      return {
+        status: "error",
+        message: "This failed recipient uses an older approved Cloud template. Refresh and assign the current approved template, then start a new promotion.",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+    throw error;
+  }
+  await pg`
+    UPDATE whatsapp_campaigns
+    SET status = CASE WHEN status <> 'cancelled' THEN 'sending'::whatsapp_campaign_status_enum ELSE status END,
+        updated_at = NOW()
+    WHERE id = ${campaignId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+  `;
+  return { status: "success", message: queued.deduplicated ? "Promotion message was already queued to send again" : "Promotion message queued to send again", data: { recipientId, action: "resend", outboxId: queued.outboxId }, code: STATUS_CODES.SUCCESS };
 };
 
 const promotionBody = (

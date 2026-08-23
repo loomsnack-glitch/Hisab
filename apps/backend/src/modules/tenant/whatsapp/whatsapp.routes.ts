@@ -799,6 +799,45 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/promotions", async c =
     }
 });
 
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/promotions/:campaignId/recipients", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const campaignId = c.req.param("campaignId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id")
+            ?? invalidUuid(storeId, "Invalid store id")
+            ?? invalidUuid(campaignId, "Invalid campaign id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const status = c.req.query("status") ?? "all";
+        if (status !== "all" && status !== "failed" && status !== "retryable") return c.json({ status: "error", message: "Invalid recipient status" }, STATUS_CODES.BAD_REQUEST);
+        return handleServiceResponse(c, await service.getPromotionRecipients(c.get("authUser").id, organizationId, storeId, campaignId, status));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+for (const action of ["retry", "resend"] as const) {
+    userRouter.post(`/:organizationId/stores/:storeId/whatsapp/promotions/:campaignId/recipients/:recipientId/${action}`, async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const campaignId = c.req.param("campaignId");
+            const recipientId = c.req.param("recipientId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id")
+                ?? invalidUuid(storeId, "Invalid store id")
+                ?? invalidUuid(campaignId, "Invalid campaign id")
+                ?? invalidUuid(recipientId, "Invalid recipient id");
+            if (invalid) return c.json(invalid, invalid.code);
+            if (action === "retry") {
+                return handleServiceResponse(c, await service.retryPromotionRecipient(c.get("authUser").id, organizationId, storeId, campaignId, recipientId));
+            }
+            return handleServiceResponse(c, await service.resendPromotionRecipient(c.get("authUser").id, organizationId, storeId, campaignId, recipientId));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    });
+}
+
 export const whatsappInternalRoutes = new Hono();
 whatsappInternalRoutes.use("*", whatsappWorkerMiddleware);
 

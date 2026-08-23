@@ -63,7 +63,7 @@ const requiredParameters = (assetComponents: unknown[], outboundComponents: Clou
     if (!component || typeof component !== "object") return true;
     const source = component as { type?: unknown; index?: unknown; text?: unknown };
     if (typeof source.text !== "string") return true;
-    const required = source.text.match(/\{\{\d+\}\}/g)?.length ?? 0;
+    const required = new Set(source.text.match(/\{\{\d+\}\}/g) ?? []).size;
     if (required === 0) return true;
     const candidate = outboundComponents.find(item =>
       item.type.toLowerCase() === String(source.type ?? "body").toLowerCase()

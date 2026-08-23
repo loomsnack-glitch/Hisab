@@ -21,6 +21,8 @@ import type {
     WhatsAppAttachConversationCustomerJSON,
     WhatsAppCreatePromotionJSON,
     WhatsAppPromotionDashboardResponseDTO,
+    WhatsAppPromotionRecipientsResponseDTO,
+    WhatsAppPromotionRecipientActionResponseDTO,
     WhatsAppCloudAccountSnapshot,
     WhatsAppCloudOnboardingStateResponseDTO,
     WhatsAppCloudOnboardingResultDTO,
@@ -56,6 +58,8 @@ type WhatsAppCustomerConsentHistoryResponse = ServiceResponse<{ events: WhatsApp
 type WhatsAppInvoiceResponse = ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
 type WhatsAppReminderResponse = ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
 type WhatsAppPromotionDashboardResponse = ServiceResponse<WhatsAppPromotionDashboardResponseDTO | null>;
+type WhatsAppPromotionRecipientsResponse = ServiceResponse<WhatsAppPromotionRecipientsResponseDTO | null>;
+type WhatsAppPromotionRecipientActionResponse = ServiceResponse<WhatsAppPromotionRecipientActionResponseDTO | null>;
 type WhatsAppConversationListResponseType = ServiceResponse<WhatsAppConversationListResponse | null>;
 type WhatsAppConversationResponse = ServiceResponse<WhatsAppConversationMessagesResponse | null>;
 const accountPath = (organizationId: string, storeId: string) =>
@@ -608,6 +612,48 @@ export const getWhatsAppPromotionDashboard = async (
 ): Promise<WhatsAppPromotionDashboardResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/whatsapp/promotions`, { params: { days, limit, page } });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppPromotionRecipients = async (
+    organizationId: string,
+    storeId: string,
+    campaignId: string,
+    status: "all" | "failed" | "retryable" = "all",
+): Promise<WhatsAppPromotionRecipientsResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/whatsapp/promotions/${campaignId}/recipients`, { params: { status } });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const retryWhatsAppPromotionRecipient = async (
+    organizationId: string,
+    storeId: string,
+    campaignId: string,
+    recipientId: string,
+): Promise<WhatsAppPromotionRecipientActionResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/promotions/${campaignId}/recipients/${recipientId}/retry`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const resendWhatsAppPromotionRecipient = async (
+    organizationId: string,
+    storeId: string,
+    campaignId: string,
+    recipientId: string,
+): Promise<WhatsAppPromotionRecipientActionResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/promotions/${campaignId}/recipients/${recipientId}/resend`);
         return response.data;
     } catch (error) {
         return handleApiError(error);
