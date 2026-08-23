@@ -386,6 +386,15 @@ export const createCloudTemplateDefaultBinding = async (input: {
     SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
     WHERE organization_id = ${input.organizationId} AND store_id = ${input.storeId} AND kind = ${input.kind}
   `;
+  await tx`
+    UPDATE whatsapp_message_templates
+    SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
+    WHERE organization_id = ${input.organizationId}
+      AND store_id = ${input.storeId}
+      AND kind = ${input.kind}
+      AND is_default = TRUE
+      AND is_active = TRUE
+  `;
   const [localTemplate] = await tx`
     INSERT INTO whatsapp_message_templates (organization_id, store_id, kind, name, body, is_default, created_by, updated_by)
     VALUES (${input.organizationId}, ${input.storeId}, ${input.kind}, ${input.localTemplateName.slice(0, 120)}, ${input.localTemplateBody}, TRUE, ${input.createdBy}, ${input.createdBy})

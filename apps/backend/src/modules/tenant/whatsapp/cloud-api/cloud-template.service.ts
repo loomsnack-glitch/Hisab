@@ -113,6 +113,8 @@ export const syncCloudTemplatesForAccount = async (
       status: "error",
       message: error instanceof CloudCredentialError && error.code === "vault_unavailable"
         ? "WhatsApp Cloud credential storage is not configured"
+        : error instanceof WhatsAppCloudApiError
+          ? `Meta templates could not be refreshed${error.providerCode ? ` (provider code ${error.providerCode})` : ""}`
         : "WhatsApp Cloud templates could not be synchronized",
       data: null,
       code: error instanceof CloudCredentialError && error.code === "vault_unavailable" ? STATUS_CODES.SERVICE_UNAVAILABLE : STATUS_CODES.BAD_REQUEST,
