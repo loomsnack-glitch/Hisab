@@ -69,6 +69,14 @@ describe("WhatsApp content contract", () => {
     );
   });
 
+  it("keeps every default body safe for Meta variable boundaries", () => {
+    for (const body of Object.values(WHATSAPP_DEFAULT_TEMPLATE_BODIES)) {
+      const source = body ?? "";
+      expect(source).not.toMatch(/^\s*{{\s*[^{}]+\s*}}/);
+      expect(source).not.toMatch(/{{\s*[^{}]+\s*}}\s*[^\w{}]*$/);
+    }
+  });
+
   it("renders only links explicitly referenced by the template", () => {
     expect(renderWhatsAppMessage({
       kind: "bill",
