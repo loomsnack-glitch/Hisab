@@ -109,6 +109,40 @@ export const getCloudTemplateSubmission = async (
   return row ? mapSubmission(row as Record<string, unknown>) : null;
 };
 
+export type CloudTemplateSubmissionUpdate = {
+  status?: "draft" | "submitting" | "pending" | "approved" | "rejected" | "paused" | "disabled" | "failed";
+  metaTemplateId?: string | null;
+  rejectionReason?: string | null;
+  lastErrorCode?: string | null;
+  lastErrorMessage?: string | null;
+  submittedAt?: string | null;
+  providerUpdatedAt?: string | null;
+  updatedBy?: string | null;
+};
+
+export const updateCloudTemplateSubmission = async (
+  organizationId: string,
+  submissionId: string,
+  update: CloudTemplateSubmissionUpdate,
+): Promise<WhatsAppCloudTemplateSubmissionDTO | null> => {
+  const [row] = await pg`
+    UPDATE whatsapp_cloud_template_submissions
+    SET status = COALESCE(${update.status ?? null}, status),
+        meta_template_id = COALESCE(${update.metaTemplateId ?? null}, meta_template_id),
+        rejection_reason = ${update.rejectionReason ?? null},
+        last_error_code = ${update.lastErrorCode ?? null},
+        last_error_message = ${update.lastErrorMessage ?? null},
+        submitted_at = COALESCE(${update.submittedAt ?? null}, submitted_at),
+        provider_updated_at = COALESCE(${update.providerUpdatedAt ?? null}, provider_updated_at),
+        updated_by = COALESCE(${update.updatedBy ?? null}, updated_by),
+        updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND id = ${submissionId}
+    RETURNING *
+  `;
+  return row ? mapSubmission(row as Record<string, unknown>) : null;
+};
+
 export const listCloudTemplateSubmissions = async (
   organizationId: string,
   whatsappBusinessAccountId: string,
@@ -155,7 +189,11 @@ export const applyCloudTemplateProviderStatus = async (
 
   await tx`
     UPDATE whatsapp_cloud_templates assets
-    SET status = ${input.status},
+    SET status = CASE
+          WHEN assets.status IN ('approved', 'rejected', 'paused', 'disabled')
+            AND ${input.status} IN ('pending') THEN assets.status
+          ELSE ${input.status}
+        END,
         category = COALESCE(${category}, assets.category),
         rejection_reason = ${reason},
         provider_updated_at = ${input.occurredAt},
@@ -176,7 +214,11 @@ export const applyCloudTemplateProviderStatus = async (
 
   await tx`
     UPDATE whatsapp_cloud_template_submissions submissions
-    SET status = ${input.status},
+    SET status = CASE
+          WHEN submissions.status IN ('approved', 'rejected', 'paused', 'disabled')
+            AND ${input.status} IN ('pending') THEN submissions.status
+          ELSE ${input.status}
+        END,
         meta_template_id = COALESCE(${templateId}, submissions.meta_template_id),
         category = COALESCE(${category}, submissions.category),
         rejection_reason = ${reason},

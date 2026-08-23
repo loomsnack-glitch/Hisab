@@ -26,7 +26,9 @@ import type {
     WhatsAppCloudOnboardingResultDTO,
     WhatsAppCloudTemplateAssetDTO,
     WhatsAppCloudTemplateBindingDTO,
+    WhatsAppCloudTemplateSubmissionDTO,
     WhatsAppCreateCloudTemplateBindingJSON,
+    WhatsAppCreateCloudTemplateSubmissionJSON,
     WhatsAppCustomerConsentEventDTO,
     WhatsAppRecordCustomerConsentJSON,
     WhatsAppSetCustomerSuppressionJSON,
@@ -45,6 +47,7 @@ type WhatsAppCloudOnboardingResponse = ServiceResponse<WhatsAppCloudOnboardingSt
 type WhatsAppCloudTemplatesResponse = ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>;
 type WhatsAppCloudBindingsResponse = ServiceResponse<{ bindings: WhatsAppCloudTemplateBindingDTO[] } | null>;
 type WhatsAppCloudBindingResponse = ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>;
+type WhatsAppCloudSubmissionResponse = ServiceResponse<{ submission: WhatsAppCloudTemplateSubmissionDTO; template: WhatsAppCloudTemplateAssetDTO | null } | null>;
 type WhatsAppCloudSafetyResponse = ServiceResponse<WhatsAppCloudSafety | null>;
 type WhatsAppCustomerConsentResponse = ServiceResponse<WhatsAppCustomerConsentEventDTO | null>;
 type WhatsAppCustomerConsentHistoryResponse = ServiceResponse<{ events: WhatsAppCustomerConsentEventDTO[] } | null>;
@@ -137,6 +140,19 @@ export const syncWhatsAppCloudTemplates = async (organizationId: string, account
 export const getWhatsAppCloudTemplates = async (organizationId: string, accountId: string): Promise<WhatsAppCloudTemplatesResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/templates`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const submitWhatsAppCloudTemplate = async (
+    organizationId: string,
+    accountId: string,
+    data: WhatsAppCreateCloudTemplateSubmissionJSON,
+): Promise<WhatsAppCloudSubmissionResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/templates`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

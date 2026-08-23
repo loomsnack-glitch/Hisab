@@ -333,6 +333,26 @@ export const listCloudTemplateBindings = async (
   return rows.map((row: Record<string, unknown>) => mapBinding(row));
 };
 
+export const isCloudAccountAssignedToStore = async (
+  organizationId: string,
+  storeId: string,
+  whatsappBusinessAccountId: string,
+): Promise<boolean> => {
+  const [row] = await pg`
+    SELECT 1
+    FROM whatsapp_account_stores assignments
+    INNER JOIN whatsapp_accounts accounts
+      ON accounts.id = assignments.whatsapp_account_id
+     AND accounts.organization_id = assignments.organization_id
+    WHERE assignments.organization_id = ${organizationId}
+      AND assignments.store_id = ${storeId}
+      AND accounts.provider = 'cloud_api'
+      AND accounts.whatsapp_business_account_id = ${whatsappBusinessAccountId}
+    LIMIT 1
+  `;
+  return Boolean(row);
+};
+
 export const getCloudTemplateBindingSnapshot = async (
   organizationId: string,
   bindingId: string,

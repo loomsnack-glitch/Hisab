@@ -23,6 +23,7 @@ import {
     WhatsAppRecordCustomerConsentSchema,
     WhatsAppSetCustomerSuppressionSchema,
     WhatsAppCloudQuotaPolicySchema,
+    WhatsAppCreateCloudTemplateSubmissionSchema,
 } from "@repo/types";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { handleServiceResponse } from "@/helpers/service.helper";
@@ -45,6 +46,7 @@ import {
     syncCloudTemplatesForAccount,
     createCloudTemplateBindingForStore,
     listCloudTemplateBindingsForStore,
+    submitCloudTemplateForAccount,
 } from "./cloud-api/cloud-template.service";
 import * as consentService from "./cloud-api/customer-consent.service";
 import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
@@ -201,6 +203,27 @@ userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/templates", 
         return unexpectedError(c, error);
     }
 });
+
+userRouter.post(
+    "/:organizationId/whatsapp/cloud/accounts/:accountId/templates",
+    validateSchema("json", WhatsAppCreateCloudTemplateSubmissionSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const accountId = c.req.param("accountId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await submitCloudTemplateForAccount(
+                c.get("authUser").id,
+                organizationId,
+                accountId,
+                c.req.valid("json"),
+            ));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
 
 userRouter.get("/:organizationId/whatsapp/cloud/safety", async c => {
     try {

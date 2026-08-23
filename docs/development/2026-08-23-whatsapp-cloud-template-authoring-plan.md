@@ -315,7 +315,7 @@ Evidence:
 
 ### Phase 3 — Submission orchestration and approval reconciliation
 
-Status: **in progress**
+Status: **completed**
 
 Scope:
 
@@ -344,10 +344,16 @@ Progress evidence:
 - [x] Template status processing bypasses message-account resolution and
   updates assets/submissions by WABA and provider identity.
 - [x] Normalizer and processor focused tests pass: 18 tests, 0 failures.
-
-Remaining in this phase: authorized create orchestration, idempotent provider
-submission, full asset reconciliation, automatic mapping, and approval-gated
-binding.
+- [x] The authorized create route verifies Organization, Cloud-account, Store,
+  credential, and Store-account assignment scope before submission.
+- [x] Submission persistence precedes the provider request and reuses the same
+  idempotency record for browser retries.
+- [x] Existing WABA templates are checked before create, and a successful
+  create is followed by a full catalogue reconciliation before the asset is
+  exposed to the application.
+- [x] Provider status updates are monotonic for terminal states, so late
+  pending notifications cannot regress an approved/rejected asset.
+- [x] Focused orchestration tests pass: 3 tests, 0 failures.
 
 Exit criteria:
 
@@ -361,7 +367,7 @@ Exit criteria:
 
 ### Phase 4 — Simple Ganatri authoring UI
 
-Status: **planned**
+Status: **in progress**
 
 Replace the current manual Cloud linking area with one clear Cloud template
 workspace for the selected Store.
