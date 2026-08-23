@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { dispatchCloudOutboxJob } from "./cloud-dispatcher";
 import type { CloudOutboxJob } from "./cloud-outbox.repository";
+import { WhatsAppCloudApiError } from "./cloud-api.client";
 
 const job: CloudOutboxJob = {
   organizationId: "11111111-1111-4111-8111-111111111111",
@@ -100,6 +101,42 @@ describe("Cloud outbox dispatcher", () => {
 
     expect(result).toEqual({ status: "reconciling", code: "submission_uncertain" });
     expect(reconciled).toBe(true);
+  });
+
+  test("persists the provider error message for permanent failures", async () => {
+    let completion: unknown[] | undefined;
+    const result = await dispatchCloudOutboxJob(job, {
+      vault: {
+        async store() { return { reference: "secret://new", keyVersion: "v2" }; },
+        async resolve() { return "token-only-in-memory"; },
+        async rotate() { return { reference: "secret://new", keyVersion: "v2" }; },
+        async revoke() {},
+      },
+      createClient: () => ({
+        async sendMessage() {
+          throw new WhatsAppCloudApiError({
+            message: "(#131030) Recipient phone number not in allowed list",
+            status: 400,
+            providerCode: "131030",
+          });
+        },
+        async uploadMedia() { return { id: "media-1" }; },
+      }),
+      loadAttachment: async () => new Uint8Array(),
+      complete: async (...args) => {
+        completion = args;
+        return true;
+      },
+      reconcile: async () => true,
+    });
+
+    expect(result).toEqual({
+      status: "permanent",
+      code: "131030",
+      message: "(#131030) Recipient phone number not in allowed list",
+    });
+    expect(completion?.[4]).toBe("(#131030) Recipient phone number not in allowed list");
+    expect(completion?.[5]).toBe(false);
   });
 
   test("dispatches an immutable Cloud template snapshot", async () => {

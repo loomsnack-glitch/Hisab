@@ -15,7 +15,7 @@ import { redis } from "@/config/redis";
 import * as repository from "./whatsapp.repository";
 import * as messageTemplate from "./message-template";
 import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
-import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
+import { getCloudTemplateBindingSnapshot } from "./cloud-api/cloud-template.repository";
 import { enqueueCloudTemplateSend } from "./cloud-api/cloud-template-send.service";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { buildPromotionCloudComponents } from "./promotion-cloud-components";
@@ -198,13 +198,15 @@ const createCloudPromotion = async (
   store: { name: string; whatsappLinks: StoreMessageLink[] },
   data: WhatsAppCreatePromotionJSON,
 ): Promise<ServiceResponse<WhatsAppPromotionResponseDTO | null>> => {
-  const defaultTemplate = await messageTemplate.getDefaultTemplate(organizationId, storeId, "promotion");
-  if (!defaultTemplate || !defaultTemplate.isActive) return { status: "error", message: "No active promotion template is available for this Store", data: null, code: STATUS_CODES.CONFLICT };
-  if (data.body.trim() !== defaultTemplate.body.trim()) return { status: "error", message: "Cloud promotions must use the approved promotion template", data: null, code: STATUS_CODES.CONFLICT };
+  if (!data.cloudTemplateBindingId) return { status: "error", message: "Choose an approved Cloud promotion template", data: null, code: STATUS_CODES.CONFLICT };
   const scope = await getCloudAccountScope(organizationId, account.id);
   if (!scope?.businessAccountId) return { status: "error", message: "Cloud WhatsApp account is not ready for template sends", data: null, code: STATUS_CODES.CONFLICT };
-  const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "promotion", defaultTemplate.id);
-  if (!binding) return { status: "error", message: "No approved Cloud promotion template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+  const binding = await getCloudTemplateBindingSnapshot(organizationId, data.cloudTemplateBindingId);
+  if (!binding || binding.binding.storeId !== storeId || binding.binding.whatsappBusinessAccountId !== scope.businessAccountId || binding.binding.kind !== "promotion") return { status: "error", message: "The selected Cloud promotion template is not linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+  if (!binding.asset || binding.asset.status !== "approved" || binding.asset.category !== "marketing") return { status: "error", message: "The selected Cloud promotion template is not approved for marketing", data: null, code: STATUS_CODES.CONFLICT };
+  const localTemplate = await messageTemplate.getTemplate(organizationId, storeId, binding.binding.localTemplateId);
+  if (!localTemplate || !localTemplate.isActive || localTemplate.kind !== "promotion") return { status: "error", message: "The selected promotion template is no longer active for this Store", data: null, code: STATUS_CODES.CONFLICT };
+  if (data.body.trim() !== localTemplate.body.trim()) return { status: "error", message: "Cloud promotions must use the selected approved promotion template", data: null, code: STATUS_CODES.CONFLICT };
   const candidates = await eligiblePromotionCustomers(organizationId);
   if (candidates.length === 0) return { status: "error", message: "No eligible customers with promotional consent and a phone number", data: null, code: STATUS_CODES.CONFLICT };
 
@@ -225,7 +227,7 @@ const createCloudPromotion = async (
     const imageLink = hasImage && objectKey ? await storage.generateSignedUrl(bucket, objectKey, cloudMediaUrlTtlSeconds()) : null;
     buildPromotionCloudComponents(
       binding.asset.components,
-      defaultTemplate.body,
+      localTemplate.body,
       { customer_name: candidates[0]!.name, store_name: store.name, ...Object.fromEntries(store.whatsappLinks.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url])) },
       imageLink,
       binding.binding.variableMapping,
@@ -237,7 +239,7 @@ const createCloudPromotion = async (
           image_storage_key, image_file_name, image_mime_type, status,
           total_recipients, created_by
         ) VALUES (
-          ${campaignId}, ${organizationId}, ${storeId}, ${account.id}, ${data.title}, ${defaultTemplate.body},
+          ${campaignId}, ${organizationId}, ${storeId}, ${account.id}, ${data.title}, ${localTemplate.body},
           ${objectKey}, ${hasImage ? data.imageFileName : null}, ${hasImage ? data.imageMimeType : null}, 'queued', ${candidates.length}, ${userId}
         ) RETURNING id
       `;
@@ -256,7 +258,7 @@ const createCloudPromotion = async (
       try {
         const componentParameters = buildPromotionCloudComponents(
           binding.asset.components,
-          defaultTemplate.body,
+          localTemplate.body,
           { customer_name: candidate.name, store_name: store.name, ...Object.fromEntries(store.whatsappLinks.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url])) },
           imageLink,
           binding.binding.variableMapping,

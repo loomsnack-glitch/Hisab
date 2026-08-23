@@ -453,6 +453,7 @@ export const WhatsAppDueReminderRequestSchema = z.object({
 export const WhatsAppCreatePromotionSchema = z.object({
     title: z.string().trim().min(1).max(120),
     body: z.string().trim().min(1).max(4096),
+    cloudTemplateBindingId: z.uuid("Invalid Cloud template binding id").optional(),
     imageBase64: z.string().min(1).max(14_000_000).optional(),
     imageFileName: z.string().trim().min(1).max(255).optional(),
     imageMimeType: z.string().regex(/^image\/[a-z0-9.+-]+$/i).max(255).optional(),

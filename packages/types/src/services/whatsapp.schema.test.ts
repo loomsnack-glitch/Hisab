@@ -12,6 +12,7 @@ import {
     WhatsAppCloudAccountSnapshotSchema,
     WhatsAppCloudProvisioningAttemptSchema,
     WhatsAppCloudOutboxOperationSchema,
+    WhatsAppCreatePromotionSchema,
     WhatsAppMessageDTOSchema,
 } from "./whatsapp.schema";
 
@@ -109,6 +110,17 @@ describe("WhatsApp schemas", () => {
             sentAt: new Date(),
             deliveredAt: null,
             readAt: null,
+        }).success).toBe(true);
+    });
+
+    test("accepts a selected Cloud promotion template binding", () => {
+        expect(WhatsAppCreatePromotionSchema.safeParse({
+            title: "August coffee offer",
+            body: "Hello {{customer_name}} from {{store_name}}",
+            cloudTemplateBindingId: uuid,
+            imageBase64: "aW1hZ2U=",
+            imageFileName: "offer.jpg",
+            imageMimeType: "image/jpeg",
         }).success).toBe(true);
     });
 

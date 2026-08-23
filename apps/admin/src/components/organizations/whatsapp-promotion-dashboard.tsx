@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, BarChart3, CheckCheck, Clock3, Eye, LoaderCircle, Megaphone, RefreshCw, Send, Users } from "lucide-react";
-import type { StoreMessageLink } from "@repo/types";
-import { getWhatsAppPromotionDashboard, stopWhatsAppCloudCampaign } from "@repo/services";
+import type { StoreMessageLink, WhatsAppCloudAccountSnapshot } from "@repo/types";
+import { getWhatsAppCloudTemplateBindings, getWhatsAppCloudTemplateSubmissions, getWhatsAppCloudTemplates, getWhatsAppMessageTemplates, getWhatsAppPromotionDashboard, stopWhatsAppCloudCampaign } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { formatDateTime } from "@/lib/format";
 import { whatsappKeys } from "@/lib/query-keys";
 import { toast } from "sonner";
-import PromotionDialog from "@/components/customers/promotion-dialog";
+import PromotionDialog, { type ApprovedPromotionTemplate } from "@/components/customers/promotion-dialog";
 
-type Props = { organizationId: string; storeId: string; storeName: string; links?: StoreMessageLink[]; cloudEnabled?: boolean };
+type Props = { organizationId: string; storeId: string; storeName: string; links?: StoreMessageLink[]; cloudAccount?: { id: string; snapshot: WhatsAppCloudAccountSnapshot }; cloudEnabled?: boolean };
 
 const formatRemaining = (seconds: number) => {
   const minutes = Math.max(1, Math.ceil(seconds / 60));
@@ -43,13 +43,38 @@ const Stat = ({ icon: Icon, label, value, tone = "text-foreground" }: { icon: ty
   </div>
 );
 
-const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links = [], cloudEnabled = false }: Props) => {
+const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links = [], cloudAccount, cloudEnabled = false }: Props) => {
   const isDevelopment = import.meta.env.DEV;
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
   const [stoppingCampaignId, setStoppingCampaignId] = useState("");
   useEffect(() => setPage(1), [storeId]);
   const queryKey = whatsappKeys.promotions(organizationId, storeId, 30, page);
+  const businessAccountId = cloudAccount?.snapshot.whatsappBusinessAccountId ?? "";
+  const localTemplatesQuery = useQuery({
+    queryKey: whatsappKeys.templates(organizationId, storeId, "promotion"),
+    queryFn: () => getWhatsAppMessageTemplates(organizationId, storeId, "promotion"),
+    enabled: Boolean(cloudAccount),
+    staleTime: 5_000,
+  });
+  const cloudTemplatesQuery = useQuery({
+    queryKey: whatsappKeys.cloudTemplates(organizationId, cloudAccount?.id ?? ""),
+    queryFn: () => getWhatsAppCloudTemplates(organizationId, cloudAccount!.id),
+    enabled: Boolean(cloudAccount),
+    staleTime: 5_000,
+  });
+  const submissionsQuery = useQuery({
+    queryKey: ["whatsapp", "cloud-submissions", organizationId, cloudAccount?.id ?? "", storeId],
+    queryFn: () => getWhatsAppCloudTemplateSubmissions(organizationId, cloudAccount!.id, storeId),
+    enabled: Boolean(cloudAccount),
+    staleTime: 5_000,
+  });
+  const bindingsQuery = useQuery({
+    queryKey: ["whatsapp", "cloud-template-bindings", organizationId, storeId, businessAccountId],
+    queryFn: () => getWhatsAppCloudTemplateBindings(organizationId, storeId, businessAccountId),
+    enabled: Boolean(cloudAccount && businessAccountId),
+    staleTime: 5_000,
+  });
   const query = useQuery({
     queryKey,
     queryFn: () => getWhatsAppPromotionDashboard(organizationId, storeId, 30, 20, page),
@@ -70,6 +95,33 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
   const cooldown = dashboard?.cooldown;
   const pagination = dashboard?.pagination;
   const promotionStatusReady = query.data?.status === "success";
+  const promotionTemplates = useMemo<ApprovedPromotionTemplate[]>(() => {
+    if (!cloudAccount || !businessAccountId) return [];
+    const localTemplates = localTemplatesQuery.data?.status === "success" ? localTemplatesQuery.data.data?.templates ?? [] : [];
+    const localTemplatesById = new Map(localTemplates.filter(template => template.isActive && template.kind === "promotion").map(template => [template.id, template]));
+    const bindings = bindingsQuery.data?.status === "success" ? bindingsQuery.data.data?.bindings ?? [] : [];
+    const assets = cloudTemplatesQuery.data?.status === "success" ? cloudTemplatesQuery.data.data?.templates ?? [] : [];
+    const submissions = submissionsQuery.data?.status === "success" ? submissionsQuery.data.data?.submissions ?? [] : [];
+    const assetsById = new Map(assets.filter(asset => asset.status === "approved" && asset.category === "marketing").map(asset => [asset.id, asset]));
+    return bindings
+      .filter(binding => binding.isActive && binding.kind === "promotion" && binding.whatsappBusinessAccountId === businessAccountId)
+      .flatMap(binding => {
+        const localTemplate = localTemplatesById.get(binding.localTemplateId);
+        const asset = assetsById.get(binding.cloudTemplateId);
+        if (!localTemplate || !asset) return [];
+        const submission = submissions.find(item => item.metaTemplateId === asset.metaTemplateId && item.kind === "promotion" && item.storeId === storeId);
+        return [{ bindingId: binding.id, name: asset.name, languageCode: asset.languageCode, body: localTemplate.body, components: asset.components, sampleValues: submission?.sampleValues ?? {} }];
+      })
+      .sort((left, right) => left.name.localeCompare(right.name) || left.languageCode.localeCompare(right.languageCode));
+  }, [bindingsQuery.data, businessAccountId, cloudAccount, cloudTemplatesQuery.data, localTemplatesQuery.data, storeId, submissionsQuery.data]);
+  const cloudTemplateLoading = Boolean(cloudAccount) && (localTemplatesQuery.isPending || cloudTemplatesQuery.isPending || submissionsQuery.isPending || (Boolean(businessAccountId) && bindingsQuery.isPending));
+  const cloudTemplateMessage = useMemo(() => {
+    if (!cloudAccount) return "";
+    if (cloudTemplateLoading) return "Checking the Store's approved promotion template…";
+    if (!businessAccountId) return "Cloud account setup is incomplete. Finish the account setup in Accounts.";
+    if (!promotionTemplates.length) return "Assign an approved marketing promotion template to this Store in Templates.";
+    return "The approved promotion templates are not available yet. Open Templates and refresh.";
+  }, [businessAccountId, cloudAccount, cloudTemplateLoading, promotionTemplates.length]);
   const hasActiveCampaign = useMemo(() => campaigns.some(campaign => campaign.queuedRecipients > 0 || campaign.sendingRecipients > 0 || campaign.retryingRecipients > 0), [campaigns]);
   const stopCampaign = async (campaignId: string) => {
     if (!window.confirm("Stop the remaining messages in this promotion? Already delivered messages will not be changed.")) return;
@@ -96,8 +148,9 @@ const WhatsAppPromotionDashboard = ({ organizationId, storeId, storeName, links 
               storeId={storeId}
               links={links}
               className="h-8 whitespace-nowrap rounded-lg px-2.5 text-xs sm:h-9 sm:px-3"
-              disabled={!isDevelopment && (!promotionStatusReady || query.isPending || cooldown?.active)}
-              disabledReason={!isDevelopment && !promotionStatusReady ? "Promotion status is unavailable" : !isDevelopment && cooldown?.active ? `Available again in ${formatRemaining(cooldown.remainingSeconds)}` : undefined}
+              approvedTemplates={promotionTemplates}
+              disabled={!isDevelopment && (!promotionStatusReady || query.isPending || cooldown?.active) || Boolean(cloudAccount && (cloudTemplateLoading || !promotionTemplates.length))}
+              disabledReason={cloudAccount && cloudTemplateLoading ? "Checking the approved promotion templates" : cloudAccount && !promotionTemplates.length ? cloudTemplateMessage : !isDevelopment && !promotionStatusReady ? "Promotion status is unavailable" : !isDevelopment && cooldown?.active ? `Available again in ${formatRemaining(cooldown.remainingSeconds)}` : undefined}
               onQueued={() => queryClient.invalidateQueries({ queryKey })}
             />
           </CardAction>

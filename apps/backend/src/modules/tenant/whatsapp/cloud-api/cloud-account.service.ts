@@ -405,9 +405,11 @@ export const refreshCloudAccountForOrganization = async (
     }
     const accessToken = await deps.vault.resolve(binding);
     const client = deps.createClient(accessToken);
-    const business = await client.getBusinessAccount(snapshot.wabaId);
+    const [business, phones] = await Promise.all([
+      client.getBusinessAccount(snapshot.wabaId),
+      client.getPhoneNumbers(snapshot.wabaId),
+    ]);
     if (String(business.id ?? "") !== snapshot.wabaId) throw new Error("Cloud WABA identity did not match the account");
-    const phones = await client.getPhoneNumbers(snapshot.wabaId);
     const phone = (phones.data ?? []).map(phoneFromProvider).find(candidate => candidate.id === snapshot.phoneNumberId);
     if (!phone) throw new Error("Cloud phone identity was not found in the WABA");
     const refreshed = await deps.refreshMetadata({

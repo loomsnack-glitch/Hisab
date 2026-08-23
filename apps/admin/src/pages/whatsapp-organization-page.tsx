@@ -216,6 +216,12 @@ const WhatsAppOrganizationPage = () => {
             return snapshot ? [{ id: account.id, phoneNumber: account.phoneNumber, snapshot }] : [];
         })
         : [];
+    const selectedAccount = selectedStore
+        ? visibleAccounts.find(account => account.assignedStoreIds.includes(selectedStore.id))
+        : undefined;
+    const selectedCloudAccount = selectedAccount?.provider === "cloud_api"
+        ? cloudAccountsForStore.find(account => account.id === selectedAccount.id)
+        : undefined;
     const statusQueries = useQueries({
         queries: visibleAccounts.map(account => ({
             queryKey: whatsappKeys.organizationAccount(organizationId, account.id),
@@ -651,7 +657,7 @@ const WhatsAppOrganizationPage = () => {
                     ) : null}
 
                     {activeTab === "promotions" ? (
-                        <WhatsAppPromotionDashboard organizationId={organizationId} storeId={selectedStore.id} storeName={selectedStore.name} links={selectedStore.whatsappLinks} cloudEnabled={cloudAccountsForStore.length > 0} />
+                        <WhatsAppPromotionDashboard organizationId={organizationId} storeId={selectedStore.id} storeName={selectedStore.name} links={selectedStore.whatsappLinks} cloudAccount={selectedCloudAccount} cloudEnabled={Boolean(selectedCloudAccount)} />
                     ) : null}
                 </section>
             ) : organizationQuery.data?.status === "success" ? (

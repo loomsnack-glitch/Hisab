@@ -35,8 +35,8 @@ export type CloudOutboxDispatcherDependencies = {
 
 export type CloudOutboxDispatchResult =
   | { status: "accepted"; providerMessageId: string }
-  | { status: "retryable"; code: string }
-  | { status: "permanent"; code: string }
+  | { status: "retryable"; code: string; message: string }
+  | { status: "permanent"; code: string; message: string }
   | { status: "reconciling"; code: "submission_uncertain" };
 
 const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
@@ -44,7 +44,8 @@ const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 const errorOutcome = (
   status: "retryable" | "permanent",
   code: string,
-): CloudOutboxDispatchResult => ({ status, code });
+  message: string,
+): CloudOutboxDispatchResult => ({ status, code, message });
 
 const messageFor = async (
   job: CloudOutboxJob,
@@ -102,7 +103,11 @@ const dispatch = async (
     });
     client = dependencies.createClient(accessToken);
   } catch {
-    return errorOutcome("retryable", "cloud_credential_unavailable");
+    return errorOutcome(
+      "retryable",
+      "cloud_credential_unavailable",
+      "Cloud credential is unavailable",
+    );
   }
 
   let message: CloudOutboundMessage;
@@ -122,6 +127,7 @@ const dispatch = async (
         ? "permanent"
         : "retryable",
       "cloud_media_unavailable",
+      messageText,
     );
   }
 
@@ -136,7 +142,7 @@ const dispatch = async (
   }
   return outcome.status === "reconciling"
     ? { status: "reconciling", code: outcome.code }
-    : { status: outcome.status, code: outcome.code };
+    : { status: outcome.status, code: outcome.code, message: outcome.message };
 };
 
 export const dispatchCloudOutboxJob = async (
@@ -165,7 +171,7 @@ export const dispatchCloudOutboxJob = async (
       job.leaseOwner,
       null,
       result.code,
-      `Cloud dispatch failed: ${result.code}`,
+      result.message,
       result.status === "retryable",
     );
   }

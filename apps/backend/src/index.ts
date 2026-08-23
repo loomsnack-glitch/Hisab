@@ -10,10 +10,12 @@ import {
 
 const port = Number(process.env.PORT) || 8001;
 const hostname = process.env.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0";
+const idleTimeout = Number(process.env.SERVER_IDLE_TIMEOUT_SECONDS) || 30;
 
 Bun.serve({
   hostname,
   port,
+  idleTimeout,
   fetch: app.fetch,
 });
 
