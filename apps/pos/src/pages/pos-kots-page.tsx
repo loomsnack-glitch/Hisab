@@ -1,7 +1,18 @@
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { completePosKitchenKot, getPosKitchenKots } from "@repo/services";
 import type { KitchenKotDTO } from "@repo/types";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@repo/ui/components/alert-dialog";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Spinner } from "@repo/ui/components/spinner";
@@ -18,6 +29,9 @@ const formatItemLine = (item: KitchenKotDTO["items"][number]) =>
 const PosKotsPage = () => {
     const { session } = useOutletContext<PosRouteContext>();
     const queryClient = useQueryClient();
+    const [kotToComplete, setKotToComplete] = useState<KitchenKotDTO | null>(
+        null,
+    );
 
     const kitchenKotsQuery = useQuery({
         queryKey: kotKeys.posKitchen(),
@@ -32,6 +46,7 @@ const PosKotsPage = () => {
                 toast.error(response.message || "Could not complete KOT");
                 return;
             }
+            setKotToComplete(null);
             queryClient.setQueryData(kotKeys.posKitchen(), response);
             toast.success(response.message || "KOT completed");
         },
@@ -166,7 +181,7 @@ const PosKotsPage = () => {
                                             type="button"
                                             className="w-full rounded-xl"
                                             disabled={completeMutation.isPending}
-                                            onClick={() => completeMutation.mutate(kot.id)}
+                                            onClick={() => setKotToComplete(kot)}
                                         >
                                             {isCompleting ? (
                                                 <Spinner className="size-4" />
@@ -184,6 +199,44 @@ const PosKotsPage = () => {
                     </div>
                 )}
             </div>
+
+            <AlertDialog
+                open={Boolean(kotToComplete)}
+                onOpenChange={(open) => {
+                    if (!open && !completeMutation.isPending) {
+                        setKotToComplete(null);
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Complete this KOT?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Mark KOT {kotToComplete?.kotNumber} as complete? This
+                            will remove it from the pending kitchen queue.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={completeMutation.isPending}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={completeMutation.isPending}
+                            onClick={() => {
+                                if (kotToComplete) {
+                                    completeMutation.mutate(kotToComplete.id);
+                                }
+                            }}
+                        >
+                            {completeMutation.isPending ? (
+                                <Spinner className="size-4" />
+                            ) : (
+                                "Complete KOT"
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 };
