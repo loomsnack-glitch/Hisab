@@ -22,6 +22,14 @@ const statusLabel: Record<string, string> = {
     failed: "Connection failed",
     revoked: "Session revoked",
 };
+const cloudStatusLabel: Record<string, string> = {
+    connected: "Connected",
+    disconnected: "Disconnected",
+    needs_action: "Needs attention",
+    revoked: "Access revoked",
+    suspended: "Suspended",
+    failed: "Connection failed",
+};
 
 const ACCOUNT_STATUS_RETRY_ATTEMPTS = 7;
 
@@ -41,7 +49,9 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
         enabled: open,
         refetchInterval: query => {
             const error = query.state.error as QueryError | null;
-            const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
+            const queryAccount = query.state.data?.data?.account ?? error?.data?.account;
+            if (queryAccount?.provider === "cloud_api") return false;
+            const status = queryAccount?.status;
             const retryBudgetAvailable = query.state.fetchFailureCount < ACCOUNT_STATUS_RETRY_ATTEMPTS;
             return retryBudgetAvailable && (error?.code === STATUS_CODES.SERVICE_UNAVAILABLE || status === "pending_qr" || status === "connecting") ? 2_000 : false;
         },
@@ -50,6 +60,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
     const accountError = accountQuery.error as QueryError | null;
     const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
     const account = accountData?.account;
+    const isCloudAccount = account?.provider === "cloud_api";
     const statusRetryExhausted = accountQuery.isError
         && (accountError?.code !== STATUS_CODES.SERVICE_UNAVAILABLE || accountQuery.failureCount >= ACCOUNT_STATUS_RETRY_ATTEMPTS);
     const accounts = accountsQuery.data?.data?.accounts ?? [];
@@ -113,7 +124,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div><p className="text-xs text-muted-foreground">Linked mobile</p><p className="mt-1 text-lg font-semibold tracking-tight">{account.phoneNumber}</p></div>
                                     <Badge variant={accountQuery.isError ? "secondary" : "outline"} className="rounded-full">
-                                        {accountQuery.isError ? "Status unavailable" : statusLabel[account.status] ?? account.status}
+                                        {accountQuery.isError ? "Status unavailable" : isCloudAccount ? cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable" : statusLabel[account.status] ?? account.status}
                                     </Badge>
                                 </div>
                                 <p className="mt-3 text-xs text-muted-foreground">Linked to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"} in this organization.</p>
@@ -157,7 +168,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                                                             <WhatsAppIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
                                                             <span className="min-w-0 flex-1">
                                                                 <span className="block truncate font-medium leading-5">{candidate.phoneNumber}</span>
-                                                                <span className="block truncate text-[11px] leading-4 text-muted-foreground">{statusLabel[candidate.status] ?? candidate.status} · {candidate.assignedStoreIds.length} Store{candidate.assignedStoreIds.length === 1 ? "" : "s"} linked</span>
+                                                                <span className="block truncate text-[11px] leading-4 text-muted-foreground">{candidate.provider === "cloud_api" ? `${cloudStatusLabel[candidate.cloudStatus ?? candidate.status] ?? "Cloud API"} · Cloud API` : statusLabel[candidate.status] ?? candidate.status} · {candidate.assignedStoreIds.length} Store{candidate.assignedStoreIds.length === 1 ? "" : "s"} linked</span>
                                                             </span>
                                                         </span>
                                                     </SelectItem>

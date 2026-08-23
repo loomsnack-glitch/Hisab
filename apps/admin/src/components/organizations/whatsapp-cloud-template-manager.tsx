@@ -33,6 +33,14 @@ import {
 } from "@repo/ui/components/select";
 import { Textarea } from "@repo/ui/components/textarea";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@repo/ui/components/table";
+import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
@@ -377,6 +385,20 @@ const WhatsAppCloudTemplateManager = ({
     setOpen(true);
   };
   const selectedKind = kinds.find((item) => item.value === kind)!;
+  const approvedTemplates = cards.filter(
+    (card) => card.status === "approved" && card.cloudTemplateId,
+  );
+  const defaultBindingFor = (messageKind: WhatsAppMessageTemplateKind) =>
+    bindings.find(
+      (binding) =>
+        binding.kind === messageKind && binding.isActive && binding.isDefault,
+    );
+  const templateForBinding = (bindingId: string | undefined) =>
+    approvedTemplates.find(
+      (template) =>
+        template.cloudTemplateId ===
+        bindings.find((binding) => binding.id === bindingId)?.cloudTemplateId,
+    );
   const linkedKindsFor = (cloudTemplateId: string) =>
     bindings
       .filter(
@@ -490,100 +512,134 @@ const WhatsAppCloudTemplateManager = ({
           </p>
         </div>
       ) : null}
-      <div className="grid gap-3 md:grid-cols-2">
-        {cards.map((card) => (
-          <div
-            key={card.id}
-            className="space-y-2 rounded-xl border border-border/60 bg-background/70 p-3"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{card.name}</p>
-                <p className="text-xs text-muted-foreground">
+      <section className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-3 sm:p-4">
+        <div>
+          <p className="text-sm font-semibold">Templates</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Track approval here. Assign approved templates in the Store defaults section below.
+          </p>
+        </div>
+        <Table className="min-w-[680px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Template</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Language</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Used for</TableHead>
+              <TableHead className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {cards.map((card) => (
+              <TableRow key={card.id}>
+                <TableCell>
+                  <p className="max-w-52 truncate font-medium">{card.name}</p>
+                  {card.reason ? (
+                    <p className="mt-1 flex max-w-64 gap-1 text-xs text-destructive">
+                      <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
+                      <span className="truncate">{card.reason}</span>
+                    </p>
+                  ) : null}
+                </TableCell>
+                <TableCell>
                   {card.kind
                     ? kinds.find((item) => item.value === card.kind)?.label
-                    : "Existing Cloud template"}{" "}
-                  · {card.language}
-                </p>
-              </div>
-              {statusBadge(card.status)}
-            </div>
-            {card.reason ? (
-              <p className="flex gap-1.5 text-xs text-destructive">
-                <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
-                {card.reason}
-              </p>
-            ) : null}
-            {card.cloudTemplateId &&
-            linkedKindsFor(card.cloudTemplateId).length > 0 ? (
-              <p className="text-xs text-primary">
-                Store defaults:{" "}
-                {linkedKindsFor(card.cloudTemplateId).join(" · ")}
-              </p>
-            ) : null}
-            {card.status === "approved" && card.cloudTemplateId ? (
-              <div className="space-y-2 border-t border-border/60 pt-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
-                    <CheckCircle2 className="size-3.5" />
-                    Approved by Meta
-                  </p>
-                  <span className="text-[11px] text-muted-foreground">
-                    Assign to this Store
+                    : card.category === "marketing"
+                      ? "Marketing"
+                      : "Utility"}
+                </TableCell>
+                <TableCell>{card.language}</TableCell>
+                <TableCell>{statusBadge(card.status)}</TableCell>
+                <TableCell>
+                  <span className="text-xs text-muted-foreground">
+                    {card.cloudTemplateId && linkedKindsFor(card.cloudTemplateId).length > 0
+                      ? linkedKindsFor(card.cloudTemplateId).join(", ")
+                      : "Not assigned"}
                   </span>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {kinds
-                    .filter(
-                      (item) =>
-                        item.category.toLowerCase() ===
-                        (card.category === "marketing"
-                          ? "marketing"
-                          : "utility"),
-                    )
-                    .map((item) => (
-                      <Button
-                        key={item.value}
-                        type="button"
-                        size="sm"
-                        variant={
-                          card.kind === item.value ? "default" : "outline"
-                        }
-                        className="h-9 w-full rounded-lg text-xs"
-                        disabled={importMutation.isPending}
-                        onClick={() =>
-                          importMutation.mutate({
-                            cloudTemplateId: card.cloudTemplateId!,
-                            whatsappBusinessAccountId: businessAccountId,
-                            kind: item.value,
-                          })
-                        }
-                      >
-                        Use for {item.label}
-                      </Button>
-                    ))}
-                </div>
-              </div>
-            ) : card.status === "rejected" || card.status === "failed" ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 rounded-lg text-xs"
-                onClick={() =>
-                  duplicateSubmission(card.submissionId ?? card.id)
-                }
+                </TableCell>
+                <TableCell className="text-right">
+                  {card.status === "rejected" || card.status === "failed" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 rounded-lg text-xs"
+                      onClick={() => duplicateSubmission(card.submissionId ?? card.id)}
+                    >
+                      Duplicate
+                    </Button>
+                  ) : card.status === "pending" || card.status === "submitting" ? (
+                    <span className="text-xs text-muted-foreground">Awaiting Meta</span>
+                  ) : card.status === "approved" ? (
+                    <span className="text-xs text-emerald-700">Ready to use</span>
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </section>
+      <section className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3 sm:p-4">
+        <div>
+          <p className="text-sm font-semibold">Store defaults</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Choose the approved template Ganatri sends for each message type in this Store.
+          </p>
+        </div>
+        <div className="grid gap-2">
+          {kinds.map((messageKind) => {
+            const binding = defaultBindingFor(messageKind.value);
+            const selectedTemplate = templateForBinding(binding?.id);
+            const compatibleTemplates = approvedTemplates.filter(
+              (template) =>
+                (messageKind.value === "promotion" ? "marketing" : "utility") ===
+                template.category,
+            );
+            return (
+              <div
+                key={messageKind.value}
+                className="grid gap-2 rounded-xl border border-border/60 bg-background/80 p-3 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(0,1.3fr)] sm:items-center"
               >
-                Duplicate and edit
-              </Button>
-            ) : card.status === "pending" || card.status === "submitting" ? (
-              <p className="text-xs text-muted-foreground">
-                Meta approval is required before sending.
-              </p>
-            ) : null}
-          </div>
-        ))}
-      </div>
+                <div>
+                  <p className="text-sm font-medium">{messageKind.label}</p>
+                  <p className="text-xs text-muted-foreground">{messageKind.category} message</p>
+                </div>
+                <Select
+                  value={selectedTemplate?.cloudTemplateId ?? ""}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    importMutation.mutate({
+                      cloudTemplateId: value,
+                      whatsappBusinessAccountId: businessAccountId,
+                      kind: messageKind.value,
+                    });
+                  }}
+                  disabled={importMutation.isPending || compatibleTemplates.length === 0}
+                >
+                  <SelectTrigger className="w-full rounded-xl bg-background">
+                    <SelectValue placeholder={compatibleTemplates.length === 0 ? "No approved template" : "Choose a template"}>
+                      {selectedTemplate?.name ?? "Choose a template"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {compatibleTemplates.map((template) => (
+                      <SelectItem key={template.cloudTemplateId} value={template.cloudTemplateId!}>
+                        {template.name} · {template.language}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })}
+        </div>
+        {approvedTemplates.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Sync Meta templates and wait for approval before assigning Store defaults.
+          </p>
+        ) : null}
+      </section>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>

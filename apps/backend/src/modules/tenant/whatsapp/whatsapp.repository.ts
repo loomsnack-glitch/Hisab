@@ -5,6 +5,7 @@ import type {
     WhatsAppMessageDTO,
     WhatsAppAccountDTO,
     WhatsAppAccountStatus,
+    WhatsAppCloudAccountStatus,
     WhatsAppWorkerAccountDTO,
     WhatsAppWorkerStatusUpdateJSON,
     WhatsAppWorkerMessageEventJSON,
@@ -199,18 +200,34 @@ const parseProviderEventPayload = (value: unknown): WhatsAppWorkerMessageEventJS
     return value as WhatsAppWorkerMessageEventJSON;
 };
 
+const legacyStatusForCloud = (cloudStatus: WhatsAppCloudAccountStatus | null, fallback: WhatsAppAccountStatus): WhatsAppAccountStatus => {
+    if (cloudStatus === null) return fallback;
+    if (cloudStatus === "connected") return "connected";
+    if (cloudStatus === "revoked") return "revoked";
+    if (cloudStatus === "disconnected") return "disconnected";
+    return "failed";
+};
+
 const mapAccount = (row: AccountRow): WhatsAppAccountDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     const defaultStoreId = (mapped.defaultStoreId as string | null | undefined) ?? null;
     const assignedStoreIds = parseAssignedStoreIds(mapped.assignedStoreIds, defaultStoreId);
+    const provider = mapped.provider as WhatsAppAccountDTO["provider"];
+    const cloudStatus = provider === "cloud_api"
+        ? (mapped.cloudStatus as WhatsAppCloudAccountStatus | null | undefined) ?? null
+        : null;
+    const status: WhatsAppAccountStatus = provider === "cloud_api"
+        ? legacyStatusForCloud(cloudStatus, mapped.status as WhatsAppAccountStatus)
+        : mapped.status as WhatsAppAccountStatus;
     return {
         id: String(mapped.id),
         organizationId: String(mapped.organizationId),
         defaultStoreId,
         assignedStoreIds,
-        provider: mapped.provider as WhatsAppAccountDTO["provider"],
+        provider,
         phoneNumber: String(mapped.phoneNumber),
-        status: mapped.status as WhatsAppAccountStatus,
+        status,
+        cloudStatus,
         lastConnectedAt: (mapped.lastConnectedAt as string | null | undefined) ?? null,
         lastSeenAt: (mapped.lastSeenAt as string | null | undefined) ?? null,
         lastErrorCode: (mapped.lastErrorCode as string | null | undefined) ?? null,

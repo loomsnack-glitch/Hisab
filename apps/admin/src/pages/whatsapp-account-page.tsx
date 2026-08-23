@@ -22,6 +22,14 @@ const statusLabel: Record<string, string> = {
     failed: "Connection failed",
     revoked: "Session revoked",
 };
+const cloudStatusLabel: Record<string, string> = {
+    connected: "Connected",
+    disconnected: "Disconnected",
+    needs_action: "Needs attention",
+    revoked: "Access revoked",
+    suspended: "Suspended",
+    failed: "Connection failed",
+};
 
 type WhatsAppAccountQueryError = {
     message?: string;
@@ -121,7 +129,7 @@ const WhatsAppAccountPage = () => {
                             </CardTitle>
                             <CardDescription className="mt-2">Link an organization WhatsApp account to this Store. Add and manage accounts from the organization page.</CardDescription>
                         </div>
-                        {account ? <Badge variant="outline" className="rounded-full">{statusLabel[account.status] ?? account.status}</Badge> : null}
+                        {account ? <Badge variant="outline" className="rounded-full">{account.provider === "cloud_api" ? `${cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable"} · Cloud API` : statusLabel[account.status] ?? account.status}</Badge> : null}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-5">

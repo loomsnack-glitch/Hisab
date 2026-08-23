@@ -305,6 +305,7 @@ export const WhatsAppAccountDTOSchema = z.object({
     provider: WhatsAppProviderSchema,
     phoneNumber: phoneSchema,
     status: WhatsAppAccountStatusSchema,
+    cloudStatus: WhatsAppCloudAccountStatusSchema.nullable().optional(),
     lastConnectedAt: dtoDateSchema.nullable().optional(),
     lastSeenAt: dtoDateSchema.nullable().optional(),
     lastErrorCode: z.string().nullable().optional(),
