@@ -265,7 +265,7 @@ const renderSaleMetaRow = (sale: SaleSummaryDTO) => {
     return (
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-foreground/75">
-                <ServiceModeIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                {/* <ServiceModeIcon className="size-3.5 shrink-0" aria-hidden="true" /> */}
                 {serviceModeOption.label}
             </span>
             <span className="shrink-0 text-xs text-muted-foreground">
