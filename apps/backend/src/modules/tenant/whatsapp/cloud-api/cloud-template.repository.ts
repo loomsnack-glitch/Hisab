@@ -311,6 +311,91 @@ export const createCloudTemplateBinding = async (input: {
   return mapBinding(row as Record<string, unknown>);
 });
 
+export const createCloudTemplateDefaultBinding = async (input: {
+  organizationId: string;
+  storeId: string;
+  cloudTemplateId: string;
+  whatsappBusinessAccountId: string;
+  kind: WhatsAppMessageTemplateKind;
+  localTemplateName: string;
+  localTemplateBody: string;
+  createdBy: string;
+}): Promise<WhatsAppCloudTemplateBindingDTO> => pg.begin(async tx => {
+  const [existing] = await tx`
+    SELECT *
+    FROM whatsapp_cloud_template_bindings
+    WHERE organization_id = ${input.organizationId}
+      AND store_id = ${input.storeId}
+      AND cloud_template_id = ${input.cloudTemplateId}
+      AND kind = ${input.kind}
+      AND is_active = TRUE
+    LIMIT 1
+  `;
+  if (existing) {
+    await tx`
+      UPDATE whatsapp_cloud_template_bindings
+      SET is_default = TRUE, updated_by = ${input.createdBy}, updated_at = NOW()
+      WHERE organization_id = ${input.organizationId} AND store_id = ${input.storeId} AND kind = ${input.kind}
+    `;
+    const [updated] = await tx`
+      SELECT * FROM whatsapp_cloud_template_bindings
+      WHERE organization_id = ${input.organizationId} AND id = ${existing.id}
+    `;
+    if (!updated) throw new Error("Cloud WhatsApp template binding could not be loaded");
+    return mapBinding(updated as Record<string, unknown>);
+  }
+  const [asset] = await tx`
+    SELECT id, status, category, components
+    FROM whatsapp_cloud_templates
+    WHERE id = ${input.cloudTemplateId}
+      AND organization_id = ${input.organizationId}
+      AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+  `;
+  if (!asset || asset.status !== "approved" || asset.category !== (input.kind === "promotion" ? "marketing" : "utility")) {
+    throw new Error("Cloud WhatsApp template must be approved and match the message category");
+  }
+  const [assignment] = await tx`
+    SELECT 1
+    FROM whatsapp_account_stores assignments
+    INNER JOIN whatsapp_accounts accounts ON accounts.id = assignments.whatsapp_account_id AND accounts.organization_id = assignments.organization_id
+    WHERE assignments.organization_id = ${input.organizationId}
+      AND assignments.store_id = ${input.storeId}
+      AND accounts.provider = 'cloud_api'
+      AND accounts.whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+    LIMIT 1
+  `;
+  if (!assignment) throw new Error("Cloud WhatsApp account is not assigned to this Store");
+  const variableMapping = validateCloudTemplateVariableMapping(
+    buildDefaultCloudTemplateVariableMapping(input.localTemplateBody, Array.isArray(asset.components) ? asset.components : []),
+    input.localTemplateBody,
+    Array.isArray(asset.components) ? asset.components : [],
+  );
+  await tx`
+    UPDATE whatsapp_cloud_template_bindings
+    SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
+    WHERE organization_id = ${input.organizationId} AND store_id = ${input.storeId} AND kind = ${input.kind}
+  `;
+  const [localTemplate] = await tx`
+    INSERT INTO whatsapp_message_templates (organization_id, store_id, kind, name, body, is_default, created_by, updated_by)
+    VALUES (${input.organizationId}, ${input.storeId}, ${input.kind}, ${input.localTemplateName.slice(0, 120)}, ${input.localTemplateBody}, TRUE, ${input.createdBy}, ${input.createdBy})
+    RETURNING id
+  `;
+  if (!localTemplate) throw new Error("Local WhatsApp template could not be created");
+  const [row] = await tx`
+    INSERT INTO whatsapp_cloud_template_bindings (
+      organization_id, store_id, local_template_id, cloud_template_id,
+      whatsapp_business_account_id, local_template_body, variable_mapping,
+      kind, is_default, created_by, updated_by
+    ) VALUES (
+      ${input.organizationId}, ${input.storeId}, ${localTemplate.id}, ${input.cloudTemplateId},
+      ${input.whatsappBusinessAccountId}, ${input.localTemplateBody}, ${variableMapping}::jsonb,
+      ${input.kind}, TRUE, ${input.createdBy}, ${input.createdBy}
+    ) RETURNING *
+  `;
+  if (!row) throw new Error("Cloud WhatsApp template binding could not be created");
+  return mapBinding(row as Record<string, unknown>);
+});
+
 export const listCloudTemplateBindings = async (
   organizationId: string,
   storeId: string,

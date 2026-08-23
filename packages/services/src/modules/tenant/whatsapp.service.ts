@@ -173,6 +173,18 @@ export const getWhatsAppCloudTemplateSubmissions = async (
     }
 };
 
+export const setWhatsAppCloudTemplateDefault = async (
+    organizationId: string,
+    submissionId: string,
+): Promise<WhatsAppCloudBindingResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/submissions/${submissionId}/default`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const createWhatsAppCloudTemplateBinding = async (
     organizationId: string,
     storeId: string,

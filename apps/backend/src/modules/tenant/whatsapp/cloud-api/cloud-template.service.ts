@@ -22,6 +22,7 @@ import {
   normalizeCloudTemplateAsset,
   upsertCloudTemplateAssets,
   isCloudAccountAssignedToStore,
+  createCloudTemplateDefaultBinding,
 } from "./cloud-template.repository";
 import {
   createCloudTemplateSubmission,
@@ -50,6 +51,7 @@ type CloudTemplateServiceDependencies = {
   list: typeof listCloudTemplateAssets;
   createBinding: typeof createCloudTemplateBinding;
   listBindings: typeof listCloudTemplateBindings;
+  createDefaultBinding: typeof createCloudTemplateDefaultBinding;
   createSubmission: typeof createCloudTemplateSubmission;
   getSubmission: typeof getCloudTemplateSubmission;
   updateSubmission: typeof updateCloudTemplateSubmission;
@@ -67,6 +69,7 @@ const dependencies = (): CloudTemplateServiceDependencies => ({
   list: listCloudTemplateAssets,
   createBinding: createCloudTemplateBinding,
   listBindings: listCloudTemplateBindings,
+  createDefaultBinding: createCloudTemplateDefaultBinding,
   createSubmission: createCloudTemplateSubmission,
   getSubmission: getCloudTemplateSubmission,
   updateSubmission: updateCloudTemplateSubmission,
@@ -195,6 +198,17 @@ const findProviderTemplate = (
   ) === languageCode,
 ) ?? null;
 
+const localBodyFromProviderComponents = (components: unknown[], kind: WhatsAppCreateCloudTemplateSubmissionJSON["kind"]): string => {
+  const names = kind === "bill"
+    ? ["customer_name", "bill_number", "total", "paid", "balance_due", "organization_name", "store_name"]
+    : kind === "due_reminder"
+      ? ["customer_name", "total_due", "bill_count", "store_name"]
+      : ["customer_name", "store_name"];
+  const body = components.find(component => component && typeof component === "object" && !Array.isArray(component) && String((component as Record<string, unknown>).type).toUpperCase() === "BODY") as Record<string, unknown> | undefined;
+  if (!body || typeof body.text !== "string") throw new Error("Approved Cloud template does not contain a body");
+  return body.text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => `{{${names[Number(index) - 1] ?? `cloud_value_${index}`}}}`);
+};
+
 export const submitCloudTemplateForAccount = async (
   userId: string,
   organizationId: string,
@@ -316,6 +330,38 @@ export const listCloudTemplateSubmissionsForAccount = async (
     data: { submissions: await deps.listSubmissions(organizationId, account.whatsappBusinessAccountId, originatingStoreId) },
     code: STATUS_CODES.SUCCESS,
   };
+};
+
+export const setCloudTemplateDefaultForSubmission = async (
+  userId: string,
+  organizationId: string,
+  submissionId: string,
+  injected: Partial<CloudTemplateServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
+  const deps = { ...dependencies(), ...injected };
+  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const submission = await deps.getSubmission(organizationId, submissionId);
+  if (!submission || submission.organizationId !== organizationId) return { status: "error", message: "Cloud template submission not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  if (!submission.originatingStoreId) return { status: "error", message: "Select a Store before assigning a default", data: null, code: STATUS_CODES.CONFLICT };
+  if (submission.status !== "approved" || !submission.metaTemplateId) return { status: "error", message: "Only an approved Cloud template can become a Store default", data: null, code: STATUS_CODES.CONFLICT };
+  const assets = await deps.list(organizationId, submission.whatsappBusinessAccountId);
+  const asset = assets.find(item => item.metaTemplateId === submission.metaTemplateId);
+  if (!asset) return { status: "error", message: "Refresh Cloud templates before assigning this default", data: null, code: STATUS_CODES.CONFLICT };
+  try {
+    const binding = await deps.createDefaultBinding({
+      organizationId,
+      storeId: submission.originatingStoreId,
+      cloudTemplateId: asset.id,
+      whatsappBusinessAccountId: submission.whatsappBusinessAccountId,
+      kind: submission.kind,
+      localTemplateName: `${submission.friendlyName} (Cloud)`,
+      localTemplateBody: localBodyFromProviderComponents(submission.requestedComponents, submission.kind),
+      createdBy: userId,
+    });
+    return { status: "success", message: "Approved Cloud template is now the Store default", data: binding, code: STATUS_CODES.SUCCESS };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Cloud template could not become the Store default", data: null, code: STATUS_CODES.CONFLICT };
+  }
 };
 
 export const createCloudTemplateBindingForStore = async (

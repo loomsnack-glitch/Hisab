@@ -48,6 +48,7 @@ import {
     listCloudTemplateBindingsForStore,
     submitCloudTemplateForAccount,
     listCloudTemplateSubmissionsForAccount,
+    setCloudTemplateDefaultForSubmission,
 } from "./cloud-api/cloud-template.service";
 import * as consentService from "./cloud-api/customer-consent.service";
 import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
@@ -217,6 +218,18 @@ userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/submissions"
             if (invalidStore) return c.json(invalidStore, invalidStore.code);
         }
         return handleServiceResponse(c, await listCloudTemplateSubmissionsForAccount(c.get("authUser").id, organizationId, accountId, storeId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/submissions/:submissionId/default", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const submissionId = c.req.param("submissionId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(submissionId, "Invalid submission id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await setCloudTemplateDefaultForSubmission(c.get("authUser").id, organizationId, submissionId));
     } catch (error) {
         return unexpectedError(c, error);
     }

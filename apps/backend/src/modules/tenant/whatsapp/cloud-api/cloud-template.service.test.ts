@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { listCloudTemplatesForAccount, submitCloudTemplateForAccount, syncCloudTemplatesForAccount } from "./cloud-template.service";
+import { listCloudTemplatesForAccount, setCloudTemplateDefaultForSubmission, submitCloudTemplateForAccount, syncCloudTemplatesForAccount } from "./cloud-template.service";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const userId = "33333333-3333-4333-8333-333333333333";
@@ -139,5 +139,43 @@ describe("Cloud template synchronization service", () => {
     expect(update?.status).toBe("pending");
     expect(response.data?.submission.metaTemplateId).toBe("meta-1");
     expect(response.data?.template?.name).toBe("bill_ready");
+  });
+
+  test("only assigns an approved submission and delegates to the transactional Store binding", async () => {
+    let input: Record<string, unknown> | undefined;
+    const response = await setCloudTemplateDefaultForSubmission(userId, organizationId, "88888888-8888-4888-8888-888888888888", {
+      organizationAccess: async () => true,
+      getSubmission: async () => ({
+        id: "88888888-8888-4888-8888-888888888888",
+        organizationId,
+        whatsappBusinessAccountId: businessAccountId,
+        originatingStoreId: "99999999-9999-4999-8999-999999999999",
+        localTemplateId: null,
+        kind: "bill" as const,
+        friendlyName: "Bill ready",
+        metaTemplateName: "bill_ready",
+        languageCode: "en_US",
+        category: "utility" as const,
+        requestedComponents: [{ type: "BODY", text: "Hello {{1}}" }],
+        sampleValues: { "1": "Customer" },
+        idempotencyKey: "idem-2",
+        metaTemplateId: "meta-2",
+        status: "approved" as const,
+        rejectionReason: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        submittedAt: "2026-08-23T10:00:00.000Z",
+        providerUpdatedAt: "2026-08-23T10:00:00.000Z",
+        createdBy: userId,
+        updatedBy: userId,
+        createdAt: "2026-08-23T10:00:00.000Z",
+        updatedAt: "2026-08-23T10:00:00.000Z",
+      }),
+      list: async () => [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organizationId, whatsappBusinessAccountId: businessAccountId, metaTemplateId: "meta-2", name: "bill_ready", languageCode: "en_US", category: "utility" as const, status: "approved" as const, components: [{ type: "BODY", text: "Hello {{1}}" }], rejectionReason: null, providerUpdatedAt: null, lastSyncedAt: "2026-08-23T10:00:00.000Z", version: 1 }],
+      createDefaultBinding: async value => { input = value; return {} as never; },
+    });
+    expect(response.status).toBe("success");
+    expect(input?.storeId).toBe("99999999-9999-4999-8999-999999999999");
+    expect(input?.localTemplateBody).toBe("Hello {{customer_name}}");
   });
 });

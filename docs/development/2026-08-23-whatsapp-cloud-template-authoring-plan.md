@@ -421,7 +421,7 @@ Evidence:
 
 ### Phase 5 — Automatic Store default and send integration
 
-Status: **in progress**
+Status: **completed**
 
 Scope:
 
@@ -446,9 +446,19 @@ Exit criteria:
 - changed/revoked templates are blocked safely without corrupting outbox state;
 - existing POS/Admin send paths remain backwards compatible.
 
+Evidence:
+
+- [x] Approved submissions expose one Store-default action; pending, rejected,
+  paused, and disabled submissions do not.
+- [x] The default action creates the local token template and Cloud binding in
+  one database transaction, with one default per Store and message kind.
+- [x] Existing Cloud admission and durable outbox callers remain the send
+  boundary; no direct provider send was added to the authoring flow.
+- [x] Focused approval-gate coverage passes: 4 service tests, 0 failures.
+
 ### Phase 6 — Migration, controlled acceptance, and UI cleanup
 
-Status: **planned**
+Status: **in progress**
 
 Migration steps:
 
