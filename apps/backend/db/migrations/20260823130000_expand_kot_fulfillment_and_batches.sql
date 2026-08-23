@@ -4,8 +4,7 @@ CREATE TYPE kot_fulfillment_type_enum AS ENUM ('dine_in', 'pick_up');
 
 ALTER TABLE kots
     ADD COLUMN fulfillment_type kot_fulfillment_type_enum,
-    ADD COLUMN sale_batch_sequence INTEGER,
-    ADD COLUMN generation_request_id UUID;
+    ADD COLUMN sale_batch_sequence INTEGER;
 
 UPDATE kots
 SET fulfillment_type = 'pick_up'
@@ -43,10 +42,6 @@ CREATE UNIQUE INDEX kots_parcel_sale_batch_key
       AND kot_type = 'parcel'
       AND sale_batch_sequence IS NOT NULL;
 
-CREATE UNIQUE INDEX kots_generation_request_key
-    ON kots (organization_id, store_id, generation_request_id)
-    WHERE generation_request_id IS NOT NULL;
-
 -- migrate:down
 
 DO $$
@@ -64,7 +59,6 @@ BEGIN
 END $$;
 
 DROP INDEX IF EXISTS kots_parcel_sale_batch_key;
-DROP INDEX IF EXISTS kots_generation_request_key;
 
 CREATE UNIQUE INDEX kots_parcel_sale_id_key
     ON kots (sale_id)
@@ -78,7 +72,6 @@ ALTER TABLE kots
 
 ALTER TABLE kots
     DROP COLUMN IF EXISTS sale_batch_sequence,
-    DROP COLUMN IF EXISTS generation_request_id,
     DROP COLUMN IF EXISTS fulfillment_type;
 
 DROP TYPE IF EXISTS kot_fulfillment_type_enum;
