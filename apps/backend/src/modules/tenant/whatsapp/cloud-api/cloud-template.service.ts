@@ -147,6 +147,38 @@ export const syncCloudTemplatesForAccount = async (
     });
     const assets = rawProviderTemplates.map(template => normalizeCloudTemplateAsset(organizationId, credential.businessAccountId, template));
     const templates = await deps.upsert(assets);
+    const approvedAssetsByMetaId = new Map(
+      templates
+        .filter(template => template.status === "approved")
+        .map(template => [template.metaTemplateId, template]),
+    );
+    if (approvedAssetsByMetaId.size > 0) {
+      const submissions = await deps.listSubmissions(organizationId, credential.businessAccountId);
+      await Promise.all(
+        submissions
+          .filter(submission =>
+            Boolean(submission.metaTemplateId) &&
+            ["submitting", "pending"].includes(submission.status) &&
+            approvedAssetsByMetaId.has(submission.metaTemplateId!),
+          )
+          .map(submission => {
+            const asset = approvedAssetsByMetaId.get(submission.metaTemplateId!);
+            if (!asset) return Promise.resolve(null);
+            return deps.updateSubmission(organizationId, submission.id, {
+              status: "approved",
+              providerUpdatedAt:
+                asset.providerUpdatedAt instanceof Date
+                  ? asset.providerUpdatedAt.toISOString()
+                  : asset.providerUpdatedAt,
+              rejectionReason: null,
+              lastErrorCode: null,
+              lastErrorMessage: null,
+              updatedBy: userId,
+              expectedStatus: submission.status,
+            }).catch(() => null);
+          }),
+      );
+    }
     console.info("[DEBUG-whatsapp-template-sync]", {
       storedAssetCount: templates.length,
       storedAssets: templates.map(template => ({

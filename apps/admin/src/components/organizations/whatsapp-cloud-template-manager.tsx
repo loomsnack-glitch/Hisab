@@ -357,7 +357,9 @@ const WhatsAppCloudTemplateManager = ({
         toast.success("Cloud templates refreshed");
       }
     },
-    onError: () => toast.error("Cloud templates could not be refreshed"),
+    onError: (error) => {
+      toast.error(mutationErrorMessage(error, "Cloud templates could not be refreshed"));
+    },
   });
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -443,7 +445,11 @@ const WhatsAppCloudTemplateManager = ({
         toast.success(response.message);
       }
     },
-    onError: () => toast.error("Existing Cloud template could not be assigned"),
+    onError: (error) => {
+      toast.error(
+        mutationErrorMessage(error, "Existing Cloud template could not be assigned"),
+      );
+    },
   });
   const openCreate = () => {
     setSubmitError(null);

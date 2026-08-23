@@ -46,6 +46,8 @@ describe("Cloud template synchronization service", () => {
         lastSyncedAt: "2026-08-22T10:00:00.000Z",
         version: 1,
       })); },
+      listSubmissions: async () => [],
+      updateSubmission: async () => null,
     });
     expect(response.status).toBe("success");
     expect(upserted).toHaveLength(1);

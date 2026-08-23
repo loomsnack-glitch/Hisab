@@ -23,4 +23,23 @@ describe("Cloud template variable mapping", () => {
       definitions,
     )).toThrow("missing body:2");
   });
+
+  test("supports repeated provider placeholders and local variables", () => {
+    const repeatedDefinitions = [{
+      type: "BODY",
+      text: "Hello {{1}}, store {{2}}, again {{2}}",
+    }];
+    const localBody = "Hello {{customer_name}}, store {{store_name}}, again {{store_name}}";
+
+    const mapping = buildDefaultCloudTemplateVariableMapping(
+      localBody,
+      repeatedDefinitions,
+    );
+
+    expect(mapping).toEqual({
+      "body:1": "customer_name",
+      "body:2": "store_name",
+    });
+    expect(validateCloudTemplateVariableMapping(mapping, localBody, repeatedDefinitions)).toEqual(mapping);
+  });
 });

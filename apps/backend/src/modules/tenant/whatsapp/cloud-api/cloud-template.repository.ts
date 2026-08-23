@@ -390,8 +390,18 @@ export const createCloudTemplateDefaultBinding = async (input: {
     }
     await tx`
       UPDATE whatsapp_cloud_template_bindings
+      SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
+      WHERE organization_id = ${input.organizationId}
+        AND store_id = ${input.storeId}
+        AND kind = ${input.kind}
+        AND is_default = TRUE
+    `;
+    await tx`
+      UPDATE whatsapp_cloud_template_bindings
       SET is_default = TRUE, updated_by = ${input.createdBy}, updated_at = NOW()
-      WHERE organization_id = ${input.organizationId} AND store_id = ${input.storeId} AND kind = ${input.kind}
+      WHERE organization_id = ${input.organizationId}
+        AND store_id = ${input.storeId}
+        AND id = ${existing.id}
     `;
     const [updated] = await tx`
       SELECT * FROM whatsapp_cloud_template_bindings
