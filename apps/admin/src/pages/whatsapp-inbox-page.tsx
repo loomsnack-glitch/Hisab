@@ -8,14 +8,12 @@ import {
     getWhatsAppAttachment,
     getWhatsAppConversation,
     getWhatsAppConversations,
-    sendWhatsAppConversationText,
 } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Spinner } from "@repo/ui/components/spinner";
-import { Textarea } from "@repo/ui/components/textarea";
-import { ArrowLeft, FileText, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, FileText, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { whatsappKeys } from "@/lib/query-keys";
@@ -40,7 +38,6 @@ const responseMessage = (response: { status: string; message?: string }) =>
 const WhatsAppInboxView = (props: InboxViewProps) => {
     const queryClient = useQueryClient();
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-    const [draft, setDraft] = useState("");
     const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
 
     const organizationId = props.organizationId;
@@ -97,21 +94,6 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
         return (customerQuery.data.data?.customers ?? []).filter((customer) => normalizePhone(customer.phone ?? "") === phone);
     }, [customerQuery.data, selectedConversation?.contactPhoneNumber]);
 
-    const sendMutation = useMutation({
-        mutationFn: (body: string) =>
-            sendWhatsAppConversationText(organizationId, storeId, selectedConversationId!, { body }),
-        onSuccess: (response) => {
-            const message = responseMessage(response);
-            if (message) {
-                toast.error(message);
-                return;
-            }
-            setDraft("");
-            void queryClient.invalidateQueries({ queryKey: conversationKey });
-            void queryClient.invalidateQueries({ queryKey: conversationsKey });
-        },
-    });
-
     const attachMutation = useMutation({
         mutationFn: (customerId: string) =>
             attachWhatsAppConversationCustomer(organizationId, storeId, selectedConversationId!, { customerId }),
@@ -139,12 +121,6 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
             return;
         }
         window.open(response.data.url, "_blank", "noopener,noreferrer");
-    };
-
-    const submitMessage = () => {
-        const body = draft.trim();
-        if (!body || !selectedConversationId || sendMutation.isPending) return;
-        sendMutation.mutate(body);
     };
 
     return (
@@ -272,28 +248,6 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
                                     )}
                                 </div>
 
-                                <div className="border-t border-border/60 p-3">
-                                    <div className="flex items-end gap-2">
-                                        <Textarea
-                                            value={draft}
-                                            onChange={(event) => setDraft(event.target.value)}
-                                            onKeyDown={(event) => {
-                                                if (event.key === "Enter" && !event.shiftKey) {
-                                                    event.preventDefault();
-                                                    submitMessage();
-                                                }
-                                            }}
-                                            placeholder="Write a message..."
-                                            maxLength={4096}
-                                            className="min-h-10 resize-none"
-                                            aria-label="WhatsApp message"
-                                        />
-                                        <Button type="button" size="icon" disabled={!draft.trim() || sendMutation.isPending || accountStatus !== "connected"} onClick={submitMessage} aria-label="Send WhatsApp message">
-                                            {sendMutation.isPending ? <Spinner className="size-4" /> : <Send className="size-4" />}
-                                        </Button>
-                                    </div>
-                                    <p className="mt-1 text-right text-[11px] text-muted-foreground">Enter to send · Shift+Enter for a new line</p>
-                                </div>
                             </>
                         )}
                     </section>
@@ -317,6 +271,7 @@ const MessageBubble = ({
         <div className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm ${outbound ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card"}`}>
                 {message.body ? <p className="whitespace-pre-wrap break-words">{message.body}</p> : null}
+                {message.messageType === "template" ? <p className="whitespace-pre-wrap break-words">Template{message.templateName ? ` · ${message.templateName}` : " message"}</p> : null}
                 {message.caption ? <p className="mt-1 whitespace-pre-wrap break-words">{message.caption}</p> : null}
                 {message.attachmentFileName ? (
                     <Button

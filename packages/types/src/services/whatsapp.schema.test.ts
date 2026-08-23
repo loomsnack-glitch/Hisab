@@ -99,6 +99,7 @@ describe("WhatsApp schemas", () => {
             messageType: "template",
             body: null,
             caption: "Your bill is ready",
+            templateName: "bill_ready",
             attachmentFileName: null,
             attachmentMimeType: null,
             status: "sent",

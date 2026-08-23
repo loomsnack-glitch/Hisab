@@ -113,6 +113,7 @@ const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
         messageType: mapped.messageType as WhatsAppMessageDTO["messageType"],
         body: (mapped.body as string | null | undefined) ?? null,
         caption: (mapped.caption as string | null | undefined) ?? null,
+        templateName: (mapped.templateName as string | null | undefined) ?? null,
         attachmentFileName: (mapped.attachmentFileName as string | null | undefined) ?? null,
         attachmentMimeType: (mapped.attachmentMimeType as string | null | undefined) ?? null,
         status: mapped.status as WhatsAppMessageDTO["status"],
@@ -732,13 +733,14 @@ export const getConversationMessages = async (
     conversationId: string,
 ): Promise<WhatsAppMessageDTO[]> => {
     const rows = await pg`
-        SELECT *
-        FROM whatsapp_messages
-        WHERE conversation_id = ${conversationId}
-          AND organization_id = ${organizationId}
-          AND store_id = ${storeId}
-          AND whatsapp_account_id = ${accountId}
-        ORDER BY created_at ASC
+        SELECT message.*, outbox.cloud_template_snapshot ->> 'name' AS template_name
+        FROM whatsapp_messages message
+        LEFT JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+        WHERE message.conversation_id = ${conversationId}
+          AND message.organization_id = ${organizationId}
+          AND message.store_id = ${storeId}
+          AND message.whatsapp_account_id = ${accountId}
+        ORDER BY message.created_at ASC
         LIMIT 500
     `;
     return rows.map((row: Record<string, unknown>) => mapMessage(row));

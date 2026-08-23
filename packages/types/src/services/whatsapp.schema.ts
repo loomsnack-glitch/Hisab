@@ -346,6 +346,7 @@ export const WhatsAppMessageDTOSchema = z.object({
     messageType: WhatsAppMessageTypeSchema,
     body: z.string().nullable().optional(),
     caption: z.string().nullable().optional(),
+    templateName: z.string().trim().max(512).nullable().optional(),
     attachmentFileName: z.string().nullable().optional(),
     attachmentMimeType: z.string().nullable().optional(),
     status: WhatsAppMessageStatusSchema,
