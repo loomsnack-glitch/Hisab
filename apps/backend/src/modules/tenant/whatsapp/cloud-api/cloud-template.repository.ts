@@ -146,6 +146,27 @@ const mapAsset = (row: Record<string, unknown>): WhatsAppCloudTemplateAssetDTO =
   });
 };
 
+export const mapCloudTemplateAssetFromJoinedRow = (
+  row: Record<string, unknown>,
+): WhatsAppCloudTemplateAssetDTO => {
+  const mapped = snakeToCamel(row) as Record<string, unknown>;
+  return mapAsset({
+    id: mapped.assetId,
+    organization_id: mapped.assetOrganizationId,
+    whatsapp_business_account_id: mapped.assetWhatsappBusinessAccountId,
+    meta_template_id: mapped.metaTemplateId,
+    name: mapped.assetName,
+    language_code: mapped.languageCode,
+    category: mapped.assetCategory,
+    status: mapped.assetStatus,
+    components: mapped.components,
+    rejection_reason: mapped.rejectionReason,
+    provider_updated_at: mapped.providerUpdatedAt,
+    last_synced_at: mapped.lastSyncedAt,
+    version: mapped.version,
+  });
+};
+
 const mapBinding = (row: Record<string, unknown>): WhatsAppCloudTemplateBindingDTO => {
   const mapped = snakeToCamel(row) as Record<string, unknown>;
   return WhatsAppCloudTemplateBindingSchema.parse({
@@ -481,21 +502,7 @@ export const getCloudTemplateBindingSnapshot = async (
   const raw = row as Record<string, unknown>;
   return {
     binding: mapBinding(raw),
-    asset: mapAsset({
-      id: raw.assetId,
-      organization_id: raw.assetOrganizationId,
-      whatsapp_business_account_id: raw.assetWhatsappBusinessAccountId,
-      meta_template_id: raw.metaTemplateId,
-      name: raw.assetName,
-      language_code: raw.languageCode,
-      category: raw.assetCategory,
-      status: raw.assetStatus,
-      components: raw.components,
-      rejection_reason: raw.rejectionReason,
-      provider_updated_at: raw.providerUpdatedAt,
-      last_synced_at: raw.lastSyncedAt,
-      version: raw.version,
-    }),
+    asset: mapCloudTemplateAssetFromJoinedRow(raw),
   };
 };
 

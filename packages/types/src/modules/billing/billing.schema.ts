@@ -105,7 +105,9 @@ export const CustomerDTOSchema = z.object({
   marketingOptedIn: z.boolean().default(false),
   marketingOptedInAt: dtoDateSchema.nullable().optional().default(null),
   marketingOptInSource: z.string().trim().min(1).max(32).nullable().optional().default(null),
-  utilityOptedIn: z.boolean().default(false),
+  // Utility messages (bills and due reminders) are enabled for customers by default.
+  // An explicit utility opt-out is still represented as false by the API.
+  utilityOptedIn: z.boolean().default(true),
   utilityOptedInAt: dtoDateSchema.nullable().optional().default(null),
   utilityOptInSource: z.string().trim().min(1).max(32).nullable().optional().default(null),
   whatsappSuppressed: z.boolean().default(false),
