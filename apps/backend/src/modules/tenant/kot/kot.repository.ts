@@ -669,6 +669,20 @@ export const markTableOrderCheckedOut = async (
     );
 };
 
+export const deleteKotsByTableOrderId = async (
+    organizationId: string,
+    storeId: string,
+    tableOrderId: string,
+    tx: Bun.TransactionSQL,
+): Promise<void> => {
+    await tx`
+        DELETE FROM kots
+        WHERE table_order_id = ${tableOrderId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+};
+
 export const discardTableOrder = async (
     organizationId: string,
     storeId: string,
@@ -687,7 +701,17 @@ export const discardTableOrder = async (
           AND status = 'active'
         RETURNING id
     `;
-    return Boolean(result);
+    if (!result) {
+        return false;
+    }
+
+    await deleteKotsByTableOrderId(
+        organizationId,
+        storeId,
+        tableOrderId,
+        tx,
+    );
+    return true;
 };
 
 export const linkKotsToSale = async (
