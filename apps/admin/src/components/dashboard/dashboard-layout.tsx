@@ -1,14 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Outlet, useLocation, useParams, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations, userLogout } from "@repo/services";
 import { cn } from "@repo/ui/lib/utils";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
 import {
     Popover,
     PopoverContent,
@@ -17,12 +11,14 @@ import {
 import { Avatar, AvatarFallback } from "@repo/ui/components/avatar";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { ChevronDown, Check, Plus, User, LogOut, Phone, MonitorSmartphone, Star, Menu } from "lucide-react";
+import { Plus, User, LogOut, Phone, MonitorSmartphone } from "lucide-react";
 import { toast } from "sonner";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@repo/ui/components/sheet";
 
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
+import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav";
+import OrganizationSwitcher from "@/components/dashboard/organization-switcher";
 import CreateOrganizationDialog from "@/components/organizations/create-organization-dialog";
+import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { getPosLoginUrl } from "@/lib/pos-origin";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -42,32 +38,41 @@ const getUserFullName = (user: any) => {
     return [salutation, user?.firstName, user?.lastName].filter(Boolean).join(" ");
 };
 
-const getOrgInitials = (name?: string) => {
-    if (!name) return "OR";
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+const getOrganizationSwitchPath = (pathname: string, organizationId: string) => {
+    if (pathname.includes("/billing")) {
+        return `/organizations/${organizationId}/billing`;
     }
-    return name.slice(0, 2).toUpperCase();
+    if (pathname.includes("/products")) {
+        return `/organizations/${organizationId}/products`;
+    }
+    if (pathname.includes("/whatsapp")) {
+        return `/organizations/${organizationId}/whatsapp/accounts`;
+    }
+    if (pathname.includes("/reports")) {
+        return `/organizations/${organizationId}/reports`;
+    }
+    if (pathname.includes("/tables")) {
+        return `/organizations/${organizationId}/tables`;
+    }
+    if (pathname.includes("/customers")) {
+        return `/organizations/${organizationId}/customers`;
+    }
+    if (pathname.includes("/purchases")) {
+        return `/organizations/${organizationId}/purchases`;
+    }
+    return `/organizations/${organizationId}/stores`;
 };
 
-const getOrgBgColor = (id?: string) => {
-    if (!id) return "bg-primary/10 text-primary border-primary/20";
-    const colors = [
-        "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
-        "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-        "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-        "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
-        "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
-    ];
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-        hash = id.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
-};
+const createOrganizationTrigger = (
+    <Button
+        variant="outline"
+        size="icon-sm"
+        className="h-9 w-9 shrink-0 rounded-xl border-border/70 bg-background/50 hover:bg-muted/50"
+        aria-label="Create organization"
+    >
+        <Plus className="size-4 text-muted-foreground hover:text-foreground" />
+    </Button>
+);
 
 const DashboardLayout = () => {
     const location = useLocation();
@@ -77,7 +82,6 @@ const DashboardLayout = () => {
     const navigate = useNavigate();
     const { organizationId } = useParams();
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readSidebarCollapsed);
-    const [isMobileOpen, setIsMobileOpen] = useState(false);
 
     const organizationsQuery = useQuery({
         queryKey: organizationKeys.list(),
@@ -193,10 +197,12 @@ const DashboardLayout = () => {
         onToggle: toggleSidebar,
     };
 
-    const isStarredActive = starredOrgId && activeOrg && starredOrgId === activeOrg.id;
+    const handleSelectOrganization = (orgId: string) => {
+        navigate(getOrganizationSwitchPath(location.pathname, orgId));
+    };
 
     return (
-        <div className="min-h-screen bg-background text-foreground">
+        <div className="min-h-screen bg-background text-foreground [--pos-mobile-nav-height:calc(3.375rem+env(safe-area-inset-bottom,0px))] lg:[--pos-mobile-nav-height:0px]">
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),_transparent_30%)]" />
             </div>
@@ -215,141 +221,25 @@ const DashboardLayout = () => {
 
                 <div className="flex min-w-0 flex-1 flex-col">
                     <header className="sticky top-0 z-20 flex min-h-[calc(3.5rem+env(safe-area-inset-top,0px))] shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-3 pt-[env(safe-area-inset-top,0px)] sm:px-6 lg:px-8 backdrop-blur-xl">
-                        {/* Left side: Organization selector and Create button */}
-                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                            <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-                                <SheetTrigger
-                                    render={
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            className="h-9 w-9 rounded-xl lg:hidden hover:bg-muted/70 shrink-0"
-                                            aria-label="Open navigation menu"
-                                        >
-                                            <Menu className="size-5 text-muted-foreground hover:text-foreground" />
-                                        </Button>
-                                    }
+                        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+                            <Link
+                                to={getAuthenticatedHomePath(organizations)}
+                                className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90 lg:hidden"
+                            >
+                                <WorkspaceBrand workspace="admin" />
+                            </Link>
+                            <div className="hidden min-w-0 items-center gap-1.5 sm:gap-2 lg:flex">
+                                <OrganizationSwitcher
+                                    organizations={organizations}
+                                    activeOrgId={activeOrgId}
+                                    activeOrgName={activeOrgName}
+                                    starredOrgId={starredOrgId}
+                                    onToggleStar={handleToggleStar}
+                                    onSelect={handleSelectOrganization}
+                                    triggerClassName="max-w-[220px]"
                                 />
-                                <SheetContent side="left" className="p-0 data-[side=left]:w-[220px] data-[side=left]:sm:max-w-[220px] border-r-0">
-                                    <div className="sr-only">
-                                        <SheetTitle>Navigation Menu</SheetTitle>
-                                    </div>
-                                    <AppSidebar
-                                        isMobile={true}
-                                        isCollapsed={false}
-                                        onToggle={() => {}}
-                                        onNavigate={() => setIsMobileOpen(false)}
-                                    />
-                                </SheetContent>
-                            </Sheet>
-
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    render={
-                                        <Button
-                                            variant="outline"
-                                            className={cn(
-                                                "h-9 gap-1.5 sm:gap-2.5 rounded-xl border border-border/70 bg-background/50 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-all duration-200 hover:bg-muted/30 hover:border-amber-500/50 max-w-[140px] sm:max-w-[220px]",
-                                                activeOrg && "pl-2 sm:pl-2.5 pr-2 sm:pr-3"
-                                            )}
-                                        >
-                                            {activeOrg && (
-                                                <Star className={cn("size-3.5 sm:size-4 shrink-0 transition-transform hidden sm:block", isStarredActive ? "text-amber-500 fill-amber-500 scale-105" : "text-muted-foreground/50")} />
-                                            )}
-                                            {activeOrg && (
-                                                <div className={cn("size-5 sm:size-6 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold border shrink-0", getOrgBgColor(activeOrg.id))}>
-                                                    {getOrgInitials(activeOrgName)}
-                                                </div>
-                                            )}
-                                            <span className="truncate max-w-[70px] sm:max-w-[140px] text-foreground">
-                                                {activeOrgName || "Select organization"}
-                                            </span>
-                                            <ChevronDown className="size-3.5 sm:size-4 text-muted-foreground shrink-0" />
-                                        </Button>
-                                    }
-                                />
-                                <DropdownMenuContent align="start" className="w-64 rounded-xl border border-border/60 bg-popover/95 p-1.5 shadow-xl backdrop-blur-xl z-50 space-y-0.5">
-                                    {organizations.length === 0 ? (
-                                        <div className="px-2.5 py-2 text-xs text-muted-foreground">
-                                            No organizations
-                                        </div>
-                                    ) : (
-                                        organizations.map((org) => {
-                                            const isOrgStarred = starredOrgId === org.id;
-                                            const isOrgActive = activeOrgId === org.id || organizationId === org.id;
-
-                                            return (
-                                                <DropdownMenuItem
-                                                    key={org.id}
-                                                    onClick={() => {
-                                                        let targetPath = `/organizations/${org.id}/stores`;
-                                                        if (location.pathname.includes("/billing")) {
-                                                            targetPath = `/organizations/${org.id}/billing`;
-                                                        } else if (location.pathname.includes("/products")) {
-                                                            targetPath = `/organizations/${org.id}/products`;
-                                                        } else if (location.pathname.includes("/whatsapp")) {
-                                                            targetPath = `/organizations/${org.id}/whatsapp/accounts`;
-                                                        } else if (location.pathname.includes("/reports")) {
-                                                            targetPath = `/organizations/${org.id}/reports`;
-                                                        } else if (location.pathname.includes("/tables")) {
-                                                            targetPath = `/organizations/${org.id}/tables`;
-                                                        }
-                                                        navigate(targetPath);
-                                                    }}
-                                                    className={cn(
-                                                        "flex items-center justify-between gap-2.5 rounded-lg px-2.5 py-2 text-sm cursor-pointer transition-colors duration-150",
-                                                        isOrgActive
-                                                            ? "bg-primary/10 text-primary font-medium focus:bg-primary/15"
-                                                            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                                                    )}
-                                                >
-                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleToggleStar(org.id);
-                                                            }}
-                                                            className="p-1 hover:bg-muted/70 rounded-md transition-colors text-muted-foreground/60 hover:text-amber-500 shrink-0"
-                                                            title={isOrgStarred ? "Unstar organization" : "Star organization"}
-                                                        >
-                                                            <Star
-                                                                className={cn(
-                                                                    "size-4 transition-all hover:scale-110",
-                                                                    isOrgStarred ? "text-amber-500 fill-amber-500" : "text-muted-foreground/45 hover:text-amber-500"
-                                                                )}
-                                                            />
-                                                        </button>
-
-                                                        <div className={cn("size-6 rounded-full flex items-center justify-center text-[10px] font-bold border shrink-0", getOrgBgColor(org.id))}>
-                                                            {getOrgInitials(org.name)}
-                                                        </div>
-
-                                                        <span className="truncate font-medium text-foreground">{org.name}</span>
-                                                    </div>
-
-                                                    {isOrgActive && (
-                                                        <Check className="size-4 text-amber-500 shrink-0 font-bold" />
-                                                    )}
-                                                </DropdownMenuItem>
-                                            );
-                                        })
-                                    )}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            <CreateOrganizationDialog
-                                trigger={
-                                    <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        className="h-9 w-9 rounded-xl border-border/70 bg-background/50 hover:bg-muted/50 shrink-0"
-                                        aria-label="Create organization"
-                                    >
-                                        <Plus className="size-4 text-muted-foreground hover:text-foreground" />
-                                    </Button>
-                                }
-                            />
+                                <CreateOrganizationDialog trigger={createOrganizationTrigger} />
+                            </div>
                         </div>
 
                         {/* Right side: Theme Toggle & User Profile Popover */}
@@ -425,6 +315,7 @@ const DashboardLayout = () => {
                         location.pathname.includes("/billing")
                             ? "p-0"
                             : "px-3.5 py-4 sm:px-6 lg:px-8 lg:py-8",
+                        "max-lg:pb-[var(--pos-mobile-nav-height)]",
                     )}>
                         <div className={cn(
                             "mx-auto w-full min-w-0",
@@ -433,6 +324,15 @@ const DashboardLayout = () => {
                             <Outlet />
                         </div>
                     </main>
+                    <AdminMobileBottomNav
+                        organizationId={activeOrgId}
+                        hasOrganization={Boolean(activeOrgId)}
+                        organizations={organizations}
+                        activeOrgName={activeOrgName}
+                        starredOrgId={starredOrgId}
+                        onToggleStar={handleToggleStar}
+                        onSelectOrganization={handleSelectOrganization}
+                    />
                 </div>
             </div>
         </div>

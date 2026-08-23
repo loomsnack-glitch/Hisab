@@ -61,6 +61,16 @@ const resolveSalesPaymentMethods = (query: SalesListQuery): string[] => {
     return [];
 };
 
+const salesPaymentMethodsClause = (paymentMethods: string[]) =>
+    paymentMethods.length === 0
+        ? sql`TRUE`
+        : sql`EXISTS (
+              SELECT 1
+              FROM payments payment_filter
+              WHERE payment_filter.sale_id = s.id
+                AND payment_filter.method::text IN ${sql(paymentMethods)}
+          )`;
+
 type SaleSummaryRow = Record<string, unknown> & {
     customer_name?: string | null;
     customer_phone?: string | null;
@@ -577,15 +587,7 @@ export const getSalesByStore = async (
           AND s.store_id = ${storeId}
           AND (${status} = '' OR s.status::text = ${status})
           AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
-          AND (
-              ${paymentMethods.length} = 0
-              OR EXISTS (
-                  SELECT 1
-                  FROM payments payment_filter
-                  WHERE payment_filter.sale_id = s.id
-                    AND payment_filter.method::text IN ${pg(paymentMethods)}
-              )
-          )
+          AND ${salesPaymentMethodsClause(paymentMethods)}
           AND (${customerId} = '' OR s.customer_id::text = ${customerId})
           AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
           AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)
@@ -744,15 +746,7 @@ export const getSalesSummaryByStore = async (
           AND s.store_id = ${storeId}
           AND (${status} = '' OR s.status::text = ${status})
           AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
-          AND (
-              ${paymentMethods.length} = 0
-              OR EXISTS (
-                  SELECT 1
-                  FROM payments payment_filter
-                  WHERE payment_filter.sale_id = s.id
-                    AND payment_filter.method::text IN ${pg(paymentMethods)}
-              )
-          )
+          AND ${salesPaymentMethodsClause(paymentMethods)}
           AND (${customerId} = '' OR s.customer_id::text = ${customerId})
           AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
           AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)
