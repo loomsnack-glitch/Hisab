@@ -24,7 +24,10 @@ import {
   enqueueCloudTemplateSend,
   enqueueCloudTemplateSendForDevice,
 } from "./cloud-api/cloud-template-send.service";
-import { buildInvoiceCloudComponents } from "./invoice-cloud-components";
+import {
+  buildInvoiceCloudComponents,
+  cloudInvoiceTemplateHasDocumentHeader,
+} from "./invoice-cloud-components";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
 
@@ -61,23 +64,31 @@ const queueCloudInvoiceForStore = async (
   if (!binding) {
     return { status: "error", message: "No approved Cloud bill template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
   }
-  const bucket = privateBucket();
-  if (!bucket) {
+  const requiresDocument = cloudInvoiceTemplateHasDocumentHeader(binding.asset.components);
+  const bucket = requiresDocument ? privateBucket() : "";
+  if (requiresDocument && !bucket) {
     return { status: "error", message: "Private media storage is not configured for WhatsApp invoices", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
   }
-  const attachmentStorageKey = invoiceObjectKey(organizationId, storeId, accountId, sale.id);
+  const attachmentStorageKey = requiresDocument
+    ? invoiceObjectKey(organizationId, storeId, accountId, sale.id)
+    : null;
+  let uploadedInvoice = false;
   try {
-    const pdf = await renderSalePdf(sale, {
-      organizationName: organization.name,
-      organizationTagline: organization.tagline,
-      storeName: store.name,
-      storeAddress: store.address,
-    });
-    if (pdf.byteLength > MAX_INVOICE_BYTES) {
-      return { status: "error", message: "Generated invoice PDF is too large to send", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+    let documentLink: string | null = null;
+    if (requiresDocument && bucket && attachmentStorageKey) {
+      const pdf = await renderSalePdf(sale, {
+        organizationName: organization.name,
+        organizationTagline: organization.tagline,
+        storeName: store.name,
+        storeAddress: store.address,
+      });
+      if (pdf.byteLength > MAX_INVOICE_BYTES) {
+        return { status: "error", message: "Generated invoice PDF is too large to send", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+      }
+      await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
+      uploadedInvoice = true;
+      documentLink = await storage.generateSignedUrl(bucket, attachmentStorageKey, cloudMediaUrlTtlSeconds());
     }
-    await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
-    const documentLink = await storage.generateSignedUrl(bucket, attachmentStorageKey, cloudMediaUrlTtlSeconds());
     const componentParameters = buildInvoiceCloudComponents(
       binding.asset.components,
       selectedTemplate.body,
@@ -98,7 +109,9 @@ const queueCloudInvoiceForStore = async (
     if (queued.status === "error" || !queued.data) return queued as ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
     return response(sale.id, queued.data, false);
   } catch (error) {
-    try { await storage.deleteObject(bucket, attachmentStorageKey); } catch { /* preserve the queue failure */ }
+    if (uploadedInvoice && bucket && attachmentStorageKey) {
+      try { await storage.deleteObject(bucket, attachmentStorageKey); } catch { /* preserve the queue failure */ }
+    }
     console.error("[whatsapp] Cloud invoice preparation failed", error instanceof Error ? error.message : "unknown");
     return { status: "error", message: error instanceof Error ? error.message : "Cloud invoice could not be queued", data: null, code: STATUS_CODES.CONFLICT };
   }

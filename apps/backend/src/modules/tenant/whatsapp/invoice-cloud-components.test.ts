@@ -19,13 +19,23 @@ describe("Cloud invoice template components", () => {
     ]);
   });
 
-  test("rejects a Cloud bill template that cannot carry the invoice document", () => {
+  test("supports a text-only Cloud bill template without generating an invoice document", () => {
+    expect(buildInvoiceCloudComponents(
+      [{ type: "BODY", text: "Hello World" }],
+      "Hello World",
+      {},
+      null,
+      {},
+    )).toEqual([]);
+  });
+
+  test("requires an invoice PDF when the Cloud bill template has a document header", () => {
     expect(() => buildInvoiceCloudComponents(
-      [{ type: "BODY", text: "Hello {{1}}" }],
+      [{ type: "HEADER", format: "DOCUMENT" }, { type: "BODY", text: "Hello {{1}}" }],
       "Hello {{customer_name}}",
       { customer_name: "Asha" },
-      "https://storage.example.test/invoice.pdf",
+      null,
       { "body:1": "customer_name" },
-    )).toThrow("document header");
+    )).toThrow("invoice PDF");
   });
 });

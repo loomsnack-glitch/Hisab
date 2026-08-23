@@ -919,7 +919,7 @@ const WhatsAppCloudTemplateManager = ({
             </div>
             <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
               <div>
-                <p className="text-xs font-semibold">What will {{"{{1}}"}} mean?</p>
+                <p className="text-xs font-semibold">What will {"{{1}}"} mean?</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   These are approval examples. Ganatri replaces them with live customer, bill, due, and Store values when sending.
                 </p>

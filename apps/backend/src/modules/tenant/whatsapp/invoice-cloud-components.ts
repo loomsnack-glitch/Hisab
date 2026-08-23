@@ -5,6 +5,13 @@ import { validateCloudTemplateVariableMapping, type CloudTemplateVariableMapping
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+export const cloudInvoiceTemplateHasDocumentHeader = (definitions: unknown[]): boolean =>
+  definitions.some(definition => {
+    if (!isRecord(definition)) return false;
+    return String(definition.type ?? "").toLowerCase() === "header" &&
+      String(definition.format ?? "").toLowerCase() === "document";
+  });
+
 const componentTextParameters = (
   text: unknown,
   componentKey: string,
@@ -26,19 +33,19 @@ export const buildInvoiceCloudComponents = (
   definitions: unknown[],
   localTemplateBody: string,
   values: Record<string, string>,
-  documentLink: string,
+  documentLink: string | null,
   variableMapping: CloudTemplateVariableMapping,
 ): CloudTemplateComponentInput[] => {
   const mapping = validateCloudTemplateVariableMapping(variableMapping, localTemplateBody, definitions);
   const inputs: CloudTemplateComponentInput[] = [];
-  let hasDocumentHeader = false;
+  const hasDocumentHeader = cloudInvoiceTemplateHasDocumentHeader(definitions);
 
   for (const definition of definitions) {
     if (!isRecord(definition)) continue;
     const type = typeof definition.type === "string" ? definition.type.toLowerCase() : "";
     const format = typeof definition.format === "string" ? definition.format.toLowerCase() : "";
     if (type === "header" && format === "document") {
-      hasDocumentHeader = true;
+      if (!documentLink) throw new Error("Cloud bill document-header templates require an invoice PDF");
       inputs.push({ type: "header", parameters: [{ type: "document", document: { link: documentLink } }] });
       continue;
     }
@@ -59,6 +66,8 @@ export const buildInvoiceCloudComponents = (
       });
     }
   }
-  if (!hasDocumentHeader) throw new Error("Cloud bill template must include a document header");
+  if (documentLink && !hasDocumentHeader) {
+    throw new Error("An invoice PDF can only be sent with a document-header template");
+  }
   return inputs;
 };
