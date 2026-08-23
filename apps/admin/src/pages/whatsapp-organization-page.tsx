@@ -4,7 +4,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import type { Query } from "@tanstack/query-core";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@repo/ui/components/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
-import { FileText, Link2, LoaderCircle, LogOut, Megaphone, Pencil, RefreshCw, Settings2 } from "lucide-react";
+import { FileText, KeyRound, Link2, LoaderCircle, LogOut, Megaphone, Pencil, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhoneNumber, STATUS_CODES, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import {
@@ -168,6 +168,8 @@ const WhatsAppOrganizationPage = () => {
     const [manualWabaId, setManualWabaId] = useState("");
     const [manualPhoneNumberId, setManualPhoneNumberId] = useState("");
     const [manualAccessToken, setManualAccessToken] = useState("");
+    const [updateTokenAccountId, setUpdateTokenAccountId] = useState("");
+    const [updateAccessToken, setUpdateAccessToken] = useState("");
     const [qrByAccountId, setQrByAccountId] = useState<Record<string, string>>({});
     const [changeAccountId, setChangeAccountId] = useState("");
     const [newPhoneNumber, setNewPhoneNumber] = useState("");
@@ -291,6 +293,30 @@ const WhatsAppOrganizationPage = () => {
         },
         onError: error => toast.error(mutationErrorMessage(error, "WhatsApp Cloud test account could not be connected")),
     });
+    const updateTokenAccount = cloudAccounts.find(account => account.id === updateTokenAccountId) ?? null;
+    const updateTokenMutation = useMutation({
+        mutationFn: () => {
+            if (!updateTokenAccount?.wabaId || !updateTokenAccount.phoneNumberId) {
+                throw new Error("WhatsApp Cloud account identity is unavailable");
+            }
+            return manuallyProvisionWhatsAppCloudAccount(organizationId, {
+                wabaId: updateTokenAccount.wabaId,
+                phoneNumberId: updateTokenAccount.phoneNumberId,
+                accessToken: updateAccessToken,
+            });
+        },
+        onSuccess: response => {
+            if (response.status !== "success") {
+                toast.error(response.message);
+                return;
+            }
+            setUpdateTokenAccountId("");
+            setUpdateAccessToken("");
+            toast.success("WhatsApp Cloud token updated");
+            refresh();
+        },
+        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp Cloud token could not be updated")),
+    });
     const phoneError = phoneNumber.length > 0 && !normalizePhoneNumber(phoneNumber);
     const pollAccountStatus = (accountId: string) => {
         setStatusPollUntilByAccountId(current => ({
@@ -379,7 +405,7 @@ const WhatsAppOrganizationPage = () => {
         onError: error => toast.error(mutationErrorMessage(error, "WhatsApp number could not be changed")),
     });
     const newPhoneError = newPhoneNumber.length > 0 && !normalizePhoneNumber(newPhoneNumber);
-    const isBusy = createMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeMutation.isPending || cloudConnectMutation.isPending || cloudRefreshMutation.isPending || cloudRevokeMutation.isPending;
+    const isBusy = createMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeMutation.isPending || cloudConnectMutation.isPending || cloudRefreshMutation.isPending || cloudRevokeMutation.isPending || updateTokenMutation.isPending;
     const selectStore = (storeId: string) => {
         setSearchParams({ storeId });
     };
@@ -547,6 +573,12 @@ const WhatsAppOrganizationPage = () => {
                                                 {cloudRefreshMutation.isPending && cloudRefreshMutation.variables === account.id ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                                                 Refresh
                                             </Button>
+                                            {manualCloudSetupEnabled && cloudSnapshot?.wabaId && cloudSnapshot.phoneNumberId ? (
+                                                <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => { setUpdateTokenAccountId(account.id); setUpdateAccessToken(""); }}>
+                                                    <KeyRound className="size-4" />
+                                                    Update token
+                                                </Button>
+                                            ) : null}
                                             {displayedCloudStatus === "connected" ? (
                                                 <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => { if (window.confirm("Revoke this WhatsApp Cloud account? It will stop sending until connected again.")) cloudRevokeMutation.mutate(account.id); }}>
                                                     {cloudRevokeMutation.isPending && cloudRevokeMutation.variables === account.id ? <LoaderCircle className="size-4 animate-spin" /> : <LogOut className="size-4" />}
@@ -664,6 +696,24 @@ const WhatsAppOrganizationPage = () => {
                         <div className="space-y-2"><label className="text-sm font-medium" htmlFor="manual-cloud-access-token">Access token</label><Input id="manual-cloud-access-token" type="password" value={manualAccessToken} onChange={event => setManualAccessToken(event.target.value)} autoComplete="off" required /></div>
                         <p className="text-xs text-muted-foreground">Use only a development/test token. Do not use this form for customer onboarding.</p>
                         <DialogFooter><Button type="button" variant="outline" className="rounded-full" disabled={manualCloudMutation.isPending} onClick={() => setManualCloudOpen(false)}>Cancel</Button><Button type="submit" className="rounded-full" disabled={manualCloudMutation.isPending || !manualWabaId.trim() || !manualPhoneNumberId.trim() || !manualAccessToken.trim()}>{manualCloudMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}Connect test account</Button></DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog> : null}
+
+            {manualCloudSetupEnabled ? <Dialog open={Boolean(updateTokenAccountId)} onOpenChange={open => { if (!updateTokenMutation.isPending && !open) { setUpdateTokenAccountId(""); setUpdateAccessToken(""); } }}>
+                <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
+                    <DialogHeader>
+                        <DialogTitle>Update Cloud API token</DialogTitle>
+                        <DialogDescription>Replace the stored token for this Cloud account. The token is validated against the existing WABA and phone number, then stored securely and never returned.</DialogDescription>
+                    </DialogHeader>
+                    <form className="space-y-4" onSubmit={event => { event.preventDefault(); updateTokenMutation.mutate(); }}>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-2"><label className="text-sm font-medium" htmlFor="update-cloud-waba-id">WABA ID</label><Input id="update-cloud-waba-id" value={updateTokenAccount?.wabaId ?? ""} readOnly aria-readonly="true" /></div>
+                            <div className="space-y-2"><label className="text-sm font-medium" htmlFor="update-cloud-phone-id">Phone Number ID</label><Input id="update-cloud-phone-id" value={updateTokenAccount?.phoneNumberId ?? ""} readOnly aria-readonly="true" /></div>
+                        </div>
+                        <div className="space-y-2"><label className="text-sm font-medium" htmlFor="update-cloud-access-token">New access token</label><Input id="update-cloud-access-token" type="password" value={updateAccessToken} onChange={event => setUpdateAccessToken(event.target.value)} autoComplete="off" required /></div>
+                        <p className="text-xs text-muted-foreground">Use a fresh Meta System User token or temporary API Setup token. Do not paste tokens into chat, logs, or source code.</p>
+                        <DialogFooter><Button type="button" variant="outline" className="rounded-full" disabled={updateTokenMutation.isPending} onClick={() => { setUpdateTokenAccountId(""); setUpdateAccessToken(""); }}>Cancel</Button><Button type="submit" className="rounded-full" disabled={updateTokenMutation.isPending || !updateTokenAccount?.wabaId || !updateTokenAccount.phoneNumberId || !updateAccessToken.trim()}>{updateTokenMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <KeyRound className="size-4" />}Update token</Button></DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog> : null}
