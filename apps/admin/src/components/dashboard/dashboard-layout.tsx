@@ -214,7 +214,7 @@ const DashboardLayout = () => {
                 </aside>
 
                 <div className="flex min-w-0 flex-1 flex-col">
-                    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-3 sm:px-6 lg:px-8 backdrop-blur-xl">
+                    <header className="sticky top-0 z-20 flex min-h-[calc(3.5rem+env(safe-area-inset-top,0px))] shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-3 pt-[env(safe-area-inset-top,0px)] sm:px-6 lg:px-8 backdrop-blur-xl">
                         {/* Left side: Organization selector and Create button */}
                         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                             <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
