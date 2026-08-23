@@ -217,10 +217,15 @@ const safeSubmissionError = (error: unknown): { code: string; message: string } 
   ].some(prefix => error.message.startsWith(prefix))
     ? error.message
     : null;
+  const providerMessage = error instanceof WhatsAppCloudApiError
+    ? error.providerSubcode === "2388299"
+      ? "Meta rejected this template because a variable is at the beginning or end of the message body. Add text before the first variable and after the last variable."
+      : `Meta template submission failed${error.providerCode ? ` (provider code ${error.providerCode})` : ""}`
+    : null;
   const message = error instanceof CloudCredentialError
     ? "WhatsApp Cloud credential storage is unavailable"
-    : error instanceof WhatsAppCloudApiError
-      ? `Meta template submission failed${error.providerCode ? ` (provider code ${error.providerCode})` : ""}`
+    : providerMessage
+      ? providerMessage
       : validationMessage
         ? validationMessage
       : "Cloud template submission failed";
@@ -245,7 +250,7 @@ const validateSubmissionComponents = (components: unknown[], sampleValues: Recor
       bodyCount += 1;
       if (typeof value.text !== "string" || !value.text.trim() || value.text.length > 4_096) throw new Error("Cloud template body text is invalid");
       const bodyText = value.text.trim();
-      if (/^\{\{\d+\}\}/.test(bodyText) || /\{\{\d+\}\}$/.test(bodyText)) {
+      if (/^\{\{\d+\}\}/.test(bodyText) || /(?:^|\n)\s*\{\{\d+\}\}\s*[^\w{}]*$/.test(bodyText)) {
         throw new Error("Cloud template body placeholders cannot be at the start or end");
       }
       for (const match of value.text.matchAll(/\{\{([^{}]+)\}\}/g)) {

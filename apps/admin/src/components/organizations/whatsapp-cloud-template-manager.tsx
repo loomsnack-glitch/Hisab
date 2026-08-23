@@ -95,6 +95,26 @@ const statusClass: Record<string, string> = {
   disabled: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
+const mutationErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error !== "object" || error === null) return fallback;
+
+  const value = error as Record<string, unknown>;
+  if (typeof value.message === "string" && value.message.trim()) {
+    return value.message;
+  }
+
+  const response = value.response;
+  if (typeof response === "object" && response !== null) {
+    const responseData = (response as Record<string, unknown>).data;
+    if (typeof responseData === "object" && responseData !== null) {
+      const message = (responseData as Record<string, unknown>).message;
+      if (typeof message === "string" && message.trim()) return message;
+    }
+  }
+
+  return fallback;
+};
+
 const slugify = (value: string): string =>
   value
     .trim()
@@ -186,6 +206,7 @@ const WhatsAppCloudTemplateManager = ({
   const [headerSample, setHeaderSample] = useState<{ base64: string; fileName: string; mimeType: string } | null>(null);
   const [previewCardId, setPreviewCardId] = useState<string | null>(null);
   const [sampleValues, setSampleValues] = useState(defaultSampleValues.bill);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0];
   const businessAccountId = account?.snapshot.whatsappBusinessAccountId ?? "";
   useEffect(() => {
@@ -390,15 +411,24 @@ const WhatsAppCloudTemplateManager = ({
         idempotencyKey,
       });
     },
+    onMutate: () => setSubmitError(null),
     onSuccess: (response) => {
-      if (response.status !== "success") toast.error(response.message);
+      if (response.status !== "success") {
+        setSubmitError(response.message);
+        toast.error(response.message);
+      }
       else {
         setOpen(false);
+        setSubmitError(null);
         invalidate();
         toast.success(response.message);
       }
     },
-    onError: () => toast.error("Template could not be submitted"),
+    onError: (error) => {
+      const message = mutationErrorMessage(error, "Template could not be submitted");
+      setSubmitError(message);
+      toast.error(message);
+    },
   });
   const importMutation = useMutation({
     mutationFn: (input: {
@@ -416,6 +446,7 @@ const WhatsAppCloudTemplateManager = ({
     onError: () => toast.error("Existing Cloud template could not be assigned"),
   });
   const openCreate = () => {
+    setSubmitError(null);
     setKind("bill");
     setFriendlyName("");
     setLanguageCode("en_US");
@@ -474,11 +505,14 @@ const WhatsAppCloudTemplateManager = ({
         .map((key) => String(submission.sampleValues[key] ?? ""))
         .join("|"),
     );
+    setSubmitError(null);
     setOpen(true);
   };
   const selectedKind = kinds.find((item) => item.value === kind)!;
   const placeholderIndexes = [...new Set([...body.matchAll(/\{\{(\d+)\}\}/g)].map((match) => match[1]!))].sort((a, b) => Number(a) - Number(b));
   const hasUnsupportedPlaceholder = placeholderIndexes.some((index) => !variableHelp[kind][Number(index) - 1]);
+  const trimmedBody = body.trim();
+  const hasEdgePlaceholder = /^\{\{\d+\}\}/.test(trimmedBody) || /(?:^|\n)\s*\{\{\d+\}\}\s*[^\w{}]*$/.test(trimmedBody);
   const updateSampleValue = (index: string, value: string) => {
     const values = sampleValues.split("|");
     values[Number(index) - 1] = value;
@@ -565,7 +599,7 @@ const WhatsAppCloudTemplateManager = ({
           <span className="text-xs font-medium text-muted-foreground">
             Cloud account
           </span>
-          <Select value={accountId} onValueChange={setAccountId}>
+          <Select value={accountId} onValueChange={(value) => { if (value) setAccountId(value); }}>
             <SelectTrigger
               className="w-full rounded-xl"
               aria-label="Cloud account"
@@ -781,7 +815,7 @@ const WhatsAppCloudTemplateManager = ({
           <DialogFooter><Button type="button" variant="outline" className="rounded-xl" onClick={() => setPreviewCardId(null)}>Close</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (!value) setSubmitError(null); }}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create WhatsApp template</DialogTitle>
@@ -790,6 +824,15 @@ const WhatsAppCloudTemplateManager = ({
               category is chosen from the message type.
             </DialogDescription>
           </DialogHeader>
+          {submitError ? (
+            <div role="alert" className="flex gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-medium">Template could not be submitted</p>
+                <p className="mt-1">{submitError}</p>
+              </div>
+            </div>
+          ) : null}
           <div className="grid gap-4 py-2">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -924,6 +967,11 @@ const WhatsAppCloudTemplateManager = ({
                 Use numbered placeholders such as {"{{1}}"}. Sample values are
                 used for the preview.
               </p>
+              {hasEdgePlaceholder ? (
+                <p role="alert" className="text-[11px] text-destructive">
+                  Meta does not allow a variable at the beginning or end of the message body. Add text before the first variable or after the last one.
+                </p>
+              ) : null}
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {variableHelp[kind].map((label, index) => (
                   <button
@@ -1022,6 +1070,7 @@ const WhatsAppCloudTemplateManager = ({
                 !friendlyName.trim() ||
                 !body.trim() ||
                 hasUnsupportedPlaceholder ||
+                hasEdgePlaceholder ||
                 (headerFormat !== "none" && !headerSample) ||
                 (Boolean(urlButton.trim()) &&
                   !/^https:\/\//.test(urlButton.trim()))

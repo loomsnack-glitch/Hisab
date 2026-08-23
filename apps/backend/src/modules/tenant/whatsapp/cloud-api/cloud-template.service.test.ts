@@ -301,6 +301,30 @@ describe("Cloud template synchronization service", () => {
     expect(providerCalled).toBe(false);
   });
 
+  test("rejects a body placeholder followed only by punctuation at the end", async () => {
+    let providerCalled = false;
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill ready",
+      metaTemplateName: "bill_ready_punctuation",
+      languageCode: "en_US",
+      components: [{ type: "BODY", text: "Regards,\n{{6}}." }],
+      sampleValues: { "6": "Ganatri" },
+      idempotencyKey: "idem-edge-placeholder-punctuation",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      createSubmission: async () => { throw new Error("should not persist invalid content"); },
+      createClient: () => ({
+        async getTemplates() { providerCalled = true; return { data: [] }; },
+      }),
+    });
+
+    expect(response).toMatchObject({ status: "error", message: "Cloud template body placeholders cannot be at the start or end" });
+    expect(providerCalled).toBe(false);
+  });
+
   test("rejects an invalid Meta template name before persisting a submission", async () => {
     let persisted = false;
     const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
