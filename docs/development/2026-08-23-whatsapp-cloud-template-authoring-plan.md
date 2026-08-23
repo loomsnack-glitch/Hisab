@@ -1,6 +1,6 @@
 # WhatsApp Cloud Template Authoring and Approval Plan
 
-Status: proposed — planning only; no implementation or commit is authorized by this document
+Status: in progress — implementation authorized by the user; external Meta/live gates remain separate
 Parent plan: [`2026-08-20-whatsapp-cloud-api-only-migration-plan.md`](./2026-08-20-whatsapp-cloud-api-only-migration-plan.md)
 Parent phase: Phase 5 — Admin operator workflow
 Branch: `feat/whatsapp`
@@ -215,7 +215,7 @@ until the compatibility gate in Phase 6 passes.
 
 ### Phase 0 — Contract and compatibility lock
 
-Status: **planned**
+Status: **completed**
 
 Scope:
 
@@ -234,9 +234,20 @@ Exit criteria:
 - unsupported Meta components have an explicit error path;
 - the plan is accepted as the Phase 5A source of truth.
 
+Evidence:
+
+- [x] Existing Cloud assets, local templates, bindings, send admission, and
+  component-builder seams were inspected.
+- [x] WABA-wide provider assets and Store-specific defaults were separated in
+  the data-model decision.
+- [x] The initial component scope is limited to the current outbound builder:
+  text/image/document headers, body, footer, quick replies, and HTTPS URLs.
+- [x] Existing bindings remain preserved and the old link flow is retained
+  until Phase 6 compatibility acceptance.
+
 ### Phase 1 — Submission persistence and database invariants
 
-Status: **planned**
+Status: **in progress**
 
 Scope:
 
@@ -458,8 +469,7 @@ For every phase:
 
 ## Current next step
 
-Start with **Phase 0 — Contract and compatibility lock**. No source code should
-be changed until the supported component contract, submission state model, and
-existing-binding migration behavior are accepted. After that, implement one
-vertical tracer-bullet slice: create a text-body utility template, persist its
-pending state, reconcile approval, and set it as the Store bill default.
+Implement **Phase 1 — Submission persistence and database invariants**. The
+first vertical tracer-bullet slice remains a text-body utility template:
+persist the request, submit it idempotently, reconcile its pending/approved
+state, and set it as the Store bill default.
