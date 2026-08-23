@@ -26,6 +26,7 @@ import {
   CloudCredentialError,
   type WhatsAppCloudCredentialVault,
 } from "./cloud-credentials";
+import { databaseCloudCredentialVault } from "./database-cloud-credentials";
 import {
   getCloudAccountSnapshot,
   getCloudCredentialBinding,
@@ -71,34 +72,12 @@ type CloudAccountServiceDependencies = {
   syncTemplates: (userId: string, organizationId: string, accountId: string, vault: WhatsAppCloudCredentialVault) => Promise<unknown>;
 };
 
-const unavailableVault: WhatsAppCloudCredentialVault = {
-  async store() {
-    throw new CloudCredentialError(
-      "vault_unavailable",
-      "WhatsApp Cloud credential vault is not configured",
-    );
-  },
-  async resolve() {
-    throw new CloudCredentialError(
-      "vault_unavailable",
-      "WhatsApp Cloud credential vault is not configured",
-    );
-  },
-  async rotate() {
-    throw new CloudCredentialError(
-      "vault_unavailable",
-      "WhatsApp Cloud credential vault is not configured",
-    );
-  },
-  async revoke() {},
-};
-
 const defaultDependencies = (): CloudAccountServiceDependencies => ({
   organizationAccess: async (organizationId, userId) => Boolean(await organizationRepository.getOrganizationByIdForUser(organizationId, userId)),
   getSnapshot: getCloudAccountSnapshot,
   exchange: createCloudAuthorizationCodeExchange(),
   createClient: (accessToken) => createConfiguredCloudClient(accessToken),
-  vault: unavailableVault,
+  vault: databaseCloudCredentialVault,
   persist: persistProvisionedCloudAccount,
   consumeReplayStore: cloudOnboardingReplayStore,
   getCredentialBinding: getCloudCredentialBinding,

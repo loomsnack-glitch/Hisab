@@ -14,9 +14,8 @@ export type RotateCloudCredentialInput = StoreCloudCredentialInput & {
 };
 
 /**
- * The application never chooses how a Cloud token is encrypted or stored.
- * Production implementations should use the configured secret manager and
- * return only an opaque reference plus the active key version.
+ * The application never exposes how a Cloud token is encrypted or stored.
+ * Implementations return only an opaque reference plus the active key version.
  */
 export interface WhatsAppCloudCredentialVault {
   store(input: StoreCloudCredentialInput): Promise<CloudCredentialBinding>;

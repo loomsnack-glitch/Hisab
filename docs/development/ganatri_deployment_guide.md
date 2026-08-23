@@ -137,11 +137,22 @@ WHATSAPP_WORKER_URL=http://127.0.0.1:8100
 WHATSAPP_WORKER_TOKEN=replace-with-a-long-random-shared-secret
 WHATSAPP_MAX_PENDING_OUTBOX_PER_ACCOUNT=1000
 
+# Backend-only AES-256-GCM keyring for WhatsApp Cloud credentials. Keep every
+# prior key version during rotation so existing credentials remain readable.
+WHATSAPP_CLOUD_CREDENTIAL_KEYS_JSON='{"v1":"base64-encoded-32-byte-key"}'
+WHATSAPP_CLOUD_CREDENTIAL_ACTIVE_KEY_VERSION=v1
+
 # Optional legacy Cloud API path; it is separate from the worker's internal
 # WHATSAPP_API_URL and can remain unused by the Baileys invoice flow.
 WHATSAPP_API_URL=https://graph.facebook.com/v22.0/<phone_number_id>/messages
 WHATSAPP_API_TOKEN=your_whatsapp_api_token
 ```
+
+`WHATSAPP_CLOUD_CREDENTIAL_KEYS_JSON` and
+`WHATSAPP_CLOUD_CREDENTIAL_ACTIVE_KEY_VERSION` are backend-only deployment
+secrets. Generate a 32-byte key with `openssl rand -base64 32`, provision it
+through the server's protected environment/secret store, and never commit it
+or place it in the WhatsApp worker environment.
 
 ### WhatsApp worker `.env`
 

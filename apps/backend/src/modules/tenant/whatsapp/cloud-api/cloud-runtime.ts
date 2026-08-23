@@ -11,21 +11,8 @@ import {
 } from "./cloud-outbox.repository";
 import { dispatchCloudOutboxJob } from "./cloud-dispatcher";
 import { createConfiguredCloudClient } from "./cloud-provider";
-import { CloudCredentialError, type WhatsAppCloudCredentialVault } from "./cloud-credentials";
+import { databaseCloudCredentialVault } from "./database-cloud-credentials";
 import { getObjectBuffer } from "@/services/storage";
-
-const unavailableVault: WhatsAppCloudCredentialVault = {
-  async store() {
-    throw new CloudCredentialError("vault_unavailable", "WhatsApp Cloud credential storage is not configured");
-  },
-  async resolve() {
-    throw new CloudCredentialError("vault_unavailable", "WhatsApp Cloud credential storage is not configured");
-  },
-  async rotate() {
-    throw new CloudCredentialError("vault_unavailable", "WhatsApp Cloud credential storage is not configured");
-  },
-  async revoke() {},
-};
 
 const cloudOutboxEnabled = (): boolean =>
   process.env.WHATSAPP_CLOUD_OUTBOX_ENABLED?.trim().toLowerCase() === "true";
@@ -39,7 +26,7 @@ const dispatchNextCloudOutbox = async (): Promise<boolean> => {
     const job = await claimNextCloudOutbox(120);
     if (!job) return false;
     await dispatchCloudOutboxJob(job, {
-      vault: unavailableVault,
+      vault: databaseCloudCredentialVault,
       createClient: accessToken => createConfiguredCloudClient(accessToken),
       loadAttachment: async (bucket, key, maxBytes) => getObjectBuffer(bucket, key, maxBytes),
       complete: completeCloudOutbox,

@@ -114,15 +114,34 @@ Evidence:
 
 ### Scope
 
-- Select and implement the approved secret-manager adapter; do not replace it with a plaintext database or ad hoc environment token map.
+- Store Cloud access tokens as authenticated AES-256-GCM ciphertext in a dedicated organization-scoped database table.
+- Keep the versioned encryption keyring and active key version in protected backend deployment configuration; never store keys in PostgreSQL.
 - Wire the adapter into the default onboarding, refresh, template-sync, and outbox runtime.
 - Add readiness validation for backend Graph/app/webhook settings and Admin Embedded Signup settings.
 - Document private media storage and signed URL requirements.
 - Add assembly tests without logging credential material.
 
-### External decision required
+### Decision resolved
 
-The repository currently defines only the vault port and an unavailable fallback. A production secret-manager choice, credentials, key rotation policy, and deployment wiring cannot be safely invented by a code-only change.
+For this implementation slice, the repository-backed vault is the approved adapter. PostgreSQL stores only ciphertext, reference metadata, and revocation state. The AES-256 keyring remains outside the database and is supplied only to the backend at deployment time.
+
+### Approved implementation slice: encrypted database credential vault
+
+Acceptance criteria:
+
+- Meta access tokens are stored only as AES-256-GCM ciphertext in a dedicated organization-scoped table.
+- The backend reads a versioned keyring from protected deployment configuration; no encryption key or token is stored together in PostgreSQL.
+- Onboarding, template sync, account refresh/revoke, and Cloud outbox dispatch use the same database-backed vault.
+- Credential references and key versions remain opaque and never expose tokens through DTOs, logs, or Admin responses.
+- Missing keys, malformed ciphertext, revoked credentials, and wrong key versions fail closed with safe errors.
+- Focused encryption/vault tests, Cloud tests, type checks, migration verification, and diff review pass.
+
+Evidence:
+
+- [x] Encrypted credential table migration applied locally.
+- [x] All WhatsApp Cloud tests pass, including ciphertext tamper rejection.
+- [x] Changed vault/wiring files have no TypeScript errors; unrelated backend baseline errors remain outside this phase.
+- [x] Deployment guide documents backend-only keyring configuration and rotation retention.
 
 ## Phase 4 — Data invariants and template mapping
 
