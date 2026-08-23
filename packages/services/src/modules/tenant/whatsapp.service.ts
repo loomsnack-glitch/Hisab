@@ -86,6 +86,18 @@ export const completeWhatsAppCloudOnboarding = async (
     }
 };
 
+export const manuallyProvisionWhatsAppCloudAccount = async (
+    organizationId: string,
+    data: { wabaId: string; phoneNumberId: string; accessToken: string },
+): Promise<WhatsAppCloudAccountResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/manual`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const getWhatsAppCloudAccounts = async (organizationId: string): Promise<WhatsAppCloudAccountsResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/accounts`);

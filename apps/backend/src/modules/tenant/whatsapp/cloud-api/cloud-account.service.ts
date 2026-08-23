@@ -23,6 +23,7 @@ import {
   type CloudProvisioningAttemptRecord,
 } from "./cloud-provisioning.repository";
 import {
+  assertCloudAccessToken,
   CloudCredentialError,
   type WhatsAppCloudCredentialVault,
 } from "./cloud-credentials";
@@ -114,6 +115,90 @@ const providerError = (error: unknown): string =>
     : error instanceof CloudCredentialError
       ? error.code
       : "cloud_provisioning_failed";
+
+type ManualCloudAccountInput = {
+  wabaId: string;
+  phoneNumberId: string;
+  accessToken: string;
+};
+
+const manualCloudSetupEnabled = (): boolean =>
+  process.env.NODE_ENV !== "production" &&
+  process.env.WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED?.trim() === "true";
+
+const providerIdInput = (value: string, label: string): string => {
+  const normalized = value.trim();
+  if (!/^\d{1,64}$/.test(normalized)) throw new Error(`Invalid WhatsApp Cloud ${label}`);
+  return normalized;
+};
+
+/**
+ * Provisions a Meta API Setup test number without Embedded Signup.
+ * This is intentionally development-only; customer onboarding must use the
+ * signed Embedded Signup exchange above.
+ */
+export const manuallyProvisionCloudAccount = async (
+  userId: string,
+  organizationId: string,
+  input: ManualCloudAccountInput,
+  injected: Partial<CloudAccountServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudAccountSnapshot | null>> => {
+  if (!manualCloudSetupEnabled()) {
+    return { status: "error", message: "WhatsApp Cloud manual setup is unavailable", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
+  const deps = { ...defaultDependencies(), ...injected };
+  let storedCredential: { reference: string; keyVersion: string } | null = null;
+  try {
+    if (!await deps.organizationAccess(organizationId, userId)) {
+      return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+    const wabaId = providerIdInput(input.wabaId, "WABA ID");
+    const phoneNumberId = providerIdInput(input.phoneNumberId, "Phone Number ID");
+    const accessToken = assertCloudAccessToken(input.accessToken);
+    const client = deps.createClient(accessToken);
+    const business = await client.getBusinessAccount(wabaId);
+    if (String(business.id ?? "") !== wabaId) throw new Error("Cloud WABA identity did not match the supplied WABA ID");
+    const phones = await client.getPhoneNumbers(wabaId);
+    const phone = (phones.data ?? []).map(phoneFromProvider).find(candidate => candidate.id === phoneNumberId);
+    if (!phone) throw new Error("Cloud phone identity was not found in the supplied WABA");
+    await client.subscribeBusinessAccount(wabaId);
+    storedCredential = await deps.vault.store({ organizationId, ownerKey: `waba:${wabaId}`, accessToken });
+    let account: WhatsAppCloudAccountSnapshot;
+    try {
+      account = await deps.persist({
+        organizationId,
+        createdBy: userId,
+        wabaId,
+        displayName: typeof business.name === "string" ? business.name : null,
+        credential: storedCredential,
+        phoneNumberId: phone.id,
+        phoneNumber: phone.display_phone_number,
+        verifiedName: phone.verified_name ?? null,
+        qualityRating: phone.quality_rating ?? null,
+        messagingLimit: phone.messaging_limit ?? null,
+      });
+    } catch (error) {
+      await deps.vault.revoke(storedCredential).catch(() => undefined);
+      throw error;
+    }
+    const sync = await deps.syncTemplates(userId, organizationId, account.id, deps.vault);
+    if (sync && typeof sync === "object" && "status" in sync && sync.status === "error") {
+      throw new Error("Cloud templates could not be synchronized");
+    }
+    return { status: "success", message: "WhatsApp Cloud test account connected", data: account, code: STATUS_CODES.CREATED };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof CloudCredentialError && error.code === "vault_unavailable"
+        ? "WhatsApp Cloud credential storage is not configured"
+        : "WhatsApp Cloud test account could not be connected",
+      data: null,
+      code: error instanceof CloudCredentialError && error.code === "vault_unavailable"
+        ? STATUS_CODES.SERVICE_UNAVAILABLE
+        : STATUS_CODES.BAD_REQUEST,
+    };
+  }
+};
 
 export const completeCloudAccountProvisioning = async (
   userId: string,

@@ -113,6 +113,16 @@ const workerUnavailable = (account: WhatsAppAccountDTO): ServiceResponse<WhatsAp
     code: STATUS_CODES.SERVICE_UNAVAILABLE,
 });
 
+const baileysLinkingEnabled = (): boolean =>
+    process.env.WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
+
+const legacyProviderDisabled = (): ServiceResponse<WhatsAppAccountStatusResponseDTO | null> => ({
+    status: "error",
+    message: "Legacy WhatsApp linking is disabled. Use WhatsApp Cloud API.",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
 const markAccountWorkerUnavailable = async (accountId: string) => {
     try {
         await saveWorkerStatus(accountId, {
@@ -197,6 +207,7 @@ export const createOrganizationAccount = async (
     organizationId: string,
     data: WhatsAppCreateAccountJSON,
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
 
@@ -272,6 +283,7 @@ export const connectOrganizationAccount = async (
             code: STATUS_CODES.CONFLICT,
         };
     }
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
     try {
         const snapshot = await workerClient.connectAccount(scoped.account.id, scoped.account.phoneNumber);
         const response = await saveWorkerSnapshot(snapshot);
@@ -324,6 +336,7 @@ export const changeOrganizationAccountNumber = async (
             code: STATUS_CODES.CONFLICT,
         };
     }
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
 
     const phoneNumber = normalizePhoneNumber(data.phoneNumber);
     if (!phoneNumber) return { status: "error", message: "Enter a valid phone number with country code", data: null, code: STATUS_CODES.BAD_REQUEST };
@@ -413,6 +426,7 @@ export const createAccount = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
 
     if (await repository.getAccount(organizationId, storeId)) {
         return {
@@ -490,6 +504,7 @@ export const connectAccount = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
 
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) {
@@ -566,10 +581,20 @@ export const changeAccountNumber = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
 
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) {
         return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+
+    if (account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "Change the Cloud phone number through Meta Embedded Signup",
+            data: accountResponse(account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
     }
 
     const phoneNumber = normalizePhoneNumber(data.phoneNumber);

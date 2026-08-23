@@ -188,7 +188,38 @@ If it returns `Forbidden`, the token is different. If it returns
 After verification, subscribe the App to the test WABA in Meta. The backend
 also performs the WABA subscription step during Cloud onboarding.
 
-## 6. Connect the Cloud account through the Admin UI
+## 6. Connect the Meta API Setup test account
+
+Embedded Signup is currently blocked until Meta recognizes the app as an
+approved Tech Provider. For local development, enable the protected manual
+test path in the ignored files:
+
+```env
+# apps/backend/.env
+WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED=true
+
+# apps/admin/.env
+VITE_WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED=true
+```
+
+Restart the backend and Admin, then open the organization's WhatsApp Accounts
+page and click **Add API test account**. Enter the **WABA ID**, **Phone Number
+ID**, and development access token shown in Meta → WhatsApp → API Setup.
+
+The backend validates both IDs through Graph, subscribes the App to the WABA,
+stores the token through the encrypted credential vault, persists a `cloud_api`
+account, and synchronizes templates. It never returns or logs the token. The
+manual form is unavailable in production and must not be used for customer
+onboarding.
+
+For Meta test numbers, add the recipient phone in API Setup → **To** before
+sending. Do not call the phone registration endpoint unless Meta reports that
+the number is not registered.
+
+After the account appears as **Cloud API / Connected**, continue with Store
+assignment below.
+
+## 7. Connect the Cloud account through the Admin UI
 
 1. Open:
 
@@ -213,7 +244,7 @@ The backend then:
 The account card should show the phone number, **Cloud API**, and **Connected**.
 The access token must never appear in the browser response or logs.
 
-## 7. Link the Cloud account to a Store
+## 8. Link the Cloud account to a Store
 
 1. Open the Store's WhatsApp page:
 
@@ -225,7 +256,7 @@ The access token must never appear in the browser response or logs.
 The organization account can be linked to multiple Stores. Template bindings
 and conversations remain Store-scoped.
 
-## 8. Sync and map Meta templates
+## 9. Sync and map Meta templates
 
 1. Open:
 
@@ -250,7 +281,7 @@ wrong categories, missing variables, and incompatible buttons/media. The test
 WABA's pre-approved template can be used for a basic text test, but a real bill
 test needs a document-capable approved template.
 
-## 9. Record consent for the test customer
+## 10. Record consent for the test customer
 
 Cloud sends are blocked unless the customer has a phone and valid consent.
 Utility messages require utility opt-in. Promotions require marketing opt-in,

@@ -15,6 +15,7 @@ import {
     getWhatsAppAccounts,
     getWhatsAppOrganizationAccount,
     getWhatsAppCloudAccounts,
+    manuallyProvisionWhatsAppCloudAccount,
     startWhatsAppCloudOnboarding,
     completeWhatsAppCloudOnboarding,
     refreshWhatsAppCloudAccount,
@@ -25,6 +26,7 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { PhoneInput } from "@repo/ui/components/phone-input";
+import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { cn } from "@repo/ui/lib/utils";
@@ -162,6 +164,10 @@ const WhatsAppOrganizationPage = () => {
     const queryClient = useQueryClient();
     const [phoneNumber, setPhoneNumber] = useState("");
     const [addOpen, setAddOpen] = useState(false);
+    const [manualCloudOpen, setManualCloudOpen] = useState(false);
+    const [manualWabaId, setManualWabaId] = useState("");
+    const [manualPhoneNumberId, setManualPhoneNumberId] = useState("");
+    const [manualAccessToken, setManualAccessToken] = useState("");
     const [qrByAccountId, setQrByAccountId] = useState<Record<string, string>>({});
     const [changeAccountId, setChangeAccountId] = useState("");
     const [newPhoneNumber, setNewPhoneNumber] = useState("");
@@ -184,6 +190,13 @@ const WhatsAppOrganizationPage = () => {
     });
     const accounts = accountsQuery.data?.data?.accounts ?? [];
     const cloudAccounts = cloudAccountsQuery.data?.data?.accounts ?? [];
+    const manualCloudSetupEnabled = import.meta.env.VITE_WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED?.trim() === "true";
+    const baileysLinkingEnabled = import.meta.env.VITE_WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
+    // Legacy Baileys records remain in the database for controlled cleanup, but
+    // must not appear in the active account pool once legacy linking is frozen.
+    const visibleAccounts = baileysLinkingEnabled
+        ? accounts
+        : accounts.filter(account => account.provider === "cloud_api");
     const stores = organizationQuery.data?.status === "success"
         ? organizationQuery.data.data?.organization.stores ?? []
         : [];
@@ -195,14 +208,14 @@ const WhatsAppOrganizationPage = () => {
         : stores[0]?.id ?? "";
     const selectedStore = stores.find(store => store.id === selectedStoreId);
     const cloudAccountsForStore: WhatsAppCloudAccountOption[] = selectedStore
-        ? accounts.flatMap(account => {
+        ? visibleAccounts.flatMap(account => {
             if (account.provider !== "cloud_api" || !account.assignedStoreIds.includes(selectedStore.id)) return [];
             const snapshot = cloudAccounts.find(cloudAccount => cloudAccount.id === account.id);
             return snapshot ? [{ id: account.id, phoneNumber: account.phoneNumber, snapshot }] : [];
         })
         : [];
     const statusQueries = useQueries({
-        queries: accounts.map(account => ({
+        queries: visibleAccounts.map(account => ({
             queryKey: whatsappKeys.organizationAccount(organizationId, account.id),
             queryFn: () => getWhatsAppOrganizationAccount(organizationId, account.id),
             enabled: Boolean(organizationId) && account.provider !== "cloud_api",
@@ -258,8 +271,27 @@ const WhatsAppOrganizationPage = () => {
         },
         onError: error => toast.error(mutationErrorMessage(error, "WhatsApp Cloud account could not be revoked")),
     });
+    const manualCloudMutation = useMutation({
+        mutationFn: () => manuallyProvisionWhatsAppCloudAccount(organizationId, {
+            wabaId: manualWabaId.trim(),
+            phoneNumberId: manualPhoneNumberId.trim(),
+            accessToken: manualAccessToken,
+        }),
+        onSuccess: response => {
+            if (response.status !== "success") {
+                toast.error(response.message);
+                return;
+            }
+            setManualCloudOpen(false);
+            setManualWabaId("");
+            setManualPhoneNumberId("");
+            setManualAccessToken("");
+            toast.success("WhatsApp Cloud test account connected");
+            refresh();
+        },
+        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp Cloud test account could not be connected")),
+    });
     const phoneError = phoneNumber.length > 0 && !normalizePhoneNumber(phoneNumber);
-
     const pollAccountStatus = (accountId: string) => {
         setStatusPollUntilByAccountId(current => ({
             ...current,
@@ -268,6 +300,7 @@ const WhatsAppOrganizationPage = () => {
     };
     const refresh = (accountId?: string) => {
         void queryClient.invalidateQueries({ queryKey: accountsKey });
+        void queryClient.invalidateQueries({ queryKey: whatsappKeys.cloudAccounts(organizationId) });
         if (accountId) {
             void queryClient.invalidateQueries({
                 queryKey: whatsappKeys.organizationAccount(organizationId, accountId),
@@ -406,7 +439,8 @@ const WhatsAppOrganizationPage = () => {
                         {activeTab === "accounts" ? (
                             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                                 <Button className="w-full rounded-full sm:w-auto" disabled={isBusy} onClick={() => cloudConnectMutation.mutate()}><Link2 className="size-4" />Connect with Meta</Button>
-                                <Button variant="outline" className="w-full rounded-full sm:w-auto" onClick={() => setAddOpen(true)}><Link2 className="size-4" />Add legacy account</Button>
+                                {manualCloudSetupEnabled ? <Button variant="outline" className="w-full rounded-full sm:w-auto" disabled={isBusy} onClick={() => setManualCloudOpen(true)}><Link2 className="size-4" />Add API test account</Button> : null}
+                                {baileysLinkingEnabled ? <Button variant="outline" className="w-full rounded-full sm:w-auto" onClick={() => setAddOpen(true)}><Link2 className="size-4" />Add legacy account</Button> : null}
                             </div>
                         ) : null}
                     </div>
@@ -453,14 +487,17 @@ const WhatsAppOrganizationPage = () => {
                         <h2 className="font-display text-xl font-semibold">Accounts</h2>
                         <p className="text-sm text-muted-foreground">Add and manage shared WhatsApp numbers.</p>
                     </div>
-                    <Badge variant="outline" className="rounded-full">{accounts.length} account{accounts.length === 1 ? "" : "s"}</Badge>
+                    <Badge variant="outline" className="rounded-full">{visibleAccounts.length} account{visibleAccounts.length === 1 ? "" : "s"}</Badge>
                 </div>
 
-                {accounts.length === 0 ? (
+                {visibleAccounts.length === 0 ? (
                     <Card className="border-dashed border-border/70 bg-muted/10">
-                        <CardContent className="py-10 text-center text-sm text-muted-foreground">No organization WhatsApp accounts yet.</CardContent>
+                        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+                            <p className="text-sm text-muted-foreground">No WhatsApp Cloud accounts connected yet.</p>
+                            {manualCloudSetupEnabled ? <Button variant="outline" className="rounded-full" onClick={() => setManualCloudOpen(true)}><Link2 className="size-4" />Add API test account</Button> : null}
+                        </CardContent>
                     </Card>
-                ) : accounts.map((account, index) => {
+                ) : visibleAccounts.map((account, index) => {
                     const isCloudAccount = account.provider === "cloud_api";
                     const cloudSnapshot = cloudAccounts.find(cloudAccount => cloudAccount.id === account.id);
                     const liveResponse = statusQueries[index]?.data?.data;
@@ -496,7 +533,7 @@ const WhatsAppOrganizationPage = () => {
                                     <p className="mt-2 text-sm text-muted-foreground">
                                         Assigned to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"}
                                     </p>
-                                    {qrImageDataUrl ? (
+                                    {baileysLinkingEnabled && qrImageDataUrl ? (
                                         <div className="mt-4 flex flex-col items-start gap-2">
                                             <img src={qrImageDataUrl} alt={`QR code for ${account.phoneNumber}`} className="size-56 rounded-xl border bg-white p-2" />
                                             <p className="text-xs text-muted-foreground">Scan from WhatsApp → Linked devices.</p>
@@ -523,11 +560,11 @@ const WhatsAppOrganizationPage = () => {
                                             )}
                                         </>
                                     ) : null}
-                                    {!isCloudAccount ? <Button variant="outline" className="rounded-full" disabled={isBusy || statusUnavailable} onClick={() => { setChangeAccountId(account.id); setNewPhoneNumber(""); }}>
+                                    {!isCloudAccount && baileysLinkingEnabled ? <Button variant="outline" className="rounded-full" disabled={isBusy || statusUnavailable} onClick={() => { setChangeAccountId(account.id); setNewPhoneNumber(""); }}>
                                         <Pencil className="size-4" />
                                         Change number
                                     </Button> : null}
-                                    {!isCloudAccount && statusUnavailable ? (
+                                    {!isCloudAccount && baileysLinkingEnabled && statusUnavailable ? (
                                         <>
                                             {liveAccount.status === "connected" ? (
                                                 <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => disconnectMutation.mutate(account.id)}>
@@ -550,7 +587,7 @@ const WhatsAppOrganizationPage = () => {
                                             <LoaderCircle className="size-4 animate-spin" />
                                             {liveAccount.status === "pending_qr" ? "Waiting for scan" : "Connecting"}
                                         </Button>
-                                    ) : !isCloudAccount ? (
+                                    ) : !isCloudAccount && baileysLinkingEnabled ? (
                                         <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => connectMutation.mutate(account.id)}>
                                             {connecting ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                                             Link account
@@ -613,6 +650,22 @@ const WhatsAppOrganizationPage = () => {
                     </form>
                 </DialogContent>
             </Dialog>
+
+            {manualCloudSetupEnabled ? <Dialog open={manualCloudOpen} onOpenChange={open => { if (!manualCloudMutation.isPending) setManualCloudOpen(open); }}>
+                <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
+                    <DialogHeader>
+                        <DialogTitle>Add Meta API test account</DialogTitle>
+                        <DialogDescription>Development-only setup for the WABA and phone shown in Meta API Setup. The access token is sent once to the backend and is never returned.</DialogDescription>
+                    </DialogHeader>
+                    <form className="space-y-4" onSubmit={event => { event.preventDefault(); manualCloudMutation.mutate(); }}>
+                        <div className="space-y-2"><label className="text-sm font-medium" htmlFor="manual-cloud-waba-id">WABA ID</label><Input id="manual-cloud-waba-id" value={manualWabaId} onChange={event => setManualWabaId(event.target.value)} inputMode="numeric" required /></div>
+                        <div className="space-y-2"><label className="text-sm font-medium" htmlFor="manual-cloud-phone-id">Phone Number ID</label><Input id="manual-cloud-phone-id" value={manualPhoneNumberId} onChange={event => setManualPhoneNumberId(event.target.value)} inputMode="numeric" required /></div>
+                        <div className="space-y-2"><label className="text-sm font-medium" htmlFor="manual-cloud-access-token">Access token</label><Input id="manual-cloud-access-token" type="password" value={manualAccessToken} onChange={event => setManualAccessToken(event.target.value)} autoComplete="off" required /></div>
+                        <p className="text-xs text-muted-foreground">Use only a development/test token. Do not use this form for customer onboarding.</p>
+                        <DialogFooter><Button type="button" variant="outline" className="rounded-full" disabled={manualCloudMutation.isPending} onClick={() => setManualCloudOpen(false)}>Cancel</Button><Button type="submit" className="rounded-full" disabled={manualCloudMutation.isPending || !manualWabaId.trim() || !manualPhoneNumberId.trim() || !manualAccessToken.trim()}>{manualCloudMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}Connect test account</Button></DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog> : null}
 
             <AlertDialog open={Boolean(changeAccountId)} onOpenChange={open => { if (!open && !changeMutation.isPending) setChangeAccountId(""); }}>
                 <AlertDialogContent>

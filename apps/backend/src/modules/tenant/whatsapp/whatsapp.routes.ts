@@ -36,6 +36,7 @@ import {
     completeCloudAccountProvisioning,
     getCloudAccountForOrganization,
     listCloudAccountsForOrganization,
+    manuallyProvisionCloudAccount,
     refreshCloudAccountForOrganization,
     revokeCloudAccountForOrganization,
 } from "./cloud-api/cloud-account.service";
@@ -87,6 +88,30 @@ registerCloudOnboardingRoutes(userRouter, startCloudOnboarding, {
     refresh: refreshCloudAccountForOrganization,
     revoke: revokeCloudAccountForOrganization,
 });
+
+const manualCloudAccountSchema = z.object({
+    wabaId: z.string().regex(/^\d{1,64}$/, "Invalid WABA ID"),
+    phoneNumberId: z.string().regex(/^\d{1,64}$/, "Invalid Phone Number ID"),
+    accessToken: z.string().trim().min(1).max(4096),
+});
+
+userRouter.post(
+    "/:organizationId/whatsapp/cloud/manual",
+    validateSchema("json", manualCloudAccountSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(
+                c,
+                await manuallyProvisionCloudAccount(c.get("authUser").id, organizationId, c.req.valid("json")),
+            );
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
 
 userRouter.get("/:organizationId/whatsapp/accounts", async c => {
     try {

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   legacyAccountStatusForCloudHealth,
   mapCloudAccountSnapshot,
+  normalizeCloudPhoneNumber,
   persistProvisionedCloudAccount,
 } from "./cloud-account.repository";
 
@@ -93,5 +94,9 @@ describe("Cloud account persistence boundary", () => {
         messagingLimit: null,
       }),
     ).rejects.toThrow("Invalid WhatsApp Cloud phone number");
+  });
+
+  test("normalizes synthetic Meta API test phone numbers without weakening customer validation", () => {
+    expect(normalizeCloudPhoneNumber("+1 555-144-2579")).toBe("+15551442579");
   });
 });

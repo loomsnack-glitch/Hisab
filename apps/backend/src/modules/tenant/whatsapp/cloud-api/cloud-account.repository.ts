@@ -1,7 +1,6 @@
 import {
   WhatsAppCloudAccountSnapshotSchema,
   type WhatsAppCloudAccountSnapshot,
-  normalizePhoneNumber,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
@@ -62,6 +61,19 @@ const providerId = (value: string, label: string): string => {
   const normalized = value.trim();
   if (!/^\d{1,64}$/.test(normalized)) {
     throw new Error(`Invalid WhatsApp Cloud ${label}`);
+  }
+  return normalized;
+};
+
+/**
+ * Meta has already validated this sender before returning its display number.
+ * Keep only the E.164 shape required by our database; strict libphonenumber
+ * validation rejects synthetic Meta API test numbers such as +1 555-144-2579.
+ */
+export const normalizeCloudPhoneNumber = (value: string): string => {
+  const normalized = value.trim().replace(/[\s().-]/g, "");
+  if (!/^\+[1-9][0-9]{7,14}$/.test(normalized)) {
+    throw new Error("Invalid WhatsApp Cloud phone number");
   }
   return normalized;
 };
@@ -194,8 +206,7 @@ export const persistProvisionedCloudAccount = async (
 ): Promise<WhatsAppCloudAccountSnapshot> => {
   const wabaId = providerId(input.wabaId, "WABA ID");
   const phoneNumberId = providerId(input.phoneNumberId, "Phone Number ID");
-  const phoneNumber = normalizePhoneNumber(input.phoneNumber);
-  if (!phoneNumber) throw new Error("Invalid WhatsApp Cloud phone number");
+  const phoneNumber = normalizeCloudPhoneNumber(input.phoneNumber);
   const credential = normalizeCloudCredentialBinding(input.credential);
   const displayName = nullableText(input.displayName, 255);
   const verifiedName = nullableText(input.verifiedName, 255);
@@ -224,7 +235,7 @@ export const persistProvisionedCloudAccount = async (
         ${input.createdBy},
         ${input.createdBy}
       )
-      ON CONFLICT (waba_id) DO UPDATE SET
+      ON CONFLICT (waba_id) WHERE waba_id IS NOT NULL DO UPDATE SET
         display_name = EXCLUDED.display_name,
         credential_reference = EXCLUDED.credential_reference,
         credential_key_version = EXCLUDED.credential_key_version,
@@ -233,6 +244,7 @@ export const persistProvisionedCloudAccount = async (
         last_error_message = NULL,
         updated_by = EXCLUDED.updated_by,
         updated_at = NOW()
+      WHERE whatsapp_business_accounts.organization_id = EXCLUDED.organization_id
       RETURNING id, organization_id
     `;
     if (!business || String(business.organization_id) !== input.organizationId) {
@@ -366,8 +378,7 @@ export const refreshCloudAccountMetadata = async (input: {
 }): Promise<WhatsAppCloudAccountSnapshot | null> => {
   const wabaId = providerId(input.wabaId, "WABA ID");
   const phoneNumberId = providerId(input.phoneNumberId, "Phone Number ID");
-  const phoneNumber = normalizePhoneNumber(input.phoneNumber);
-  if (!phoneNumber) throw new Error("Invalid WhatsApp Cloud phone number");
+  const phoneNumber = normalizeCloudPhoneNumber(input.phoneNumber);
 
   return pg.begin(async tx => {
     const [business] = await tx`

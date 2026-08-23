@@ -53,7 +53,11 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
     const statusRetryExhausted = accountQuery.isError
         && (accountError?.code !== STATUS_CODES.SERVICE_UNAVAILABLE || accountQuery.failureCount >= ACCOUNT_STATUS_RETRY_ATTEMPTS);
     const accounts = accountsQuery.data?.data?.accounts ?? [];
-    const availableAccounts = accounts.filter(candidate => !candidate.assignedStoreIds.includes(storeId));
+    const baileysLinkingEnabled = import.meta.env.VITE_WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
+    const availableAccounts = accounts.filter(candidate =>
+        (baileysLinkingEnabled || candidate.provider === "cloud_api")
+        && !candidate.assignedStoreIds.includes(storeId),
+    );
     const selectedAccount = availableAccounts.find(candidate => candidate.id === selectedAccountId);
     const assignMutation = useMutation({
         mutationFn: () => assignWhatsAppAccount(organizationId, storeId, { whatsappAccountId: selectedAccountId }),
@@ -92,7 +96,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
 
     return (
         <>
-            <Button variant="outline" className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4" onClick={() => setOpen(true)}>
+            <Button variant="outline" className="pointer-events-auto relative z-10 rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4" onClick={() => setOpen(true)}>
                 <WhatsAppIcon className="size-3.5 sm:size-4" /> WhatsApp
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>

@@ -49,7 +49,11 @@ const WhatsAppAccountPage = () => {
     const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
     const account = accountData?.account;
     const accounts = accountsQuery.data?.data?.accounts ?? [];
-    const availableAccounts = accounts.filter(candidate => !candidate.assignedStoreIds.includes(storeId));
+    const baileysLinkingEnabled = import.meta.env.VITE_WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
+    const availableAccounts = accounts.filter(candidate =>
+        (baileysLinkingEnabled || candidate.provider === "cloud_api")
+        && !candidate.assignedStoreIds.includes(storeId),
+    );
     const selectedAccount = availableAccounts.find(candidate => candidate.id === selectedAccountId);
     const assignMutation = useMutation({
         mutationFn: () => assignWhatsAppAccount(organizationId, storeId, { whatsappAccountId: selectedAccountId }),

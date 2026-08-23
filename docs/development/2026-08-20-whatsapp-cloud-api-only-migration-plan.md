@@ -1,7 +1,7 @@
 # WhatsApp Cloud API-only migration plan
 
-Status: in progress — implementation loops 1–6 complete; Loop 7 plan ready; Cloud API migration not yet production-ready
-Date: 2026-08-21
+Status: in progress — Cloud API hardening committed; manual test-account path and Baileys retirement gates are next
+Date: 2026-08-23
 Owner: Hisab platform
 
 This document is the source of truth for the Cloud API migration. The status
@@ -41,6 +41,12 @@ worker requirement.
   creating duplicate sends.
 - Remove Baileys code, dependencies, auth data, UI, deployment, and port 8100
   only after the migration gates are passed.
+
+The current development unblock is separate from final retirement: Meta has not
+yet enabled Embedded Signup for this app because Tech Provider approval is still
+pending. We will use the Meta API Setup test WABA/phone through a protected,
+development-only manual Cloud account path. That path must not become the
+customer onboarding flow or a production token-entry feature.
 
 ## Non-goals
 
@@ -716,8 +722,10 @@ enforcement.
 
 ### Phase 7: Customer migration and Baileys retirement
 
-Status: **not started**. Keep the Baileys worker, QR-compatible contracts, and
-port `8100` until the Phase 6 controlled checklist and migration gates pass.
+Status: **preflight planned; retirement not started**. The first subphase is a
+development-only Cloud API test-account path. Keep the Baileys worker,
+QR-compatible contracts, and port `8100` until the Cloud proof and migration
+gates pass.
 
 Dependencies: Phases 0–6 and migration runbook approval.
 
@@ -737,9 +745,86 @@ Code-only contract and runtime work may proceed with the external Phase 0 gate
 deferred, but no live onboarding, provider send, or production cutover is
 authorized until the external gate passes.
 
+#### Phase 7A: Development Cloud API test-account onboarding
+
+Status: **next implementation slice**. This exists only to test the Meta number
+already visible in Meta **WhatsApp → API Setup** while Embedded Signup is
+blocked. It does not remove Baileys and it does not migrate a Baileys number.
+
+Implementation:
+
+- add a backend-only, organization-authorized manual provisioning operation
+  behind `WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED=false` by default;
+- accept only WABA ID, Phone Number ID, and the Meta access token over an
+  authenticated request; never return or log the token;
+- validate the WABA and phone identity through Graph, subscribe the App to the
+  WABA, store the token through the encrypted Cloud credential vault, persist a
+  `cloud_api` account, and synchronize templates;
+- keep the UI hidden unless the explicit development flag is enabled; the
+  existing **Add account** action must continue to create only Baileys accounts
+  until the legacy linking freeze;
+- allow the resulting Cloud account to use the existing Store assignment flow;
+- use Meta test-recipient allowlisting for the first send and keep Cloud
+  outbox sending behind its existing feature gate.
+
+Exit gate: one Meta API Setup test number is persisted as a Cloud account,
+linked to a Store, refreshed successfully, has templates synchronized, and
+passes a controlled send/webhook test. No Baileys account or QR session is
+changed by this phase.
+
+#### Phase 7B: Freeze new Baileys linking and hide legacy entry points
+
+Dependencies: Phase 7A exit gate and a written rollback owner.
+
+- add a server-side `WHATSAPP_BAILEYS_LINKING_ENABLED` flag, defaulting to
+  enabled until the organization migration starts;
+- when disabled, reject Baileys account creation, QR connect, number change,
+  and reconnect with a stable `legacy_provider_disabled` response;
+- hide **Add account**, **Link account**, QR dialogs, and QR polling from the
+  Admin/POS surfaces while leaving read-only history and existing account
+  diagnostics available during the drain period;
+- keep the worker alive only for explicitly retained legacy accounts and
+  prevent it from claiming Cloud rows;
+- add tests proving the flag fails closed for new Baileys mutations and never
+  affects Cloud account listing, assignment, webhook processing, or dispatch.
+
+Exit gate: no new Baileys session can be created, existing legacy accounts can
+still be audited, and the Cloud test account remains fully operational.
+
+#### Phase 7C: Organization-by-organization Cloud cutover
+
+- inventory each Organization's Baileys accounts, Stores, pending outbox rows,
+  retryable rows, dead letters, conversations, and encrypted auth state;
+- connect or manually provision the Cloud account and verify WABA/Phone Number
+  ID ownership before changing any Store assignment;
+- freeze new Baileys sends for that Organization, drain or explicitly rebuild
+  unsent rows through approved Cloud templates, and verify one bill, reminder,
+  promotion, inbound reply, and status event;
+- mark the old account retired without deleting historical messages or
+  conversations; retain a reconciliation snapshot and rollback decision.
+
+Exit gate: the Organization has no production-critical Baileys dependency and
+Cloud delivery, webhook processing, quotas, templates, and support diagnostics
+are healthy.
+
+#### Phase 7D: Global Baileys drain and cleanup release
+
+Only after every Organization passes Phase 7C:
+
+- stop the worker after all remaining legacy rows are drained or dispositioned;
+- remove QR routes, polling, QR/session contracts, and Baileys-only UI;
+- remove the worker deployment, PM2 entry, port `8100`, auth-state storage, and
+  environment variables in a separate release;
+- remove Baileys provider classes/dependencies and only then remove obsolete
+  provider branches/schema fields after a backup and historical-data audit;
+- keep historical message, conversation, delivery, and audit rows readable.
+
+Exit gate: zero active Baileys accounts, zero Baileys runtime processes, zero
+production QR entry points, and Cloud-only monitoring/support runbooks live.
+
 ## Implementation loop state
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 - Loop 1 — **complete**: fail closed at the legacy-to-Cloud boundary. Legacy
   invoice, due-reminder, promotion, and inbox-text paths reject Cloud accounts,
@@ -802,6 +887,17 @@ Last updated: 2026-08-22
   TypeScript check still reports only the repository's existing unrelated
   test-contract errors. No bill, due-reminder, promotion, or inbound caller
   was migrated in this sub-loop.
+- Phase 7A preflight — **in progress**: add the development-only manual Cloud
+  API Setup account path for the Meta test WABA/phone because Embedded Signup
+  is blocked pending Tech Provider approval. The path validates provider
+  identity, subscribes the WABA, stores the token through the encrypted vault,
+  persists a `cloud_api` account, and syncs templates. Baileys remains
+  unchanged and the manual path is disabled in production.
+- Phase 7A preflight verification: Cloud-focused suite passes 119 tests and
+  the backend production build passes. Admin build was started but did not
+  finish in the local process; existing Admin typecheck errors remain in the
+  unrelated Cloud template manager and service files. Controlled Meta account
+  provisioning is still pending the WABA ID, Phone Number ID, and test token.
 - Rule: each loop must end with focused verification, a two-axis review, a
   committed narrow diff, and this state update before the next loop starts.
 

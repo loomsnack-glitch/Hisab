@@ -9,6 +9,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { ArrowLeft, MonitorSmartphone, Pencil, Settings2, Store } from "lucide-react";
 
 import EditStoreDialog from "@/components/organizations/edit-store-dialog";
+import StoreWhatsAppDialog from "@/components/organizations/store-whatsapp-dialog";
 import SaleNumberSettingsForm from "@/components/organizations/sale-number-settings-form";
 import StoreFeatureSettingsForm from "@/components/organizations/store-feature-settings-form";
 import StoreDevicesSection from "@/components/organizations/store-devices-section";
@@ -140,16 +141,19 @@ const StoreDetailShell = () => {
                             </div>
                         </div>
 
-                        <EditStoreDialog
-                            organizationId={organizationId}
-                            store={store}
-                            trigger={
-                                <Button variant="outline" className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4 shrink-0">
-                                    <Pencil className="size-3.5 sm:size-4" />
-                                    Edit store
-                                </Button>
-                            }
-                        />
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                            <StoreWhatsAppDialog organizationId={organizationId} storeId={store.id} storeName={store.name} />
+                            <EditStoreDialog
+                                organizationId={organizationId}
+                                store={store}
+                                trigger={
+                                    <Button variant="outline" className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4 shrink-0">
+                                        <Pencil className="size-3.5 sm:size-4" />
+                                        Edit store
+                                    </Button>
+                                }
+                            />
+                        </div>
                     </div>
                 </CardContent>
             </Card>

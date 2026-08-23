@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createCloudOnboardingState } from "./cloud-onboarding";
-import { completeCloudAccountProvisioning, refreshCloudAccountForOrganization, revokeCloudAccountForOrganization } from "./cloud-account.service";
+import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, revokeCloudAccountForOrganization } from "./cloud-account.service";
 import type { CloudProvisioningState } from "./cloud-provisioning";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
@@ -281,5 +281,67 @@ describe("Cloud account provisioning service", () => {
     });
     expect(response.status).toBe("success");
     expect(calls).toEqual(["revoke-secret", `revoke-db:${userId}`]);
+  });
+
+  test("manually provisions an API Setup account only when the development flag is enabled", async () => {
+    const previousFlag = process.env.WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED;
+    process.env.WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED = "true";
+    const calls: string[] = [];
+    try {
+      const response = await manuallyProvisionCloudAccount(userId, organizationId, {
+        wabaId: "1234567890",
+        phoneNumberId: "9876543210",
+        accessToken: "test-provider-token",
+      }, {
+        organizationAccess: async () => true,
+        createClient: token => {
+          expect(token).toBe("test-provider-token");
+          return {
+            async getBusinessAccount(wabaId: string) {
+              calls.push(`business:${wabaId}`);
+              return { id: wabaId, name: "Ganatri" };
+            },
+            async getPhoneNumbers() {
+              calls.push("phones");
+              return { data: [{ id: "9876543210", display_phone_number: "+919876543210" }] };
+            },
+            async subscribeBusinessAccount(wabaId: string) {
+              calls.push(`subscribe:${wabaId}`);
+            },
+          };
+        },
+        vault: {
+          async store(input) {
+            expect(input.accessToken).toBe("test-provider-token");
+            calls.push("store");
+            return { reference: "db-secret:test", keyVersion: "v1" };
+          },
+          async resolve() { return "unused"; },
+          async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+          async revoke() { calls.push("revoke"); },
+        },
+        persist: async input => ({
+          id: "33333333-3333-4333-8333-333333333333",
+          organizationId,
+          wabaId: input.wabaId,
+          phoneNumberId: input.phoneNumberId,
+          verifiedName: input.verifiedName,
+          status: "connected",
+          qualityRating: null,
+          messagingLimit: null,
+          lastLimitSyncedAt: null,
+          lastWebhookAt: null,
+          lastGraphApiAt: null,
+          lastErrorCode: null,
+        }),
+        syncTemplates: async () => ({ status: "success" }),
+      });
+
+      expect(response.status).toBe("success");
+      expect(calls).toEqual(["business:1234567890", "phones", "subscribe:1234567890", "store"]);
+    } finally {
+      if (previousFlag === undefined) delete process.env.WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED;
+      else process.env.WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED = previousFlag;
+    }
   });
 });
