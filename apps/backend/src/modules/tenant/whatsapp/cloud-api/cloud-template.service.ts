@@ -282,10 +282,14 @@ const validateSubmissionComponents = (components: unknown[], sampleValues: Recor
   return normalized;
 };
 
+const providerPlaceholderIndexes = (text: string): string[] => [...new Set(
+  [...text.matchAll(/\{\{(\d+)\}\}/g)].map(match => match[1]!),
+)].sort((left, right) => Number(left) - Number(right));
+
 const providerComponents = (components: Array<Record<string, unknown>>, sampleValues: Record<string, unknown>): Array<Record<string, unknown>> => components.map(component => {
   const type = String(component.type).toUpperCase();
   if (type === "BODY" && typeof component.text === "string" && /\{\{\d+\}\}/.test(component.text)) {
-    const indexes = [...component.text.matchAll(/\{\{(\d+)\}\}/g)].map(match => match[1]!);
+    const indexes = providerPlaceholderIndexes(component.text);
     return { ...component, example: { body_text: [indexes.map(index => String(sampleValues[index]))] } };
   }
   return component;

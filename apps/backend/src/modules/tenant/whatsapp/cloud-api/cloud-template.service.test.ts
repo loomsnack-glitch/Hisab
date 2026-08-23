@@ -71,6 +71,7 @@ describe("Cloud template synchronization service", () => {
   test("persists the submission before creating a provider template and reconciles the returned asset", async () => {
     const created: string[] = [];
     let providerCreated = false;
+    let providerDefinition: Record<string, unknown> | undefined;
     let update: Record<string, unknown> | undefined;
     const submission = {
       id: "77777777-7777-4777-8777-777777777777",
@@ -104,8 +105,8 @@ describe("Cloud template synchronization service", () => {
       friendlyName: "Bill ready",
       metaTemplateName: "bill_ready",
       languageCode: "en_US",
-      components: [{ type: "BODY", text: "Hello {{1}}" }],
-      sampleValues: { "1": "Customer" },
+      components: [{ type: "BODY", text: "Regards {{6}}, invoice {{2}} for {{1}}. Total {{3}}, paid {{4}}, due {{5}}. {{6}}" }],
+      sampleValues: { "1": "Customer", "2": "INV-1001", "3": "₹1,250", "4": "₹1,000", "5": "₹250", "6": "Ganatri" },
       idempotencyKey: "idem-1",
     }, {
       organizationAccess: async () => true,
@@ -130,7 +131,12 @@ describe("Cloud template synchronization service", () => {
             ? { data: [] }
             : { data: [{ id: "meta-1", name: "bill_ready", language: "en_US", category: "UTILITY", status: "PENDING", components: [{ type: "BODY", text: "Hello {{1}}" }] }] };
         },
-        async createMessageTemplate() { providerCreated = true; created.push("provider-create"); return { id: "meta-1", status: "PENDING" }; },
+        async createMessageTemplate(_wabaId, definition) {
+          providerCreated = true;
+          providerDefinition = definition;
+          created.push("provider-create");
+          return { id: "meta-1", status: "PENDING" };
+        },
       }),
       upsert: async assets => assets.map((asset, index) => ({ id: `66666666-6666-4666-8666-66666666666${index}`, ...asset, lastSyncedAt: "2026-08-23T10:00:00.000Z", version: 1 })),
     });
@@ -140,6 +146,13 @@ describe("Cloud template synchronization service", () => {
     expect(update?.status).toBe("pending");
     expect(response.data?.submission.metaTemplateId).toBe("meta-1");
     expect(response.data?.template?.name).toBe("bill_ready");
+    expect(providerDefinition?.components).toEqual([{
+      type: "BODY",
+      text: "Regards {{6}}, invoice {{2}} for {{1}}. Total {{3}}, paid {{4}}, due {{5}}. {{6}}",
+      example: {
+        body_text: [["Customer", "INV-1001", "₹1,250", "₹1,000", "₹250", "Ganatri"]],
+      },
+    }]);
   });
 
   test("only assigns an approved submission and delegates to the transactional Store binding", async () => {
