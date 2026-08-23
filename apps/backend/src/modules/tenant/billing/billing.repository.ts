@@ -461,6 +461,15 @@ export const deleteDraftSale = async (
     tx?: Bun.TransactionSQL,
 ): Promise<boolean> => {
     const db = tx || pg;
+
+    // Parcel KOTs reference draft sales directly; remove them before deleting the sale.
+    await db`
+        DELETE FROM kots
+        WHERE sale_id = ${saleId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
     const [result] = await db`
         DELETE FROM sales
         WHERE id = ${saleId}
