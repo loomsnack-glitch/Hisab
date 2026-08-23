@@ -96,6 +96,27 @@ export const createCloudTemplateSubmission = async (
   return existingSubmission;
 });
 
+export const claimCloudTemplateSubmission = async (
+  organizationId: string,
+  submissionId: string,
+  updatedBy: string,
+): Promise<WhatsAppCloudTemplateSubmissionDTO | null> => {
+  const [row] = await pg`
+    UPDATE whatsapp_cloud_template_submissions
+    SET status = 'submitting',
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND id = ${submissionId}
+      AND (
+        status IN ('draft', 'failed')
+        OR (status = 'submitting' AND updated_at < NOW() - INTERVAL '10 minutes')
+      )
+    RETURNING *
+  `;
+  return row ? mapSubmission(row as Record<string, unknown>) : null;
+};
+
 export const getCloudTemplateSubmission = async (
   organizationId: string,
   submissionId: string,
@@ -118,6 +139,7 @@ export type CloudTemplateSubmissionUpdate = {
   submittedAt?: string | null;
   providerUpdatedAt?: string | null;
   updatedBy?: string | null;
+  expectedStatus?: "draft" | "submitting" | "pending" | "approved" | "rejected" | "paused" | "disabled" | "failed";
 };
 
 export const updateCloudTemplateSubmission = async (
@@ -138,6 +160,7 @@ export const updateCloudTemplateSubmission = async (
         updated_at = NOW()
     WHERE organization_id = ${organizationId}
       AND id = ${submissionId}
+      AND (${update.expectedStatus ?? null}::text IS NULL OR status = ${update.expectedStatus ?? null})
     RETURNING *
   `;
   return row ? mapSubmission(row as Record<string, unknown>) : null;
@@ -180,14 +203,14 @@ export type CloudTemplateProviderStatusUpdate = {
 
 export const applyCloudTemplateProviderStatus = async (
   input: CloudTemplateProviderStatusUpdate,
-): Promise<void> => pg.begin(async tx => {
+): Promise<boolean> => pg.begin(async tx => {
   const category = input.category;
   const templateId = input.providerTemplateId;
   const templateName = input.templateName;
   const languageCode = input.languageCode;
   const reason = input.status === "rejected" ? input.reason : null;
 
-  await tx`
+  const updatedAssets = await tx`
     UPDATE whatsapp_cloud_templates assets
     SET status = CASE
           WHEN assets.status IN ('approved', 'rejected', 'paused', 'disabled')
@@ -211,9 +234,10 @@ export const applyCloudTemplateProviderStatus = async (
           AND assets.language_code = ${languageCode}
         )
       )
+    RETURNING assets.id
   `;
 
-  await tx`
+  const updatedSubmissions = await tx`
     UPDATE whatsapp_cloud_template_submissions submissions
     SET status = CASE
           WHEN submissions.status IN ('approved', 'rejected', 'paused', 'disabled')
@@ -237,5 +261,7 @@ export const applyCloudTemplateProviderStatus = async (
           AND submissions.language_code = ${languageCode}
         )
       )
+    RETURNING submissions.id
   `;
+  return updatedAssets.length > 0 || updatedSubmissions.length > 0;
 });

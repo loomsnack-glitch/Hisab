@@ -34,7 +34,7 @@ export type CloudWebhookProcessorDependencies = {
     failureMessage: string | null,
   ) => Promise<CloudMessageStatusUpdateResult>;
   resolveAccount: (wabaId: string, phoneNumberId: string) => Promise<string | null>;
-  updateTemplateStatus: (event: CloudNormalizedTemplateStatusEvent) => Promise<void>;
+  updateTemplateStatus: (event: CloudNormalizedTemplateStatusEvent) => Promise<boolean | void>;
   complete: (
     event: Pick<CloudWebhookEventClaim, "id" | "leaseOwner">,
     ignoredDetail?: string,
@@ -172,7 +172,13 @@ export const processCloudWebhookEvent = async (
     let processed = 0;
     for (const event of actionable) {
       if (event.kind === "template_status") {
-        await deps.updateTemplateStatus(event);
+        const updated = await deps.updateTemplateStatus(event);
+        if (updated === false) {
+          throw new CloudWebhookRetryableError(
+            "cloud_template_not_found",
+            "Cloud template status arrived before the template was synchronized",
+          );
+        }
         processed += 1;
         continue;
       }

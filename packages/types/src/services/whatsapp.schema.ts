@@ -162,6 +162,12 @@ export const WhatsAppCreateCloudTemplateSubmissionSchema = z.object({
     idempotencyKey: z.string().trim().min(1).max(255),
 });
 
+export const WhatsAppUseCloudTemplateForStoreSchema = z.object({
+    cloudTemplateId: z.uuid("Invalid Cloud template id"),
+    whatsappBusinessAccountId: z.uuid("Invalid internal Cloud business account id"),
+    kind: WhatsAppMessageTemplateKindSchema,
+});
+
 export const WhatsAppCloudQuotaPolicySchema = z.object({
     monthlyMessageLimit: z.number().int().nonnegative().nullable(),
     monthlyBudgetMinor: z.number().int().nonnegative().nullable(),

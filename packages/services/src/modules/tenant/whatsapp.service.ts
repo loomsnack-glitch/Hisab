@@ -29,6 +29,7 @@ import type {
     WhatsAppCloudTemplateSubmissionDTO,
     WhatsAppCreateCloudTemplateBindingJSON,
     WhatsAppCreateCloudTemplateSubmissionJSON,
+    WhatsAppUseCloudTemplateForStoreJSON,
     WhatsAppCustomerConsentEventDTO,
     WhatsAppRecordCustomerConsentJSON,
     WhatsAppSetCustomerSuppressionJSON,
@@ -179,6 +180,19 @@ export const setWhatsAppCloudTemplateDefault = async (
 ): Promise<WhatsAppCloudBindingResponse> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/submissions/${submissionId}/default`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const importWhatsAppCloudTemplateForStore = async (
+    organizationId: string,
+    storeId: string,
+    data: WhatsAppUseCloudTemplateForStoreJSON,
+): Promise<WhatsAppCloudBindingResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/cloud/template-bindings/import`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

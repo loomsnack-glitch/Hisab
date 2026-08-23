@@ -119,6 +119,7 @@ describe("Cloud template synchronization service", () => {
         async revoke() {},
       },
       createSubmission: async input => { created.push(input.idempotencyKey); return submission; },
+      claimSubmission: async () => ({ ...submission, status: "submitting" as const }),
       updateSubmission: async (_organizationId, _submissionId, values) => {
         update = values;
         return { ...submission, ...values, metaTemplateId: values.metaTemplateId ?? submission.metaTemplateId, status: values.status ?? submission.status } as typeof submission;
@@ -177,5 +178,89 @@ describe("Cloud template synchronization service", () => {
     expect(response.status).toBe("success");
     expect(input?.storeId).toBe("99999999-9999-4999-8999-999999999999");
     expect(input?.localTemplateBody).toBe("Hello {{customer_name}}");
+  });
+
+  test("does not call Meta when another request owns the submission claim", async () => {
+    let providerCalls = 0;
+    const submission = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      organizationId,
+      whatsappBusinessAccountId: businessAccountId,
+      originatingStoreId: null,
+      localTemplateId: null,
+      kind: "bill" as const,
+      friendlyName: "Bill ready",
+      metaTemplateName: "bill_ready",
+      languageCode: "en_US",
+      category: "utility" as const,
+      requestedComponents: [{ type: "BODY", text: "Hello {{1}}" }],
+      sampleValues: { "1": "Customer" },
+      idempotencyKey: "idem-race",
+      metaTemplateId: null,
+      status: "draft" as const,
+      rejectionReason: null,
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      submittedAt: null,
+      providerUpdatedAt: null,
+      createdBy: userId,
+      updatedBy: userId,
+      createdAt: "2026-08-23T10:00:00.000Z",
+      updatedAt: "2026-08-23T10:00:00.000Z",
+    };
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill ready",
+      metaTemplateName: "bill_ready",
+      languageCode: "en_US",
+      components: [{ type: "BODY", text: "Hello {{1}}" }],
+      sampleValues: { "1": "Customer" },
+      idempotencyKey: "idem-race",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      getCredential: async () => ({ businessAccountId, reference: "secret://cloud/1", keyVersion: "kms-v1" }),
+      vault: {
+        async store() { return { reference: "unused", keyVersion: "unused" }; },
+        async resolve() { return "token-in-memory"; },
+        async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+        async revoke() {},
+      },
+      createSubmission: async () => submission,
+      claimSubmission: async () => null,
+      createClient: () => ({
+        async getTemplates() { providerCalls += 1; return { data: [] }; },
+        async createMessageTemplate() { providerCalls += 1; return { id: "meta-race" }; },
+      }),
+    });
+
+    expect(response).toMatchObject({ status: "success", message: "Cloud template submission is already being processed" });
+    expect(providerCalls).toBe(0);
+  });
+
+  test("rejects named placeholders before sending an invalid Meta request", async () => {
+    let providerCalled = false;
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill ready",
+      metaTemplateName: "bill_ready",
+      languageCode: "en_US",
+      components: [{ type: "BODY", text: "Hello {{customer_name}}" }],
+      sampleValues: { customer_name: "Customer" },
+      idempotencyKey: "idem-named-placeholder",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      getCredential: async () => ({ businessAccountId, reference: "secret://cloud/1", keyVersion: "kms-v1" }),
+      createSubmission: async () => { throw new Error("should not persist invalid content"); },
+      createClient: () => ({
+        async getTemplates() { providerCalled = true; return { data: [] }; },
+      }),
+    });
+
+    expect(response).toMatchObject({ status: "error", message: "Cloud template placeholders must use positive numbers" });
+    expect(providerCalled).toBe(false);
   });
 });

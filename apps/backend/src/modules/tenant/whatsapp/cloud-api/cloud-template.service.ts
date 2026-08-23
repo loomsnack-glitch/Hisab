@@ -5,6 +5,7 @@ import {
   type WhatsAppCloudTemplateBindingDTO,
   type WhatsAppCloudTemplateSubmissionDTO,
   type WhatsAppCreateCloudTemplateSubmissionJSON,
+  type WhatsAppUseCloudTemplateForStoreJSON,
   type WhatsAppCreateCloudTemplateBindingJSON,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
@@ -15,6 +16,7 @@ import {
 import { CloudCredentialError, type WhatsAppCloudCredentialVault } from "./cloud-credentials";
 import { databaseCloudCredentialVault } from "./database-cloud-credentials";
 import { createConfiguredCloudClient } from "./cloud-provider";
+import { WhatsAppCloudApiError } from "./cloud-api.client";
 import {
   listCloudTemplateAssets,
   createCloudTemplateBinding,
@@ -26,6 +28,7 @@ import {
 } from "./cloud-template.repository";
 import {
   createCloudTemplateSubmission,
+  claimCloudTemplateSubmission,
   getCloudTemplateSubmission,
   updateCloudTemplateSubmission,
   listCloudTemplateSubmissions,
@@ -53,6 +56,7 @@ type CloudTemplateServiceDependencies = {
   listBindings: typeof listCloudTemplateBindings;
   createDefaultBinding: typeof createCloudTemplateDefaultBinding;
   createSubmission: typeof createCloudTemplateSubmission;
+  claimSubmission: typeof claimCloudTemplateSubmission;
   getSubmission: typeof getCloudTemplateSubmission;
   updateSubmission: typeof updateCloudTemplateSubmission;
   listSubmissions: typeof listCloudTemplateSubmissions;
@@ -71,6 +75,7 @@ const dependencies = (): CloudTemplateServiceDependencies => ({
   listBindings: listCloudTemplateBindings,
   createDefaultBinding: createCloudTemplateDefaultBinding,
   createSubmission: createCloudTemplateSubmission,
+  claimSubmission: claimCloudTemplateSubmission,
   getSubmission: getCloudTemplateSubmission,
   updateSubmission: updateCloudTemplateSubmission,
   listSubmissions: listCloudTemplateSubmissions,
@@ -128,7 +133,28 @@ const providerStatusFor = (value: unknown): WhatsAppCloudTemplateSubmissionDTO["
 };
 
 const safeSubmissionError = (error: unknown): { code: string; message: string } => {
-  const message = error instanceof Error ? error.message : "Cloud template submission failed";
+  const validationMessage = error instanceof Error && [
+    "Cloud template components are invalid",
+    "Cloud template component is invalid",
+    "Cloud template component type is unsupported",
+    "Cloud template body text is invalid",
+    "Cloud template placeholders must use positive numbers",
+    "Cloud template footer text is invalid",
+    "Cloud template buttons are invalid",
+    "Cloud template button is invalid",
+    "Cloud template button URL is invalid",
+    "Cloud template button URL must use HTTPS",
+    "Cloud template must contain exactly one body",
+  ].some(prefix => error.message.startsWith(prefix))
+    ? error.message
+    : null;
+  const message = error instanceof CloudCredentialError
+    ? "WhatsApp Cloud credential storage is unavailable"
+    : error instanceof WhatsAppCloudApiError
+      ? `Meta template submission failed${error.providerCode ? ` (provider code ${error.providerCode})` : ""}`
+      : validationMessage
+        ? validationMessage
+      : "Cloud template submission failed";
   const code = typeof (error as { providerCode?: unknown })?.providerCode === "string"
     ? String((error as { providerCode: string }).providerCode)
     : "cloud_template_submission_failed";
@@ -149,7 +175,10 @@ const validateSubmissionComponents = (components: unknown[], sampleValues: Recor
     if (type === "BODY") {
       bodyCount += 1;
       if (typeof value.text !== "string" || !value.text.trim() || value.text.length > 4_096) throw new Error("Cloud template body text is invalid");
-      for (const match of value.text.matchAll(/\{\{(\d+)\}\}/g)) placeholders.add(match[1]!);
+      for (const match of value.text.matchAll(/\{\{([^{}]+)\}\}/g)) {
+        if (!/^\d+$/.test(match[1]!) || Number(match[1]) < 1) throw new Error("Cloud template placeholders must use positive numbers");
+        placeholders.add(match[1]!);
+      }
     }
     if (type === "FOOTER" && (typeof value.text !== "string" || !value.text.trim() || value.text.length > 60)) throw new Error("Cloud template footer text is invalid");
     if (type === "BUTTONS") {
@@ -206,7 +235,11 @@ const localBodyFromProviderComponents = (components: unknown[], kind: WhatsAppCr
       : ["customer_name", "store_name"];
   const body = components.find(component => component && typeof component === "object" && !Array.isArray(component) && String((component as Record<string, unknown>).type).toUpperCase() === "BODY") as Record<string, unknown> | undefined;
   if (!body || typeof body.text !== "string") throw new Error("Approved Cloud template does not contain a body");
-  return body.text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => `{{${names[Number(index) - 1] ?? `cloud_value_${index}`}}}`);
+  return body.text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => {
+    const name = names[Number(index) - 1];
+    if (!name) throw new Error(`Cloud template placeholder {{${index}}} is not supported for ${kind}`);
+    return `{{${name}}}`;
+  });
 };
 
 export const submitCloudTemplateForAccount = async (
@@ -247,15 +280,18 @@ export const submitCloudTemplateForAccount = async (
       idempotencyKey: data.idempotencyKey,
       createdBy: userId,
     };
-    let submission = await deps.createSubmission(submissionInput);
-    pendingSubmission = submission;
-    if (["pending", "approved", "rejected", "paused", "disabled"].includes(submission.status) && submission.metaTemplateId) {
-      return { status: "success", message: "Cloud template submission already exists", data: { submission, template: null }, code: STATUS_CODES.SUCCESS };
+    const existingSubmission = await deps.createSubmission(submissionInput);
+    if (["pending", "approved", "rejected", "paused", "disabled"].includes(existingSubmission.status) && existingSubmission.metaTemplateId) {
+      return { status: "success", message: "Cloud template submission already exists", data: { submission: existingSubmission, template: null }, code: STATUS_CODES.SUCCESS };
     }
+    const submissionClaim = await deps.claimSubmission(organizationId, existingSubmission.id, userId);
+    if (!submissionClaim) {
+      return { status: "success", message: "Cloud template submission is already being processed", data: { submission: existingSubmission, template: null }, code: STATUS_CODES.SUCCESS };
+    }
+    let submission = submissionClaim;
+    pendingSubmission = submission;
     const accessToken = await deps.vault.resolve(credential);
     const client = deps.createClient(accessToken);
-    submission = await deps.updateSubmission(organizationId, submission.id, { status: "submitting", updatedBy: userId }) ?? submission;
-    pendingSubmission = submission;
     let providerTemplate = findProviderTemplate((await client.getTemplates(account.wabaId)).data ?? [], data.metaTemplateName, data.languageCode);
     let providerResponse: { id?: string; status?: string; category?: string } | null = null;
     if (!providerTemplate) {
@@ -279,6 +315,7 @@ export const submitCloudTemplateForAccount = async (
       submittedAt: typeof submission.submittedAt === "string" ? submission.submittedAt : submission.submittedAt?.toISOString() ?? new Date().toISOString(),
       providerUpdatedAt: providerTemplate ? (typeof providerTemplate.updated_at === "string" ? providerTemplate.updated_at : new Date().toISOString()) : null,
       updatedBy: userId,
+      expectedStatus: "submitting",
     }) ?? submission;
     pendingSubmission = submission;
     return { status: "success", message: status === "approved" ? "Cloud template is approved" : "Cloud template submitted to Meta for approval", data: { submission, template: template ?? null }, code: STATUS_CODES.SUCCESS };
@@ -290,6 +327,7 @@ export const submitCloudTemplateForAccount = async (
         lastErrorCode: safe.code,
         lastErrorMessage: safe.message,
         updatedBy: userId,
+        expectedStatus: "submitting",
       }).catch(() => undefined);
     }
     return { status: "error", message: safe.message, data: null, code: STATUS_CODES.BAD_REQUEST };
@@ -347,6 +385,8 @@ export const setCloudTemplateDefaultForSubmission = async (
   const assets = await deps.list(organizationId, submission.whatsappBusinessAccountId);
   const asset = assets.find(item => item.metaTemplateId === submission.metaTemplateId);
   if (!asset) return { status: "error", message: "Refresh Cloud templates before assigning this default", data: null, code: STATUS_CODES.CONFLICT };
+  const expectedCategory = submission.kind === "promotion" ? "marketing" : "utility";
+  if (asset.status !== "approved" || asset.category !== expectedCategory) return { status: "error", message: "Cloud template is no longer approved for this message type", data: null, code: STATUS_CODES.CONFLICT };
   try {
     const binding = await deps.createDefaultBinding({
       organizationId,
@@ -359,6 +399,38 @@ export const setCloudTemplateDefaultForSubmission = async (
       createdBy: userId,
     });
     return { status: "success", message: "Approved Cloud template is now the Store default", data: binding, code: STATUS_CODES.SUCCESS };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Cloud template could not become the Store default", data: null, code: STATUS_CODES.CONFLICT };
+  }
+};
+
+export const setCloudTemplateAssetDefaultForStore = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  data: WhatsAppUseCloudTemplateForStoreJSON,
+  injected: Partial<CloudTemplateServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
+  const deps = { ...dependencies(), ...injected };
+  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  if (!await organizationRepository.getStoreById(organizationId, storeId)) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const asset = (await deps.list(organizationId, data.whatsappBusinessAccountId)).find(item => item.id === data.cloudTemplateId);
+  const expectedCategory = data.kind === "promotion" ? "marketing" : "utility";
+  if (!asset || asset.status !== "approved" || asset.category !== expectedCategory) {
+    return { status: "error", message: "Cloud WhatsApp template must be approved and match the message category", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  try {
+    const binding = await deps.createDefaultBinding({
+      organizationId,
+      storeId,
+      cloudTemplateId: asset.id,
+      whatsappBusinessAccountId: data.whatsappBusinessAccountId,
+      kind: data.kind,
+      localTemplateName: `${asset.name} (Imported)`,
+      localTemplateBody: localBodyFromProviderComponents(asset.components, data.kind),
+      createdBy: userId,
+    });
+    return { status: "success", message: "Existing Cloud template is now the Store default", data: binding, code: STATUS_CODES.SUCCESS };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Cloud template could not become the Store default", data: null, code: STATUS_CODES.CONFLICT };
   }

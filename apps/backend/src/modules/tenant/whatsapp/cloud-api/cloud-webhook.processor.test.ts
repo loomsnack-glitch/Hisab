@@ -60,6 +60,7 @@ const deps = () => {
         calls.statuses.push(data);
         return "updated" as "updated" | "stale" | "missing";
       },
+      updateTemplateStatus: async () => true,
       resolveAccount: async (): Promise<string | null> => "account-1",
       complete: async () => {
         calls.completed += 1;
@@ -274,5 +275,39 @@ describe("processCloudWebhookEvent", () => {
       code: "cloud_processing_failed",
     });
     expect(state.calls.failed).toHaveLength(1);
+  });
+
+  test("retries a template status until the Cloud template has been synchronized", async () => {
+    const state = deps();
+    state.injected.updateTemplateStatus = async () => false;
+    const result = await processCloudWebhookEvent(
+      claim({
+        payload: {
+          object: "whatsapp_business_account",
+          entry: [{
+            id: "waba-1",
+            changes: [{
+              field: "message_template_status_update",
+              value: {
+                event: "APPROVED",
+                message_template_id: "meta-template-1",
+                message_template_name: "bill_ready",
+                message_template_language: "en_US",
+                category: "UTILITY",
+                timestamp: "1760000000",
+              },
+            }],
+          }],
+        },
+      }),
+      state.injected,
+    );
+
+    expect(result).toEqual({
+      status: "retryable",
+      code: "cloud_template_not_found",
+    });
+    expect(state.calls.failed).toHaveLength(1);
+    expect(state.calls.completed).toBe(0);
   });
 });

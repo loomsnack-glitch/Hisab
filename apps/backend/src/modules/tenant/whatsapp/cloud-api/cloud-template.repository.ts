@@ -321,6 +321,18 @@ export const createCloudTemplateDefaultBinding = async (input: {
   localTemplateBody: string;
   createdBy: string;
 }): Promise<WhatsAppCloudTemplateBindingDTO> => pg.begin(async tx => {
+  const [assignment] = await tx`
+    SELECT 1
+    FROM whatsapp_account_stores assignments
+    INNER JOIN whatsapp_accounts accounts ON accounts.id = assignments.whatsapp_account_id AND accounts.organization_id = assignments.organization_id
+    WHERE assignments.organization_id = ${input.organizationId}
+      AND assignments.store_id = ${input.storeId}
+      AND accounts.provider = 'cloud_api'
+      AND accounts.whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+    LIMIT 1
+  `;
+  if (!assignment) throw new Error("Cloud WhatsApp account is not assigned to this Store");
+
   const [existing] = await tx`
     SELECT *
     FROM whatsapp_cloud_template_bindings
@@ -332,6 +344,16 @@ export const createCloudTemplateDefaultBinding = async (input: {
     LIMIT 1
   `;
   if (existing) {
+    const [existingAsset] = await tx`
+      SELECT status, category
+      FROM whatsapp_cloud_templates
+      WHERE id = ${input.cloudTemplateId}
+        AND organization_id = ${input.organizationId}
+        AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+    `;
+    if (!existingAsset || existingAsset.status !== "approved" || existingAsset.category !== (input.kind === "promotion" ? "marketing" : "utility")) {
+      throw new Error("Cloud WhatsApp template must be approved and match the message category");
+    }
     await tx`
       UPDATE whatsapp_cloud_template_bindings
       SET is_default = TRUE, updated_by = ${input.createdBy}, updated_at = NOW()
@@ -354,17 +376,6 @@ export const createCloudTemplateDefaultBinding = async (input: {
   if (!asset || asset.status !== "approved" || asset.category !== (input.kind === "promotion" ? "marketing" : "utility")) {
     throw new Error("Cloud WhatsApp template must be approved and match the message category");
   }
-  const [assignment] = await tx`
-    SELECT 1
-    FROM whatsapp_account_stores assignments
-    INNER JOIN whatsapp_accounts accounts ON accounts.id = assignments.whatsapp_account_id AND accounts.organization_id = assignments.organization_id
-    WHERE assignments.organization_id = ${input.organizationId}
-      AND assignments.store_id = ${input.storeId}
-      AND accounts.provider = 'cloud_api'
-      AND accounts.whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
-    LIMIT 1
-  `;
-  if (!assignment) throw new Error("Cloud WhatsApp account is not assigned to this Store");
   const variableMapping = validateCloudTemplateVariableMapping(
     buildDefaultCloudTemplateVariableMapping(input.localTemplateBody, Array.isArray(asset.components) ? asset.components : []),
     input.localTemplateBody,

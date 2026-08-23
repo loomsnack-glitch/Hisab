@@ -506,6 +506,13 @@ Evidence:
   shared-types typecheck pass; `git diff --check` is clean.
 - [x] The submission migration was previously applied to the configured
   development database with 76 applied and 0 pending migrations.
+- [x] Post-review hardening added an atomic submission claim with stale-worker
+  recovery, compare-and-set terminal updates, safe provider error messages,
+  numeric placeholder validation, existing approved-template Store import,
+  rejected-template duplicate/edit recovery, approval-webhook retry behavior,
+  and approved/category checks before default assignment.
+- [x] The Cloud-module regression suite passes with 128 tests and 0 failures;
+  the new race, placeholder, and webhook synchronization cases are covered.
 - [ ] Live Meta approval, webhook delivery, two-Store shared-WABA sends, and
   target-production rollback evidence still require controlled staging access.
 
