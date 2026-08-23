@@ -51,7 +51,7 @@ import type {
     SaleServiceMode,
     UpdateDraftSaleJSON,
 } from "@repo/types";
-import { normalizePhoneNumber, formatSaleServiceModeLabel } from "@repo/types";
+import { normalizePhoneNumber } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
     AlertDialog,
@@ -253,6 +253,33 @@ const SERVICE_MODE_OPTIONS: Array<{
     { value: "dine_in", label: "Dine-In", icon: Utensils },
     { value: "pick_up", label: "Pick-Up", icon: ShoppingCart },
 ];
+
+const getServiceModeOption = (serviceMode?: SaleServiceMode | null) =>
+    SERVICE_MODE_OPTIONS.find((option) => option.value === (serviceMode ?? "dine_in")) ??
+    SERVICE_MODE_OPTIONS[0];
+
+const renderSaleMetaRow = (sale: SaleSummaryDTO) => {
+    const serviceModeOption = getServiceModeOption(sale.serviceMode);
+    const ServiceModeIcon = serviceModeOption.icon;
+
+    return (
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-foreground/75">
+                <ServiceModeIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                {serviceModeOption.label}
+            </span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+                {sale.itemCount} item{sale.itemCount !== 1 ? "s" : ""}
+            </span>
+            <time
+                className="min-w-0 basis-full text-[11px] leading-tight text-muted-foreground sm:basis-auto sm:text-xs"
+                dateTime={typeof sale.createdAt === "string" ? sale.createdAt : undefined}
+            >
+                {formatDateTime(sale.createdAt)}
+            </time>
+        </div>
+    );
+};
 
 const salesSortOptions: Array<{ value: SaleSort; label: string }> = [
     { value: "newest", label: "Newest" },
@@ -2825,7 +2852,7 @@ const BillingPage = ({
                                                 badges.push(
                                                     <span
                                                         key="cash"
-                                                        className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                                        className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-600 border border-zinc-500/20 dark:text-zinc-300"
                                                     >
                                                         Cash
                                                     </span>,
@@ -2870,34 +2897,40 @@ const BillingPage = ({
                                                         className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border/40 bg-card/70 px-3 py-2 transition-all hover:border-primary/20 hover:bg-card/90 hover:shadow-xs"
                                                     >
                                                         <div className="min-w-0 flex-1 pr-2">
-                                                            <div className="flex min-w-0 items-center gap-2">
-                                                                <p className="shrink-0 whitespace-nowrap text-xs font-bold text-amber-500 dark:text-amber-400">
-                                                                    {sale.tokenNumber ? `Token ${sale.tokenNumber} · ` : ""}
-                                                                    {sale.kotNumbers && sale.kotNumbers.length > 0
-                                                                        ? `KOT ${sale.kotNumbers.join(", ")} · `
-                                                                        : ""}
-                                                                    {sale.serviceTableLabel
-                                                                        ? `Table ${sale.serviceTableLabel} · `
-                                                                        : ""}
-                                                                    {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft"}
-                                                                </p>
-                                                                <p className="min-w-0 truncate text-xs font-semibold text-foreground/80">
-                                                                    {sale.customer?.name || "Walk-in customer"}
-                                                                </p>
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                {sale.customer?.phone ? (
-                                                                    <p className="truncate text-[10px] text-muted-foreground">
-                                                                        {sale.customer.phone}
-                                                                    </p>
+                                                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                                                <div className="flex shrink-0 items-center gap-1.5">
+                                                                    {sale.tokenNumber ? (
+                                                                        <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
+                                                                            Token {sale.tokenNumber}
+                                                                        </span>
+                                                                    ) : null}
+                                                                    {sale.kotNumbers && sale.kotNumbers.length > 0 ? (
+                                                                        <span className="text-xs font-semibold text-muted-foreground">
+                                                                            KOT {sale.kotNumbers.join(", ")}
+                                                                        </span>
+                                                                    ) : null}
+                                                                    {sale.serviceTableLabel ? (
+                                                                        <span className="text-xs font-semibold text-muted-foreground">
+                                                                            Table {sale.serviceTableLabel}
+                                                                        </span>
+                                                                    ) : null}
+                                                                    {sale.saleNumber ? (
+                                                                        <span className="rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 text-[10px] font-semibold text-foreground/70">
+                                                                            Bill {sale.saleNumber}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-500">
+                                                                            Draft
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {sale.customer?.name ? (
+                                                                    <span className="min-w-0 max-w-full truncate rounded-md border border-sky-500/20 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-400">
+                                                                        {sale.customer.name}
+                                                                    </span>
                                                                 ) : null}
-                                                                <p className="truncate text-[10px] text-muted-foreground/80">
-                                                                    {formatSaleServiceModeLabel(sale.serviceMode)} ·{" "}
-                                                                    {sale.itemCount} item
-                                                                    {sale.itemCount !== 1 ? "s" : ""} ·{" "}
-                                                                    {formatDateTime(sale.createdAt)}
-                                                                </p>
                                                             </div>
+                                                            {renderSaleMetaRow(sale)}
                                                         </div>
 
                                                         <div className="flex shrink-0 items-center gap-2">
