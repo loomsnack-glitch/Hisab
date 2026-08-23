@@ -20,17 +20,25 @@ import * as repository from "./whatsapp.repository";
 import * as workerClient from "./whatsapp.worker-client";
 import * as invoiceService from "./invoice";
 import * as conversationService from "./conversation";
+import * as storage from "@/services/storage";
+import { renderSalePdf } from "./invoice-pdf";
+import { renderDueReminderPdf } from "./due-reminder-pdf";
 import { formatDueReminderText, getDueReminderTemplateValues } from "./due-reminder";
 import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
 import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
 import { enqueueCloudTemplateSend, enqueueCloudTemplateSendForDevice } from "./cloud-api/cloud-template-send.service";
 import { buildDueReminderCloudComponents } from "./due-reminder-cloud-components";
+import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
 import * as promotionService from "./promotion";
 import * as messageTemplate from "./message-template";
 
 const QR_KEY_PREFIX = "whatsapp:account:qr:";
 const QR_TTL_SECONDS = 120;
+const MAX_DUE_REMINDER_PDF_BYTES = 10 * 1024 * 1024;
+const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
+const dueReminderObjectKey = (organizationId: string, storeId: string, accountId: string, customerId: string, saleId?: string) =>
+    `whatsapp-due-reminders/${organizationId}/${storeId}/${accountId}/${customerId}/${saleId ?? "statement"}.pdf`;
 type StoreScope =
     | { error: string; code: 404 }
     | { organization: Awaited<ReturnType<typeof organizationRepository.getOrganizationByIdForUser>>; store: Awaited<ReturnType<typeof organizationRepository.getStoreById>> };
@@ -893,38 +901,72 @@ const queueDueReminderForStore = async (
         const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "due_reminder", defaultTemplate.id);
         if (!binding) return { status: "error", message: "No approved Cloud due-reminder template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
         const values = getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks);
-        let componentParameters;
+        const hasDocumentHeader = binding.asset.components.some(component => {
+            if (!component || typeof component !== "object" || Array.isArray(component)) return false;
+            const value = component as Record<string, unknown>;
+            return String(value.type ?? "").toLowerCase() === "header" && String(value.format ?? "").toLowerCase() === "document";
+        });
+        let attachmentStorageKey: string | null = null;
+        let documentLink: string | null = null;
         try {
-            componentParameters = buildDueReminderCloudComponents(binding.asset.components, defaultTemplate.body, values, binding.binding.variableMapping);
+            if (hasDocumentHeader) {
+                const bucket = privateBucket();
+                if (!bucket) return { status: "error", message: "Private media storage is not configured for due reminder PDFs", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+                const organization = await organizationRepository.getOrganizationById(organizationId);
+                if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+                const sale = saleId ? await invoiceService.loadSaleDetail(organizationId, storeId, saleId) : null;
+                if (saleId && !sale) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
+                const pdf = sale
+                    ? await renderSalePdf(sale, {
+                        organizationName: organization.name,
+                        organizationTagline: organization.tagline,
+                        storeName: store.name,
+                        storeAddress: store.address,
+                    })
+                    : await renderDueReminderPdf(customer, reminderSales, {
+                        organizationName: organization.name,
+                        storeName: store.name,
+                        storeAddress: store.address,
+                    });
+                if (pdf.byteLength > MAX_DUE_REMINDER_PDF_BYTES) return { status: "error", message: "Due reminder PDF is too large to send", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+                attachmentStorageKey = dueReminderObjectKey(organizationId, storeId, account.id, customerId, saleId);
+                await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
+                documentLink = await storage.generateSignedUrl(bucket, attachmentStorageKey, cloudMediaUrlTtlSeconds());
+            }
+            const componentParameters = buildDueReminderCloudComponents(binding.asset.components, defaultTemplate.body, values, binding.binding.variableMapping, documentLink);
+            const window = new Date().toISOString().slice(0, 10);
+            const fingerprint = createHash("sha256").update(JSON.stringify({
+                organizationId,
+                storeId,
+                customerId,
+                sales: reminderSales.map(sale => ({ id: sale.id, dueTotal: String(sale.dueTotal ?? "0") })).sort((a, b) => a.id.localeCompare(b.id)),
+                window,
+            })).digest("hex");
+            const idempotencyKey = saleId ? `due-reminder:${saleId}:${window}` : `due-reminder:${fingerprint}`;
+            const enqueue = userId
+                ? enqueueCloudTemplateSend(userId, organizationId, {
+                    storeId, accountId: account.id, customerId, saleId: saleId ?? null,
+                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
+                })
+                : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
+                    storeId, accountId: account.id, customerId, saleId: saleId ?? null,
+                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
+                });
+            const queued = await enqueue;
+            if (queued.status === "error" || !queued.data) {
+                if (attachmentStorageKey) await storage.deleteObject(privateBucket(), attachmentStorageKey).catch(() => undefined);
+                return queued as ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
+            }
+            return {
+                status: "success",
+                message: "Due reminder queued for WhatsApp",
+                data: { customerId, saleId: saleId ?? null, ...queued.data } as WhatsAppReminderQueueResponseDTO,
+                code: STATUS_CODES.CREATED,
+            };
         } catch (error) {
+            if (attachmentStorageKey) await storage.deleteObject(privateBucket(), attachmentStorageKey).catch(() => undefined);
             return { status: "error", message: error instanceof Error ? error.message : "Cloud due-reminder template variables are invalid", data: null, code: STATUS_CODES.BAD_REQUEST };
         }
-        const window = new Date().toISOString().slice(0, 10);
-        const fingerprint = createHash("sha256").update(JSON.stringify({
-            organizationId,
-            storeId,
-            customerId,
-            sales: reminderSales.map(sale => ({ id: sale.id, dueTotal: String(sale.dueTotal ?? "0") })).sort((a, b) => a.id.localeCompare(b.id)),
-            window,
-        })).digest("hex");
-        const idempotencyKey = saleId ? `due-reminder:${saleId}:${window}` : `due-reminder:${fingerprint}`;
-        const enqueue = userId
-            ? enqueueCloudTemplateSend(userId, organizationId, {
-                storeId, accountId: account.id, customerId, saleId: saleId ?? null,
-                bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
-            })
-            : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
-                storeId, accountId: account.id, customerId, saleId: saleId ?? null,
-                bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
-            });
-        const queued = await enqueue;
-        if (queued.status === "error" || !queued.data) return queued as ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
-        return {
-            status: "success",
-            message: "Due reminder queued for WhatsApp",
-            data: { customerId, saleId: saleId ?? null, ...queued.data } as WhatsAppReminderQueueResponseDTO,
-            code: STATUS_CODES.CREATED,
-        };
     }
     try {
         const queued = await repository.createCustomerTextOutbox({

@@ -159,7 +159,15 @@ export const WhatsAppCreateCloudTemplateSubmissionSchema = z.object({
     languageCode: z.string().trim().regex(/^[A-Za-z]{2,10}(?:[_-][A-Za-z0-9]{2,10})*$/),
     components: z.array(z.unknown()).max(20),
     sampleValues: z.record(z.string(), z.unknown()).default({}),
+    headerSampleBase64: z.string().min(1).max(14_000_000).optional(),
+    headerSampleFileName: z.string().trim().min(1).max(255).optional(),
+    headerSampleMimeType: z.string().trim().regex(/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i).max(255).optional(),
     idempotencyKey: z.string().trim().min(1).max(255),
+}).superRefine((data, context) => {
+    const fields = [data.headerSampleBase64, data.headerSampleFileName, data.headerSampleMimeType];
+    if (fields.some(Boolean) && fields.some(value => !value)) {
+        context.addIssue({ code: "custom", path: ["headerSampleBase64"], message: "Provide all header sample media fields or omit the sample" });
+    }
 });
 
 export const WhatsAppUseCloudTemplateForStoreSchema = z.object({

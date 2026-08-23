@@ -25,16 +25,24 @@ export const buildDueReminderCloudComponents = (
   localTemplateBody: string,
   values: Record<string, string>,
   variableMapping: CloudTemplateVariableMapping,
+  documentLink: string | null = null,
 ): CloudTemplateComponentInput[] => {
   const mapping = validateCloudTemplateVariableMapping(variableMapping, localTemplateBody, definitions);
   const inputs: CloudTemplateComponentInput[] = [];
+  let hasDocumentHeader = false;
 
   for (const definition of definitions) {
     if (!isRecord(definition)) continue;
     const type = typeof definition.type === "string" ? definition.type.toLowerCase() : "";
     const format = typeof definition.format === "string" ? definition.format.toLowerCase() : "";
-    if (type === "header" && ["image", "video", "document"].includes(format)) {
-      throw new Error("Cloud due-reminder templates cannot use media headers");
+    if (type === "header" && format === "document") {
+      if (!documentLink) throw new Error("Cloud due-reminder template requires a PDF invoice");
+      hasDocumentHeader = true;
+      inputs.push({ type: "header", parameters: [{ type: "document", document: { link: documentLink } }] });
+      continue;
+    }
+    if (type === "header" && ["image", "video"].includes(format)) {
+      throw new Error("Cloud due-reminder templates only support document headers");
     }
     if (type === "header" || type === "body") {
       const parameters = textParameters(definition.text, type, mapping, values);
@@ -50,5 +58,6 @@ export const buildDueReminderCloudComponents = (
       });
     }
   }
+  if (documentLink && !hasDocumentHeader) throw new Error("A PDF can only be sent with an approved document-header template");
   return inputs;
 };

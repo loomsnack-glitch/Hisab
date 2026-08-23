@@ -24,12 +24,23 @@ describe("Cloud due-reminder template components", () => {
     ]);
   });
 
+  test("adds the dynamic PDF for a document header", () => {
+    const components = buildDueReminderCloudComponents(
+      [{ type: "header", format: "DOCUMENT" }, { type: "body", text: "Reminder for {{1}}" }],
+      "Reminder for {{customer_name}}",
+      { customer_name: "Asha" },
+      { "body:1": "customer_name" },
+      "https://storage.example.test/due.pdf",
+    );
+    expect(components[0]).toEqual({ type: "header", parameters: [{ type: "document", document: { link: "https://storage.example.test/due.pdf" } }] });
+  });
+
   test("rejects unsupported media headers", () => {
     expect(() => buildDueReminderCloudComponents(
       [{ type: "header", format: "IMAGE" }],
       "Reminder",
       {},
       {},
-    )).toThrow("cannot use media headers");
+    )).toThrow("only support document headers");
   });
 });

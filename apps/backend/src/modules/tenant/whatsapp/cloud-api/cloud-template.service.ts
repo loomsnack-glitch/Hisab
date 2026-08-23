@@ -37,6 +37,7 @@ import {
 
 type CloudTemplateClient = {
   getTemplates: (wabaId: string) => Promise<{ data?: Array<Record<string, unknown>> }>;
+  uploadMedia?: (phoneNumberId: string, media: { body: Uint8Array; mimeType: string; fileName: string }) => Promise<{ id: string }>;
   createMessageTemplate?: (wabaId: string, definition: {
     name: string;
     language: string;
@@ -146,6 +147,9 @@ const safeSubmissionError = (error: unknown): { code: string; message: string } 
     "Cloud template button is invalid",
     "Cloud template button URL is invalid",
     "Cloud template button URL must use HTTPS",
+    "Cloud template header is invalid",
+    "Cloud template header sample is required",
+    "Cloud template header sample must be",
     "Cloud template must contain exactly one body",
   ].some(prefix => error.message.startsWith(prefix))
     ? error.message
@@ -182,6 +186,14 @@ const validateSubmissionComponents = (components: unknown[], sampleValues: Recor
         placeholders.add(match[1]!);
       }
     }
+    if (type === "HEADER") {
+      const format = typeof value.format === "string" ? value.format.trim().toUpperCase() : "";
+      if (!["TEXT", "IMAGE", "DOCUMENT"].includes(format)) throw new Error("Cloud template header is invalid");
+      if (format === "TEXT" && (typeof value.text !== "string" || !value.text.trim() || value.text.length > 60)) {
+        throw new Error("Cloud template header is invalid");
+      }
+      if (format !== "TEXT" && value.text !== undefined) throw new Error("Cloud template header is invalid");
+    }
     if (type === "FOOTER" && (typeof value.text !== "string" || !value.text.trim() || value.text.length > 60)) throw new Error("Cloud template footer text is invalid");
     if (type === "BUTTONS") {
       if (!Array.isArray(value.buttons) || value.buttons.length < 1 || value.buttons.length > 3) throw new Error("Cloud template buttons are invalid");
@@ -216,6 +228,28 @@ const providerComponents = (components: Array<Record<string, unknown>>, sampleVa
   }
   return component;
 });
+
+const providerComponentsWithHeaderSample = async (
+  client: CloudTemplateClient,
+  phoneNumberId: string | null,
+  components: Array<Record<string, unknown>>,
+  sample: { base64?: string; fileName?: string; mimeType?: string },
+): Promise<Array<Record<string, unknown>>> => {
+  const header = components.find(component => String(component.type).toUpperCase() === "HEADER");
+  const format = typeof header?.format === "string" ? header.format.toUpperCase() : "";
+  if (format !== "IMAGE" && format !== "DOCUMENT") return components;
+  if (!phoneNumberId || !client.uploadMedia) throw new Error("Cloud template header media upload is unavailable");
+  if (!sample.base64 || !sample.fileName || !sample.mimeType) throw new Error("Cloud template header sample is required");
+  const mimeType = sample.mimeType.trim().toLowerCase();
+  if (format === "IMAGE" && !mimeType.startsWith("image/")) throw new Error("Cloud template header sample must be an image");
+  if (format === "DOCUMENT" && mimeType !== "application/pdf") throw new Error("Cloud template header sample must be a PDF");
+  const body = Buffer.from(sample.base64, "base64");
+  if (body.byteLength === 0 || body.byteLength > 10 * 1024 * 1024) throw new Error("Cloud template header sample must be 10 MB or smaller");
+  const uploaded = await client.uploadMedia(phoneNumberId, { body, mimeType, fileName: sample.fileName });
+  return components.map(component => String(component.type).toUpperCase() === "HEADER"
+    ? { ...component, example: { header_handle: [uploaded.id] } }
+    : component);
+};
 
 const findProviderTemplate = (
   templates: Array<Record<string, unknown>>,
@@ -298,11 +332,17 @@ export const submitCloudTemplateForAccount = async (
     let providerResponse: { id?: string; status?: string; category?: string } | null = null;
     if (!providerTemplate) {
       if (!client.createMessageTemplate) throw new Error("Cloud template creation is unavailable");
+      const componentsWithHeaderSample = await providerComponentsWithHeaderSample(
+        client,
+        account.phoneNumberId,
+        components,
+        { base64: data.headerSampleBase64, fileName: data.headerSampleFileName, mimeType: data.headerSampleMimeType },
+      );
       providerResponse = await client.createMessageTemplate(account.wabaId, {
         name: data.metaTemplateName,
         language: data.languageCode,
         category: providerCategoryFor(category),
-        components: providerComponents(components, data.sampleValues),
+        components: providerComponents(componentsWithHeaderSample, data.sampleValues),
       });
       providerTemplate = findProviderTemplate((await client.getTemplates(account.wabaId)).data ?? [], data.metaTemplateName, data.languageCode);
     }

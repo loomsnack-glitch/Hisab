@@ -43,8 +43,11 @@ import {
 import {
   AlertCircle,
   CheckCircle2,
+  Eye,
   ExternalLink,
   FileText,
+  FileType2,
+  Image as ImageIcon,
   Plus,
   RefreshCw,
   Send,
@@ -115,6 +118,20 @@ const defaultSampleValues: Record<WhatsAppMessageTemplateKind, string> = {
   due_reminder: "Customer|₹250|2|My Store",
   promotion: "Customer|My Store",
 };
+const variableHelp: Record<WhatsAppMessageTemplateKind, string[]> = {
+  bill: ["Customer name", "Bill number", "Total", "Paid", "Balance due", "Organization name", "Store name"],
+  due_reminder: ["Customer name", "Total due", "Bill count", "Store name"],
+  promotion: ["Customer name", "Store name"],
+};
+const readMediaFile = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const value = typeof reader.result === "string" ? reader.result.split(",")[1] : "";
+    value ? resolve(value) : reject(new Error("Media file could not be read"));
+  };
+  reader.onerror = () => reject(reader.error ?? new Error("Media file could not be read"));
+  reader.readAsDataURL(file);
+});
 const defaultBody = (kind: WhatsAppMessageTemplateKind): string => {
   const source =
     WHATSAPP_DEFAULT_TEMPLATE_BODIES[kind] ?? "Hello {{customer_name}}";
@@ -148,7 +165,10 @@ const WhatsAppCloudTemplateManager = ({
   const [body, setBody] = useState(defaultBody("bill"));
   const [footer, setFooter] = useState("");
   const [urlButton, setUrlButton] = useState("");
-  const [sampleValues, setSampleValues] = useState("Customer|INV-1001|₹1,250");
+  const [headerFormat, setHeaderFormat] = useState<"none" | "image" | "document">("image");
+  const [headerSample, setHeaderSample] = useState<{ base64: string; fileName: string; mimeType: string } | null>(null);
+  const [previewCardId, setPreviewCardId] = useState<string | null>(null);
+  const [sampleValues, setSampleValues] = useState(defaultSampleValues.bill);
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0];
   const businessAccountId = account?.snapshot.whatsappBusinessAccountId ?? "";
   useEffect(() => {
@@ -218,6 +238,8 @@ const WhatsAppCloudTemplateManager = ({
       category: template.category,
       status: template.status,
       reason: template.rejectionReason,
+      components: template.components,
+      sampleValues: byProviderId.get(template.metaTemplateId)?.sampleValues ?? {},
     }));
     const pending = submissions.filter(
       (item) =>
@@ -239,6 +261,8 @@ const WhatsAppCloudTemplateManager = ({
         category: item.category,
         status: item.status,
         reason: item.rejectionReason ?? item.lastErrorMessage,
+        components: item.requestedComponents,
+        sampleValues: item.sampleValues,
       })),
     ];
   }, [cloudTemplates, submissions]);
@@ -286,6 +310,7 @@ const WhatsAppCloudTemplateManager = ({
         metaTemplateName: slugify(friendlyName),
         languageCode: languageCode.trim(),
         components: [
+          ...(headerFormat !== "none" ? [{ type: "HEADER", format: headerFormat.toUpperCase() }] : []),
           { type: "BODY", text: body.trim() },
           ...(footer.trim() ? [{ type: "FOOTER", text: footer.trim() }] : []),
           ...(urlButton.trim()
@@ -308,6 +333,13 @@ const WhatsAppCloudTemplateManager = ({
             .split("|")
             .map((value, index) => [String(index + 1), value.trim()]),
         ),
+        ...(headerSample
+          ? {
+              headerSampleBase64: headerSample.base64,
+              headerSampleFileName: headerSample.fileName,
+              headerSampleMimeType: headerSample.mimeType,
+            }
+          : {}),
         idempotencyKey: `${businessAccountId}:${slugify(friendlyName)}:${languageCode.trim()}:${kind}`,
       }),
     onSuccess: (response) => {
@@ -342,6 +374,8 @@ const WhatsAppCloudTemplateManager = ({
     setBody(defaultBody("bill"));
     setFooter("");
     setUrlButton("");
+    setHeaderFormat("document");
+    setHeaderSample(null);
     setSampleValues(defaultSampleValues.bill);
     setOpen(true);
   };
@@ -364,6 +398,13 @@ const WhatsAppCloudTemplateManager = ({
         String((component as Record<string, unknown>).type).toUpperCase() ===
           "FOOTER",
     ) as Record<string, unknown> | undefined;
+    const headerComponent = submission.requestedComponents.find(
+      (component) =>
+        component &&
+        typeof component === "object" &&
+        !Array.isArray(component) &&
+        String((component as Record<string, unknown>).type).toUpperCase() === "HEADER",
+    ) as Record<string, unknown> | undefined;
     setKind(submission.kind);
     setFriendlyName(`${submission.friendlyName} copy`);
     setLanguageCode(submission.languageCode);
@@ -376,6 +417,9 @@ const WhatsAppCloudTemplateManager = ({
       typeof footerComponent?.text === "string" ? footerComponent.text : "",
     );
     setUrlButton("");
+    const header = String(headerComponent?.format ?? "").toLowerCase();
+    setHeaderFormat(header === "image" || header === "document" ? header : "none");
+    setHeaderSample(null);
     setSampleValues(
       Object.keys(submission.sampleValues)
         .sort((a, b) => Number(a) - Number(b))
@@ -385,6 +429,14 @@ const WhatsAppCloudTemplateManager = ({
     setOpen(true);
   };
   const selectedKind = kinds.find((item) => item.value === kind)!;
+  const placeholderIndexes = [...new Set([...body.matchAll(/\{\{(\d+)\}\}/g)].map((match) => match[1]!))].sort((a, b) => Number(a) - Number(b));
+  const hasUnsupportedPlaceholder = placeholderIndexes.some((index) => !variableHelp[kind][Number(index) - 1]);
+  const updateSampleValue = (index: string, value: string) => {
+    const values = sampleValues.split("|");
+    values[Number(index) - 1] = value;
+    setSampleValues(values.join("|"));
+  };
+  const previewCard = cards.find((card) => card.id === previewCardId) ?? null;
   const approvedTemplates = cards.filter(
     (card) => card.status === "approved" && card.cloudTemplateId,
   );
@@ -559,21 +611,20 @@ const WhatsAppCloudTemplateManager = ({
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
-                  {card.status === "rejected" || card.status === "failed" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 rounded-lg text-xs"
-                      onClick={() => duplicateSubmission(card.submissionId ?? card.id)}
-                    >
-                      Duplicate
+                  <div className="flex justify-end gap-1.5">
+                    <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg px-2 text-xs" onClick={() => setPreviewCardId(card.id)}>
+                      <Eye className="size-3.5" /> Preview
                     </Button>
-                  ) : card.status === "pending" || card.status === "submitting" ? (
-                    <span className="text-xs text-muted-foreground">Awaiting Meta</span>
-                  ) : card.status === "approved" ? (
-                    <span className="text-xs text-emerald-700">Ready to use</span>
-                  ) : null}
+                    {card.status === "rejected" || card.status === "failed" ? (
+                      <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-xs" onClick={() => duplicateSubmission(card.submissionId ?? card.id)}>
+                        Duplicate
+                      </Button>
+                    ) : card.status === "pending" || card.status === "submitting" ? (
+                      <span className="self-center text-xs text-muted-foreground">Awaiting Meta</span>
+                    ) : card.status === "approved" ? (
+                      <span className="self-center text-xs text-emerald-700">Ready</span>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -640,6 +691,38 @@ const WhatsAppCloudTemplateManager = ({
           </p>
         ) : null}
       </section>
+      <Dialog open={Boolean(previewCard)} onOpenChange={(value) => { if (!value) setPreviewCardId(null); }}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>{previewCard?.name ?? "Template preview"}</DialogTitle>
+            <DialogDescription>
+              {previewCard ? `${statusLabels[previewCard.status] ?? previewCard.status} · ${previewCard.language}` : "Preview"}
+            </DialogDescription>
+          </DialogHeader>
+          {previewCard ? (
+            <div className="rounded-2xl bg-[#e5f6df] p-3 shadow-inner">
+              <div className="space-y-2 rounded-xl bg-white p-3 text-sm text-slate-900 shadow-sm">
+                {Array.isArray(previewCard.components) ? previewCard.components.map((component, index) => {
+                  if (!component || typeof component !== "object" || Array.isArray(component)) return null;
+                  const value = component as Record<string, unknown>;
+                  const type = String(value.type ?? "").toLowerCase();
+                  const format = String(value.format ?? "").toLowerCase();
+                  if (type === "header" && format === "image") return <div key={index} className="flex h-28 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-500"><ImageIcon className="mr-2 size-5" />Image header</div>;
+                  if (type === "header" && format === "document") return <div key={index} className="flex items-center gap-2 rounded-lg bg-slate-100 p-3 text-xs text-slate-600"><FileType2 className="size-5" />PDF invoice attached when sent</div>;
+                  if (type === "header" || type === "body" || type === "footer") {
+                    const text = typeof value.text === "string" ? value.text : "";
+                    const rendered = text.replace(/\{\{(\d+)\}\}/g, (_, number: string) => String(previewCard.sampleValues[number] ?? `Example ${number}`));
+                    return <p key={index} className={type === "footer" ? "text-xs text-slate-500" : "whitespace-pre-wrap"}>{rendered}</p>;
+                  }
+                  if (type === "buttons") return <div key={index} className="space-y-1 border-t pt-2">{Array.isArray(value.buttons) ? value.buttons.map((button, buttonIndex) => <div key={buttonIndex} className="rounded-lg border border-emerald-200 px-3 py-2 text-center text-xs font-medium text-emerald-700">{button && typeof button === "object" && !Array.isArray(button) ? String((button as Record<string, unknown>).text ?? "Button") : "Button"}</div>) : null}</div>;
+                  return null;
+                }) : <p className="text-sm text-slate-500">Template content is not available for preview.</p>}
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter><Button type="button" variant="outline" className="rounded-xl" onClick={() => setPreviewCardId(null)}>Close</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
@@ -665,6 +748,8 @@ const WhatsAppCloudTemplateManager = ({
                     setKind(next);
                     setBody(defaultBody(next));
                     setSampleValues(defaultSampleValues[next]);
+                    setHeaderFormat(next === "promotion" ? "image" : "document");
+                    setHeaderSample(null);
                   }}
                 >
                   <SelectTrigger
@@ -716,6 +801,53 @@ const WhatsAppCloudTemplateManager = ({
                 Meta-safe name: {slugify(friendlyName)}
               </p>
             </div>
+            <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div>
+                <p className="text-xs font-semibold">Header media</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Promotion templates can use an image. Bill and due-reminder templates can use a PDF invoice header.
+                </p>
+              </div>
+              <Select
+                value={headerFormat}
+                onValueChange={(value) => {
+                  setHeaderFormat(value as "none" | "image" | "document");
+                  setHeaderSample(null);
+                }}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue>{headerFormat === "none" ? "No header" : headerFormat === "image" ? "Image header" : "PDF document header"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No header</SelectItem>
+                  <SelectItem value="image" disabled={kind !== "promotion"}>Image header · Promotion</SelectItem>
+                  <SelectItem value="document" disabled={kind === "promotion"}>PDF header · Bill or due reminder</SelectItem>
+                </SelectContent>
+              </Select>
+              {headerFormat !== "none" ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium" htmlFor="cloud-template-header-sample">Sample media for Meta approval</label>
+                  <Input
+                    id="cloud-template-header-sample"
+                    type="file"
+                    accept={headerFormat === "image" ? "image/*" : "application/pdf"}
+                    className="rounded-xl bg-background"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setHeaderSample({ base64: await readMediaFile(file), fileName: file.name, mimeType: file.type });
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Media file could not be read");
+                      }
+                    }}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {headerSample ? `${headerSample.fileName} selected` : "Required when submitting an image or PDF header."}
+                  </p>
+                </div>
+              ) : null}
+            </div>
             <div className="space-y-1.5">
               <label
                 className="text-xs font-medium"
@@ -734,6 +866,18 @@ const WhatsAppCloudTemplateManager = ({
                 Use numbered placeholders such as {"{{1}}"}. Sample values are
                 used for the preview.
               </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {variableHelp[kind].map((label, index) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="rounded-full border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted"
+                    onClick={() => setBody((current) => `${current}${current.endsWith(" ") || !current ? "" : " "}{{${index + 1}}}`)}
+                  >
+                    {`{{${index + 1}}}`} {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -773,23 +917,20 @@ const WhatsAppCloudTemplateManager = ({
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <label
-                className="text-xs font-medium"
-                htmlFor="cloud-template-samples"
-              >
-                Preview values
-              </label>
-              <Input
-                id="cloud-template-samples"
-                className="rounded-xl"
-                value={sampleValues}
-                onChange={(event) => setSampleValues(event.target.value)}
-                placeholder="Customer|INV-1001|₹1,250"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Separate values with | in the same order as your placeholders.
-              </p>
+            <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div>
+                <p className="text-xs font-semibold">What will {{"{{1}}"}} mean?</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  These are approval examples. Ganatri replaces them with live customer, bill, due, and Store values when sending.
+                </p>
+              </div>
+              {placeholderIndexes.length > 0 ? placeholderIndexes.map((index) => (
+                <div key={index} className="grid gap-1 sm:grid-cols-[7rem_minmax(0,1fr)] sm:items-center">
+                  <label className="text-xs font-medium" htmlFor={`cloud-template-sample-${index}`}>{`{{${index}}}`} · {variableHelp[kind][Number(index) - 1] ?? "Value"}</label>
+                  <Input id={`cloud-template-sample-${index}`} className="rounded-xl bg-background" value={sampleValues.split("|")[Number(index) - 1] ?? ""} onChange={(event) => updateSampleValue(index, event.target.value)} placeholder="Example value" />
+                </div>
+              )) : <p className="text-[11px] text-muted-foreground">Add a variable to provide Meta with an example value.</p>}
+              {hasUnsupportedPlaceholder ? <p className="text-[11px] text-destructive">This message type supports only the listed variable slots.</p> : null}
             </div>
             <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
               <p className="mb-2 text-xs font-semibold">Preview</p>
@@ -822,6 +963,8 @@ const WhatsAppCloudTemplateManager = ({
                 !businessAccountId ||
                 !friendlyName.trim() ||
                 !body.trim() ||
+                hasUnsupportedPlaceholder ||
+                (headerFormat !== "none" && !headerSample) ||
                 (Boolean(urlButton.trim()) &&
                   !/^https:\/\//.test(urlButton.trim()))
               }

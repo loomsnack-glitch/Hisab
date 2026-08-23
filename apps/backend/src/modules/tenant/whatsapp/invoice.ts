@@ -104,7 +104,7 @@ const queueCloudInvoiceForStore = async (
   }
 };
 
-const loadSaleDetail = async (
+export const loadSaleDetail = async (
   organizationId: string,
   storeId: string,
   saleId: string,
