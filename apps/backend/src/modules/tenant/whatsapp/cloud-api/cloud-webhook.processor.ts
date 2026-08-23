@@ -2,6 +2,7 @@ import type { WhatsAppWorkerMessageEventJSON } from "@repo/types";
 import {
   type CloudDeferredEvent,
   type CloudNormalizedEvent,
+  type CloudNormalizedTemplateStatusEvent,
   normalizeCloudWebhookReceipt,
 } from "./cloud-webhook.normalizer";
 import type {
@@ -33,6 +34,7 @@ export type CloudWebhookProcessorDependencies = {
     failureMessage: string | null,
   ) => Promise<CloudMessageStatusUpdateResult>;
   resolveAccount: (wabaId: string, phoneNumberId: string) => Promise<string | null>;
+  updateTemplateStatus: (event: CloudNormalizedTemplateStatusEvent) => Promise<void>;
   complete: (
     event: Pick<CloudWebhookEventClaim, "id" | "leaseOwner">,
     ignoredDetail?: string,
@@ -73,6 +75,19 @@ const dependencies: CloudWebhookProcessorDependencies = {
   resolveAccount: async (wabaId, phoneNumberId) => {
     const { findCloudAccountId } = await import("./cloud-webhook.repository");
     return findCloudAccountId(wabaId, phoneNumberId);
+  },
+  updateTemplateStatus: async event => {
+    const { applyCloudTemplateProviderStatus } = await import("./cloud-template-submission.repository");
+    await applyCloudTemplateProviderStatus({
+      wabaId: event.wabaId,
+      providerTemplateId: event.providerTemplateId,
+      templateName: event.templateName,
+      languageCode: event.languageCode,
+      status: event.status,
+      category: event.category,
+      reason: event.reason,
+      occurredAt: event.occurredAt,
+    });
   },
   complete: async (...args) => {
     const { completeCloudWebhookEvent } = await import("./cloud-webhook.repository");
@@ -156,6 +171,11 @@ export const processCloudWebhookEvent = async (
   try {
     let processed = 0;
     for (const event of actionable) {
+      if (event.kind === "template_status") {
+        await deps.updateTemplateStatus(event);
+        processed += 1;
+        continue;
+      }
       const accountId = await deps.resolveAccount(
         event.wabaId,
         event.phoneNumberId,

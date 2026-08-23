@@ -335,6 +335,20 @@ Scope:
   is unambiguous;
 - create or update the Store binding only after approval and mapping success.
 
+Progress evidence:
+
+- [x] WABA-scoped `message_template_status_update` events are normalized
+  without requiring phone metadata.
+- [x] Approval, rejection, pause, disabled, and pending states are mapped to
+  the submission/provider asset lifecycle.
+- [x] Template status processing bypasses message-account resolution and
+  updates assets/submissions by WABA and provider identity.
+- [x] Normalizer and processor focused tests pass: 18 tests, 0 failures.
+
+Remaining in this phase: authorized create orchestration, idempotent provider
+submission, full asset reconciliation, automatic mapping, and approval-gated
+binding.
+
 Exit criteria:
 
 - authorized users can create only within their Organization;

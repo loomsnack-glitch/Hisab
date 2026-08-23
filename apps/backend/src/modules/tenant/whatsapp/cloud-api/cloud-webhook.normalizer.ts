@@ -41,6 +41,18 @@ export type CloudNormalizedStatusEvent = {
   failureMessage: string | null;
 };
 
+export type CloudNormalizedTemplateStatusEvent = {
+  kind: "template_status";
+  wabaId: string;
+  providerTemplateId: string | null;
+  templateName: string | null;
+  languageCode: string | null;
+  status: "pending" | "approved" | "rejected" | "paused" | "disabled";
+  category: "marketing" | "utility" | "authentication" | null;
+  reason: string | null;
+  occurredAt: string;
+};
+
 export type CloudDeferredEvent = {
   kind: "deferred";
   wabaId: string | null;
@@ -55,6 +67,7 @@ export type CloudDeferredEvent = {
 export type CloudNormalizedEvent =
   | CloudNormalizedMessageEvent
   | CloudNormalizedStatusEvent
+  | CloudNormalizedTemplateStatusEvent
   | CloudDeferredEvent;
 
 export type CloudMessageStatusSnapshot = {
@@ -353,10 +366,66 @@ const normalizeStatus = (
   }
 };
 
+const normalizeTemplateStatus = (
+  entryId: string,
+  value: JsonRecord,
+): CloudNormalizedEvent => {
+  const providerTemplateId = providerMessageIdentifier(
+    value.message_template_id ?? value.id,
+  );
+  const templateName = boundedString(
+    value.message_template_name ?? value.name,
+    512,
+  );
+  const languageCode = boundedString(
+    value.message_template_language ?? value.language,
+    64,
+  );
+  const rawStatus = stringValue(value.event ?? value.status)?.toLowerCase();
+  const status = rawStatus === "approved"
+    ? "approved"
+    : rawStatus === "rejected"
+      ? "rejected"
+      : rawStatus === "paused"
+        ? "paused"
+        : rawStatus === "disabled" || rawStatus === "deleted"
+          ? "disabled"
+          : rawStatus === "pending" || rawStatus === "pending_review"
+            ? "pending"
+            : null;
+  const categoryValue = stringValue(value.category)?.toLowerCase();
+  const category = categoryValue === "marketing" || categoryValue === "utility" || categoryValue === "authentication"
+    ? categoryValue
+    : null;
+  if (!status || (!providerTemplateId && !templateName)) {
+    return deferred(
+      { wabaId: entryId, phoneNumberId: null },
+      "Template status is missing an identity or supported status",
+      { reason: "unsupported_status", providerMessageId: providerTemplateId },
+    );
+  }
+  return {
+    kind: "template_status",
+    wabaId: entryId,
+    providerTemplateId,
+    templateName,
+    languageCode,
+    status,
+    category,
+    reason: boundedString(value.reason ?? value.rejection_reason, 1_000),
+    occurredAt: typeof value.timestamp === "string" && /^\d+$/.test(value.timestamp)
+      ? timestampToIso(value.timestamp)
+      : new Date().toISOString(),
+  };
+};
+
 const eventKey = (event: CloudNormalizedEvent): string => {
   if (event.kind === "message") return `message:${event.providerMessageId}`;
   if (event.kind === "status")
     return `status:${event.providerMessageId}:${event.status}:${event.occurredAt}`;
+  if (event.kind === "template_status") {
+    return `template-status:${event.providerTemplateId ?? event.templateName ?? "unknown"}:${event.status}:${event.occurredAt}`;
+  }
   return `deferred:${event.providerMessageId ?? "unknown"}:${event.reason}:${event.detail}`;
 };
 
@@ -451,6 +520,10 @@ export const normalizeCloudWebhookReceipt = (
                 ),
           );
         }
+      }
+      const field = stringValue(change.field);
+      if (field === "message_template_status_update" || (value.event !== undefined && (value.message_template_id !== undefined || value.message_template_name !== undefined))) {
+        addEvent(normalizeTemplateStatus(entryId, value));
       }
     }
   }

@@ -132,3 +132,66 @@ export const listCloudTemplateSubmissions = async (
       `;
   return rows.map((row: Record<string, unknown>) => mapSubmission(row));
 };
+
+export type CloudTemplateProviderStatusUpdate = {
+  wabaId: string;
+  providerTemplateId: string | null;
+  templateName: string | null;
+  languageCode: string | null;
+  status: "pending" | "approved" | "rejected" | "paused" | "disabled";
+  category: "marketing" | "utility" | "authentication" | null;
+  reason: string | null;
+  occurredAt: string;
+};
+
+export const applyCloudTemplateProviderStatus = async (
+  input: CloudTemplateProviderStatusUpdate,
+): Promise<void> => pg.begin(async tx => {
+  const category = input.category;
+  const templateId = input.providerTemplateId;
+  const templateName = input.templateName;
+  const languageCode = input.languageCode;
+  const reason = input.status === "rejected" ? input.reason : null;
+
+  await tx`
+    UPDATE whatsapp_cloud_templates assets
+    SET status = ${input.status},
+        category = COALESCE(${category}, assets.category),
+        rejection_reason = ${reason},
+        provider_updated_at = ${input.occurredAt},
+        last_synced_at = NOW(),
+        updated_at = NOW()
+    FROM whatsapp_business_accounts business
+    WHERE business.id = assets.whatsapp_business_account_id
+      AND business.waba_id = ${input.wabaId}
+      AND (
+        (${templateId}::varchar IS NOT NULL AND assets.meta_template_id = ${templateId})
+        OR (
+          ${templateId}::varchar IS NULL
+          AND assets.name = ${templateName}
+          AND assets.language_code = ${languageCode}
+        )
+      )
+  `;
+
+  await tx`
+    UPDATE whatsapp_cloud_template_submissions submissions
+    SET status = ${input.status},
+        meta_template_id = COALESCE(${templateId}, submissions.meta_template_id),
+        category = COALESCE(${category}, submissions.category),
+        rejection_reason = ${reason},
+        provider_updated_at = ${input.occurredAt},
+        updated_at = NOW()
+    FROM whatsapp_business_accounts business
+    WHERE business.id = submissions.whatsapp_business_account_id
+      AND business.waba_id = ${input.wabaId}
+      AND (
+        (${templateId}::varchar IS NOT NULL AND submissions.meta_template_id = ${templateId})
+        OR (
+          ${templateId}::varchar IS NULL
+          AND submissions.meta_template_name = ${templateName}
+          AND submissions.language_code = ${languageCode}
+        )
+      )
+  `;
+});

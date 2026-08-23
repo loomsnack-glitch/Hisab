@@ -218,6 +218,43 @@ describe("WhatsApp Cloud webhook normalization", () => {
     });
   });
 
+  test("normalizes WABA-scoped template approval events without phone metadata", () => {
+    const [event] = normalizeCloudWebhookReceipt(
+      receiptFrom({
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            id: "waba-1",
+            changes: [
+              {
+                field: "message_template_status_update",
+                value: {
+                  event: "APPROVED",
+                  message_template_id: "meta-template-1",
+                  message_template_name: "bill_receipt",
+                  message_template_language: "en_US",
+                  category: "UTILITY",
+                  timestamp: "1760000000",
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(event).toMatchObject({
+      kind: "template_status",
+      wabaId: "waba-1",
+      providerTemplateId: "meta-template-1",
+      templateName: "bill_receipt",
+      languageCode: "en_US",
+      status: "approved",
+      category: "utility",
+      occurredAt: "2025-10-09T08:53:20.000Z",
+    });
+  });
+
   test("does not silently accept malformed provider identifiers", () => {
     const [event] = normalizeCloudWebhookReceipt(
       receiptFrom({
