@@ -27,6 +27,7 @@ import {
   createCloudTemplateSubmission,
   getCloudTemplateSubmission,
   updateCloudTemplateSubmission,
+  listCloudTemplateSubmissions,
   type CloudTemplateSubmissionInput,
 } from "./cloud-template-submission.repository";
 
@@ -52,6 +53,7 @@ type CloudTemplateServiceDependencies = {
   createSubmission: typeof createCloudTemplateSubmission;
   getSubmission: typeof getCloudTemplateSubmission;
   updateSubmission: typeof updateCloudTemplateSubmission;
+  listSubmissions: typeof listCloudTemplateSubmissions;
   isAccountAssignedToStore: typeof isCloudAccountAssignedToStore;
   organizationAccess: (organizationId: string, userId: string) => Promise<boolean>;
 };
@@ -68,6 +70,7 @@ const dependencies = (): CloudTemplateServiceDependencies => ({
   createSubmission: createCloudTemplateSubmission,
   getSubmission: getCloudTemplateSubmission,
   updateSubmission: updateCloudTemplateSubmission,
+  listSubmissions: listCloudTemplateSubmissions,
   isAccountAssignedToStore: isCloudAccountAssignedToStore,
   organizationAccess: async (organizationId, userId) => Boolean(await organizationRepository.getOrganizationByIdForUser(organizationId, userId)),
 });
@@ -129,22 +132,56 @@ const safeSubmissionError = (error: unknown): { code: string; message: string } 
   return { code: code.slice(0, 100), message: message.slice(0, 1_000) };
 };
 
-const validateSubmissionComponents = (components: unknown[]): Array<Record<string, unknown>> => {
+const validateSubmissionComponents = (components: unknown[], sampleValues: Record<string, unknown>): Array<Record<string, unknown>> => {
   if (!Array.isArray(components) || components.length === 0 || components.length > 20) {
     throw new Error("Cloud template components are invalid");
   }
+  let bodyCount = 0;
+  const placeholders = new Set<string>();
   const normalized = components.map(component => {
     if (!component || typeof component !== "object" || Array.isArray(component)) throw new Error("Cloud template component is invalid");
     const value = { ...(component as Record<string, unknown>) };
     const type = typeof value.type === "string" ? value.type.trim().toUpperCase() : "";
     if (!["HEADER", "BODY", "FOOTER", "BUTTONS"].includes(type)) throw new Error("Cloud template component type is unsupported");
+    if (type === "BODY") {
+      bodyCount += 1;
+      if (typeof value.text !== "string" || !value.text.trim() || value.text.length > 4_096) throw new Error("Cloud template body text is invalid");
+      for (const match of value.text.matchAll(/\{\{(\d+)\}\}/g)) placeholders.add(match[1]!);
+    }
+    if (type === "FOOTER" && (typeof value.text !== "string" || !value.text.trim() || value.text.length > 60)) throw new Error("Cloud template footer text is invalid");
+    if (type === "BUTTONS") {
+      if (!Array.isArray(value.buttons) || value.buttons.length < 1 || value.buttons.length > 3) throw new Error("Cloud template buttons are invalid");
+      for (const button of value.buttons) {
+        if (!button || typeof button !== "object" || Array.isArray(button)) throw new Error("Cloud template button is invalid");
+        const buttonValue = button as Record<string, unknown>;
+        const buttonType = typeof buttonValue.type === "string" ? buttonValue.type.trim().toUpperCase() : "";
+        if (!["URL", "QUICK_REPLY"].includes(buttonType) || typeof buttonValue.text !== "string" || !String(buttonValue.text).trim()) throw new Error("Cloud template button is invalid");
+        if (buttonType === "URL") {
+          if (typeof buttonValue.url !== "string") throw new Error("Cloud template button URL is invalid");
+          try { if (new URL(buttonValue.url).protocol !== "https:") throw new Error(); } catch { throw new Error("Cloud template button URL must use HTTPS"); }
+        }
+      }
+    }
     value.type = type;
     const serialized = JSON.stringify(value);
     if (!serialized || serialized.length > 64 * 1024) throw new Error("Cloud template component is too large");
     return value;
   });
+  if (bodyCount !== 1) throw new Error("Cloud template must contain exactly one body");
+  for (const placeholder of placeholders) {
+    if (typeof sampleValues[placeholder] !== "string" || !String(sampleValues[placeholder]).trim()) throw new Error(`Missing sample value for {{${placeholder}}}`);
+  }
   return normalized;
 };
+
+const providerComponents = (components: Array<Record<string, unknown>>, sampleValues: Record<string, unknown>): Array<Record<string, unknown>> => components.map(component => {
+  const type = String(component.type).toUpperCase();
+  if (type === "BODY" && typeof component.text === "string" && /\{\{\d+\}\}/.test(component.text)) {
+    const indexes = [...component.text.matchAll(/\{\{(\d+)\}\}/g)].map(match => match[1]!);
+    return { ...component, example: { body_text: [indexes.map(index => String(sampleValues[index]))] } };
+  }
+  return component;
+});
 
 const findProviderTemplate = (
   templates: Array<Record<string, unknown>>,
@@ -179,7 +216,7 @@ export const submitCloudTemplateForAccount = async (
     }
     const credential = await deps.getCredential(organizationId, accountId);
     if (!credential) return { status: "error", message: "WhatsApp Cloud account credential is unavailable", data: null, code: STATUS_CODES.CONFLICT };
-    const components = validateSubmissionComponents(data.components);
+    const components = validateSubmissionComponents(data.components, data.sampleValues);
     const category = categoryForKind(data.kind);
     const submissionInput: CloudTemplateSubmissionInput = {
       organizationId,
@@ -213,7 +250,7 @@ export const submitCloudTemplateForAccount = async (
         name: data.metaTemplateName,
         language: data.languageCode,
         category: providerCategoryFor(category),
-        components,
+        components: providerComponents(components, data.sampleValues),
       });
       providerTemplate = findProviderTemplate((await client.getTemplates(account.wabaId)).data ?? [], data.metaTemplateName, data.languageCode);
     }
@@ -257,6 +294,28 @@ export const listCloudTemplatesForAccount = async (
   if (!account?.whatsappBusinessAccountId) return accountNotFound();
   const templates = await deps.list(organizationId, account.whatsappBusinessAccountId);
   return { status: "success", message: "WhatsApp Cloud templates fetched successfully", data: { templates }, code: STATUS_CODES.SUCCESS };
+};
+
+export const listCloudTemplateSubmissionsForAccount = async (
+  userId: string,
+  organizationId: string,
+  accountId: string,
+  originatingStoreId?: string,
+  injected: Partial<CloudTemplateServiceDependencies> = {},
+): Promise<ServiceResponse<{ submissions: WhatsAppCloudTemplateSubmissionDTO[] } | null>> => {
+  const deps = { ...dependencies(), ...injected };
+  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const account = await deps.getAccount(organizationId, accountId);
+  if (!account?.whatsappBusinessAccountId) return accountNotFound();
+  if (originatingStoreId && !await organizationRepository.getStoreById(organizationId, originatingStoreId)) {
+    return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
+  return {
+    status: "success",
+    message: "Cloud template submissions fetched successfully",
+    data: { submissions: await deps.listSubmissions(organizationId, account.whatsappBusinessAccountId, originatingStoreId) },
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 export const createCloudTemplateBindingForStore = async (

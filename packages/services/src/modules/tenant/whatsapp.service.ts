@@ -48,6 +48,7 @@ type WhatsAppCloudTemplatesResponse = ServiceResponse<{ templates: WhatsAppCloud
 type WhatsAppCloudBindingsResponse = ServiceResponse<{ bindings: WhatsAppCloudTemplateBindingDTO[] } | null>;
 type WhatsAppCloudBindingResponse = ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>;
 type WhatsAppCloudSubmissionResponse = ServiceResponse<{ submission: WhatsAppCloudTemplateSubmissionDTO; template: WhatsAppCloudTemplateAssetDTO | null } | null>;
+type WhatsAppCloudSubmissionsResponse = ServiceResponse<{ submissions: WhatsAppCloudTemplateSubmissionDTO[] } | null>;
 type WhatsAppCloudSafetyResponse = ServiceResponse<WhatsAppCloudSafety | null>;
 type WhatsAppCustomerConsentResponse = ServiceResponse<WhatsAppCustomerConsentEventDTO | null>;
 type WhatsAppCustomerConsentHistoryResponse = ServiceResponse<{ events: WhatsAppCustomerConsentEventDTO[] } | null>;
@@ -153,6 +154,19 @@ export const submitWhatsAppCloudTemplate = async (
 ): Promise<WhatsAppCloudSubmissionResponse> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/templates`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppCloudTemplateSubmissions = async (
+    organizationId: string,
+    accountId: string,
+    storeId?: string,
+): Promise<WhatsAppCloudSubmissionsResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/submissions`, { params: storeId ? { storeId } : undefined });
         return response.data;
     } catch (error) {
         return handleApiError(error);

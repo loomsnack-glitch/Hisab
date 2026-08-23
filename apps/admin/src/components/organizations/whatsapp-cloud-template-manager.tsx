@@ -1,145 +1,70 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-    createWhatsAppCloudTemplateBinding,
-    getWhatsAppCloudTemplateBindings,
-    getWhatsAppCloudTemplates,
-    getWhatsAppMessageTemplates,
-    syncWhatsAppCloudTemplates,
-} from "@repo/services";
+import { getWhatsAppCloudTemplateSubmissions, getWhatsAppCloudTemplates, submitWhatsAppCloudTemplate, syncWhatsAppCloudTemplates } from "@repo/services";
 import type { WhatsAppCloudAccountSnapshot, WhatsAppMessageTemplateKind } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
+import { Input } from "@repo/ui/components/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
-import { AlertCircle, CheckCircle2, Link2, RefreshCw } from "lucide-react";
+import { Textarea } from "@repo/ui/components/textarea";
+import { AlertCircle, CheckCircle2, ExternalLink, FileText, Plus, RefreshCw, Send, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
-import { whatsappKeys } from "@/lib/query-keys";
 
-export type WhatsAppCloudAccountOption = {
-    id: string;
-    phoneNumber: string;
-    snapshot: WhatsAppCloudAccountSnapshot;
-};
-
-type Props = {
-    organizationId: string;
-    storeId: string;
-    accounts: WhatsAppCloudAccountOption[];
-};
-
-const kinds: Array<{ value: WhatsAppMessageTemplateKind; label: string }> = [
-    { value: "bill", label: "Bill" },
-    { value: "due_reminder", label: "Due reminder" },
-    { value: "promotion", label: "Promotion" },
+export type WhatsAppCloudAccountOption = { id: string; phoneNumber: string; snapshot: WhatsAppCloudAccountSnapshot };
+type Props = { organizationId: string; storeId: string; accounts: WhatsAppCloudAccountOption[] };
+const kinds: Array<{ value: WhatsAppMessageTemplateKind; label: string; category: string }> = [
+    { value: "bill", label: "Bill", category: "Utility" },
+    { value: "due_reminder", label: "Due reminder", category: "Utility" },
+    { value: "promotion", label: "Promotion", category: "Marketing" },
 ];
+const statusLabels: Record<string, string> = { draft: "Draft", submitting: "Submitting", pending: "Pending approval", approved: "Approved", rejected: "Rejected", paused: "Paused", disabled: "Disabled", failed: "Failed" };
+const statusClass: Record<string, string> = { approved: "border-emerald-200 bg-emerald-50 text-emerald-700", rejected: "border-red-200 bg-red-50 text-red-700", failed: "border-red-200 bg-red-50 text-red-700", pending: "border-amber-200 bg-amber-50 text-amber-700", submitting: "border-amber-200 bg-amber-50 text-amber-700", paused: "border-orange-200 bg-orange-50 text-orange-700", disabled: "border-slate-200 bg-slate-50 text-slate-600" };
+const slugify = (value: string): string => (value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 512) || "ganatri_template");
+const defaultBody = (kind: WhatsAppMessageTemplateKind): string => kind === "promotion" ? "Hi {{1}}, discover our latest offer. Reply to this message if you would like to know more." : kind === "due_reminder" ? "Hi {{1}}, your outstanding balance is {{2}}. Please review your account when convenient." : "Hi {{1}}, your bill {{2}} for {{3}} is ready. Thank you for shopping with us.";
+const statusBadge = (status: string) => <Badge variant="outline" className={`rounded-full text-[10px] ${statusClass[status] ?? ""}`}>{status === "approved" ? <CheckCircle2 className="mr-1 size-3" /> : null}{statusLabels[status] ?? status}</Badge>;
 
 const WhatsAppCloudTemplateManager = ({ organizationId, storeId, accounts }: Props) => {
     const queryClient = useQueryClient();
     const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+    const [open, setOpen] = useState(false);
     const [kind, setKind] = useState<WhatsAppMessageTemplateKind>("bill");
-    const [localTemplateId, setLocalTemplateId] = useState("");
-    const [cloudTemplateId, setCloudTemplateId] = useState("");
-    const [isDefault, setIsDefault] = useState(true);
+    const [friendlyName, setFriendlyName] = useState("");
+    const [languageCode, setLanguageCode] = useState("en_US");
+    const [body, setBody] = useState(defaultBody("bill"));
+    const [footer, setFooter] = useState("");
+    const [urlButton, setUrlButton] = useState("");
+    const [sampleValues, setSampleValues] = useState("Customer|INV-1001|₹1,250");
     const account = accounts.find(item => item.id === accountId) ?? accounts[0];
-    const internalBusinessAccountId = account?.snapshot.whatsappBusinessAccountId ?? "";
-
-    useEffect(() => {
-        if (!accounts.some(item => item.id === accountId)) setAccountId(accounts[0]?.id ?? "");
-    }, [accounts, accountId]);
-
-    const localQuery = useQuery({
-        queryKey: whatsappKeys.templates(organizationId, storeId, kind),
-        queryFn: () => getWhatsAppMessageTemplates(organizationId, storeId, kind),
-        enabled: Boolean(organizationId && storeId),
+    const businessAccountId = account?.snapshot.whatsappBusinessAccountId ?? "";
+    useEffect(() => { if (!accounts.some(item => item.id === accountId)) setAccountId(accounts[0]?.id ?? ""); }, [accounts, accountId]);
+    const cloudQuery = useQuery({ queryKey: ["whatsapp", "cloud-templates", organizationId, accountId], queryFn: () => getWhatsAppCloudTemplates(organizationId, accountId), enabled: Boolean(organizationId && accountId) });
+    const submissionsQuery = useQuery({ queryKey: ["whatsapp", "cloud-submissions", organizationId, accountId, storeId], queryFn: () => getWhatsAppCloudTemplateSubmissions(organizationId, accountId, storeId), enabled: Boolean(organizationId && accountId && storeId) });
+    const cloudTemplates = cloudQuery.data?.status === "success" ? cloudQuery.data.data?.templates ?? [] : [];
+    const submissions = submissionsQuery.data?.status === "success" ? submissionsQuery.data.data?.submissions ?? [] : [];
+    const cards = useMemo(() => {
+        const byProviderId = new Map(submissions.filter(item => item.metaTemplateId).map(item => [item.metaTemplateId!, item]));
+        const assets = cloudTemplates.map(template => ({ id: `asset-${template.id}`, name: template.name, language: template.languageCode, kind: byProviderId.get(template.metaTemplateId)?.kind ?? null, status: template.status, reason: template.rejectionReason }));
+        const pending = submissions.filter(item => !item.metaTemplateId || !cloudTemplates.some(template => template.metaTemplateId === item.metaTemplateId));
+        return [...assets, ...pending.map(item => ({ id: item.id, name: item.friendlyName, language: item.languageCode, kind: item.kind, status: item.status, reason: item.rejectionReason ?? item.lastErrorMessage }))];
+    }, [cloudTemplates, submissions]);
+    const invalidate = () => { void queryClient.invalidateQueries({ queryKey: ["whatsapp", "cloud-templates", organizationId, accountId] }); void queryClient.invalidateQueries({ queryKey: ["whatsapp", "cloud-submissions", organizationId, accountId, storeId] }); };
+    const syncMutation = useMutation({ mutationFn: () => syncWhatsAppCloudTemplates(organizationId, accountId), onSuccess: response => { if (response.status !== "success") toast.error(response.message); else { invalidate(); toast.success("Cloud templates refreshed"); } }, onError: () => toast.error("Cloud templates could not be refreshed") });
+    const submitMutation = useMutation({
+        mutationFn: () => submitWhatsAppCloudTemplate(organizationId, accountId, { storeId, whatsappBusinessAccountId: businessAccountId, kind, friendlyName: friendlyName.trim(), metaTemplateName: slugify(friendlyName), languageCode: languageCode.trim(), components: [{ type: "BODY", text: body.trim() }, ...(footer.trim() ? [{ type: "FOOTER", text: footer.trim() }] : []), ...(urlButton.trim() ? [{ type: "BUTTONS", buttons: [{ type: "URL", text: "View details", url: urlButton.trim() }] }] : [])], sampleValues: Object.fromEntries(sampleValues.split("|").map((value, index) => [String(index + 1), value.trim()])), idempotencyKey: `${businessAccountId}:${slugify(friendlyName)}:${languageCode.trim()}:${kind}` }),
+        onSuccess: response => { if (response.status !== "success") toast.error(response.message); else { setOpen(false); invalidate(); toast.success(response.message); } },
+        onError: () => toast.error("Template could not be submitted"),
     });
-    const cloudQuery = useQuery({
-        queryKey: whatsappKeys.cloudTemplates(organizationId, accountId),
-        queryFn: () => getWhatsAppCloudTemplates(organizationId, accountId),
-        enabled: Boolean(organizationId && accountId),
-    });
-    const bindingsQuery = useQuery({
-        queryKey: [whatsappKeys.all, "cloud-bindings", organizationId, storeId, internalBusinessAccountId],
-        queryFn: () => getWhatsAppCloudTemplateBindings(organizationId, storeId, internalBusinessAccountId),
-        enabled: Boolean(organizationId && storeId && internalBusinessAccountId),
-    });
-    const localTemplates = localQuery.data?.status === "success" ? localQuery.data.data?.templates ?? [] : [];
-    const approvedCloudTemplates = useMemo(
-        () => (cloudQuery.data?.status === "success" ? cloudQuery.data.data?.templates ?? [] : []).filter(template => template.status === "approved"),
-        [cloudQuery.data],
-    );
-    const bindings = bindingsQuery.data?.status === "success" ? bindingsQuery.data.data?.bindings ?? [] : [];
-    const selectedKind = kinds.find(item => item.value === kind);
-    const selectedLocalTemplate = localTemplates.find(template => template.id === localTemplateId);
-    const selectedCloudTemplate = approvedCloudTemplates.find(template => template.id === cloudTemplateId);
-
-    useEffect(() => {
-        setLocalTemplateId(current => localTemplates.some(template => template.id === current) ? current : localTemplates.find(template => template.isDefault)?.id ?? localTemplates[0]?.id ?? "");
-    }, [localTemplates]);
-    useEffect(() => {
-        setCloudTemplateId(current => approvedCloudTemplates.some(template => template.id === current) ? current : approvedCloudTemplates[0]?.id ?? "");
-    }, [approvedCloudTemplates]);
-
-    const refreshBindings = () => queryClient.invalidateQueries({ queryKey: [whatsappKeys.all, "cloud-bindings", organizationId, storeId, internalBusinessAccountId] });
-    const syncMutation = useMutation({
-        mutationFn: () => syncWhatsAppCloudTemplates(organizationId, accountId),
-        onSuccess: response => {
-            if (response.status !== "success") toast.error(response.message);
-            else {
-                queryClient.invalidateQueries({ queryKey: whatsappKeys.cloudTemplates(organizationId, accountId) });
-                toast.success("Meta templates synchronized");
-            }
-        },
-        onError: (error: { message?: string }) => toast.error(error.message ?? "Unable to synchronize Meta templates"),
-    });
-    const bindMutation = useMutation({
-        mutationFn: () => createWhatsAppCloudTemplateBinding(organizationId, storeId, {
-            localTemplateId,
-            cloudTemplateId,
-            whatsappBusinessAccountId: internalBusinessAccountId,
-            kind,
-            isDefault,
-        }),
-        onSuccess: response => {
-            if (response.status !== "success") toast.error(response.message);
-            else {
-                refreshBindings();
-                toast.success(`${kinds.find(item => item.value === kind)?.label ?? "Template"} Cloud binding saved`);
-            }
-        },
-        onError: (error: { message?: string }) => toast.error(error.message ?? "Unable to save Cloud template binding"),
-    });
-
-    if (accounts.length === 0) {
-        return <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">Assign a connected Cloud account to this Store before mapping Meta templates.</div>;
-    }
-
+    const openCreate = () => { setKind("bill"); setFriendlyName(""); setLanguageCode("en_US"); setBody(defaultBody("bill")); setFooter(""); setUrlButton(""); setSampleValues("Customer|INV-1001|₹1,250"); setOpen(true); };
+    const selectedKind = kinds.find(item => item.value === kind)!;
+    const preview = body.replace(/\{\{(\d+)\}\}/g, (_, index: string) => sampleValues.split("|")[Number(index) - 1]?.trim() || `{{${index}}}`);
+    if (accounts.length === 0) return <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">Assign a connected Cloud account to this Store before creating templates.</div>;
     return <div className="space-y-4 rounded-xl border border-border/60 bg-background/50 p-3 sm:p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-                <p className="text-sm font-semibold">Meta Cloud templates</p>
-                <p className="text-xs leading-relaxed text-muted-foreground">Sync approved Meta templates, then assign one to each Store message type.</p>
-            </div>
-            <Button type="button" variant="outline" size="sm" className="rounded-xl" disabled={syncMutation.isPending || !accountId} onClick={() => syncMutation.mutate()}>
-                {syncMutation.isPending ? <RefreshCw className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Sync Meta
-            </Button>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {accounts.length > 1 ? <div className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">Cloud account</span><Select value={accountId} onValueChange={setAccountId}><SelectTrigger id="cloud-account" className="w-full rounded-xl" aria-label="Cloud account"><SelectValue placeholder="Cloud account">{account?.phoneNumber ?? undefined}</SelectValue></SelectTrigger><SelectContent>{accounts.map(item => <SelectItem key={item.id} value={item.id}>{item.phoneNumber}</SelectItem>)}</SelectContent></Select></div> : <div className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">Cloud account</span><div className="flex h-10 items-center gap-2 rounded-xl border border-border/60 px-3 text-sm"><Link2 className="size-4 text-primary" />{account?.phoneNumber}</div></div>}
-            <div className="space-y-1.5"><label htmlFor="message-type" className="text-xs font-medium text-muted-foreground">Message type</label><Select value={kind} onValueChange={value => setKind(value as WhatsAppMessageTemplateKind)}><SelectTrigger id="message-type" className="w-full rounded-xl" aria-label="Message type"><SelectValue>{selectedKind?.label ?? "Message type"}</SelectValue></SelectTrigger><SelectContent>{kinds.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1.5"><label htmlFor="local-template" className="text-xs font-medium text-muted-foreground">Store template</label><Select value={localTemplateId} onValueChange={setLocalTemplateId}><SelectTrigger id="local-template" className="w-full rounded-xl" aria-label="Store template"><SelectValue placeholder="Store template">{selectedLocalTemplate ? `${selectedLocalTemplate.name}${selectedLocalTemplate.isDefault ? " · Default" : ""}` : undefined}</SelectValue></SelectTrigger><SelectContent>{localTemplates.map(template => <SelectItem key={template.id} value={template.id}>{template.name}{template.isDefault ? " · Default" : ""}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1.5"><label htmlFor="meta-template" className="text-xs font-medium text-muted-foreground">Meta template</label><Select value={cloudTemplateId} onValueChange={setCloudTemplateId}><SelectTrigger id="meta-template" className="w-full rounded-xl" aria-label="Meta template"><SelectValue placeholder="Meta template">{selectedCloudTemplate ? `${selectedCloudTemplate.name} · ${selectedCloudTemplate.languageCode}` : undefined}</SelectValue></SelectTrigger><SelectContent>{approvedCloudTemplates.map(template => <SelectItem key={template.id} value={template.id}>{template.name} · {template.languageCode}</SelectItem>)}</SelectContent></Select></div>
-        </div>
-
-        <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/70 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={isDefault} onChange={event => setIsDefault(event.target.checked)} /><span>Use this binding as the Store default for {kinds.find(item => item.value === kind)?.label.toLowerCase()}</span></label>
-            <Button type="button" className="rounded-xl" disabled={bindMutation.isPending || !localTemplateId || !cloudTemplateId || !internalBusinessAccountId} onClick={() => bindMutation.mutate()}>{bindMutation.isPending ? "Saving…" : "Save binding"}</Button>
-        </div>
-
-        {cloudQuery.isError || cloudQuery.data?.status === "error" ? <p className="flex items-center gap-2 text-xs text-destructive"><AlertCircle className="size-4" />Meta templates could not be loaded. Check the Cloud account and try Sync Meta.</p> : null}
-        {!cloudQuery.isPending && approvedCloudTemplates.length === 0 ? <p className="text-xs text-muted-foreground">No approved Meta templates are available yet. Submit/approve a template in Meta, then synchronize again.</p> : null}
-        {bindings.length > 0 ? <div className="space-y-2"><p className="text-xs font-semibold text-muted-foreground">Current Store bindings</p>{bindings.filter(binding => binding.isActive).map(binding => <div key={binding.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2 text-xs"><span>{kinds.find(item => item.value === binding.kind)?.label ?? binding.kind}</span><span className="flex items-center gap-1.5 text-muted-foreground"><CheckCircle2 className="size-3.5 text-emerald-600" />Mapped</span></div>)}</div> : null}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="flex items-center gap-2 text-sm font-semibold"><FileText className="size-4 text-primary" /> WhatsApp templates</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Create once in Ganatri, submit to Meta, then use approved templates for this Store.</p></div><div className="flex shrink-0 flex-wrap gap-2"><Button type="button" variant="outline" size="sm" className="rounded-xl" disabled={syncMutation.isPending} onClick={() => syncMutation.mutate()}><RefreshCw className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`} /> Refresh</Button><Button type="button" size="sm" className="rounded-xl" onClick={openCreate}><Plus className="size-4" /> Create template</Button></div></div>
+        {accounts.length > 1 ? <div className="max-w-sm space-y-1.5"><span className="text-xs font-medium text-muted-foreground">Cloud account</span><Select value={accountId} onValueChange={setAccountId}><SelectTrigger className="w-full rounded-xl" aria-label="Cloud account"><SelectValue>{account?.phoneNumber}</SelectValue></SelectTrigger><SelectContent>{accounts.map(item => <SelectItem key={item.id} value={item.id}>{item.phoneNumber}</SelectItem>)}</SelectContent></Select></div> : <p className="text-xs text-muted-foreground">Sending number: <span className="font-medium text-foreground">{account?.phoneNumber}</span></p>}
+        {cloudQuery.data?.status === "error" || submissionsQuery.data?.status === "error" ? <p className="flex items-center gap-2 text-xs text-destructive"><AlertCircle className="size-4" /> Templates could not be loaded. Try Refresh.</p> : null}{cloudQuery.isPending || submissionsQuery.isPending ? <p className="text-xs text-muted-foreground">Loading template status…</p> : null}{!cloudQuery.isPending && !submissionsQuery.isPending && cards.length === 0 ? <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center"><p className="text-sm font-medium">No templates yet</p><p className="mt-1 text-xs text-muted-foreground">Create a bill, reminder, or promotion template and submit it for Meta approval.</p></div> : null}
+        <div className="grid gap-3 md:grid-cols-2">{cards.map(card => <div key={card.id} className="space-y-2 rounded-xl border border-border/60 bg-background/70 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{card.name}</p><p className="text-xs text-muted-foreground">{card.kind ? kinds.find(item => item.value === card.kind)?.label : "Cloud template"} · {card.language}</p></div>{statusBadge(card.status)}</div>{card.reason ? <p className="flex gap-1.5 text-xs text-destructive"><ShieldAlert className="mt-0.5 size-3.5 shrink-0" />{card.reason}</p> : null}{card.status === "approved" ? <p className="flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="size-3.5" />Ready to assign as a Store default</p> : card.status === "pending" || card.status === "submitting" ? <p className="text-xs text-muted-foreground">Meta approval is required before sending.</p> : null}</div>)}</div>
+        <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Create WhatsApp template</DialogTitle><DialogDescription>Ganatri will submit this template to Meta for approval. The category is chosen from the message type.</DialogDescription></DialogHeader><div className="grid gap-4 py-2"><div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><label className="text-xs font-medium" htmlFor="cloud-template-kind">Message type</label><Select value={kind} onValueChange={value => { const next = value as WhatsAppMessageTemplateKind; setKind(next); setBody(defaultBody(next)); }}><SelectTrigger id="cloud-template-kind" className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{kinds.map(item => <SelectItem key={item.value} value={item.value}>{item.label} · {item.category}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1.5"><label className="text-xs font-medium" htmlFor="cloud-template-language">Language</label><Input id="cloud-template-language" className="rounded-xl" value={languageCode} onChange={event => setLanguageCode(event.target.value)} placeholder="en_US" /></div></div><div className="space-y-1.5"><label className="text-xs font-medium" htmlFor="cloud-template-name">Template name</label><Input id="cloud-template-name" className="rounded-xl" value={friendlyName} onChange={event => setFriendlyName(event.target.value)} placeholder={`e.g. ${selectedKind.label} ready`} /><p className="text-[11px] text-muted-foreground">Meta-safe name: {slugify(friendlyName)}</p></div><div className="space-y-1.5"><label className="text-xs font-medium" htmlFor="cloud-template-body">Message body</label><Textarea id="cloud-template-body" className="min-h-32 rounded-xl" value={body} onChange={event => setBody(event.target.value)} placeholder="Use {{1}}, {{2}}, etc. for values filled by Ganatri." /><p className="text-[11px] text-muted-foreground">Use numbered placeholders such as {"{{1}}"}. Sample values are used for the preview.</p></div><div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><label className="text-xs font-medium" htmlFor="cloud-template-footer">Footer <span className="font-normal text-muted-foreground">(optional)</span></label><Input id="cloud-template-footer" className="rounded-xl" value={footer} onChange={event => setFooter(event.target.value)} placeholder="Thank you for choosing us" /></div><div className="space-y-1.5"><label className="text-xs font-medium" htmlFor="cloud-template-button">HTTPS button link <span className="font-normal text-muted-foreground">(optional)</span></label><Input id="cloud-template-button" className="rounded-xl" value={urlButton} onChange={event => setUrlButton(event.target.value)} placeholder="https://example.com/review" /></div></div><div className="space-y-1.5"><label className="text-xs font-medium" htmlFor="cloud-template-samples">Preview values</label><Input id="cloud-template-samples" className="rounded-xl" value={sampleValues} onChange={event => setSampleValues(event.target.value)} placeholder="Customer|INV-1001|₹1,250" /><p className="text-[11px] text-muted-foreground">Separate values with | in the same order as your placeholders.</p></div><div className="rounded-xl border border-border/60 bg-muted/20 p-3"><p className="mb-2 text-xs font-semibold">Preview</p><div className="whitespace-pre-wrap rounded-lg bg-emerald-50 p-3 text-sm text-emerald-950">{preview}{footer.trim() ? `\n\n${footer.trim()}` : ""}{urlButton.trim() ? <span className="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-700"><ExternalLink className="size-3.5" />View details</span> : null}</div></div></div><DialogFooter><Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>Cancel</Button><Button type="button" className="rounded-xl" disabled={submitMutation.isPending || !businessAccountId || !friendlyName.trim() || !body.trim() || (Boolean(urlButton.trim()) && !/^https:\/\//.test(urlButton.trim()))} onClick={() => submitMutation.mutate()}>{submitMutation.isPending ? <RefreshCw className="size-4 animate-spin" /> : <Send className="size-4" />} {submitMutation.isPending ? "Submitting…" : "Submit for approval"}</Button></DialogFooter></DialogContent></Dialog>
     </div>;
 };
-
 export default WhatsAppCloudTemplateManager;

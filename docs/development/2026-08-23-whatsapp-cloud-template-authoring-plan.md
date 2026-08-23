@@ -367,7 +367,7 @@ Exit criteria:
 
 ### Phase 4 — Simple Ganatri authoring UI
 
-Status: **in progress**
+Status: **completed**
 
 Replace the current manual Cloud linking area with one clear Cloud template
 workspace for the selected Store.
@@ -408,9 +408,20 @@ Exit criteria:
 - the UI never exposes an implementation UUID as a label;
 - all loading, empty, error, rejected, and stale-status states are handled.
 
+Evidence:
+
+- [x] The old Cloud UUID-selector surface is replaced by one responsive
+  workspace with account summary, lifecycle cards, refresh, and Create
+  template.
+- [x] The create dialog derives the Meta-safe name and category, supports body,
+  footer, HTTPS button, sample values, and a WhatsApp-style preview.
+- [x] Pending and rejected submissions are loaded from durable submission
+  storage, so a reload does not erase lifecycle state.
+- [x] Admin and shared-service typechecks pass for the new workspace.
+
 ### Phase 5 — Automatic Store default and send integration
 
-Status: **planned**
+Status: **in progress**
 
 Scope:
 

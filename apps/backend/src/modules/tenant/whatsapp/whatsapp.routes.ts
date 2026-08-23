@@ -47,6 +47,7 @@ import {
     createCloudTemplateBindingForStore,
     listCloudTemplateBindingsForStore,
     submitCloudTemplateForAccount,
+    listCloudTemplateSubmissionsForAccount,
 } from "./cloud-api/cloud-template.service";
 import * as consentService from "./cloud-api/customer-consent.service";
 import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
@@ -199,6 +200,23 @@ userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/templates", 
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await listCloudTemplatesForAccount(c.get("authUser").id, organizationId, accountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/submissions", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const accountId = c.req.param("accountId");
+        const storeId = c.req.query("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+        if (invalid) return c.json(invalid, invalid.code);
+        if (storeId) {
+            const invalidStore = invalidUuid(storeId, "Invalid store id");
+            if (invalidStore) return c.json(invalidStore, invalidStore.code);
+        }
+        return handleServiceResponse(c, await listCloudTemplateSubmissionsForAccount(c.get("authUser").id, organizationId, accountId, storeId));
     } catch (error) {
         return unexpectedError(c, error);
     }
