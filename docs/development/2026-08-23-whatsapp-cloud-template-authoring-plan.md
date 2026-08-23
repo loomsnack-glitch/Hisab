@@ -458,7 +458,7 @@ Evidence:
 
 ### Phase 6 — Migration, controlled acceptance, and UI cleanup
 
-Status: **in progress**
+Status: **completed locally; live acceptance pending**
 
 Migration steps:
 
@@ -492,6 +492,22 @@ Exit criteria:
 - all focused tests, Admin/shared type checks, migration checks, and diff
   review pass;
 - live provider evidence is recorded separately from local test evidence.
+
+Evidence:
+
+- [x] Cloud Stores now use the authoring/default workspace; the legacy local
+  template and link controls remain only for Stores without a Cloud account.
+- [x] Existing provider assets and bindings are read-only compatibility data;
+  no migration deletes or rewrites them.
+- [x] The old manual Cloud UUID-selector surface is no longer rendered for a
+  Cloud Store, while the underlying binding route remains available during the
+  compatibility window.
+- [x] Focused WhatsApp suites, Admin typecheck, shared-service typecheck, and
+  shared-types typecheck pass; `git diff --check` is clean.
+- [x] The submission migration was previously applied to the configured
+  development database with 76 applied and 0 pending migrations.
+- [ ] Live Meta approval, webhook delivery, two-Store shared-WABA sends, and
+  target-production rollback evidence still require controlled staging access.
 
 ## Explicit non-goals for this slice
 
@@ -533,7 +549,7 @@ For every phase:
 
 ## Current next step
 
-Implement **Phase 1 — Submission persistence and database invariants**. The
-first vertical tracer-bullet slice remains a text-body utility template:
-persist the request, submit it idempotently, reconcile its pending/approved
-state, and set it as the Store bill default.
+Run the controlled staging acceptance checklist with a real Meta Cloud account.
+Local implementation phases are complete; do not treat local typechecks or
+mocked provider tests as evidence of Meta approval, webhook delivery, or
+production database rollback.

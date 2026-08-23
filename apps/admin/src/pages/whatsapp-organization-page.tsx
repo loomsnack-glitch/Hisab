@@ -604,15 +604,16 @@ const WhatsAppOrganizationPage = () => {
                     {activeTab === "templates" ? (
                         <Card className="border-border/60 bg-card/80">
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2 font-display text-xl"><FileText className="size-5 text-primary" />Templates and links</CardTitle>
-                                <CardDescription>Reusable messages for {selectedStore.name}. Links are inserted only where you choose.</CardDescription>
+                                <CardTitle className="flex items-center gap-2 font-display text-xl"><FileText className="size-5 text-primary" />{cloudAccountsForStore.length > 0 ? "WhatsApp Cloud templates" : "Templates and links"}</CardTitle>
+                                <CardDescription>{cloudAccountsForStore.length > 0 ? `Create, submit, and assign approved templates for ${selectedStore.name}.` : `Reusable messages for ${selectedStore.name}. Links are inserted only where you choose.`}</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <WhatsAppLinkManager organizationId={organizationId} store={selectedStore} />
-                                <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="bill" links={selectedStore.whatsappLinks} />
-                                <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="due_reminder" links={selectedStore.whatsappLinks} />
-                                <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="promotion" links={selectedStore.whatsappLinks} />
-                                <WhatsAppCloudTemplateManager organizationId={organizationId} storeId={selectedStore.id} accounts={cloudAccountsForStore} />
+                                {cloudAccountsForStore.length > 0 ? <WhatsAppCloudTemplateManager organizationId={organizationId} storeId={selectedStore.id} accounts={cloudAccountsForStore} /> : <>
+                                    <WhatsAppLinkManager organizationId={organizationId} store={selectedStore} />
+                                    <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="bill" links={selectedStore.whatsappLinks} />
+                                    <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="due_reminder" links={selectedStore.whatsappLinks} />
+                                    <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="promotion" links={selectedStore.whatsappLinks} />
+                                </>}
                             </CardContent>
                         </Card>
                     ) : null}
