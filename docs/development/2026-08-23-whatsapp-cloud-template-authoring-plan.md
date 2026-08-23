@@ -560,3 +560,42 @@ Run the controlled staging acceptance checklist with a real Meta Cloud account.
 Local implementation phases are complete; do not treat local typechecks or
 mocked provider tests as evidence of Meta approval, webhook delivery, or
 production database rollback.
+
+## Deferred follow-up: template visibility and shared defaults
+
+Status: deferred — record only; do not implement in the current slice.
+
+Requested behavior:
+
+- Shared default Bill and Due-reminder templates are visible to every
+  authorized user in the Organization.
+- A default/system template is not owned by the user who happened to create
+  or import it.
+- Promotion templates are private by default and visible only to their
+  creator.
+- Visibility must be enforced by backend queries and authorization, not by
+  hiding rows in the Admin UI.
+- Store assignment and approved Cloud-template checks remain required before
+  sending.
+
+Proposed implementation:
+
+1. Add an explicit template visibility field (`shared` or `private`) to the
+   durable Cloud submission/local template ownership model. Keep `created_by`
+   for audit and private-template filtering.
+2. Mark the seeded/default Bill and Due-reminder templates as `shared`.
+   Existing Promotion templates should be backfilled as `private`, retaining
+   their current creator where available.
+3. Filter template list, preview, duplicate, and assignment operations with:
+   `visibility = 'shared' OR created_by = current_user_id`, plus the existing
+   Organization/Store/WABA scope checks.
+4. Show a small `Shared` or `Only me` label in the template table and default
+   new Promotion templates to `Only me`. Do not expose raw user IDs.
+5. Add migration, schema, repository/service authorization tests, and verify
+   that a private Promotion template cannot be read or assigned by another
+   authorized Organization user.
+
+Open decision for implementation phase:
+
+- Confirm whether shared Bill/Due templates should be visible across every
+  Store in the Organization or only across users of the originating Store.

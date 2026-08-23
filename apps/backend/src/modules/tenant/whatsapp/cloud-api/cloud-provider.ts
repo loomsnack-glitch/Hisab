@@ -95,6 +95,7 @@ export const createConfiguredCloudClient = (accessToken: string) => {
   return new WhatsAppCloudApiClient({
     accessToken,
     graphVersion: graphVersion(),
+    appId: requiredConfig("WHATSAPP_CLOUD_APP_ID"),
     baseUrl: graphBaseUrl(),
   });
 };

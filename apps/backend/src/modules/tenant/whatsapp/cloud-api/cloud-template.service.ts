@@ -37,7 +37,7 @@ import {
 
 type CloudTemplateClient = {
   getTemplates: (wabaId: string) => Promise<{ data?: Array<Record<string, unknown>> }>;
-  uploadMedia?: (phoneNumberId: string, media: { body: Uint8Array; mimeType: string; fileName: string }) => Promise<{ id: string }>;
+  uploadTemplateSample?: (media: { body: Uint8Array; mimeType: string; fileName: string }) => Promise<{ handle: string }>;
   createMessageTemplate?: (wabaId: string, definition: {
     name: string;
     language: string;
@@ -64,6 +64,24 @@ type CloudTemplateServiceDependencies = {
   isAccountAssignedToStore: typeof isCloudAccountAssignedToStore;
   organizationAccess: (organizationId: string, userId: string) => Promise<boolean>;
 };
+
+const debugProviderComponents = (template: Record<string, unknown>) =>
+  Array.isArray(template.components)
+    ? template.components.map(component => {
+      if (!component || typeof component !== "object" || Array.isArray(component)) return { valueType: typeof component };
+      const value = component as Record<string, unknown>;
+      return {
+        type: typeof value.type === "string" ? value.type : null,
+        format: typeof value.format === "string" ? value.format : null,
+        textType: value.text === null ? "null" : typeof value.text,
+        textLength: typeof value.text === "string" ? value.text.length : null,
+        keys: Object.keys(value),
+        exampleKeys: value.example && typeof value.example === "object" && !Array.isArray(value.example)
+          ? Object.keys(value.example as Record<string, unknown>)
+          : [],
+      };
+    })
+    : [];
 
 const dependencies = (): CloudTemplateServiceDependencies => ({
   vault: databaseCloudCredentialVault,
@@ -106,8 +124,38 @@ export const syncCloudTemplatesForAccount = async (
     if (!credential) return { status: "error", message: "WhatsApp Cloud account credential is unavailable", data: null, code: STATUS_CODES.CONFLICT };
     const accessToken = await deps.vault.resolve(credential);
     const providerTemplates = await deps.createClient(accessToken).getTemplates(account.wabaId);
-    const assets = (providerTemplates.data ?? []).map(template => normalizeCloudTemplateAsset(organizationId, credential.businessAccountId, template));
+    const rawProviderTemplates = providerTemplates.data ?? [];
+    const providerIdentityCounts = new Map<string, number>();
+    for (const template of rawProviderTemplates) {
+      const name = typeof template.name === "string" ? template.name : "<missing-name>";
+      const language = typeof template.language === "string" ? template.language : "<missing-language>";
+      const key = `${name}:${language}`;
+      providerIdentityCounts.set(key, (providerIdentityCounts.get(key) ?? 0) + 1);
+    }
+    console.info("[DEBUG-whatsapp-template-sync]", {
+      providerCount: rawProviderTemplates.length,
+      providerDuplicates: [...providerIdentityCounts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([identity, count]) => ({ identity, count })),
+      providerTemplates: rawProviderTemplates.map(template => ({
+        id: typeof template.id === "string" ? template.id : null,
+        name: typeof template.name === "string" ? template.name : null,
+        language: typeof template.language === "string" ? template.language : null,
+        status: typeof template.status === "string" ? template.status : null,
+        components: debugProviderComponents(template),
+      })),
+    });
+    const assets = rawProviderTemplates.map(template => normalizeCloudTemplateAsset(organizationId, credential.businessAccountId, template));
     const templates = await deps.upsert(assets);
+    console.info("[DEBUG-whatsapp-template-sync]", {
+      storedAssetCount: templates.length,
+      storedAssets: templates.map(template => ({
+        id: template.id,
+        metaTemplateId: template.metaTemplateId,
+        name: template.name,
+        language: template.languageCode,
+      })),
+    });
     return { status: "success", message: "WhatsApp Cloud templates synchronized", data: { templates }, code: STATUS_CODES.SUCCESS };
   } catch (error) {
     return {
@@ -135,6 +183,18 @@ const providerStatusFor = (value: unknown): WhatsAppCloudTemplateSubmissionDTO["
   return "pending";
 };
 
+const cloudTemplateNamePattern = /^[a-z0-9_]+$/;
+const cloudTemplateLanguagePattern = /^[A-Za-z]{2,10}(?:[_-][A-Za-z0-9]{2,10})*$/;
+
+const validateSubmissionMetadata = (data: WhatsAppCreateCloudTemplateSubmissionJSON): void => {
+  if (data.metaTemplateName.length > 512 || !cloudTemplateNamePattern.test(data.metaTemplateName)) {
+    throw new Error("Cloud template name is invalid");
+  }
+  if (!cloudTemplateLanguagePattern.test(data.languageCode)) {
+    throw new Error("Cloud template language is invalid");
+  }
+};
+
 const safeSubmissionError = (error: unknown): { code: string; message: string } => {
   const validationMessage = error instanceof Error && [
     "Cloud template components are invalid",
@@ -151,6 +211,8 @@ const safeSubmissionError = (error: unknown): { code: string; message: string } 
     "Cloud template header sample is required",
     "Cloud template header sample must be",
     "Cloud template must contain exactly one body",
+    "Cloud template name is invalid",
+    "Cloud template language is invalid",
   ].some(prefix => error.message.startsWith(prefix))
     ? error.message
     : null;
@@ -231,23 +293,22 @@ const providerComponents = (components: Array<Record<string, unknown>>, sampleVa
 
 const providerComponentsWithHeaderSample = async (
   client: CloudTemplateClient,
-  phoneNumberId: string | null,
   components: Array<Record<string, unknown>>,
   sample: { base64?: string; fileName?: string; mimeType?: string },
 ): Promise<Array<Record<string, unknown>>> => {
   const header = components.find(component => String(component.type).toUpperCase() === "HEADER");
   const format = typeof header?.format === "string" ? header.format.toUpperCase() : "";
   if (format !== "IMAGE" && format !== "DOCUMENT") return components;
-  if (!phoneNumberId || !client.uploadMedia) throw new Error("Cloud template header media upload is unavailable");
+  if (!client.uploadTemplateSample) throw new Error("Cloud template header media upload is unavailable");
   if (!sample.base64 || !sample.fileName || !sample.mimeType) throw new Error("Cloud template header sample is required");
   const mimeType = sample.mimeType.trim().toLowerCase();
   if (format === "IMAGE" && !mimeType.startsWith("image/")) throw new Error("Cloud template header sample must be an image");
   if (format === "DOCUMENT" && mimeType !== "application/pdf") throw new Error("Cloud template header sample must be a PDF");
   const body = Buffer.from(sample.base64, "base64");
   if (body.byteLength === 0 || body.byteLength > 10 * 1024 * 1024) throw new Error("Cloud template header sample must be 10 MB or smaller");
-  const uploaded = await client.uploadMedia(phoneNumberId, { body, mimeType, fileName: sample.fileName });
+  const uploaded = await client.uploadTemplateSample({ body, mimeType, fileName: sample.fileName });
   return components.map(component => String(component.type).toUpperCase() === "HEADER"
-    ? { ...component, example: { header_handle: [uploaded.id] } }
+    ? { ...component, example: { header_handle: [uploaded.handle] } }
     : component);
 };
 
@@ -287,7 +348,9 @@ export const submitCloudTemplateForAccount = async (
 ): Promise<ServiceResponse<{ submission: WhatsAppCloudTemplateSubmissionDTO; template: WhatsAppCloudTemplateAssetDTO | null } | null>> => {
   const deps = { ...dependencies(), ...injected };
   let pendingSubmission: WhatsAppCloudTemplateSubmissionDTO | null = null;
+  let providerPhase = "load_provider_templates";
   try {
+    validateSubmissionMetadata(data);
     if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
     const account = await deps.getAccount(organizationId, accountId);
     if (!account?.wabaId || account.whatsappBusinessAccountId !== data.whatsappBusinessAccountId) return accountNotFound();
@@ -332,19 +395,27 @@ export const submitCloudTemplateForAccount = async (
     let providerResponse: { id?: string; status?: string; category?: string } | null = null;
     if (!providerTemplate) {
       if (!client.createMessageTemplate) throw new Error("Cloud template creation is unavailable");
+      providerPhase = "upload_template_sample";
       const componentsWithHeaderSample = await providerComponentsWithHeaderSample(
         client,
-        account.phoneNumberId,
         components,
         { base64: data.headerSampleBase64, fileName: data.headerSampleFileName, mimeType: data.headerSampleMimeType },
       );
+      providerPhase = "create_message_template";
       providerResponse = await client.createMessageTemplate(account.wabaId, {
         name: data.metaTemplateName,
         language: data.languageCode,
         category: providerCategoryFor(category),
         components: providerComponents(componentsWithHeaderSample, data.sampleValues),
       });
+      providerPhase = "refresh_provider_templates";
       providerTemplate = findProviderTemplate((await client.getTemplates(account.wabaId)).data ?? [], data.metaTemplateName, data.languageCode);
+      console.info("[DEBUG-whatsapp-template-submit]", {
+        phase: "refresh_provider_templates_response",
+        providerTemplateId: typeof providerTemplate?.id === "string" ? providerTemplate.id : null,
+        providerTemplateName: typeof providerTemplate?.name === "string" ? providerTemplate.name : null,
+        components: providerTemplate ? debugProviderComponents(providerTemplate) : [],
+      });
     }
     const providerTemplateId = String(providerTemplate?.id ?? providerResponse?.id ?? "").trim() || null;
     const status = providerStatusFor(providerTemplate?.status ?? providerResponse?.status);
@@ -362,6 +433,21 @@ export const submitCloudTemplateForAccount = async (
     pendingSubmission = submission;
     return { status: "success", message: status === "approved" ? "Cloud template is approved" : "Cloud template submitted to Meta for approval", data: { submission, template: template ?? null }, code: STATUS_CODES.SUCCESS };
   } catch (error) {
+    if (error instanceof WhatsAppCloudApiError) {
+      console.error("[DEBUG-whatsapp-template-submit]", {
+        phase: providerPhase,
+        status: error.status ?? null,
+        providerCode: error.providerCode ?? null,
+        providerSubcode: error.providerSubcode ?? null,
+        fbtraceId: error.fbtraceId ?? null,
+        message: error.message,
+      });
+    } else {
+      console.error("[DEBUG-whatsapp-template-submit]", {
+        phase: providerPhase,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     const safe = safeSubmissionError(error);
     if (pendingSubmission) {
       await deps.updateSubmission(organizationId, pendingSubmission.id, {
@@ -404,10 +490,23 @@ export const listCloudTemplateSubmissionsForAccount = async (
   if (originatingStoreId && !await organizationRepository.getStoreById(organizationId, originatingStoreId)) {
     return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
   }
+  const submissions = await deps.listSubmissions(organizationId, account.whatsappBusinessAccountId, originatingStoreId);
+  console.info("[DEBUG-whatsapp-template-submissions]", {
+    count: submissions.length,
+    submissions: submissions.map(submission => ({
+      id: submission.id,
+      friendlyName: submission.friendlyName,
+      languageCode: submission.languageCode,
+      kind: submission.kind,
+      status: submission.status,
+      metaTemplateId: submission.metaTemplateId,
+      idempotencyKey: submission.idempotencyKey,
+    })),
+  });
   return {
     status: "success",
     message: "Cloud template submissions fetched successfully",
-    data: { submissions: await deps.listSubmissions(organizationId, account.whatsappBusinessAccountId, originatingStoreId) },
+    data: { submissions },
     code: STATUS_CODES.SUCCESS,
   };
 };

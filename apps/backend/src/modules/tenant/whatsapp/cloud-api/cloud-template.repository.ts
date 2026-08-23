@@ -40,6 +40,15 @@ const boundedText = (value: unknown, label: string, maxLength: number): string =
   return normalized;
 };
 
+const boundedComponentText = (value: unknown): string => {
+  if (typeof value !== "string") throw new Error("Cloud template component text is invalid");
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 4_096) {
+    throw new Error("Cloud template component text is invalid");
+  }
+  return normalized;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -53,8 +62,12 @@ const normalizeComponents = (value: unknown): unknown[] => {
     if (!/^[A-Za-z_]+$/.test(type)) {
       throw new Error("Cloud template component type is invalid");
     }
-    if (component.text !== undefined) {
-      boundedText(component.text, "component text", 4_096);
+    // Meta returns `text: null` for non-text headers (for example IMAGE).
+    // Preserve that provider shape; only validate text when a text value exists.
+    // Body/footer text may contain line breaks; Meta preserves them in the
+    // provider response and they are valid WhatsApp template content.
+    if (component.text !== undefined && component.text !== null) {
+      boundedComponentText(component.text);
     }
     if (component.buttons !== undefined && (!Array.isArray(component.buttons) || component.buttons.length > 10)) {
       throw new Error("Cloud template buttons are invalid");

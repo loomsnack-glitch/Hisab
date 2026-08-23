@@ -70,8 +70,7 @@ export const createCloudTemplateSubmission = async (
       ${input.languageCode}, ${input.category}, ${input.requestedComponents}::jsonb,
       ${input.sampleValues}::jsonb, ${input.idempotencyKey}, ${input.createdBy}, ${input.createdBy}
     )
-    ON CONFLICT (organization_id, whatsapp_business_account_id, idempotency_key)
-    DO NOTHING
+    ON CONFLICT DO NOTHING
     RETURNING *
   `;
   if (inserted) return mapSubmission(inserted as Record<string, unknown>);
@@ -83,7 +82,21 @@ export const createCloudTemplateSubmission = async (
       AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
       AND idempotency_key = ${input.idempotencyKey}
   `;
-  if (!existing) throw new Error("Cloud template submission could not be created");
+  if (!existing) {
+    const [activeByName] = await tx`
+      SELECT *
+      FROM whatsapp_cloud_template_submissions
+      WHERE organization_id = ${input.organizationId}
+        AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+        AND meta_template_name = ${input.metaTemplateName}
+        AND language_code = ${input.languageCode}
+        AND status IN ('draft', 'submitting', 'pending')
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `;
+    if (activeByName) return mapSubmission(activeByName as Record<string, unknown>);
+    throw new Error("Cloud template submission could not be created");
+  }
   const existingSubmission = mapSubmission(existing as Record<string, unknown>);
   if (
     existingSubmission.metaTemplateName !== input.metaTemplateName ||

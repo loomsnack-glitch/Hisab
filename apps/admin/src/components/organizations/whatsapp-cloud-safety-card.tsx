@@ -19,8 +19,6 @@ import { toast } from "sonner";
 
 type Props = { organizationId: string };
 
-const limitLabel = (value: number | null, suffix = "") => value === null ? "Unlimited" : `${value.toLocaleString()}${suffix}`;
-
 const WhatsAppCloudSafetyCard = ({ organizationId }: Props) => {
     const query = useQuery({
         queryKey: whatsappKeys.cloudSafety(organizationId),
@@ -88,15 +86,6 @@ const WhatsAppCloudSafetyCard = ({ organizationId }: Props) => {
                 {query.isError || query.data?.status === "error" ? <p className="text-sm text-destructive">Safety status is unavailable. Retry after the backend is ready.</p> : null}
                 {safety ? (
                     <div className="space-y-3">
-                        <p className="rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                            These are Ganatri safeguards and internal estimates. Meta quality, messaging limits, delivery, and billing remain authoritative in WhatsApp Manager.
-                        </p>
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                            <div className="rounded-xl border border-border/60 bg-background/70 p-3"><p className="text-xs text-muted-foreground">Ganatri-tracked messages</p><p className="mt-1 text-lg font-semibold">{safety.usage.units.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">/ {limitLabel(safety.policy.monthlyMessageLimit)}</span></p></div>
-                            <div className="rounded-xl border border-border/60 bg-background/70 p-3"><p className="text-xs text-muted-foreground">Internal cost estimate</p><p className="mt-1 text-lg font-semibold">{safety.policy.currencyCode} {(safety.usage.costMinor / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-                            <div className="rounded-xl border border-border/60 bg-background/70 p-3"><p className="text-xs text-muted-foreground">Internal recipient cap</p><p className="mt-1 text-lg font-semibold">{limitLabel(safety.policy.recipientWindowLimit)} <span className="text-xs font-normal text-muted-foreground">per window</span></p></div>
-                            <div className="rounded-xl border border-border/60 bg-background/70 p-3"><p className="text-xs text-muted-foreground">Awaiting provider confirmation</p><p className="mt-1 text-lg font-semibold">{safety.outbox.reconcilingCount.toLocaleString()}</p><p className="text-[11px] text-muted-foreground">{safety.outbox.oldestReconcilingAt ? `Oldest ${formatDateTime(safety.outbox.oldestReconcilingAt)}` : "No pending reconciliation"}</p></div>
-                        </div>
                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <Badge variant="outline" className="rounded-full"><Gauge className="mr-1 size-3.5" />Send interval {safety.policy.accountSendIntervalSeconds}s</Badge>
                             <Badge variant="outline" className="rounded-full">Customer cooldown {safety.policy.customerCooldownSeconds}s</Badge>

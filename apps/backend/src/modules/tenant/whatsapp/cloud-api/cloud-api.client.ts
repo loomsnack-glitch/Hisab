@@ -16,6 +16,7 @@ export type WhatsAppCloudApiFetch = (
 export type WhatsAppCloudApiClientOptions = {
   accessToken: string;
   graphVersion: string;
+  appId?: string;
   baseUrl?: string;
   fetchImpl?: WhatsAppCloudApiFetch;
   timeoutMs?: number;
@@ -136,6 +137,7 @@ const normalizeResourceId = (value: string, label: string): string => {
 export class WhatsAppCloudApiClient {
   private readonly accessToken: string;
   private readonly graphVersion: string;
+  private readonly appId: string | null;
   private readonly baseUrl: string;
   private readonly fetchImpl: WhatsAppCloudApiFetch;
   private readonly timeoutMs: number;
@@ -157,6 +159,7 @@ export class WhatsAppCloudApiClient {
 
     this.accessToken = options.accessToken.trim();
     this.graphVersion = graphVersion;
+    this.appId = options.appId?.trim() || null;
     this.baseUrl = (options.baseUrl ?? "https://graph.facebook.com")
       .trim()
       .replace(/\/+$/, "");
@@ -409,5 +412,59 @@ export class WhatsAppCloudApiClient {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async uploadTemplateSample(media: WhatsAppCloudMediaUpload) {
+    if (!this.appId) {
+      throw new WhatsAppCloudApiError({
+        message: "WhatsApp Cloud app ID is required for template media uploads",
+        retryable: false,
+      });
+    }
+    const mimeType = media.mimeType.trim();
+    const fileName = media.fileName.trim();
+    if (!mimeType || !fileName || media.body.byteLength === 0) {
+      throw new WhatsAppCloudApiError({
+        message: "WhatsApp Cloud template media upload is invalid",
+        retryable: false,
+      });
+    }
+
+    const query = new URLSearchParams({
+      file_name: fileName,
+      file_length: String(media.body.byteLength),
+      file_type: mimeType,
+    });
+    const session = await this.requestJson<{ id?: unknown }>(
+      `${normalizeResourceId(this.appId, "App ID")}/uploads?${query.toString()}`,
+      { method: "POST" },
+    );
+    const uploadSessionId = asString(session.id);
+    if (!uploadSessionId) {
+      throw new WhatsAppCloudApiError({
+        message: "WhatsApp Cloud template media upload returned no session ID",
+        retryable: false,
+      });
+    }
+
+    const uploaded = await this.requestJson<{ h?: unknown }>(
+      uploadSessionId,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          file_offset: "0",
+        },
+        body: media.body,
+      },
+    );
+    const handle = asString(uploaded.h);
+    if (!handle) {
+      throw new WhatsAppCloudApiError({
+        message: "WhatsApp Cloud template media upload returned no handle",
+        retryable: false,
+      });
+    }
+    return { handle };
   }
 }

@@ -263,4 +263,28 @@ describe("Cloud template synchronization service", () => {
     expect(response).toMatchObject({ status: "error", message: "Cloud template placeholders must use positive numbers" });
     expect(providerCalled).toBe(false);
   });
+
+  test("rejects an invalid Meta template name before persisting a submission", async () => {
+    let persisted = false;
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill ready",
+      metaTemplateName: "Bill ready",
+      languageCode: "en_US",
+      components: [{ type: "BODY", text: "Hello {{1}}" }],
+      sampleValues: { "1": "Customer" },
+      idempotencyKey: "idem-invalid-name",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      createSubmission: async () => {
+        persisted = true;
+        throw new Error("should not persist invalid metadata");
+      },
+    });
+
+    expect(response).toMatchObject({ status: "error", message: "Cloud template name is invalid" });
+    expect(persisted).toBe(false);
+  });
 });

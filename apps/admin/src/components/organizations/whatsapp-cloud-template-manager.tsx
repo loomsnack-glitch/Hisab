@@ -48,6 +48,7 @@ import {
   FileText,
   FileType2,
   Image as ImageIcon,
+  LoaderCircle,
   Plus,
   RefreshCw,
   Send,
@@ -93,6 +94,7 @@ const statusClass: Record<string, string> = {
   paused: "border-orange-200 bg-orange-50 text-orange-700",
   disabled: "border-slate-200 bg-slate-50 text-slate-600",
 };
+
 const slugify = (value: string): string =>
   value
     .trim()
@@ -100,6 +102,21 @@ const slugify = (value: string): string =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 512) || "ganatri_template";
+
+const contentIdempotencyKey = async (
+  businessAccountId: string,
+  template: {
+    friendlyName: string;
+    languageCode: string;
+    kind: WhatsAppMessageTemplateKind;
+    content: unknown;
+  },
+): Promise<string> => {
+  const encoded = new TextEncoder().encode(JSON.stringify(template.content));
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("").slice(0, 24);
+  return `${businessAccountId}:${slugify(template.friendlyName)}:${template.languageCode}:${template.kind}:${fingerprint}`;
+};
 const defaultTokenNames: Record<WhatsAppMessageTemplateKind, string[]> = {
   bill: [
     "customer_name",
@@ -241,12 +258,33 @@ const WhatsAppCloudTemplateManager = ({
       components: template.components,
       sampleValues: byProviderId.get(template.metaTemplateId)?.sampleValues ?? {},
     }));
+    const activeSubmissionIdentities = new Set(
+      submissions
+        .filter((item) => ["draft", "submitting", "pending"].includes(item.status))
+        .map((item) => `${item.metaTemplateName}:${item.languageCode}`),
+    );
+    const activeSubmissionContent = new Set(
+      submissions
+        .filter((item) => ["draft", "submitting", "pending"].includes(item.status))
+        .map((item) => `${item.kind}:${item.languageCode}:${JSON.stringify(item.requestedComponents)}`),
+    );
     const pending = submissions.filter(
-      (item) =>
-        !item.metaTemplateId ||
-        !cloudTemplates.some(
-          (template) => template.metaTemplateId === item.metaTemplateId,
-        ),
+      (item) => {
+        if (
+          item.metaTemplateId &&
+          cloudTemplates.some(
+            (template) => template.metaTemplateId === item.metaTemplateId,
+          )
+        ) {
+          return false;
+        }
+        const identity = `${item.metaTemplateName}:${item.languageCode}`;
+        const contentIdentity = `${item.kind}:${item.languageCode}:${JSON.stringify(item.requestedComponents)}`;
+        return !(
+          item.status === "failed" &&
+          (activeSubmissionIdentities.has(identity) || activeSubmissionContent.has(contentIdentity))
+        );
+      },
     );
     return [
       ...assets,
@@ -301,8 +339,8 @@ const WhatsAppCloudTemplateManager = ({
     onError: () => toast.error("Cloud templates could not be refreshed"),
   });
   const submitMutation = useMutation({
-    mutationFn: () =>
-      submitWhatsAppCloudTemplate(organizationId, accountId, {
+    mutationFn: async () => {
+      const template = {
         storeId,
         whatsappBusinessAccountId: businessAccountId,
         kind,
@@ -340,8 +378,18 @@ const WhatsAppCloudTemplateManager = ({
               headerSampleMimeType: headerSample.mimeType,
             }
           : {}),
-        idempotencyKey: `${businessAccountId}:${slugify(friendlyName)}:${languageCode.trim()}:${kind}`,
-      }),
+      };
+      const idempotencyKey = await contentIdempotencyKey(businessAccountId, {
+        friendlyName: template.friendlyName,
+        languageCode: template.languageCode,
+        kind: template.kind,
+        content: template,
+      });
+      return submitWhatsAppCloudTemplate(organizationId, accountId, {
+        ...template,
+        idempotencyKey,
+      });
+    },
     onSuccess: (response) => {
       if (response.status !== "success") toast.error(response.message);
       else {
@@ -642,6 +690,9 @@ const WhatsAppCloudTemplateManager = ({
           {kinds.map((messageKind) => {
             const binding = defaultBindingFor(messageKind.value);
             const selectedTemplate = templateForBinding(binding?.id);
+            const savingDefault =
+              importMutation.isPending &&
+              importMutation.variables?.kind === messageKind.value;
             const compatibleTemplates = approvedTemplates.filter(
               (template) =>
                 (messageKind.value === "promotion" ? "marketing" : "utility") ===
@@ -670,7 +721,14 @@ const WhatsAppCloudTemplateManager = ({
                 >
                   <SelectTrigger className="w-full rounded-xl bg-background">
                     <SelectValue placeholder={compatibleTemplates.length === 0 ? "No approved template" : "Choose a template"}>
-                      {selectedTemplate?.name ?? "Choose a template"}
+                      {savingDefault ? (
+                        <span className="flex items-center gap-2">
+                          <LoaderCircle className="size-4 animate-spin" />
+                          Saving…
+                        </span>
+                      ) : (
+                        selectedTemplate?.name ?? "Choose a template"
+                      )}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>

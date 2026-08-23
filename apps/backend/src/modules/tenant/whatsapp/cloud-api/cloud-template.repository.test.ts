@@ -39,6 +39,36 @@ describe("Cloud template normalization", () => {
     })).toThrow("Cloud template language is invalid");
   });
 
+  test("accepts Meta's null text field on media headers", () => {
+    expect(normalizeCloudTemplateAsset(organizationId, businessAccountId, {
+      id: "meta-template-2",
+      name: "panini_free_cold_coffee",
+      language: "en_US",
+      category: "MARKETING",
+      status: "PENDING",
+      components: [
+        { type: "HEADER", format: "IMAGE", text: null, example: { header_handle: ["media-handle"] } },
+        { type: "BODY", text: "Hello {{1}}" },
+      ],
+    }).components).toEqual([
+      { type: "HEADER", format: "IMAGE", text: null, example: { header_handle: ["media-handle"] } },
+      { type: "BODY", text: "Hello {{1}}" },
+    ]);
+  });
+
+  test("accepts line breaks in provider component text", () => {
+    expect(normalizeCloudTemplateAsset(organizationId, businessAccountId, {
+      id: "meta-template-3",
+      name: "panini_free_cold_coffee",
+      language: "en_US",
+      category: "MARKETING",
+      status: "PENDING",
+      components: [{ type: "BODY", text: "🔥 FREE COFFEE!\n\nBuy any large panini and get one cold coffee free." }],
+    }).components).toEqual([
+      { type: "BODY", text: "🔥 FREE COFFEE!\n\nBuy any large panini and get one cold coffee free." },
+    ]);
+  });
+
   test("rejects malformed provider components instead of storing an empty template", () => {
     expect(() => normalizeCloudTemplateAsset(organizationId, businessAccountId, {
       id: "meta-template-1",

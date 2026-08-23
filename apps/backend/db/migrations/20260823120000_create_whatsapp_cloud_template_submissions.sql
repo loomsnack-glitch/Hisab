@@ -56,11 +56,7 @@ CREATE TABLE whatsapp_cloud_template_submissions (
     CONSTRAINT whatsapp_cloud_template_submissions_samples_check
         CHECK (jsonb_typeof(sample_values) = 'object'),
     CONSTRAINT whatsapp_cloud_template_submissions_name_check
-        CHECK (LENGTH(BTRIM(friendly_name)) BETWEEN 1 AND 120),
-    CONSTRAINT whatsapp_cloud_template_submissions_meta_name_check
-        CHECK (meta_template_name ~ '^[a-z0-9_]{1,512}$'),
-    CONSTRAINT whatsapp_cloud_template_submissions_language_check
-        CHECK (language_code ~ '^[A-Za-z]{2,10}([_-][A-Za-z0-9]{2,10})*$')
+        CHECK (LENGTH(BTRIM(friendly_name)) BETWEEN 1 AND 120)
 );
 
 CREATE UNIQUE INDEX whatsapp_cloud_template_submissions_active_name_key

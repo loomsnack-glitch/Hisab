@@ -244,4 +244,36 @@ describe("WhatsAppCloudApiClient", () => {
     });
     expect(String(calls[0]?.init?.body)).not.toContain("test-secret-token");
   });
+
+  test("uploads template samples through the resumable upload API and returns the handle", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v26.0",
+      appId: "app-1",
+      baseUrl: "https://graph.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return calls.length === 1
+          ? jsonResponse({ id: "upload:session-1?sig=abc" })
+          : jsonResponse({ h: "2:::image/jpeg:template-handle" });
+      },
+    });
+
+    await expect(client.uploadTemplateSample({
+      body: new TextEncoder().encode("image-bytes"),
+      mimeType: "image/jpeg",
+      fileName: "offer.jpg",
+    })).resolves.toEqual({ handle: "2:::image/jpeg:template-handle" });
+    expect(calls[0]?.url).toBe(
+      "https://graph.example.test/v26.0/app-1/uploads?file_name=offer.jpg&file_length=11&file_type=image%2Fjpeg",
+    );
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(calls[1]?.url).toBe(
+      "https://graph.example.test/v26.0/upload:session-1?sig=abc",
+    );
+    expect(new Headers(calls[1]?.init?.headers).get("file_offset")).toBe("0");
+    expect(new Headers(calls[1]?.init?.headers).get("Content-Type")).toBe("application/octet-stream");
+    expect(String(calls[1]?.init?.body)).not.toContain("test-secret-token");
+  });
 });
