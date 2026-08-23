@@ -201,6 +201,7 @@ const safeSubmissionError = (error: unknown): { code: string; message: string } 
     "Cloud template component is invalid",
     "Cloud template component type is unsupported",
     "Cloud template body text is invalid",
+    "Cloud template body placeholders cannot be at the start or end",
     "Cloud template placeholders must use positive numbers",
     "Cloud template footer text is invalid",
     "Cloud template buttons are invalid",
@@ -243,6 +244,10 @@ const validateSubmissionComponents = (components: unknown[], sampleValues: Recor
     if (type === "BODY") {
       bodyCount += 1;
       if (typeof value.text !== "string" || !value.text.trim() || value.text.length > 4_096) throw new Error("Cloud template body text is invalid");
+      const bodyText = value.text.trim();
+      if (/^\{\{\d+\}\}/.test(bodyText) || /\{\{\d+\}\}$/.test(bodyText)) {
+        throw new Error("Cloud template body placeholders cannot be at the start or end");
+      }
       for (const match of value.text.matchAll(/\{\{([^{}]+)\}\}/g)) {
         if (!/^\d+$/.test(match[1]!) || Number(match[1]) < 1) throw new Error("Cloud template placeholders must use positive numbers");
         placeholders.add(match[1]!);
@@ -364,9 +369,9 @@ export const submitCloudTemplateForAccount = async (
         return { status: "error", message: "WhatsApp Cloud account is not assigned to this Store", data: null, code: STATUS_CODES.CONFLICT };
       }
     }
+    const components = validateSubmissionComponents(data.components, data.sampleValues);
     const credential = await deps.getCredential(organizationId, accountId);
     if (!credential) return { status: "error", message: "WhatsApp Cloud account credential is unavailable", data: null, code: STATUS_CODES.CONFLICT };
-    const components = validateSubmissionComponents(data.components, data.sampleValues);
     const category = categoryForKind(data.kind);
     const submissionInput: CloudTemplateSubmissionInput = {
       organizationId,

@@ -54,8 +54,7 @@ Paid: {{paid}}
 Balance due: {{balance_due}}
 
 Thank you.
-Regards,
-{{organization_name}}`,
+Regards from {{organization_name}}.`,
   due_reminder: `Hello {{customer_name}},
 
 This is a friendly reminder from {{store_name}}.

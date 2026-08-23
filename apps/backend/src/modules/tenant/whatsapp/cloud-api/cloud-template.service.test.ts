@@ -84,7 +84,7 @@ describe("Cloud template synchronization service", () => {
       metaTemplateName: "bill_ready",
       languageCode: "en_US",
       category: "utility" as const,
-      requestedComponents: [{ type: "BODY", text: "Hello {{1}}" }],
+      requestedComponents: [{ type: "BODY", text: "Hello {{1}}." }],
       sampleValues: { "1": "Customer" },
       idempotencyKey: "idem-1",
       metaTemplateId: null,
@@ -105,7 +105,7 @@ describe("Cloud template synchronization service", () => {
       friendlyName: "Bill ready",
       metaTemplateName: "bill_ready",
       languageCode: "en_US",
-      components: [{ type: "BODY", text: "Regards {{6}}, invoice {{2}} for {{1}}. Total {{3}}, paid {{4}}, due {{5}}. {{6}}" }],
+      components: [{ type: "BODY", text: "Regards {{6}}, invoice {{2}} for {{1}}. Total {{3}}, paid {{4}}, due {{5}}. {{6}}." }],
       sampleValues: { "1": "Customer", "2": "INV-1001", "3": "₹1,250", "4": "₹1,000", "5": "₹250", "6": "Ganatri" },
       idempotencyKey: "idem-1",
     }, {
@@ -129,7 +129,7 @@ describe("Cloud template synchronization service", () => {
         async getTemplates() {
           return !providerCreated
             ? { data: [] }
-            : { data: [{ id: "meta-1", name: "bill_ready", language: "en_US", category: "UTILITY", status: "PENDING", components: [{ type: "BODY", text: "Hello {{1}}" }] }] };
+            : { data: [{ id: "meta-1", name: "bill_ready", language: "en_US", category: "UTILITY", status: "PENDING", components: [{ type: "BODY", text: "Hello {{1}}." }] }] };
         },
         async createMessageTemplate(_wabaId, definition) {
           providerCreated = true;
@@ -148,7 +148,7 @@ describe("Cloud template synchronization service", () => {
     expect(response.data?.template?.name).toBe("bill_ready");
     expect(providerDefinition?.components).toEqual([{
       type: "BODY",
-      text: "Regards {{6}}, invoice {{2}} for {{1}}. Total {{3}}, paid {{4}}, due {{5}}. {{6}}",
+      text: "Regards {{6}}, invoice {{2}} for {{1}}. Total {{3}}, paid {{4}}, due {{5}}. {{6}}.",
       example: {
         body_text: [["Customer", "INV-1001", "₹1,250", "₹1,000", "₹250", "Ganatri"]],
       },
@@ -170,7 +170,7 @@ describe("Cloud template synchronization service", () => {
         metaTemplateName: "bill_ready",
         languageCode: "en_US",
         category: "utility" as const,
-        requestedComponents: [{ type: "BODY", text: "Hello {{1}}" }],
+        requestedComponents: [{ type: "BODY", text: "Hello {{1}}." }],
         sampleValues: { "1": "Customer" },
         idempotencyKey: "idem-2",
         metaTemplateId: "meta-2",
@@ -185,12 +185,12 @@ describe("Cloud template synchronization service", () => {
         createdAt: "2026-08-23T10:00:00.000Z",
         updatedAt: "2026-08-23T10:00:00.000Z",
       }),
-      list: async () => [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organizationId, whatsappBusinessAccountId: businessAccountId, metaTemplateId: "meta-2", name: "bill_ready", languageCode: "en_US", category: "utility" as const, status: "approved" as const, components: [{ type: "BODY", text: "Hello {{1}}" }], rejectionReason: null, providerUpdatedAt: null, lastSyncedAt: "2026-08-23T10:00:00.000Z", version: 1 }],
+      list: async () => [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organizationId, whatsappBusinessAccountId: businessAccountId, metaTemplateId: "meta-2", name: "bill_ready", languageCode: "en_US", category: "utility" as const, status: "approved" as const, components: [{ type: "BODY", text: "Hello {{1}}." }], rejectionReason: null, providerUpdatedAt: null, lastSyncedAt: "2026-08-23T10:00:00.000Z", version: 1 }],
       createDefaultBinding: async value => { input = value; return {} as never; },
     });
     expect(response.status).toBe("success");
     expect(input?.storeId).toBe("99999999-9999-4999-8999-999999999999");
-    expect(input?.localTemplateBody).toBe("Hello {{customer_name}}");
+    expect(input?.localTemplateBody).toBe("Hello {{customer_name}}.");
   });
 
   test("does not call Meta when another request owns the submission claim", async () => {
@@ -206,7 +206,7 @@ describe("Cloud template synchronization service", () => {
       metaTemplateName: "bill_ready",
       languageCode: "en_US",
       category: "utility" as const,
-      requestedComponents: [{ type: "BODY", text: "Hello {{1}}" }],
+      requestedComponents: [{ type: "BODY", text: "Hello {{1}}." }],
       sampleValues: { "1": "Customer" },
       idempotencyKey: "idem-race",
       metaTemplateId: null,
@@ -227,7 +227,7 @@ describe("Cloud template synchronization service", () => {
       friendlyName: "Bill ready",
       metaTemplateName: "bill_ready",
       languageCode: "en_US",
-      components: [{ type: "BODY", text: "Hello {{1}}" }],
+      components: [{ type: "BODY", text: "Hello {{1}}." }],
       sampleValues: { "1": "Customer" },
       idempotencyKey: "idem-race",
     }, {
@@ -277,6 +277,30 @@ describe("Cloud template synchronization service", () => {
     expect(providerCalled).toBe(false);
   });
 
+  test("rejects a body placeholder at the start or end before calling Meta", async () => {
+    let providerCalled = false;
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill ready",
+      metaTemplateName: "bill_ready",
+      languageCode: "en_US",
+      components: [{ type: "BODY", text: "Regards,\n{{6}}" }],
+      sampleValues: { "6": "Ganatri" },
+      idempotencyKey: "idem-edge-placeholder",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      createSubmission: async () => { throw new Error("should not persist invalid content"); },
+      createClient: () => ({
+        async getTemplates() { providerCalled = true; return { data: [] }; },
+      }),
+    });
+
+    expect(response).toMatchObject({ status: "error", message: "Cloud template body placeholders cannot be at the start or end" });
+    expect(providerCalled).toBe(false);
+  });
+
   test("rejects an invalid Meta template name before persisting a submission", async () => {
     let persisted = false;
     const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
@@ -285,7 +309,7 @@ describe("Cloud template synchronization service", () => {
       friendlyName: "Bill ready",
       metaTemplateName: "Bill ready",
       languageCode: "en_US",
-      components: [{ type: "BODY", text: "Hello {{1}}" }],
+      components: [{ type: "BODY", text: "Hello {{1}}." }],
       sampleValues: { "1": "Customer" },
       idempotencyKey: "idem-invalid-name",
     }, {
