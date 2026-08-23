@@ -202,6 +202,7 @@ export const applyCloudTemplateProviderStatus = async (
     FROM whatsapp_business_accounts business
     WHERE business.id = assets.whatsapp_business_account_id
       AND business.waba_id = ${input.wabaId}
+      AND (assets.provider_updated_at IS NULL OR assets.provider_updated_at <= ${input.occurredAt}::timestamptz)
       AND (
         (${templateId}::varchar IS NOT NULL AND assets.meta_template_id = ${templateId})
         OR (
@@ -227,6 +228,7 @@ export const applyCloudTemplateProviderStatus = async (
     FROM whatsapp_business_accounts business
     WHERE business.id = submissions.whatsapp_business_account_id
       AND business.waba_id = ${input.wabaId}
+      AND (submissions.provider_updated_at IS NULL OR submissions.provider_updated_at <= ${input.occurredAt}::timestamptz)
       AND (
         (${templateId}::varchar IS NOT NULL AND submissions.meta_template_id = ${templateId})
         OR (
