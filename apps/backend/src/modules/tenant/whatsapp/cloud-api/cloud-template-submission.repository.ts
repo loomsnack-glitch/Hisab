@@ -1,0 +1,134 @@
+import {
+  WhatsAppCloudTemplateSubmissionSchema,
+  type WhatsAppCloudTemplateSubmissionDTO,
+} from "@repo/types";
+import { pg } from "@/config/db";
+import { snakeToCamel } from "@/utils/case";
+
+export type CloudTemplateSubmissionInput = {
+  organizationId: string;
+  whatsappBusinessAccountId: string;
+  originatingStoreId?: string | null;
+  localTemplateId?: string | null;
+  kind: "bill" | "due_reminder" | "promotion";
+  friendlyName: string;
+  metaTemplateName: string;
+  languageCode: string;
+  category: "marketing" | "utility" | "authentication" | "unknown";
+  requestedComponents: unknown[];
+  sampleValues: Record<string, unknown>;
+  idempotencyKey: string;
+  createdBy: string;
+};
+
+const mapSubmission = (row: Record<string, unknown>): WhatsAppCloudTemplateSubmissionDTO => {
+  const mapped = snakeToCamel(row) as Record<string, unknown>;
+  return WhatsAppCloudTemplateSubmissionSchema.parse({
+    id: mapped.id,
+    organizationId: mapped.organizationId,
+    whatsappBusinessAccountId: mapped.whatsappBusinessAccountId,
+    originatingStoreId: mapped.originatingStoreId ?? null,
+    localTemplateId: mapped.localTemplateId ?? null,
+    kind: mapped.kind,
+    friendlyName: mapped.friendlyName,
+    metaTemplateName: mapped.metaTemplateName,
+    languageCode: mapped.languageCode,
+    category: mapped.category,
+    requestedComponents: Array.isArray(mapped.requestedComponents) ? mapped.requestedComponents : [],
+    sampleValues: mapped.sampleValues && typeof mapped.sampleValues === "object" && !Array.isArray(mapped.sampleValues)
+      ? mapped.sampleValues
+      : {},
+    idempotencyKey: mapped.idempotencyKey,
+    metaTemplateId: mapped.metaTemplateId ?? null,
+    status: mapped.status,
+    rejectionReason: mapped.rejectionReason ?? null,
+    lastErrorCode: mapped.lastErrorCode ?? null,
+    lastErrorMessage: mapped.lastErrorMessage ?? null,
+    submittedAt: mapped.submittedAt ?? null,
+    providerUpdatedAt: mapped.providerUpdatedAt ?? null,
+    createdBy: mapped.createdBy,
+    updatedBy: mapped.updatedBy ?? null,
+    createdAt: mapped.createdAt,
+    updatedAt: mapped.updatedAt,
+  });
+};
+
+export const mapCloudTemplateSubmission = mapSubmission;
+
+export const createCloudTemplateSubmission = async (
+  input: CloudTemplateSubmissionInput,
+): Promise<WhatsAppCloudTemplateSubmissionDTO> => pg.begin(async tx => {
+  const [inserted] = await tx`
+    INSERT INTO whatsapp_cloud_template_submissions (
+      organization_id, whatsapp_business_account_id, originating_store_id,
+      local_template_id, kind, friendly_name, meta_template_name,
+      language_code, category, requested_components, sample_values,
+      idempotency_key, created_by, updated_by
+    ) VALUES (
+      ${input.organizationId}, ${input.whatsappBusinessAccountId}, ${input.originatingStoreId ?? null},
+      ${input.localTemplateId ?? null}, ${input.kind}, ${input.friendlyName}, ${input.metaTemplateName},
+      ${input.languageCode}, ${input.category}, ${input.requestedComponents}::jsonb,
+      ${input.sampleValues}::jsonb, ${input.idempotencyKey}, ${input.createdBy}, ${input.createdBy}
+    )
+    ON CONFLICT (organization_id, whatsapp_business_account_id, idempotency_key)
+    DO NOTHING
+    RETURNING *
+  `;
+  if (inserted) return mapSubmission(inserted as Record<string, unknown>);
+
+  const [existing] = await tx`
+    SELECT *
+    FROM whatsapp_cloud_template_submissions
+    WHERE organization_id = ${input.organizationId}
+      AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+      AND idempotency_key = ${input.idempotencyKey}
+  `;
+  if (!existing) throw new Error("Cloud template submission could not be created");
+  const existingSubmission = mapSubmission(existing as Record<string, unknown>);
+  if (
+    existingSubmission.metaTemplateName !== input.metaTemplateName ||
+    existingSubmission.languageCode !== input.languageCode ||
+    existingSubmission.kind !== input.kind ||
+    JSON.stringify(existingSubmission.requestedComponents) !== JSON.stringify(input.requestedComponents)
+  ) {
+    throw new Error("Cloud template submission idempotency key was reused with different content");
+  }
+  return existingSubmission;
+});
+
+export const getCloudTemplateSubmission = async (
+  organizationId: string,
+  submissionId: string,
+): Promise<WhatsAppCloudTemplateSubmissionDTO | null> => {
+  const [row] = await pg`
+    SELECT *
+    FROM whatsapp_cloud_template_submissions
+    WHERE organization_id = ${organizationId}
+      AND id = ${submissionId}
+  `;
+  return row ? mapSubmission(row as Record<string, unknown>) : null;
+};
+
+export const listCloudTemplateSubmissions = async (
+  organizationId: string,
+  whatsappBusinessAccountId: string,
+  originatingStoreId?: string,
+): Promise<WhatsAppCloudTemplateSubmissionDTO[]> => {
+  const rows = originatingStoreId
+    ? await pg`
+        SELECT *
+        FROM whatsapp_cloud_template_submissions
+        WHERE organization_id = ${organizationId}
+          AND whatsapp_business_account_id = ${whatsappBusinessAccountId}
+          AND originating_store_id = ${originatingStoreId}
+        ORDER BY updated_at DESC, id DESC
+      `
+    : await pg`
+        SELECT *
+        FROM whatsapp_cloud_template_submissions
+        WHERE organization_id = ${organizationId}
+          AND whatsapp_business_account_id = ${whatsappBusinessAccountId}
+        ORDER BY updated_at DESC, id DESC
+      `;
+  return rows.map((row: Record<string, unknown>) => mapSubmission(row));
+};

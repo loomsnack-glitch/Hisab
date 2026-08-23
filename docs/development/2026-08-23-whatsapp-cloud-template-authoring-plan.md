@@ -247,7 +247,7 @@ Evidence:
 
 ### Phase 1 — Submission persistence and database invariants
 
-Status: **in progress**
+Status: **completed**
 
 Scope:
 
@@ -268,9 +268,23 @@ Exit criteria:
 - duplicate create retries cannot create two active submissions;
 - no credential, token, or raw provider secret is stored in the new table.
 
+Evidence:
+
+- [x] Migration `20260823120000_create_whatsapp_cloud_template_submissions.sql`
+  adds tenant-scoped submission storage, status states, JSONB checks, active
+  name uniqueness, provider-ID uniqueness, and idempotency uniqueness.
+- [x] The configured development database reports 76 applied migrations and
+  0 pending after the migration was applied.
+- [x] Shared DTO schemas and backend submission mapping were added without
+  storing credential material.
+- [x] Submission mapping regression test passes.
+- [x] Full backend typecheck was run; remaining failures are repository
+  baseline/test-contract failures, not this phase's submission mapper after
+  its implicit-any issue was fixed.
+
 ### Phase 2 — Meta create/update/delete adapter
 
-Status: **planned**
+Status: **in progress**
 
 Scope:
 

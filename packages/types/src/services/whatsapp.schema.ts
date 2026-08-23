@@ -70,6 +70,17 @@ export const WhatsAppCloudTemplateCategorySchema = z.enum([
     "unknown",
 ]);
 
+export const WhatsAppCloudTemplateSubmissionStatusSchema = z.enum([
+    "draft",
+    "submitting",
+    "pending",
+    "approved",
+    "rejected",
+    "paused",
+    "disabled",
+    "failed",
+]);
+
 export const WhatsAppCloudTemplateAssetSchema = z.object({
     id: z.uuid("Invalid Cloud template id"),
     organizationId: z.uuid("Invalid organization id"),
@@ -109,6 +120,46 @@ export const WhatsAppCreateCloudTemplateBindingSchema = z.object({
     variableMapping: z.record(z.string(), z.string()).optional(),
     kind: WhatsAppMessageTemplateKindSchema,
     isDefault: z.boolean().optional(),
+});
+
+export const WhatsAppCloudTemplateSubmissionSchema = z.object({
+    id: z.uuid("Invalid template submission id"),
+    organizationId: z.uuid("Invalid organization id"),
+    whatsappBusinessAccountId: z.uuid("Invalid internal Cloud business account id"),
+    originatingStoreId: z.uuid("Invalid originating store id").nullable(),
+    localTemplateId: z.uuid("Invalid local template id").nullable(),
+    kind: WhatsAppMessageTemplateKindSchema,
+    friendlyName: z.string().trim().min(1).max(120),
+    metaTemplateName: z.string().regex(/^[a-z0-9_]{1,512}$/),
+    languageCode: z.string().regex(/^[A-Za-z]{2,10}(?:[_-][A-Za-z0-9]{2,10})*$/),
+    category: WhatsAppCloudTemplateCategorySchema,
+    requestedComponents: z.array(z.unknown()),
+    sampleValues: z.record(z.string(), z.unknown()),
+    idempotencyKey: z.string().trim().min(1).max(255),
+    metaTemplateId: z.string().trim().min(1).max(255).nullable(),
+    status: WhatsAppCloudTemplateSubmissionStatusSchema,
+    rejectionReason: z.string().trim().min(1).max(1000).nullable(),
+    lastErrorCode: z.string().trim().min(1).max(100).nullable(),
+    lastErrorMessage: z.string().trim().min(1).max(1000).nullable(),
+    submittedAt: dtoDateSchema.nullable(),
+    providerUpdatedAt: dtoDateSchema.nullable(),
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
+export const WhatsAppCreateCloudTemplateSubmissionSchema = z.object({
+    storeId: z.uuid("Invalid store id").nullable().optional(),
+    whatsappBusinessAccountId: z.uuid("Invalid internal Cloud business account id"),
+    localTemplateId: z.uuid("Invalid local template id").nullable().optional(),
+    kind: WhatsAppMessageTemplateKindSchema,
+    friendlyName: z.string().trim().min(1).max(120),
+    metaTemplateName: z.string().trim().regex(/^[a-z0-9_]{1,512}$/),
+    languageCode: z.string().trim().regex(/^[A-Za-z]{2,10}(?:[_-][A-Za-z0-9]{2,10})*$/),
+    components: z.array(z.unknown()).max(20),
+    sampleValues: z.record(z.string(), z.unknown()).default({}),
+    idempotencyKey: z.string().trim().min(1).max(255),
 });
 
 export const WhatsAppCloudQuotaPolicySchema = z.object({

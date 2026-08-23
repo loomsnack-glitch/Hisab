@@ -51,9 +51,12 @@ import {
     WhatsAppCloudProvisioningStepSchema,
     WhatsAppCloudTemplateStatusSchema,
     WhatsAppCloudTemplateCategorySchema,
+    WhatsAppCloudTemplateSubmissionStatusSchema,
     WhatsAppCloudTemplateAssetSchema,
     WhatsAppCloudTemplateBindingSchema,
     WhatsAppCreateCloudTemplateBindingSchema,
+    WhatsAppCloudTemplateSubmissionSchema,
+    WhatsAppCreateCloudTemplateSubmissionSchema,
     WhatsAppCloudQuotaPolicySchema,
     WhatsAppCloudSafetySchema,
     WhatsAppCloudOutboxOperationSchema,
@@ -99,9 +102,12 @@ export type WhatsAppCloudProvisioningStatus = z.infer<typeof WhatsAppCloudProvis
 export type WhatsAppCloudProvisioningStep = z.infer<typeof WhatsAppCloudProvisioningStepSchema>;
 export type WhatsAppCloudTemplateStatus = z.infer<typeof WhatsAppCloudTemplateStatusSchema>;
 export type WhatsAppCloudTemplateCategory = z.infer<typeof WhatsAppCloudTemplateCategorySchema>;
+export type WhatsAppCloudTemplateSubmissionStatus = z.infer<typeof WhatsAppCloudTemplateSubmissionStatusSchema>;
 export type WhatsAppCloudTemplateAssetDTO = z.infer<typeof WhatsAppCloudTemplateAssetSchema>;
 export type WhatsAppCloudTemplateBindingDTO = z.infer<typeof WhatsAppCloudTemplateBindingSchema>;
 export type WhatsAppCreateCloudTemplateBindingJSON = z.infer<typeof WhatsAppCreateCloudTemplateBindingSchema>;
+export type WhatsAppCloudTemplateSubmissionDTO = z.infer<typeof WhatsAppCloudTemplateSubmissionSchema>;
+export type WhatsAppCreateCloudTemplateSubmissionJSON = z.infer<typeof WhatsAppCreateCloudTemplateSubmissionSchema>;
 export type WhatsAppCloudQuotaPolicy = z.infer<typeof WhatsAppCloudQuotaPolicySchema>;
 export type WhatsAppCloudSafety = z.infer<typeof WhatsAppCloudSafetySchema>;
 export type WhatsAppCloudOutboxOperationDTO = z.infer<typeof WhatsAppCloudOutboxOperationSchema>;
