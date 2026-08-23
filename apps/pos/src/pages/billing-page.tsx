@@ -1,14 +1,28 @@
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useSwipeable } from "react-swipeable";
 import {
     commitSale,
     commitPosSale,
     completePosSale,
-    createPosParcelKot,
     createPosTableKot,
     updatePosTableKot,
+  updatePosStandaloneKot,
     checkoutPosTableOrder,
     createDraftSale,
     createPosDraftSale,
@@ -41,7 +55,6 @@ import type {
     CommitSaleJSON,
     ReplaceSaleJSON,
     CompleteSaleJSON,
-    CreateParcelKotJSON,
     CreateTableKotJSON,
     CheckoutTableOrderJSON,
     CreateCustomerJSON,
@@ -52,16 +65,26 @@ import type {
     ProductResponseDTO,
     ComboProductResponse,
     CustomerDTO,
+  KotDTO,
     SalesListQuery,
     SalesListSummary,
     SaleDetailDTO,
+  SaleItemDTO,
     SaleSummaryDTO,
+    SaleServiceMode,
     ServiceTableDTO,
     TableOrderDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
-import { normalizePhoneNumber } from "@repo/types";
+import { normalizePhoneNumber, formatSaleServiceModeLabel } from "@repo/types";
+import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
+import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
+import {
+    DataTableFilterTrigger,
+    DataTableFilterValue,
+} from "@repo/ui/components/data-table-filter-trigger";
+import { DataTableSortFilter } from "@repo/ui/components/data-table-sort-filter";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -83,30 +106,40 @@ import {
 import { Calendar as DateCalendar } from "@repo/ui/components/calendar";
 import { Input } from "@repo/ui/components/input";
 import { PhoneInput } from "@repo/ui/components/phone-input";
-import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@repo/ui/components/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
-    ArrowUpDown,
     Barcode,
     Calendar,
     Check,
     ChevronLeft,
     ChevronRight,
     Copy,
-    Filter,
     Minus,
     Pause,
     Plus,
     Play,
     Printer,
     ReceiptText,
+    RotateCcw,
     Search,
     ShoppingCart,
     Store,
     Trash2,
+    Utensils,
     User,
     X,
     Boxes,
@@ -116,8 +149,12 @@ import { toast } from "sonner";
 
 import { usePosMobileNav } from "@/components/pos/pos-mobile-nav-context";
 import CustomerDirectory from "@/components/customers/customer-directory";
-import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
-import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
+import CustomizeProductDialog, {
+  type CustomizeAddOnSelection,
+} from "@/components/billing/customize-product-dialog";
+import ConfigureComboDialog, {
+  type ComboDialogSelection,
+} from "@/components/billing/configure-combo-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
@@ -125,9 +162,24 @@ import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
-import type { PosComposerHandoff, PosPanelTab } from "@/pages/pos-route-context";
-import { billingKeys, catalogKeys, organizationKeys, serviceTableKeys, whatsappKeys } from "@/lib/query-keys";
-import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate, getAverageBillPerOrder } from "@/lib/format";
+import type {
+  PosComposerHandoff,
+  PosPanelTab,
+} from "@/pages/pos-route-context";
+import {
+  billingKeys,
+  catalogKeys,
+  organizationKeys,
+  serviceTableKeys,
+  whatsappKeys,
+} from "@/lib/query-keys";
+import {
+  formatCurrency,
+  formatDateTime,
+  formatDiscountPercentage,
+  formatLongDate,
+  getAverageBillPerOrder,
+} from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
@@ -147,14 +199,29 @@ import {
     type ScanDiagnostic,
 } from "@/lib/barcode-scanning";
 import { safeRandomUUID } from "@/lib/uuid";
-import { isParcelKotActionVisible, PosParcelKotAction } from "@/lib/pos-parcel-kot";
+import {
+  buildDirectKotGenerationFields,
+  isDirectGenerateKotVisible,
+  isKotBackedDirectDraft,
+  isOrderTypeSelectorVisible,
+  saleComposerItemsWithoutStandaloneKot,
+  selectedStandaloneKotItemsToComposerItems,
+  splitKotBackedDraftComposer,
+} from "@/lib/pos-direct-kot";
+import {
+  PosGenerateKotToggle,
+  PosStandaloneKotList,
+} from "@/lib/pos-direct-kot-components";
 import {
     composerItemsFromTableKot,
-    isTableKotActionVisible,
-    PosTableKotAction,
-    PosTableKotList,
+  isTableKotFulfillmentSelectorVisible,
+  isTableKotWorkflowEnabled,
     remainingTableKotItemCount,
+  resolveTableCheckoutMode,
+  resolveStableTableKotRequest,
+    shouldOpenMobileCartOnComposerHandoff,
 } from "@/lib/pos-table-kot";
+import { PosTableKotList } from "@/lib/pos-table-kot-components";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
 type ComposerAddOn = CustomizeAddOnSelection;
@@ -198,7 +265,9 @@ type ScanFeedback =
     | { kind: "ambiguous"; productCode: string }
     | { kind: "unavailable"; message: string };
 
-const getStoredScanDiagnostics = (storageKey: string | null): ScanDiagnostic[] => {
+const getStoredScanDiagnostics = (
+  storageKey: string | null,
+): ScanDiagnostic[] => {
     if (!storageKey || typeof window === "undefined") {
         return [];
     }
@@ -231,10 +300,14 @@ const buildComposerConfigurationSignature = (addOns: ComposerAddOn[]) => {
         .join("|");
 };
 
-const buildComboConfigurationSignature = (selections: ComposerComboSelection[]) =>
+const buildComboConfigurationSignature = (
+  selections: ComposerComboSelection[],
+) =>
     [...selections]
         .sort((left, right) =>
-            `${left.groupId}:${left.optionProductId}`.localeCompare(`${right.groupId}:${right.optionProductId}`),
+      `${left.groupId}:${left.optionProductId}`.localeCompare(
+        `${right.groupId}:${right.optionProductId}`,
+      ),
         )
         .map(
             (selection) =>
@@ -251,17 +324,30 @@ const isSameComposerConfiguration = (
     },
 ) =>
     left.productId === right.productId &&
-    buildComposerConfigurationSignature(left.addOns) === buildComposerConfigurationSignature(right.addOns) &&
+  buildComposerConfigurationSignature(left.addOns) ===
+    buildComposerConfigurationSignature(right.addOns) &&
     buildComboConfigurationSignature(left.comboSelections ?? []) ===
         buildComboConfigurationSignature(right.comboSelections ?? []);
 
 type SettlementMode = "full" | "partial" | "due";
 type SaleSort = "newest" | "oldest" | "highest" | "lowest";
 type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
+type BillPaymentMethod = Exclude<SalesPaymentMethodFilter, "all">;
 type SalesDateMode = "date" | "range";
-type SalesDatePreset = "today" | "yesterday" | "this-week" | "this-month" | "custom" | "all";
-type BillingPanelTab = "products" | "bills" | "reports" | "purchases" | "customers";
+type SalesDatePreset =
+  "today" | "yesterday" | "this-week" | "this-month" | "custom" | "all";
+type BillingPanelTab =
+  "products" | "bills" | "reports" | "purchases" | "customers";
 type InvoiceAction = "print" | "whatsapp";
+
+const SERVICE_MODE_OPTIONS: Array<{
+    value: SaleServiceMode;
+    label: string;
+    icon: typeof Utensils;
+}> = [
+    { value: "dine_in", label: "Dine-In", icon: Utensils },
+    { value: "pick_up", label: "Pick-Up", icon: ShoppingCart },
+];
 
 const salesSortOptions: Array<{ value: SaleSort; label: string }> = [
     { value: "newest", label: "Newest" },
@@ -280,7 +366,12 @@ const salesPaymentMethodOptions: Array<{
     { value: "card", label: "Card" },
 ];
 
-const salesDatePresetOptions: Array<{ value: SalesDatePreset; label: string }> = [
+const salesPaymentMethodFilterOptions = salesPaymentMethodOptions.filter(
+    (option) => option.value !== "all",
+);
+
+const salesDatePresetOptions: Array<{ value: SalesDatePreset; label: string }> =
+  [
     { value: "today", label: "Today" },
     { value: "yesterday", label: "Yesterday" },
     { value: "this-week", label: "This week" },
@@ -292,7 +383,9 @@ const salesDatePresetOptions: Array<{ value: SalesDatePreset; label: string }> =
 const getSalesDatePresetOptions = (mode: SalesDateMode) =>
     salesDatePresetOptions.filter((preset) =>
         mode === "date"
-            ? preset.value === "today" || preset.value === "yesterday" || preset.value === "custom"
+      ? preset.value === "today" ||
+        preset.value === "yesterday" ||
+        preset.value === "custom"
             : preset.value === "this-week" ||
               preset.value === "this-month" ||
               preset.value === "custom" ||
@@ -300,7 +393,11 @@ const getSalesDatePresetOptions = (mode: SalesDateMode) =>
     );
 
 const formatSalesDate = (value: Date) =>
-    value.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  value.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
 const startOfLocalDay = (value: Date) =>
     new Date(value.getFullYear(), value.getMonth(), value.getDate());
@@ -362,31 +459,45 @@ const SalesSummaryBar = ({ summary }: { summary: SalesListSummary | null }) => {
     return (
         <div className="mb-4 grid grid-cols-3 gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-3.5 text-xs sm:grid-cols-5 sm:gap-4 sm:px-4">
             <div className="min-w-0">
-                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Sales</p>
-                <p className="whitespace-nowrap text-sm font-semibold sm:text-base">{summary.completedCount}</p>
+        <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+          Sales
+        </p>
+        <p className="whitespace-nowrap text-sm font-semibold sm:text-base">
+          {summary.completedCount}
+        </p>
             </div>
             <div className="min-w-0">
-                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+        <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+          Total
+        </p>
                 <p className="whitespace-nowrap text-sm font-bold text-primary sm:text-base">
                     {formatCurrency(summary.salesTotal)}
                 </p>
             </div>
             <div className="min-w-0">
-                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Collected</p>
+        <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+          Collected
+        </p>
                 <p className="whitespace-nowrap text-sm font-semibold text-emerald-600 dark:text-emerald-400 sm:text-base">
                     {formatCurrency(summary.collectedTotal)}
                 </p>
             </div>
             <div className="min-w-0">
-                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Due</p>
+        <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+          Due
+        </p>
                 <p className="whitespace-nowrap text-sm font-semibold text-amber-600 dark:text-amber-400 sm:text-base">
                     {formatCurrency(summary.dueTotal)}
                 </p>
             </div>
             <div className="min-w-0">
-                <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">Avg bill</p>
+        <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+          Avg bill
+        </p>
                 <p className="whitespace-nowrap text-sm font-semibold sm:text-base">
-                    {formatCurrency(getAverageBillPerOrder(summary.salesTotal, summary.completedCount))}
+          {formatCurrency(
+            getAverageBillPerOrder(summary.salesTotal, summary.completedCount),
+          )}
                 </p>
             </div>
         </div>
@@ -417,12 +528,15 @@ const paymentMethodOptions: Array<{ value: PaymentMethod; label: string }> = [
     { value: "card", label: "Card" },
 ];
 
-const discountPresetPercentages = [5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 75, 100] as const;
+const discountPresetPercentages = [
+  5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 75, 100,
+] as const;
 
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
-    initialPanelTab?: "products" | "bills" | "reports" | "customers" | "purchases";
+  initialPanelTab?:
+    "products" | "bills" | "reports" | "customers" | "purchases";
     productSearch?: string;
     salesSearch?: string;
     purchaseSearch?: string;
@@ -458,18 +572,22 @@ const BillingPage = ({
     const isDeviceMode = mode === "device";
     const canMutate = isDeviceMode;
     const posPrinter = useOptionalPosPrinter();
-    const organizationId = isDeviceMode ? (session?.organization.id ?? "") : organizationIdParam;
+  const organizationId = isDeviceMode
+    ? (session?.organization.id ?? "")
+    : organizationIdParam;
     const scanDiagnosticStorageKey = session?.device.id
         ? `hisab:barcode-scan-diagnostics:${session.device.id}`
         : null;
 
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
     const [activeTableId, setActiveTableId] = useState<string | null>(null);
-    const [activeTableOrder, setActiveTableOrder] = useState<TableOrderDTO | null>(null);
+  const [activeTableOrder, setActiveTableOrder] =
+    useState<TableOrderDTO | null>(null);
     const [selectedKotId, setSelectedKotId] = useState<string | null>(null);
     const [editingKotId, setEditingKotId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
-    const [selectedCustomerFallback, setSelectedCustomerFallback] = useState<CustomerDTO | null>(null);
+  const [selectedCustomerFallback, setSelectedCustomerFallback] =
+    useState<CustomerDTO | null>(null);
     const [customerSearch, setCustomerSearch] = useState("");
     const [notes, setNotes] = useState("");
     const [items, setItems] = useState<ComposerItem[]>([]);
@@ -479,25 +597,48 @@ const BillingPage = ({
     const [draftToDeleteId, setDraftToDeleteId] = useState<string | null>(null);
     const [resumingDraftId, setResumingDraftId] = useState<string | null>(null);
     const consumedComposerHandoffRef = useRef<string | null>(null);
-    const [receiptToPrint, setReceiptToPrint] = useState<SaleDetailDTO | null>(null);
+  const [receiptToPrint, setReceiptToPrint] = useState<SaleDetailDTO | null>(
+    null,
+  );
     const salesScrollContainerRef = useRef<HTMLDivElement | null>(null);
     const salesLoadMoreRef = useRef<HTMLDivElement | null>(null);
     const completionRequestRef = useRef<{
         requestId: string;
         fingerprint: string;
     } | null>(null);
-    const parcelKotRequestRef = useRef<{
+  const draftKotRequestRef = useRef<{
+    requestId: string;
+    fingerprint: string;
+  } | null>(null);
+  const tableKotRequestRef = useRef<{
         requestId: string;
         fingerprint: string;
     } | null>(null);
+  const [baselineComposerItems, setBaselineComposerItems] = useState<
+    ComposerItem[]
+  >([]);
+  const [activeStandaloneKots, setActiveStandaloneKots] = useState<KotDTO[]>(
+    [],
+  );
+  const [activeStandaloneSaleItems, setActiveStandaloneSaleItems] = useState<
+    SaleItemDTO[]
+  >([]);
+  const [selectedStandaloneKotId, setSelectedStandaloneKotId] = useState<
+    string | null
+  >(null);
+  const [generateKotEnabled, setGenerateKotEnabled] = useState(true);
     const [settlementMode, setSettlementMode] = useState<SettlementMode>("full");
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("cash");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] =
+    useState<PaymentMethod>("cash");
     const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
     const [discountInput, setDiscountInput] = useState("");
-    const [discountMode, setDiscountMode] = useState<"amount" | "percent">("percent");
+  const [discountMode, setDiscountMode] = useState<"amount" | "percent">(
+    "percent",
+  );
     const [invoiceActions, setInvoiceActions] = useState<InvoiceAction[]>(
         isDeviceMode && posPrinter?.connected ? ["print"] : [],
     );
+    const [serviceMode, setServiceMode] = useState<SaleServiceMode>("dine_in");
     const [settlementEditorOpen, setSettlementEditorOpen] = useState(false);
     const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
     const [replacingSaleId, setReplacingSaleId] = useState<string | null>(null);
@@ -507,30 +648,44 @@ const BillingPage = ({
     const [newCustomerName, setNewCustomerName] = useState("");
     const [newCustomerPhone, setNewCustomerPhone] = useState("");
     const [discountEditorOpen, setDiscountEditorOpen] = useState(false);
-    const [historyFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
+  const [historyFilter] = useState<
+    "all" | "draft" | "open" | "paid" | "voided"
+  >("all");
     const [leftPanelTab, setLeftPanelTab] = useState<BillingPanelTab>(
         isDeviceMode ? initialPanelTab : "bills",
     );
 
     const [sortBy, setSortBy] = useState<SaleSort>("newest");
-    const [paymentMethodFilter, setPaymentMethodFilter] = useState<SalesPaymentMethodFilter>("all");
+    const [paymentMethodSelection, setPaymentMethodSelection] = useState<
+        Set<BillPaymentMethod>
+    >(new Set());
     const [dateFilter, setDateFilter] = useState<SalesDateMode>("date");
     const [datePreset, setDatePreset] = useState<SalesDatePreset>("today");
     const [specificDate, setSpecificDate] = useState(new Date());
     const [customFromDate, setCustomFromDate] = useState<Date | null>(null);
     const [customToDate, setCustomToDate] = useState<Date | null>(null);
     const [salesDatePopoverOpen, setSalesDatePopoverOpen] = useState(false);
-    const [appliedDateFilter, setAppliedDateFilter] = useState<SalesDateMode>("date");
-    const [appliedDatePreset, setAppliedDatePreset] = useState<SalesDatePreset>("today");
+  const [appliedDateFilter, setAppliedDateFilter] =
+    useState<SalesDateMode>("date");
+  const [appliedDatePreset, setAppliedDatePreset] =
+    useState<SalesDatePreset>("today");
     const [appliedSpecificDate, setAppliedSpecificDate] = useState(new Date());
-    const [appliedCustomFromDate, setAppliedCustomFromDate] = useState<Date | null>(null);
-    const [appliedCustomToDate, setAppliedCustomToDate] = useState<Date | null>(null);
-    const [customizeProductId, setCustomizeProductId] = useState<string | null>(null);
-    const [configureComboProductId, setConfigureComboProductId] = useState<string | null>(null);
+  const [appliedCustomFromDate, setAppliedCustomFromDate] =
+    useState<Date | null>(null);
+  const [appliedCustomToDate, setAppliedCustomToDate] = useState<Date | null>(
+    null,
+  );
+  const [customizeProductId, setCustomizeProductId] = useState<string | null>(
+    null,
+  );
+  const [configureComboProductId, setConfigureComboProductId] = useState<
+    string | null
+  >(null);
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
     const [scanValue, setScanValue] = useState("");
     const [directScanPaused, setDirectScanPaused] = useState(false);
-    const [directScanActivationOpen, setDirectScanActivationOpen] = useState(false);
+  const [directScanActivationOpen, setDirectScanActivationOpen] =
+    useState(false);
     const [scanFeedback, setScanFeedback] = useState<ScanFeedback | null>(null);
     const [scanDiagnostics, setScanDiagnostics] = useState<ScanDiagnostic[]>(() =>
         getStoredScanDiagnostics(scanDiagnosticStorageKey),
@@ -541,9 +696,15 @@ const BillingPage = ({
     const productSearch = productSearchProp ?? "";
     const salesSearch = salesSearchProp ?? "";
     const purchaseSearch = purchaseSearchProp ?? "";
-    const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
-    const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
-    const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
+  const deferredProductSearch = useDeferredValue(
+    productSearch.trim().toLowerCase(),
+  );
+  const deferredCustomerSearch = useDeferredValue(
+    customerSearch.trim().toLowerCase(),
+  );
+  const deferredSalesSearch = useDeferredValue(
+    salesSearch.trim().toLowerCase(),
+  );
 
     const applySalesDatePreset = (preset: SalesDatePreset) => {
         const today = startOfLocalDay(new Date());
@@ -588,7 +749,9 @@ const BillingPage = ({
     };
 
     const shiftSalesDate = (days: number) => {
-        const next = new Date(salesDatePopoverOpen ? specificDate : appliedSpecificDate);
+    const next = new Date(
+      salesDatePopoverOpen ? specificDate : appliedSpecificDate,
+    );
         next.setDate(next.getDate() + days);
         const nextDate = startOfLocalDay(next);
 
@@ -614,7 +777,11 @@ const BillingPage = ({
     };
 
     const confirmSalesDateFilter = () => {
-        if (dateFilter === "range" && datePreset === "custom" && (!customFromDate || !customToDate)) {
+    if (
+      dateFilter === "range" &&
+      datePreset === "custom" &&
+      (!customFromDate || !customToDate)
+    ) {
             return;
         }
 
@@ -643,6 +810,32 @@ const BillingPage = ({
         setSalesDatePopoverOpen(open);
     };
 
+    const appliedSalesDateLabel =
+        appliedDateFilter === "date"
+            ? formatSalesDate(appliedSpecificDate)
+            : appliedDatePreset === "all"
+              ? "All dates"
+              : appliedCustomFromDate && appliedCustomToDate
+                ? `${formatSalesDate(appliedCustomFromDate)} — ${formatSalesDate(appliedCustomToDate)}`
+                : "Select date range";
+
+    const hasBillsToolbarFilters =
+        paymentMethodSelection.size > 0 ||
+        sortBy !== "newest" ||
+        appliedDatePreset !== "today" ||
+        appliedDateFilter !== "date";
+
+    const clearBillsToolbarFilters = () => {
+        setPaymentMethodSelection(new Set());
+        setSortBy("newest");
+        applySalesDatePreset("today");
+        setAppliedDateFilter("date");
+        setAppliedDatePreset("today");
+        setAppliedSpecificDate(startOfLocalDay(new Date()));
+        setAppliedCustomFromDate(null);
+        setAppliedCustomToDate(null);
+    };
+
     const changePanelTab = (tab: BillingPanelTab) => {
         if (tab === "bills" && leftPanelTab !== "bills") {
             applySalesDatePreset("today");
@@ -655,7 +848,9 @@ const BillingPage = ({
         setLeftPanelTab(tab);
     };
 
-    const selectedStoreId = isDeviceMode ? (session?.store.id ?? "") : searchParams.get("storeId") || "";
+  const selectedStoreId = isDeviceMode
+    ? (session?.store.id ?? "")
+    : searchParams.get("storeId") || "";
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -665,13 +860,15 @@ const BillingPage = ({
 
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
-        queryFn: () => (isDeviceMode ? getPosCategories() : getCategories(organizationId)),
+    queryFn: () =>
+      isDeviceMode ? getPosCategories() : getCategories(organizationId),
         enabled: Boolean(organizationId),
     });
 
     const productsQuery = useQuery({
         queryKey: catalogKeys.products(organizationId),
-        queryFn: () => (isDeviceMode ? getPosProducts() : getProducts(organizationId)),
+    queryFn: () =>
+      isDeviceMode ? getPosProducts() : getProducts(organizationId),
         enabled: Boolean(organizationId),
     });
 
@@ -696,12 +893,26 @@ const BillingPage = ({
                 appliedCustomToDate,
                 appliedDatePreset,
             ),
-        [appliedDateFilter, appliedDatePreset, appliedSpecificDate, appliedCustomFromDate, appliedCustomToDate],
+    [
+      appliedDateFilter,
+      appliedDatePreset,
+      appliedSpecificDate,
+      appliedCustomFromDate,
+      appliedCustomToDate,
+    ],
     );
     const dateRangeNeedsInput =
-        appliedDateFilter === "range" && appliedDatePreset === "custom" && (!appliedCustomFromDate || !appliedCustomToDate);
-    const salesStatusFilter = historyFilter === "draft" || historyFilter === "voided" ? historyFilter : historyFilter === "open" || historyFilter === "paid" ? "completed" : undefined;
-    const salesPaymentStatusFilter = historyFilter === "paid" ? "paid" : undefined;
+    appliedDateFilter === "range" &&
+    appliedDatePreset === "custom" &&
+    (!appliedCustomFromDate || !appliedCustomToDate);
+  const salesStatusFilter =
+    historyFilter === "draft" || historyFilter === "voided"
+      ? historyFilter
+      : historyFilter === "open" || historyFilter === "paid"
+        ? "completed"
+        : undefined;
+  const salesPaymentStatusFilter =
+    historyFilter === "paid" ? "paid" : undefined;
     const salesQueryParams = useMemo<SalesListQuery>(() => {
         return {
             limit: 40,
@@ -709,14 +920,28 @@ const BillingPage = ({
             status: salesStatusFilter,
             paymentStatus: salesPaymentStatusFilter,
             search: deferredSalesSearch || undefined,
-            paymentMethod: paymentMethodFilter === "all" ? undefined : paymentMethodFilter,
+            paymentMethods:
+                paymentMethodSelection.size > 0
+                    ? Array.from(paymentMethodSelection).join(",")
+                    : undefined,
             createdFrom: salesDateBounds.from?.toISOString(),
             createdTo: salesDateBounds.to?.toISOString(),
         };
-    }, [deferredSalesSearch, paymentMethodFilter, salesDateBounds.from, salesDateBounds.to, salesPaymentStatusFilter, salesStatusFilter, sortBy]);
+  }, [
+    deferredSalesSearch,
+    paymentMethodSelection,
+    salesDateBounds.from,
+    salesDateBounds.to,
+    salesPaymentStatusFilter,
+    salesStatusFilter,
+    sortBy,
+  ]);
 
     const customersQuery = useQuery({
-        queryKey: billingKeys.customers(organizationId, { mode: "device", search: deferredCustomerSearch }),
+    queryKey: billingKeys.customers(organizationId, {
+      mode: "device",
+      search: deferredCustomerSearch,
+    }),
         queryFn: () =>
             getPosCustomers({
                 search: deferredCustomerSearch || undefined,
@@ -727,11 +952,19 @@ const BillingPage = ({
     });
 
     const salesQuery = useInfiniteQuery({
-        queryKey: billingKeys.sales(organizationId, selectedStoreId, salesQueryParams),
+    queryKey: billingKeys.sales(
+      organizationId,
+      selectedStoreId,
+      salesQueryParams,
+    ),
         initialPageParam: null as string | null,
         queryFn: async ({ pageParam }) => {
-            const query = pageParam ? { ...salesQueryParams, cursor: pageParam } : salesQueryParams;
-            const response = isDeviceMode ? await getPosSales(query) : await getSales(organizationId, selectedStoreId, query);
+      const query = pageParam
+        ? { ...salesQueryParams, cursor: pageParam }
+        : salesQueryParams;
+      const response = isDeviceMode
+        ? await getPosSales(query)
+        : await getSales(organizationId, selectedStoreId, query);
             if (response.status === "error") {
                 throw new Error(response.message || "Bills failed to load");
             }
@@ -739,7 +972,7 @@ const BillingPage = ({
         },
         getNextPageParam: (lastPage) =>
             lastPage.status === "success" && lastPage.data?.pageInfo.hasMore
-                ? lastPage.data.pageInfo.nextCursor ?? undefined
+        ? (lastPage.data.pageInfo.nextCursor ?? undefined)
                 : undefined,
         enabled: Boolean(organizationId && selectedStoreId) && !dateRangeNeedsInput,
     });
@@ -752,45 +985,66 @@ const BillingPage = ({
     const receiptContext = useMemo(() => {
         const store = isDeviceMode
             ? session?.store
-            : organization?.stores.find((candidate) => candidate.id === selectedStoreId);
+      : organization?.stores.find(
+          (candidate) => candidate.id === selectedStoreId,
+        );
 
         return {
-            organizationName: isDeviceMode ? session?.organization.name : organization?.name,
-            organizationTagline: isDeviceMode ? session?.organization.tagline : organization?.tagline,
+      organizationName: isDeviceMode
+        ? session?.organization.name
+        : organization?.name,
+      organizationTagline: isDeviceMode
+        ? session?.organization.tagline
+        : organization?.tagline,
             storeName: store?.name,
             storeAddress: store?.address,
         };
     }, [isDeviceMode, organization, selectedStoreId, session]);
     const categories = useMemo(
-        () => (categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : []),
+    () =>
+      categoriesQuery.data?.status === "success"
+        ? (categoriesQuery.data.data?.categories ?? [])
+        : [],
         [categoriesQuery.data],
     );
     const products = useMemo(
-        () => (productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : []),
+    () =>
+      productsQuery.data?.status === "success"
+        ? (productsQuery.data.data?.products ?? [])
+        : [],
         [productsQuery.data],
     );
     const inactiveProductCodes = useMemo(
         () =>
             productsQuery.data?.status === "success"
-                ? ((productsQuery.data.data?.inactiveProductCodes ?? []) as InactiveProductCode[])
+        ? ((productsQuery.data.data?.inactiveProductCodes ??
+            []) as InactiveProductCode[])
                 : [],
         [productsQuery.data],
     );
     const barcodeScanningEnabled =
         posSettingsQuery.data?.status === "success" &&
-        posSettingsQuery.data.data?.organizationCatalogSettings.barcodeScanningEnabled === true;
+    posSettingsQuery.data.data?.organizationCatalogSettings
+      .barcodeScanningEnabled === true;
     const directBarcodeScanEnabled =
         barcodeScanningEnabled &&
         posSettingsQuery.data?.status === "success" &&
-        posSettingsQuery.data.data?.storeDevicePosSettings.directBarcodeScanEnabled === true;
-    const activeProductCodesCount = products.filter((product) => Boolean(product.productCode)).length;
+    posSettingsQuery.data.data?.storeDevicePosSettings
+      .directBarcodeScanEnabled === true;
+  const activeProductCodesCount = products.filter((product) =>
+    Boolean(product.productCode),
+  ).length;
     const canEnableDirectBarcodeScan =
         productsQuery.data?.status === "success" && activeProductCodesCount > 0;
     const updateDirectScanMutation = useMutation({
-        mutationFn: (directBarcodeScanEnabled: boolean) => updatePosSettings({ directBarcodeScanEnabled }),
+    mutationFn: (directBarcodeScanEnabled: boolean) =>
+      updatePosSettings({ directBarcodeScanEnabled }),
         onSuccess: (response) => {
             if (response.status === "success") {
-                queryClient.setQueryData(["pos", "settings", session?.device.id], response);
+        queryClient.setQueryData(
+          ["pos", "settings", session?.device.id],
+          response,
+        );
                 setDirectScanPaused(false);
                 toast.success(response.message);
                 return;
@@ -805,12 +1059,18 @@ const BillingPage = ({
 
     const recordScanDiagnostic = useCallback(
         (diagnostic: Omit<ScanDiagnostic, "occurredAt">) => {
-            const nextDiagnostic = { ...diagnostic, occurredAt: new Date().toISOString() };
+      const nextDiagnostic = {
+        ...diagnostic,
+        occurredAt: new Date().toISOString(),
+      };
             setScanDiagnostics((current) => {
                 const next = appendScanDiagnostic(current, nextDiagnostic);
                 if (scanDiagnosticStorageKey) {
                     try {
-                        window.sessionStorage.setItem(scanDiagnosticStorageKey, JSON.stringify(next));
+            window.sessionStorage.setItem(
+              scanDiagnosticStorageKey,
+              JSON.stringify(next),
+            );
                     } catch {
                         // Diagnostics remain visible for this render even when browser storage is unavailable.
                     }
@@ -820,7 +1080,8 @@ const BillingPage = ({
         },
         [scanDiagnosticStorageKey],
     );
-    const getComposerUnitDiscountFromSaleItem = useCallback((item: SaleDetailDTO["items"][number]) => {
+  const getComposerUnitDiscountFromSaleItem = useCallback(
+    (item: SaleDetailDTO["items"][number]) => {
         const quantity = Number(item.quantity);
         if (quantity <= 0) return 0;
 
@@ -840,11 +1101,17 @@ const BillingPage = ({
             0,
         );
 
-        return Math.max(Number(item.discountAmount) / quantity - comboAddOnDiscountPerParent, 0);
-    }, []);
+      return Math.max(
+        Number(item.discountAmount) / quantity - comboAddOnDiscountPerParent,
+        0,
+      );
+    },
+    [],
+  );
     const comboProductsQuery = useQuery({
         queryKey: catalogKeys.combos(organizationId),
-        queryFn: () => (isDeviceMode ? getPosComboProducts() : getComboProducts(organizationId)),
+    queryFn: () =>
+      isDeviceMode ? getPosComboProducts() : getComboProducts(organizationId),
         enabled: Boolean(organizationId),
         staleTime: 5 * 60 * 1000,
     });
@@ -852,11 +1119,16 @@ const BillingPage = ({
     const comboProductsIsError = comboProductsQuery.isError;
     const refetchComboProducts = comboProductsQuery.refetch;
     const preloadedCombos = useMemo(
-        () => (comboProductsQuery.data?.status === "success" ? (comboProductsQuery.data.data?.combos ?? []) : []),
+    () =>
+      comboProductsQuery.data?.status === "success"
+        ? (comboProductsQuery.data.data?.combos ?? [])
+        : [],
         [comboProductsQuery.data],
     );
     const configureCombo = configureComboProductId
-        ? (preloadedCombos.find((combo) => combo.product.id === configureComboProductId) ?? null)
+    ? (preloadedCombos.find(
+        (combo) => combo.product.id === configureComboProductId,
+      ) ?? null)
         : null;
     const adminAttachmentProductIds = useMemo(() => {
         const productIds = new Set<string>();
@@ -865,7 +1137,10 @@ const BillingPage = ({
             productIds.add(customizeProductId);
         }
 
-        for (const combo of [...preloadedCombos, ...(configureCombo ? [configureCombo] : [])]) {
+    for (const combo of [
+      ...preloadedCombos,
+      ...(configureCombo ? [configureCombo] : []),
+    ]) {
             for (const group of combo.choiceGroups) {
                 for (const option of group.options) {
                     productIds.add(option.optionProductId);
@@ -893,18 +1168,26 @@ const BillingPage = ({
                 : adminAttachmentQueries.flatMap((query) =>
                       query.data?.status === "success"
                           ? (query.data.data?.attachments ?? []).filter(
-                                (attachment) => attachment.status === "active" && attachment.addOn.status === "active",
+                  (attachment) =>
+                    attachment.status === "active" &&
+                    attachment.addOn.status === "active",
                             )
                           : [],
                   ),
         [adminAttachmentQueries, isDeviceMode, selectableAttachmentsQuery.data],
     );
-    const customers = customersQuery.data?.status === "success" ? (customersQuery.data.data?.customers ?? []) : [];
-    const salesPages = useMemo(() => salesQuery.data?.pages ?? [], [salesQuery.data]);
+  const customers =
+    customersQuery.data?.status === "success"
+      ? (customersQuery.data.data?.customers ?? [])
+      : [];
+  const salesPages = useMemo(
+    () => salesQuery.data?.pages ?? [],
+    [salesQuery.data],
+  );
     const sales = useMemo(
         () =>
             salesPages.flatMap((page) =>
-                page.status === "success" ? page.data?.sales ?? [] : [],
+        page.status === "success" ? (page.data?.sales ?? []) : [],
             ),
         [salesPages],
     );
@@ -920,16 +1203,22 @@ const BillingPage = ({
 
     const firstSalesPage = salesPages[0];
     const salesServiceError =
-        salesPages.length === 0 && salesQuery.error instanceof Error ? salesQuery.error.message : null;
+    salesPages.length === 0 && salesQuery.error instanceof Error
+      ? salesQuery.error.message
+      : null;
     const salesSummary =
-        !dateRangeNeedsInput && firstSalesPage?.status === "success" ? firstSalesPage.data?.summary ?? null : null;
+    !dateRangeNeedsInput && firstSalesPage?.status === "success"
+      ? (firstSalesPage.data?.summary ?? null)
+      : null;
     const selectedCustomer =
-        customers.find((customer) => customer.id === selectedCustomerId) ?? selectedCustomerFallback;
+    customers.find((customer) => customer.id === selectedCustomerId) ??
+    selectedCustomerFallback;
     const customerSearchLooksLikePhone = /^[+\d\s()-]+$/.test(customerSearch);
 
     const categoryOptions = [{ id: "all", name: "All" }, ...categories];
     const activeCategoryFilter =
-        categoryFilter !== "all" && !categories.some((category) => category.id === categoryFilter)
+    categoryFilter !== "all" &&
+    !categories.some((category) => category.id === categoryFilter)
             ? "all"
             : categoryFilter;
     const filteredCustomers = customers.slice(0, customerPickerOpen ? 40 : 8);
@@ -937,9 +1226,14 @@ const BillingPage = ({
     const selectAdjacentCategory = (direction: -1 | 1) => {
         const currentIndex = Math.max(
             0,
-            categoryOptions.findIndex((category) => category.id === activeCategoryFilter),
+      categoryOptions.findIndex(
+        (category) => category.id === activeCategoryFilter,
+      ),
+    );
+    const nextIndex = Math.min(
+      Math.max(currentIndex + direction, 0),
+      categoryOptions.length - 1,
         );
-        const nextIndex = Math.min(Math.max(currentIndex + direction, 0), categoryOptions.length - 1);
         const nextCategory = categoryOptions[nextIndex];
 
         if (nextCategory && nextCategory.id !== activeCategoryFilter) {
@@ -996,10 +1290,15 @@ const BillingPage = ({
         return grouped;
     }, [selectableAttachments]);
 
-    const customizeProduct = products.find((product) => product.id === customizeProductId) ?? null;
-    const customizeAttachments = customizeProduct ? (attachmentsByProductId.get(customizeProduct.id) ?? []) : [];
+  const customizeProduct =
+    products.find((product) => product.id === customizeProductId) ?? null;
+  const customizeAttachments = customizeProduct
+    ? (attachmentsByProductId.get(customizeProduct.id) ?? [])
+    : [];
     const comboUnavailable = Boolean(
-        configureComboProductId && comboProductsQuery.data?.status === "success" && !configureCombo,
+    configureComboProductId &&
+    comboProductsQuery.data?.status === "success" &&
+    !configureCombo,
     );
 
     useEffect(() => {
@@ -1008,10 +1307,12 @@ const BillingPage = ({
         }
     }, [comboUnavailable]);
 
-    const organizationStores = isDeviceMode && session ? [session.store] : (organization?.stores ?? []);
+  const organizationStores =
+    isDeviceMode && session ? [session.store] : (organization?.stores ?? []);
     const selectedStore = isDeviceMode
         ? (session?.store ?? null)
-        : (organizationStores.find((store) => store.id === selectedStoreId) ?? null);
+    : (organizationStores.find((store) => store.id === selectedStoreId) ??
+      null);
 
     useEffect(() => {
         if (isDeviceMode) {
@@ -1022,7 +1323,9 @@ const BillingPage = ({
             return;
         }
 
-        const hasSelectedStore = organization.stores.some((store) => store.id === selectedStoreId);
+    const hasSelectedStore = organization.stores.some(
+      (store) => store.id === selectedStoreId,
+    );
         if (hasSelectedStore) {
             return;
         }
@@ -1037,16 +1340,28 @@ const BillingPage = ({
         });
     }, [isDeviceMode, organization, selectedStoreId, setSearchParams]);
 
-    const activeProducts = products.filter((product) => product.status === "active");
+  const activeProducts = products.filter(
+    (product) => product.status === "active",
+  );
     const filteredProducts = activeProducts.filter((product) => {
-        const matchesCategory = activeCategoryFilter === "all" || product.categoryId === activeCategoryFilter;
-        const matchesSearch = !deferredProductSearch || product.name.toLowerCase().includes(deferredProductSearch);
+    const matchesCategory =
+      activeCategoryFilter === "all" ||
+      product.categoryId === activeCategoryFilter;
+    const matchesSearch =
+      !deferredProductSearch ||
+      product.name.toLowerCase().includes(deferredProductSearch);
         return matchesCategory && matchesSearch;
     });
-    const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
+  const allBillItems = [...baselineComposerItems, ...items];
+  const cartItemCount = allBillItems.reduce(
+    (total, item) => total + item.quantity,
+    0,
+  );
+  const hasBillItems = allBillItems.length > 0;
     const hasActiveTableOrder = Boolean(activeTableId && activeTableOrder);
     const tableKotItemCount = remainingTableKotItemCount(activeTableOrder);
-    const isTableOrderCheckout = hasActiveTableOrder && items.length === 0 && !editingKotId;
+  const isTableOrderCheckout =
+    hasActiveTableOrder && items.length === 0 && !editingKotId;
 
     const filteredSales = sales.filter((sale) => {
         switch (historyFilter) {
@@ -1096,30 +1411,48 @@ const BillingPage = ({
             </Button>
         </div>
     ) : salesQuery.hasNextPage ? (
-        <div ref={salesLoadMoreRef} className="flex min-h-20 items-center justify-center py-6" aria-live="polite">
-            {salesQuery.isFetchingNextPage ? <Spinner className="size-8 text-primary" /> : null}
+    <div
+      ref={salesLoadMoreRef}
+      className="flex min-h-20 items-center justify-center py-6"
+      aria-live="polite"
+    >
+      {salesQuery.isFetchingNextPage ? (
+        <Spinner className="size-8 text-primary" />
+      ) : null}
         </div>
     ) : salesPages.length > 1 ? (
-        <p className="py-4 text-center text-xs text-muted-foreground">All bills loaded</p>
+    <p className="py-4 text-center text-xs text-muted-foreground">
+      All bills loaded
+    </p>
     ) : null;
 
-    const subtotal = items.reduce((total, item) => {
+  const subtotal = allBillItems.reduce((total, item) => {
         return total + getComposerItemPricing(item).subtotal;
     }, 0);
-    const lineDiscountTotal = items.reduce((total, item) => {
+  const lineDiscountTotal = allBillItems.reduce((total, item) => {
         return total + getComposerItemPricing(item).lineDiscountTotal;
     }, 0);
-    const remainingTableSubtotal = Number(activeTableOrder?.remainingSubtotal ?? 0);
-    const remainingTableDiscount = Number(activeTableOrder?.remainingDiscountTotal ?? 0);
-    const remainingTableGrand = Number(activeTableOrder?.remainingGrandTotal ?? 0);
+  const remainingTableSubtotal = Number(
+    activeTableOrder?.remainingSubtotal ?? 0,
+  );
+  const remainingTableDiscount = Number(
+    activeTableOrder?.remainingDiscountTotal ?? 0,
+  );
+  const remainingTableGrand = Number(
+    activeTableOrder?.remainingGrandTotal ?? 0,
+  );
     const discountBase = Math.max(
         isTableOrderCheckout ? remainingTableGrand : subtotal - lineDiscountTotal,
         0,
     );
-    const parsedDiscountValue = discountInput.trim() === "" ? 0 : Number(discountInput);
+  const parsedDiscountValue =
+    discountInput.trim() === "" ? 0 : Number(discountInput);
     const normalizedDiscountValue =
-        Number.isFinite(parsedDiscountValue) && parsedDiscountValue >= 0 ? parsedDiscountValue : 0;
-    const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+    Number.isFinite(parsedDiscountValue) && parsedDiscountValue >= 0
+      ? parsedDiscountValue
+      : 0;
+  const roundCurrency = (value: number) =>
+    Math.round((value + Number.EPSILON) * 100) / 100;
     const orderDiscountAmount =
         discountMode === "percent"
             ? roundCurrency((discountBase * normalizedDiscountValue) / 100)
@@ -1141,44 +1474,82 @@ const BillingPage = ({
         isTableOrderCheckout ? remainingTableDiscount : lineDiscountTotal,
         isTableOrderCheckout ? remainingTableSubtotal : subtotal,
     );
-    const orderDiscountPercentage = formatDiscountPercentage(orderDiscountAmount, discountBase);
+  const orderDiscountPercentage = formatDiscountPercentage(
+    orderDiscountAmount,
+    discountBase,
+  );
     const discountPresetOptions = discountPresetPercentages
         .map((percentage) => ({
             percentage,
             amount: roundCurrency((discountBase * percentage) / 100),
         }))
-        .filter((preset) => preset.amount > 0 && preset.amount <= discountBase + 0.005);
+    .filter(
+      (preset) => preset.amount > 0 && preset.amount <= discountBase + 0.005,
+    );
     const cartGrandTotal = Math.max(subtotal - totalDiscount, 0);
     const grandTotal = isTableOrderCheckout
         ? Math.max(remainingTableGrand - orderDiscountAmount, 0)
         : cartGrandTotal;
-    const displaySubtotal = isTableOrderCheckout ? remainingTableSubtotal : subtotal;
-    const displayLineDiscount = isTableOrderCheckout ? remainingTableDiscount : lineDiscountTotal;
-    const orderItemCount = isTableOrderCheckout ? tableKotItemCount : cartItemCount;
-    const rawPartialPaymentAmount = Math.max(Number(partialPaymentAmount || 0), 0);
+  const displaySubtotal = isTableOrderCheckout
+    ? remainingTableSubtotal
+    : subtotal;
+  const displayLineDiscount = isTableOrderCheckout
+    ? remainingTableDiscount
+    : lineDiscountTotal;
+  const orderItemCount = isTableOrderCheckout
+    ? tableKotItemCount
+    : cartItemCount;
+  const rawPartialPaymentAmount = Math.max(
+    Number(partialPaymentAmount || 0),
+    0,
+  );
     const collectedTotal =
-        settlementMode === "due" ? 0 : settlementMode === "full" ? grandTotal : rawPartialPaymentAmount;
+    settlementMode === "due"
+      ? 0
+      : settlementMode === "full"
+        ? grandTotal
+        : rawPartialPaymentAmount;
     const dueTotal = Math.max(grandTotal - collectedTotal, 0);
     const isReplacingSale = Boolean(replacingSaleId);
-    const tableKotActionAvailable = isTableKotActionVisible({
-        isDeviceMode,
+  const tableKotWorkflowEnabled = isTableKotWorkflowEnabled({
         kotSystemEnabled: session?.store.kotSystemEnabled === true,
         tableManagementEnabled: session?.store.tableManagementEnabled === true,
+  });
+  const tableCheckoutMode = resolveTableCheckoutMode({
+    tableKotWorkflowEnabled,
         hasActiveTableOrder,
-        isReplacingSale,
+    hasNewComposerItems: items.length > 0,
+    isEditingKot: Boolean(editingKotId),
+    hasExistingKots: tableKotItemCount > 0,
     });
-    const canPlaceTableBill = isTableOrderCheckout && tableKotItemCount > 0;
+  const canOpenTableCheckout = tableCheckoutMode !== null;
+  const canPlaceTableBill = tableCheckoutMode === "place_order";
+  const showTableKotFulfillmentSelector =
+    isTableKotFulfillmentSelectorVisible(tableCheckoutMode);
+  const showTableFinalPlacementSections = tableCheckoutMode === "place_order";
+  const showBillingAdjustments =
+    !hasActiveTableOrder || showTableFinalPlacementSections;
     const displayedDueTotal = dueTotal;
-    const isOverpaid = settlementMode === "partial" && rawPartialPaymentAmount > grandTotal;
-    const isPartialAmountMissing = settlementMode === "partial" && rawPartialPaymentAmount <= 0;
-    const matchesFullPayment = settlementMode === "partial" && grandTotal > 0 && rawPartialPaymentAmount === grandTotal;
-    const hasInvalidPartialPayment = isOverpaid || isPartialAmountMissing || matchesFullPayment;
+  const isOverpaid =
+    settlementMode === "partial" && rawPartialPaymentAmount > grandTotal;
+  const isPartialAmountMissing =
+    settlementMode === "partial" && rawPartialPaymentAmount <= 0;
+  const matchesFullPayment =
+    settlementMode === "partial" &&
+    grandTotal > 0 &&
+    rawPartialPaymentAmount === grandTotal;
+  const hasInvalidPartialPayment =
+    isOverpaid || isPartialAmountMissing || matchesFullPayment;
     const changeDiscountMode = (nextMode: "amount" | "percent") => {
         if (nextMode === discountMode) {
             return;
         }
 
-        if (discountInput.trim() !== "" && Number.isFinite(parsedDiscountValue) && parsedDiscountValue >= 0) {
+    if (
+      discountInput.trim() !== "" &&
+      Number.isFinite(parsedDiscountValue) &&
+      parsedDiscountValue >= 0
+    ) {
             const convertedValue =
                 nextMode === "percent"
                     ? discountBase > 0
@@ -1213,7 +1584,9 @@ const BillingPage = ({
 
     const toggleInvoiceAction = (action: InvoiceAction) => {
         setInvoiceActions((current) =>
-            current.includes(action) ? current.filter((item) => item !== action) : [...current, action],
+      current.includes(action)
+        ? current.filter((item) => item !== action)
+        : [...current, action],
         );
     };
 
@@ -1275,6 +1648,13 @@ const BillingPage = ({
         setActiveTableOrder(null);
         setSelectedKotId(null);
         setEditingKotId(null);
+    setBaselineComposerItems([]);
+    setActiveStandaloneKots([]);
+    setActiveStandaloneSaleItems([]);
+    setSelectedStandaloneKotId(null);
+    setGenerateKotEnabled(true);
+    draftKotRequestRef.current = null;
+    tableKotRequestRef.current = null;
         setReplacingSaleId(null);
         setReplaceConfirmationOpen(false);
         setSelectedCustomerId("");
@@ -1289,6 +1669,7 @@ const BillingPage = ({
         setDiscountInput("");
         setDiscountMode("percent");
         setInvoiceActions(isDeviceMode && posPrinter?.connected ? ["print"] : []);
+        setServiceMode("dine_in");
         setDiscountEditorOpen(false);
         setPlaceOrderDialogOpen(false);
         setCustomerPickerOpen(false);
@@ -1306,7 +1687,9 @@ const BillingPage = ({
         const printTimer = window.setTimeout(() => {
             printReceiptText({
                 text: buildReceiptText(receiptToPrint, receiptContext),
-                title: receiptToPrint.saleNumber ? `Receipt_${receiptToPrint.saleNumber}` : "Receipt",
+        title: receiptToPrint.saleNumber
+          ? `Receipt_${receiptToPrint.saleNumber}`
+          : "Receipt",
             });
             setReceiptToPrint(null);
         }, 100);
@@ -1316,7 +1699,8 @@ const BillingPage = ({
         };
     }, [receiptContext, receiptToPrint]);
 
-    const addPlainProductToBill = useCallback((product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
+  const addPlainProductToBill = useCallback(
+    (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
         setItems((current) => {
             const existingPlainItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
@@ -1327,7 +1711,10 @@ const BillingPage = ({
             if (existingPlainItem) {
                 const nextQuantity = existingPlainItem.quantity + 1;
                 onAdded?.(nextQuantity);
-                return incrementPlainProductQuantity(current, existingPlainItem.key) ?? current;
+          return (
+            incrementPlainProductQuantity(current, existingPlainItem.key) ??
+            current
+          );
             }
 
             onAdded?.(1);
@@ -1347,7 +1734,9 @@ const BillingPage = ({
                 },
             ];
         });
-    }, []);
+    },
+    [],
+  );
 
     const addProductToBill = useCallback(
         (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
@@ -1356,7 +1745,9 @@ const BillingPage = ({
                 return;
             }
 
-            const combo = preloadedCombos.find((item) => item.product.id === product.id);
+      const combo = preloadedCombos.find(
+        (item) => item.product.id === product.id,
+      );
             if (comboProductsIsError || comboProductsData?.status === "error") {
                 toast.error("Unable to load Combo options. Retrying now.");
                 void refetchComboProducts();
@@ -1415,7 +1806,11 @@ const BillingPage = ({
             }
 
             setScanValue("");
-            const result = resolveProductCodeScan(productCode, products, inactiveProductCodes);
+      const result = resolveProductCodeScan(
+        productCode,
+        products,
+        inactiveProductCodes,
+      );
             if (result.kind === "unknown") {
                 setScanFeedback({ kind: "unknown", productCode: result.productCode });
                 recordScanDiagnostic({
@@ -1447,24 +1842,35 @@ const BillingPage = ({
                 recordScanDiagnostic({
                     kind: "duplicate-assignment",
                     productCode: result.productCode,
-                    message: "Conflicting catalog assignments prevented the scan from resolving.",
+          message:
+            "Conflicting catalog assignments prevented the scan from resolving.",
                 });
                 focusScanField();
                 return;
             }
 
-            const productAttachments = attachmentsByProductId.get(result.product.id) ?? [];
-            const combo = preloadedCombos.find((item) => item.product.id === result.product.id);
+      const productAttachments =
+        attachmentsByProductId.get(result.product.id) ?? [];
+      const combo = preloadedCombos.find(
+        (item) => item.product.id === result.product.id,
+      );
             const action = getProductCardAction(result.product, {
                 hasAddOns: productAttachments.length > 0,
                 comboAvailable: Boolean(combo),
                 comboHasSettings: Boolean(combo?.choiceGroups.length),
-                comboLoading: result.product.productType === "combo" && comboProductsQuery.isPending,
-                comboHasError: comboProductsQuery.isError || comboProductsQuery.data?.status === "error",
+        comboLoading:
+          result.product.productType === "combo" &&
+          comboProductsQuery.isPending,
+        comboHasError:
+          comboProductsQuery.isError ||
+          comboProductsQuery.data?.status === "error",
             });
 
             if (action === "disabled" || action === "loading") {
-                setScanFeedback({ kind: "unavailable", message: `${result.product.name} cannot be added right now.` });
+        setScanFeedback({
+          kind: "unavailable",
+          message: `${result.product.name} cannot be added right now.`,
+        });
                 recordScanDiagnostic({
                     kind: "scan-to-cart-failure",
                     productCode: result.productCode,
@@ -1497,7 +1903,10 @@ const BillingPage = ({
                 handleProductCardClick(result.product, action);
             }
             if (action === "customize" || action === "configure") {
-                setScanFeedback({ kind: "success", message: `Choose options for ${result.product.name}.` });
+        setScanFeedback({
+          kind: "success",
+          message: `Choose options for ${result.product.name}.`,
+        });
                 return;
             }
         },
@@ -1530,7 +1939,9 @@ const BillingPage = ({
         const handleKeyDown = (event: KeyboardEvent) => {
             const activeElement = document.activeElement;
             const scanFieldOwnsFocus = activeElement === scanInputRef.current;
-            const dialogOwnsFocus = Boolean(document.querySelector('[role="dialog"]'));
+      const dialogOwnsFocus = Boolean(
+        document.querySelector('[role="dialog"]'),
+      );
             const canCapture = shouldCaptureDirectBarcodeScan({
                 enabled: captureEnabled,
                 scanFieldOwnsFocus,
@@ -1544,7 +1955,10 @@ const BillingPage = ({
             }
 
             if (event.key === "Enter") {
-                const result = consumeDirectBarcodeScanKey(directScanBufferRef.current, event.key);
+        const result = consumeDirectBarcodeScanKey(
+          directScanBufferRef.current,
+          event.key,
+        );
                 directScanBufferRef.current = result.buffer;
                 if (result.scannedCode) {
                     event.preventDefault();
@@ -1553,9 +1967,17 @@ const BillingPage = ({
                 return;
             }
 
-            if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (
+        event.key.length === 1 &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
                 event.preventDefault();
-                directScanBufferRef.current = consumeDirectBarcodeScanKey(directScanBufferRef.current, event.key).buffer;
+        directScanBufferRef.current = consumeDirectBarcodeScanKey(
+          directScanBufferRef.current,
+          event.key,
+        ).buffer;
             }
         };
 
@@ -1564,9 +1986,18 @@ const BillingPage = ({
             directScanBufferRef.current = "";
             window.removeEventListener("keydown", handleKeyDown, true);
         };
-    }, [directBarcodeScanEnabled, directScanPaused, handleProductCodeScan, isDeviceMode, leftPanelTab]);
+  }, [
+    directBarcodeScanEnabled,
+    directScanPaused,
+    handleProductCodeScan,
+    isDeviceMode,
+    leftPanelTab,
+  ]);
 
-    const addConfiguredProductToBill = (product: ProductResponseDTO, addOns: CustomizeAddOnSelection[]) => {
+  const addConfiguredProductToBill = (
+    product: ProductResponseDTO,
+    addOns: CustomizeAddOnSelection[],
+  ) => {
         if (addOns.length === 0) {
             addProductToBill(product);
             return;
@@ -1582,7 +2013,9 @@ const BillingPage = ({
 
             if (existingConfiguredItem) {
                 return current.map((item) =>
-                    item.key === existingConfiguredItem.key ? { ...item, quantity: item.quantity + 1 } : item,
+          item.key === existingConfiguredItem.key
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
                 );
             }
 
@@ -1604,7 +2037,10 @@ const BillingPage = ({
         });
     };
 
-    const addConfiguredComboToBill = (combo: ComboProductResponse, selections: ComboDialogSelection[]) => {
+  const addConfiguredComboToBill = (
+    combo: ComboProductResponse,
+    selections: ComboDialogSelection[],
+  ) => {
         setItems((current) => {
             const existing = current.find((item) =>
                 isSameComposerConfiguration(item, {
@@ -1615,7 +2051,9 @@ const BillingPage = ({
             );
             if (existing) {
                 return current.map((item) =>
-                    item.key === existing.key ? { ...item, quantity: item.quantity + 1 } : item,
+          item.key === existing.key
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
                 );
             }
             return [
@@ -1653,11 +2091,8 @@ const BillingPage = ({
         );
     };
 
-    const buildDraftPayload = (): CreateDraftSaleJSON => ({
-        customerId: selectedCustomerId || null,
-        orderDiscountAmount,
-        notes: notes.trim() || null,
-        items: items.map((item) => ({
+  const mapComposerItemsToSaleInputs = (composerItems: ComposerItem[]) =>
+    composerItems.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
             addOns: item.addOns.map((addOn) => ({
@@ -1673,20 +2108,57 @@ const BillingPage = ({
                     quantity: addOn.quantity,
                 })),
             })),
-        })),
+    }));
+
+  const directGenerateKotVisible = isDirectGenerateKotVisible({
+    isDeviceMode,
+    kotSystemEnabled: session?.store.kotSystemEnabled === true,
+    hasActiveTableOrder,
+    isReplacingSale,
+  });
+  const isEditingStandaloneKot = Boolean(
+    !hasActiveTableOrder && activeDraftId && selectedStandaloneKotId,
+  );
+  const showOrderTypeSelector = isOrderTypeSelectorVisible({
+    hasActiveTableOrder,
+    showTableKotFulfillmentSelector,
+  });
+  const showInvoiceOptions =
+    !hasActiveTableOrder || showTableFinalPlacementSections;
+
+  const buildKotGenerationFields = () => {
+    return buildDirectKotGenerationFields({
+      visible: directGenerateKotVisible,
+      toggleEnabled: generateKotEnabled,
+      pendingItems: mapComposerItemsToSaleInputs(items),
+    });
+  };
+
+  const buildDraftPayload = (): CreateDraftSaleJSON => ({
+    customerId: selectedCustomerId || null,
+    orderDiscountAmount,
+    notes: notes.trim() || null,
+    serviceMode,
+    items: mapComposerItemsToSaleInputs(allBillItems),
+    ...buildKotGenerationFields(),
     });
 
     const buildCommitPayload = (): CommitSaleJSON => ({
         customerId: selectedCustomerId || null,
         orderDiscountAmount,
         notes: notes.trim() || null,
+        serviceMode,
         items: buildDraftPayload().items,
+    ...buildKotGenerationFields(),
         payments:
             settlementMode === "due"
                 ? []
                 : [
                       {
-                          amount: settlementMode === "full" ? grandTotal : rawPartialPaymentAmount,
+              amount:
+                settlementMode === "full"
+                  ? grandTotal
+                  : rawPartialPaymentAmount,
                           method: selectedPaymentMethod,
                           referenceNumber: null,
                           notes: null,
@@ -1694,16 +2166,42 @@ const BillingPage = ({
                   ],
     });
 
+  const attachDraftKotRequestId = <
+    T extends CreateDraftSaleJSON | UpdateDraftSaleJSON,
+  >(
+    payload: T,
+  ): T => {
+    if (!payload.generateKot || !payload.kotBatchItems?.length) {
+      return payload;
+    }
+    const fingerprint = JSON.stringify({
+      saleId: activeDraftId,
+      serviceMode: payload.serviceMode,
+      items: payload.kotBatchItems,
+    });
+    const existing = draftKotRequestRef.current;
+    const requestId =
+      existing?.fingerprint === fingerprint
+        ? existing.requestId
+        : safeRandomUUID();
+    draftKotRequestRef.current = { requestId, fingerprint };
+    return { ...payload, kotRequestId: requestId };
+  };
+
     const createCustomerMutation = useMutation({
         mutationFn: (payload: CreateCustomerJSON) =>
-            isDeviceMode ? createPosCustomer(payload) : createCustomer(organizationId, payload),
+      isDeviceMode
+        ? createPosCustomer(payload)
+        : createCustomer(organizationId, payload),
         onSuccess: (response) => {
             if (response.status !== "success" || !response.data?.customer) {
                 toast.error(response.message || "Failed to create customer");
                 return;
             }
 
-            queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
+      queryClient.invalidateQueries({
+        queryKey: billingKeys.organization(organizationId),
+      });
             selectCustomer(response.data.customer);
             toast.success("Customer created");
         },
@@ -1715,10 +2213,12 @@ const BillingPage = ({
     const saveDraftMutation = useMutation({
         mutationFn: async () => {
             if (!selectedStoreId) {
-                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
+        throw new Error(
+          isDeviceMode ? "Store session is missing" : "Select a store first",
+        );
             }
 
-            if (items.length === 0) {
+      if (!hasBillItems) {
                 throw new Error("Add at least one product before saving a draft");
             }
 
@@ -1726,10 +2226,13 @@ const BillingPage = ({
                 throw new Error(discountValidationMessage || "Enter a valid discount");
             }
 
-            const payload = buildDraftPayload();
+      const payload = attachDraftKotRequestId(buildDraftPayload());
             const response = activeDraftId
                 ? isDeviceMode
-                    ? await updatePosDraftSale(activeDraftId, payload as UpdateDraftSaleJSON)
+          ? await updatePosDraftSale(
+              activeDraftId,
+              payload as UpdateDraftSaleJSON,
+            )
                     : await updateDraftSale(
                           organizationId,
                           selectedStoreId,
@@ -1747,6 +2250,7 @@ const BillingPage = ({
             return response.data.sale;
         },
         onSuccess: (sale) => {
+      draftKotRequestRef.current = null;
             invalidateBillingQueries();
             resetComposer();
             toast.success(sale.status === "draft" ? "Draft saved" : "Bill updated");
@@ -1760,9 +2264,17 @@ const BillingPage = ({
     });
 
     const completeSaleMutation = useMutation({
-        mutationFn: async ({ requestId }: { requestId: string; shouldPrint: boolean; shouldSendWhatsApp: boolean }) => {
+    mutationFn: async ({
+      requestId,
+    }: {
+      requestId: string;
+      shouldPrint: boolean;
+      shouldSendWhatsApp: boolean;
+    }) => {
             if (!selectedStoreId) {
-                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
+        throw new Error(
+          isDeviceMode ? "Store session is missing" : "Select a store first",
+        );
             }
 
             if (activeTableId && activeTableOrder) {
@@ -1775,7 +2287,9 @@ const BillingPage = ({
                 }
 
                 if (hasInvalidDiscount) {
-                    throw new Error(discountValidationMessage || "Enter a valid discount");
+          throw new Error(
+            discountValidationMessage || "Enter a valid discount",
+          );
                 }
 
                 if (isOverpaid) {
@@ -1787,7 +2301,9 @@ const BillingPage = ({
                 }
 
                 if (matchesFullPayment) {
-                    throw new Error("Select 'Paid' when the customer is paying the full bill amount");
+          throw new Error(
+            "Select 'Paid' when the customer is paying the full bill amount",
+          );
                 }
 
                 const payload: CheckoutTableOrderJSON = {
@@ -1805,7 +2321,7 @@ const BillingPage = ({
                 return response.data.sale;
             }
 
-            if (items.length === 0) {
+      if (!hasBillItems) {
                 throw new Error("Add at least one product before completing the bill");
             }
 
@@ -1822,7 +2338,9 @@ const BillingPage = ({
             }
 
             if (matchesFullPayment) {
-                throw new Error("Select 'Paid' when the customer is paying the full bill amount");
+        throw new Error(
+          "Select 'Paid' when the customer is paying the full bill amount",
+        );
             }
 
             if (replacingSaleId) {
@@ -1841,9 +2359,18 @@ const BillingPage = ({
             }
 
             if (activeDraftId) {
+        const commitPayload = buildCommitPayload();
+        if (commitPayload.generateKot && commitPayload.kotBatchItems?.length) {
+          commitPayload.kotRequestId = requestId;
+        }
                 const response = isDeviceMode
-                    ? await commitPosSale(activeDraftId, buildCommitPayload())
-                    : await commitSale(organizationId, selectedStoreId, activeDraftId, buildCommitPayload());
+          ? await commitPosSale(activeDraftId, commitPayload)
+          : await commitSale(
+              organizationId,
+              selectedStoreId,
+              activeDraftId,
+              commitPayload,
+            );
 
                 if (response.status !== "success" || !response.data?.sale) {
                     throw new Error(response.message || "Failed to complete bill");
@@ -1858,6 +2385,9 @@ const BillingPage = ({
                     ...buildDraftPayload(),
                     payments: buildCommitPayload().payments,
                 };
+        if (payload.generateKot && payload.kotBatchItems?.length) {
+          payload.kotRequestId = requestId;
+        }
                 const response = await completePosSale(payload);
 
                 if (response.status !== "success" || !response.data?.sale) {
@@ -1868,7 +2398,11 @@ const BillingPage = ({
             }
 
             const draftPayload = buildDraftPayload();
-            const draftResponse = await createDraftSale(organizationId, selectedStoreId, draftPayload);
+      const draftResponse = await createDraftSale(
+        organizationId,
+        selectedStoreId,
+        draftPayload,
+      );
 
             if (draftResponse.status !== "success" || !draftResponse.data?.sale) {
                 throw new Error(draftResponse.message || "Failed to prepare bill");
@@ -1876,7 +2410,12 @@ const BillingPage = ({
 
             const commitResponse = isDeviceMode
                 ? await commitPosSale(draftResponse.data.sale.id, buildCommitPayload())
-                : await commitSale(organizationId, selectedStoreId, draftResponse.data.sale.id, buildCommitPayload());
+        : await commitSale(
+            organizationId,
+            selectedStoreId,
+            draftResponse.data.sale.id,
+            buildCommitPayload(),
+          );
 
             if (commitResponse.status !== "success" || !commitResponse.data?.sale) {
                 throw new Error(commitResponse.message || "Failed to complete bill");
@@ -1895,11 +2434,14 @@ const BillingPage = ({
             if (variables.shouldPrint) {
                 if (isDeviceMode) {
                     if (!posPrinter?.supported) {
-                        toast.error("WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS");
+            toast.error(
+              "WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS",
+            );
                     } else if (!posPrinter.connected) {
                         toast.error("Connect the 80mm USB printer before printing");
                     } else {
-                        void posPrinter.printSale(sale, receiptContext)
+            void posPrinter
+              .printSale(sale, receiptContext)
                             .then(() => toast.success("Receipt sent to printer"))
                             .catch((error: { message?: string }) => {
                                 toast.error(error?.message || "Receipt printing failed");
@@ -1913,19 +2455,29 @@ const BillingPage = ({
                 const queueRequest = isDeviceMode
                     ? queuePosWhatsAppInvoice(sale.id)
                     : queueWhatsAppInvoice(organizationId, selectedStoreId, sale.id);
-                void queueRequest.then(response => {
+        void queueRequest
+          .then((response) => {
                     queryClient.invalidateQueries({
                         queryKey: isDeviceMode
                             ? whatsappKeys.posInvoice(sale.id)
-                            : whatsappKeys.invoice(organizationId, selectedStoreId, sale.id),
+                : whatsappKeys.invoice(
+                    organizationId,
+                    selectedStoreId,
+                    sale.id,
+                  ),
                     });
                     if (response.status === "success") {
                         toast.success("Invoice queued for WhatsApp");
                     } else {
-                        toast.error(response.message || "Invoice could not be queued for WhatsApp");
+              toast.error(
+                response.message || "Invoice could not be queued for WhatsApp",
+              );
                     }
-                }).catch((error: { message?: string }) => {
-                    toast.error(error?.message || "Invoice could not be queued for WhatsApp");
+          })
+          .catch((error: { message?: string }) => {
+            toast.error(
+              error?.message || "Invoice could not be queued for WhatsApp",
+            );
                 });
             }
             toast.success(
@@ -1933,7 +2485,11 @@ const BillingPage = ({
                     ? `Bill ${sale.saleNumber ?? ""} edited`
                     : `Bill ${sale.saleNumber ?? ""} completed`,
             );
-            if (!wasReplacing && isDeviceMode && (hasActiveTableOrder || shouldReturnToPosTablesAfterSale(sale))) {
+      if (
+        !wasReplacing &&
+        isDeviceMode &&
+        (hasActiveTableOrder || shouldReturnToPosTablesAfterSale(sale))
+      ) {
                 onPanelTabChange?.("tables");
             }
         },
@@ -1942,60 +2498,23 @@ const BillingPage = ({
         },
     });
 
-    const parcelKotMutation = useMutation({
-        mutationFn: async ({ requestId }: { requestId: string }) => {
-            if (!selectedStoreId) {
-                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
-            }
-
-            if (items.length === 0) {
-                throw new Error("Add at least one product before generating a Parcel KOT");
-            }
-
-            if (hasInvalidDiscount) {
-                throw new Error(discountValidationMessage || "Enter a valid discount");
-            }
-
-            const payload: CreateParcelKotJSON = {
-                requestId,
-                ...buildDraftPayload(),
-            };
-            const response = await createPosParcelKot(payload);
-            if (response.status !== "success" || !response.data?.kot || !response.data.sale) {
-                throw new Error(response.message || "Failed to generate Parcel KOT");
-            }
-
-            return response.data;
-        },
-        onSuccess: (data) => {
-            parcelKotRequestRef.current = null;
-            invalidateBillingQueries();
-            setMobileCartOpen(false);
-            resetComposer();
-            toast.success(`Parcel ${data.kot.kotNumber} placed`);
-        },
-        onError: (error: { message?: string }) => {
-            toast.error(error?.message || "Failed to generate Parcel KOT");
-        },
-    });
-
-    const submitParcelKot = () => {
-        const fingerprint = JSON.stringify(buildDraftPayload());
-        const existingRequest = parcelKotRequestRef.current;
-        const requestId = existingRequest?.fingerprint === fingerprint ? existingRequest.requestId : safeRandomUUID();
-        parcelKotRequestRef.current = { requestId, fingerprint };
-        parcelKotMutation.mutate({ requestId });
-    };
-
     const tableKotMutation = useMutation({
-        mutationFn: async ({ editingKotId: kotId }: { editingKotId: string | null }) => {
+    mutationFn: async ({
+      editingKotId: kotId,
+      requestId,
+    }: {
+      editingKotId: string | null;
+      requestId: string;
+    }) => {
             if (!activeTableId) {
                 throw new Error("No Active Table Order");
             }
 
             if (items.length === 0) {
                 throw new Error(
-                    kotId ? "Add at least one product before saving this KOT" : "Add at least one product before generating a Table KOT",
+          kotId
+            ? "Add at least one product before saving this KOT"
+            : "Add at least one product before generating a Table KOT",
                 );
             }
 
@@ -2004,16 +2523,25 @@ const BillingPage = ({
             }
 
             const payload: CreateTableKotJSON = {
-                items: buildDraftPayload().items,
+        requestId,
+        items: mapComposerItemsToSaleInputs(items),
                 customerId: selectedCustomerId || null,
                 notes: notes.trim() || null,
+        fulfillmentType: serviceMode,
             };
             const response = kotId
-                ? await updatePosTableKot(activeTableId, kotId, { items: payload.items })
+        ? await updatePosTableKot(activeTableId, kotId, {
+            items: payload.items,
+          })
                 : await createPosTableKot(activeTableId, payload);
 
             if (response.status !== "success" || !response.data?.tableOrder) {
-                throw new Error(response.message || (kotId ? "Failed to update Table KOT" : "Failed to generate Table KOT"));
+        throw new Error(
+          response.message ||
+            (kotId
+              ? "Failed to update Table KOT"
+              : "Failed to generate Table KOT"),
+        );
             }
 
             return response.data.tableOrder;
@@ -2021,7 +2549,9 @@ const BillingPage = ({
         onSuccess: (tableOrder, variables) => {
             invalidateBillingQueries();
             invalidateTableQueries();
+      setPlaceOrderDialogOpen(false);
             if (variables.editingKotId) {
+        tableKotRequestRef.current = null;
                 setActiveTableOrder(tableOrder);
                 setEditingKotId(null);
                 setItems([]);
@@ -2039,8 +2569,68 @@ const BillingPage = ({
         },
     });
 
+  const standaloneKotMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeDraftId || !selectedStandaloneKotId) {
+        throw new Error("Select a standalone KOT to edit");
+      }
+      if (items.length === 0) {
+        throw new Error("A KOT must have at least one item");
+      }
+
+      const kotResponse = await updatePosStandaloneKot(
+        activeDraftId,
+        selectedStandaloneKotId,
+        {
+          items: mapComposerItemsToSaleInputs(items),
+          sale: {
+            ...buildDraftPayload(),
+            generateKot: false,
+            kotBatchItems: undefined,
+          },
+        },
+      );
+      if (kotResponse.status !== "success" || !kotResponse.data?.sale) {
+        throw new Error(kotResponse.message || "Failed to update KOT");
+      }
+      return kotResponse.data.sale;
+    },
+    onSuccess: (sale) => {
+      const split = splitKotBackedDraftComposer(
+        sale.items,
+        sale.standaloneKots ?? [],
+      );
+      setActiveStandaloneKots(sale.standaloneKots ?? []);
+      setActiveStandaloneSaleItems(sale.items);
+      setSelectedStandaloneKotId(null);
+      setBaselineComposerItems(split.generatedItems as ComposerItem[]);
+      setItems(split.pendingItems as ComposerItem[]);
+      setPlaceOrderDialogOpen(false);
+      invalidateBillingQueries();
+      toast.success("KOT updated");
+    },
+    onError: (error: { message?: string }) => {
+      toast.error(error?.message || "Failed to update KOT");
+    },
+  });
+
     const submitTableKot = () => {
-        tableKotMutation.mutate({ editingKotId });
+    const fingerprint = JSON.stringify({
+      tableId: activeTableId,
+      customerId: selectedCustomerId || null,
+      notes: notes.trim() || null,
+      fulfillmentType: serviceMode,
+      items: mapComposerItemsToSaleInputs(items),
+    });
+    const request = resolveStableTableKotRequest({
+      existing: editingKotId ? null : tableKotRequestRef.current,
+      fingerprint,
+      createRequestId: safeRandomUUID,
+    });
+    if (!editingKotId) {
+      tableKotRequestRef.current = request;
+    }
+    tableKotMutation.mutate({ editingKotId, requestId: request.requestId });
     };
 
     const handleSelectTableKot = (kotId: string) => {
@@ -2060,11 +2650,6 @@ const BillingPage = ({
         setItems(composerItemsFromTableKot(activeTableOrder, kotId));
     };
 
-    const returnToTables = () => {
-        resetComposer();
-        onPanelTabChange?.("tables");
-    };
-
     const submitCompleteSale = () => {
         const shouldPrint = invoiceActions.includes("print");
         const shouldSendWhatsApp = invoiceActions.includes("whatsapp");
@@ -2073,7 +2658,10 @@ const BillingPage = ({
             payments: buildCommitPayload().payments,
         });
         const existingRequest = completionRequestRef.current;
-        const requestId = existingRequest?.fingerprint === fingerprint ? existingRequest.requestId : safeRandomUUID();
+    const requestId =
+      existingRequest?.fingerprint === fingerprint
+        ? existingRequest.requestId
+        : safeRandomUUID();
         completionRequestRef.current = { requestId, fingerprint };
         completeSaleMutation.mutate({ requestId, shouldPrint, shouldSendWhatsApp });
     };
@@ -2084,20 +2672,51 @@ const BillingPage = ({
             return;
         }
 
+    if (isEditingStandaloneKot) {
+      standaloneKotMutation.mutate();
+      return;
+    }
+
+    if (
+      tableCheckoutMode === "generate_kot" ||
+      tableCheckoutMode === "save_kot"
+    ) {
+      submitTableKot();
+      return;
+    }
+
         submitCompleteSale();
     };
 
-    const loadSaleIntoComposer = useCallback((sale: SaleDetailDTO, editSaleId: string | null) => {
+  const loadSaleIntoComposer = useCallback(
+    (sale: SaleDetailDTO, editSaleId: string | null) => {
         setReplacingSaleId(editSaleId);
         setActiveDraftId(editSaleId ? null : sale.id);
         setActiveTableId(null);
         setActiveTableOrder(null);
         setSelectedKotId(null);
         setEditingKotId(null);
+      setSelectedStandaloneKotId(null);
         setSelectedCustomerId(sale.customerId ?? "");
         setSelectedCustomerFallback(null);
         setCustomerSearch(sale.customer?.phone || sale.customer?.name || "");
         setNotes(sale.notes ?? "");
+        setServiceMode(sale.serviceMode ?? "dine_in");
+
+      const kotBackedDraft = !editSaleId && isKotBackedDirectDraft(sale);
+      if (kotBackedDraft) {
+        setActiveStandaloneKots(sale.standaloneKots ?? []);
+        setActiveStandaloneSaleItems(sale.items);
+        const split = splitKotBackedDraftComposer(
+          sale.items,
+          sale.standaloneKots ?? [],
+        );
+        setBaselineComposerItems(split.generatedItems as ComposerItem[]);
+        setItems(split.pendingItems as ComposerItem[]);
+      } else {
+        setActiveStandaloneKots([]);
+        setActiveStandaloneSaleItems([]);
+        setBaselineComposerItems([]);
         setItems(
             sale.items.map((item) => ({
                 key: item.id,
@@ -2114,7 +2733,8 @@ const BillingPage = ({
                     unitDiscount: Number(addOn.unitDiscountSnapshot),
                     quantity: Number(addOn.quantityPerParent),
                 })),
-                bundleComponents: (item.bundleComponents ?? []).map((component) => ({
+            bundleComponents: (item.bundleComponents ?? []).map(
+              (component) => ({
                     id: component.id,
                     componentProductId: component.componentProductId,
                     name: component.productNameSnapshot,
@@ -2127,7 +2747,8 @@ const BillingPage = ({
                         unitPrice: Number(addOn.unitPriceSnapshot),
                         unitDiscount: Number(addOn.unitDiscountSnapshot),
                     })),
-                })),
+              }),
+            ),
                 comboSelections: (item.bundleComponents ?? [])
                     .filter((component) => Boolean(component.choiceGroupId))
                     .map((component) => ({
@@ -2146,23 +2767,35 @@ const BillingPage = ({
                     })),
             })),
         );
+      }
         setSettlementMode("full");
         setSettlementEditorOpen(false);
         setSelectedPaymentMethod("cash");
         setPartialPaymentAmount("");
-        setDiscountInput(Number(sale.orderDiscountAmount) > 0 ? String(sale.orderDiscountAmount) : "");
+      setDiscountInput(
+        Number(sale.orderDiscountAmount) > 0
+          ? String(sale.orderDiscountAmount)
+          : "",
+      );
         setDiscountMode("amount");
         setDiscountEditorOpen(Number(sale.orderDiscountAmount) > 0);
         setLeftPanelTab("products");
-    }, [getComposerUnitDiscountFromSaleItem]);
+    },
+    [getComposerUnitDiscountFromSaleItem],
+  );
 
-    const loadTableOrderIntoComposer = useCallback((table: ServiceTableDTO, tableOrder: TableOrderDTO) => {
+  const loadTableOrderIntoComposer = useCallback(
+    (table: ServiceTableDTO, tableOrder: TableOrderDTO) => {
         setReplacingSaleId(null);
         setActiveDraftId(null);
         setActiveTableId(table.id);
         setActiveTableOrder(tableOrder);
         setSelectedKotId(null);
         setEditingKotId(null);
+      setActiveStandaloneKots([]);
+      setActiveStandaloneSaleItems([]);
+      setBaselineComposerItems([]);
+      setSelectedStandaloneKotId(null);
         setSelectedCustomerId(tableOrder.customerId ?? "");
         setSelectedCustomerFallback(null);
         setCustomerSearch("");
@@ -2176,7 +2809,18 @@ const BillingPage = ({
         setDiscountMode("percent");
         setDiscountEditorOpen(false);
         setLeftPanelTab("products");
-    }, []);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (placeOrderDialogOpen) {
+      setGenerateKotEnabled(true);
+      if (tableCheckoutMode === "generate_kot") {
+        setServiceMode("dine_in");
+      }
+    }
+  }, [placeOrderDialogOpen, tableCheckoutMode]);
 
     useEffect(() => {
         if (!pendingComposerHandoff) {
@@ -2192,9 +2836,14 @@ const BillingPage = ({
 
             consumedComposerHandoffRef.current = handoffKey;
             if (pendingComposerHandoff.table) {
-                loadTableOrderIntoComposer(pendingComposerHandoff.table, pendingComposerHandoff.tableOrder);
+        loadTableOrderIntoComposer(
+          pendingComposerHandoff.table,
+          pendingComposerHandoff.tableOrder,
+        );
             }
-            setMobileCartOpen(true);
+      setMobileCartOpen(
+        shouldOpenMobileCartOnComposerHandoff(pendingComposerHandoff),
+      );
             window.scrollTo({ top: 0, behavior: "smooth" });
             onComposerHandoffConsumed?.();
             toast.success(
@@ -2215,8 +2864,13 @@ const BillingPage = ({
         }
 
         consumedComposerHandoffRef.current = handoffKey;
-        loadSaleIntoComposer(pendingComposerHandoff.sale, pendingComposerHandoff.editSaleId);
-        setMobileCartOpen(true);
+    loadSaleIntoComposer(
+      pendingComposerHandoff.sale,
+      pendingComposerHandoff.editSaleId,
+    );
+    setMobileCartOpen(
+      shouldOpenMobileCartOnComposerHandoff(pendingComposerHandoff),
+    );
         window.scrollTo({ top: 0, behavior: "smooth" });
         onComposerHandoffConsumed?.();
         toast.success(
@@ -2224,7 +2878,12 @@ const BillingPage = ({
                 ? "Bill loaded for editing"
                 : "Draft loaded into the composer",
         );
-    }, [loadSaleIntoComposer, loadTableOrderIntoComposer, onComposerHandoffConsumed, pendingComposerHandoff]);
+  }, [
+    loadSaleIntoComposer,
+    loadTableOrderIntoComposer,
+    onComposerHandoffConsumed,
+    pendingComposerHandoff,
+  ]);
 
     const handleEditSale = (sale: SaleDetailDTO) => {
         if (isDeviceMode && onPanelTabChange) {
@@ -2243,7 +2902,9 @@ const BillingPage = ({
     const resumeDraftMutation = useMutation({
         mutationFn: async (saleId: string) => {
             if (!selectedStoreId) {
-                throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
+        throw new Error(
+          isDeviceMode ? "Store session is missing" : "Select a store first",
+        );
             }
 
             const response = isDeviceMode
@@ -2319,16 +2980,27 @@ const BillingPage = ({
         );
     }
 
-    if (!isDeviceMode && (organizationQuery.isError || organizationQuery.data?.status === "error" || !organization)) {
+  if (
+    !isDeviceMode &&
+    (organizationQuery.isError ||
+      organizationQuery.data?.status === "error" ||
+      !organization)
+  ) {
         return (
             <div className="rounded-2xl border border-border/60 bg-card/80 p-8 shadow-xl shadow-black/5">
-                <p className="font-display text-2xl font-semibold text-foreground">Billing workspace unavailable</p>
+        <p className="font-display text-2xl font-semibold text-foreground">
+          Billing workspace unavailable
+        </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                     {organizationQuery.data?.message ||
                         (organizationQuery.error as { message?: string })?.message ||
                         "This organization could not be loaded."}
                 </p>
-                <Button variant="outline" className="mt-4 rounded-full" render={<Link to="/organizations" />}>
+        <Button
+          variant="outline"
+          className="mt-4 rounded-full"
+          render={<Link to="/organizations" />}
+        >
                     Back to organizations
                 </Button>
             </div>
@@ -2352,7 +3024,8 @@ const BillingPage = ({
                         Add a store before starting billing.
                     </h1>
                     <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                        Billing is store-scoped. Once a store exists, this screen becomes the POS billing surface.
+            Billing is store-scoped. Once a store exists, this screen becomes
+            the POS billing surface.
                     </p>
                     <Button
                         className="mt-4 rounded-full"
@@ -2383,9 +3056,13 @@ const BillingPage = ({
                             <h1 className="font-display text-xl font-bold tracking-tight text-foreground">
                                 Billing history
                             </h1>
-                            <p className="text-xs text-muted-foreground">Admin read-only mode</p>
+              <p className="text-xs text-muted-foreground">
+                Admin read-only mode
+              </p>
                         </div>
-                        <span className="text-sm text-muted-foreground hidden sm:inline">{formatLongDate()}</span>
+            <span className="text-sm text-muted-foreground hidden sm:inline">
+              {formatLongDate()}
+            </span>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -2399,7 +3076,9 @@ const BillingPage = ({
                             onValueChange={setStore}
                         >
                             <SelectTrigger className="h-9 min-w-[160px] max-w-[240px] rounded-xl bg-background/80 px-3 text-sm">
-                                <SelectValue placeholder="Choose store">{selectedStore?.name}</SelectValue>
+                <SelectValue placeholder="Choose store">
+                  {selectedStore?.name}
+                </SelectValue>
                             </SelectTrigger>
                             <SelectContent alignItemWithTrigger={false} align="end">
                                 {organizationStores.map((store) => (
@@ -2446,7 +3125,12 @@ const BillingPage = ({
 
                     {canMutate && leftPanelTab === "reports" ? (
                         <div className="min-h-full p-4 max-lg:pb-2 lg:p-6 lg:pb-6">
-                            {session ? <ProductSalesSummary mode="pos" storeName={session.store.name} /> : null}
+              {session ? (
+                <ProductSalesSummary
+                  mode="pos"
+                  storeName={session.store.name}
+                />
+              ) : null}
                         </div>
                     ) : canMutate && leftPanelTab === "purchases" ? (
                         session ? (
@@ -2476,7 +3160,11 @@ const BillingPage = ({
                                                     className="h-8 rounded-lg pl-8 text-sm"
                                                 />
                                             </div>
-                                            <Button type="submit" size="sm" className="h-8 shrink-0 rounded-lg px-3 text-xs">
+                      <Button
+                        type="submit"
+                        size="sm"
+                        className="h-8 shrink-0 rounded-lg px-3 text-xs"
+                      >
                                                 Add
                                             </Button>
                                             {directBarcodeScanEnabled ? (
@@ -2485,11 +3173,21 @@ const BillingPage = ({
                                                     variant="outline"
                                                     size="icon-sm"
                                                     className="size-8 shrink-0 rounded-lg"
-                                                    aria-label={directScanPaused ? "Resume direct scan" : "Pause direct scan"}
+                          aria-label={
+                            directScanPaused
+                              ? "Resume direct scan"
+                              : "Pause direct scan"
+                          }
                                                     aria-pressed={!directScanPaused}
-                                                    onClick={() => setDirectScanPaused((paused) => !paused)}
+                          onClick={() =>
+                            setDirectScanPaused((paused) => !paused)
+                          }
                                                 >
-                                                    {directScanPaused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+                          {directScanPaused ? (
+                            <Play className="size-3.5" />
+                          ) : (
+                            <Pause className="size-3.5" />
+                          )}
                                                 </Button>
                                             ) : (
                                                 <Button
@@ -2497,7 +3195,10 @@ const BillingPage = ({
                                                     variant="outline"
                                                     size="sm"
                                                     className="h-8 shrink-0 rounded-lg px-2 text-xs"
-                                                    disabled={!canEnableDirectBarcodeScan || updateDirectScanMutation.isPending}
+                          disabled={
+                            !canEnableDirectBarcodeScan ||
+                            updateDirectScanMutation.isPending
+                          }
                                                     onClick={() => setDirectScanActivationOpen(true)}
                                                 >
                                                     <Play className="size-3.5" />
@@ -2507,10 +3208,19 @@ const BillingPage = ({
                                         </form>
 
                                         <details className="mt-1.5 text-xs text-muted-foreground">
-                                            <summary className="cursor-pointer select-none hover:text-foreground">Scanner settings</summary>
+                      <summary className="cursor-pointer select-none hover:text-foreground">
+                        Scanner settings
+                      </summary>
                                             <div className="mt-2 flex flex-wrap items-center gap-2">
                                                 <span>
-                                                    {activeProductCodesCount} active code{activeProductCodesCount === 1 ? "" : "s"} · Direct scan {directBarcodeScanEnabled ? (directScanPaused ? "paused" : "on") : "off"}
+                          {activeProductCodesCount} active code
+                          {activeProductCodesCount === 1 ? "" : "s"} · Direct
+                          scan{" "}
+                          {directBarcodeScanEnabled
+                            ? directScanPaused
+                              ? "paused"
+                              : "on"
+                            : "off"}
                                                 </span>
                                                 {directBarcodeScanEnabled ? (
                                                     <Button
@@ -2519,7 +3229,9 @@ const BillingPage = ({
                                                         size="sm"
                                                         className="h-7 rounded-md px-2"
                                                         disabled={updateDirectScanMutation.isPending}
-                                                        onClick={() => updateDirectScanMutation.mutate(false)}
+                            onClick={() =>
+                              updateDirectScanMutation.mutate(false)
+                            }
                                                     >
                                                         Turn off direct scan
                                                     </Button>
@@ -2536,19 +3248,24 @@ const BillingPage = ({
                                                 )}
                                                 role="status"
                                             >
-                                                {scanFeedback.kind === "success" || scanFeedback.kind === "unavailable" ? (
+                        {scanFeedback.kind === "success" ||
+                        scanFeedback.kind === "unavailable" ? (
                                                     <span>{scanFeedback.message}</span>
                                                 ) : scanFeedback.kind === "inactive" ? (
                                                     <span>
-                                                        {scanFeedback.productName} is inactive. Product Code: <code>{scanFeedback.productCode}</code>
+                            {scanFeedback.productName} is inactive. Product
+                            Code: <code>{scanFeedback.productCode}</code>
                                                     </span>
                                                 ) : scanFeedback.kind === "ambiguous" ? (
                                                     <span>
-                                                        Product Code <code>{scanFeedback.productCode}</code> has conflicting catalog assignments. Ask an administrator to resolve it.
+                            Product Code <code>{scanFeedback.productCode}</code>{" "}
+                            has conflicting catalog assignments. Ask an
+                            administrator to resolve it.
                                                     </span>
                                                 ) : (
                                                     <span>
-                                                        No Product is linked to <code>{scanFeedback.productCode}</code>.
+                            No Product is linked to{" "}
+                            <code>{scanFeedback.productCode}</code>.
                                                     </span>
                                                 )}
                                                 {scanFeedback.kind === "unknown" ? (
@@ -2560,10 +3277,16 @@ const BillingPage = ({
                                                             className="h-7 rounded-md bg-background/70"
                                                             onClick={async () => {
                                                                 try {
-                                                                    await navigator.clipboard.writeText(scanFeedback.productCode);
-                                                                    toast.success("Product Code copied for your administrator");
+                                  await navigator.clipboard.writeText(
+                                    scanFeedback.productCode,
+                                  );
+                                  toast.success(
+                                    "Product Code copied for your administrator",
+                                  );
                                                                 } catch {
-                                                                    toast.error("Could not copy the Product Code");
+                                  toast.error(
+                                    "Could not copy the Product Code",
+                                  );
                                                                 }
                                                             }}
                                                         >
@@ -2578,7 +3301,9 @@ const BillingPage = ({
                                                                 setScanFeedback(null);
                                                                 onProductSearchChange?.("");
                                                                 document
-                                                                    .querySelector<HTMLInputElement>('input[aria-label="Search products..."]')
+                                  .querySelector<HTMLInputElement>(
+                                    'input[aria-label="Search products..."]',
+                                  )
                                                                     ?.focus();
                                                             }}
                                                         >
@@ -2592,9 +3317,13 @@ const BillingPage = ({
                                             <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                     <div>
-                                                        <p className="text-sm font-semibold text-foreground">Scan diagnostics for this browser session</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              Scan diagnostics for this browser session
+                            </p>
                                                         <p className="text-xs text-muted-foreground">
-                                                            Unknown codes, duplicate assignments, and add-to-cart failures are kept here for follow-up on this device.
+                              Unknown codes, duplicate assignments, and
+                              add-to-cart failures are kept here for follow-up
+                              on this device.
                                                         </p>
                                                     </div>
                                                     <div className="flex items-center gap-1">
@@ -2605,10 +3334,14 @@ const BillingPage = ({
                                                             className="h-7 rounded-md bg-background/70"
                                                             onClick={async () => {
                                                                 try {
-                                                                    await navigator.clipboard.writeText(formatScanDiagnostics(scanDiagnostics));
+                                  await navigator.clipboard.writeText(
+                                    formatScanDiagnostics(scanDiagnostics),
+                                  );
                                                                     toast.success("Scan diagnostics copied");
                                                                 } catch {
-                                                                    toast.error("Could not copy scan diagnostics");
+                                  toast.error(
+                                    "Could not copy scan diagnostics",
+                                  );
                                                                 }
                                                             }}
                                                         >
@@ -2623,7 +3356,9 @@ const BillingPage = ({
                                                                 setScanDiagnostics([]);
                                                                 if (scanDiagnosticStorageKey) {
                                                                     try {
-                                                                        window.sessionStorage.removeItem(scanDiagnosticStorageKey);
+                                    window.sessionStorage.removeItem(
+                                      scanDiagnosticStorageKey,
+                                    );
                                                                     } catch {
                                                                         // Clearing the visible session state is sufficient when storage is unavailable.
                                                                     }
@@ -2634,11 +3369,19 @@ const BillingPage = ({
                                                         </Button>
                                                     </div>
                                                 </div>
-                                                <ul className="mt-2 space-y-1 text-xs text-muted-foreground" aria-label="Barcode scan diagnostics">
-                                                    {[...scanDiagnostics].reverse().map((diagnostic, index) => (
+                        <ul
+                          className="mt-2 space-y-1 text-xs text-muted-foreground"
+                          aria-label="Barcode scan diagnostics"
+                        >
+                          {[...scanDiagnostics]
+                            .reverse()
+                            .map((diagnostic, index) => (
                                                         <li key={`${diagnostic.occurredAt}-${index}`}>
-                                                            <span className="font-medium text-foreground">{diagnostic.kind.replaceAll("-", " ")}</span>
-                                                            {": "} <code>{diagnostic.productCode}</code> — {diagnostic.message}
+                                <span className="font-medium text-foreground">
+                                  {diagnostic.kind.replaceAll("-", " ")}
+                                </span>
+                                {": "} <code>{diagnostic.productCode}</code> —{" "}
+                                {diagnostic.message}
                                                         </li>
                                                     ))}
                                                 </ul>
@@ -2684,7 +3427,9 @@ const BillingPage = ({
                                     ) : filteredProducts.length === 0 ? (
                                         <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-6 text-center">
                                             <ShoppingCart className="size-10 text-muted-foreground/50" />
-                                            <p className="mt-3 font-medium text-foreground">No products found</p>
+                        <p className="mt-3 font-medium text-foreground">
+                          No products found
+                        </p>
                                             <p className="mt-1 text-sm text-muted-foreground">
                                                 Try a different search or category.
                                             </p>
@@ -2696,24 +3441,30 @@ const BillingPage = ({
                                                     .filter((item) => item.productId === product.id)
                                                     .reduce((total, item) => total + item.quantity, 0);
                                                 const isInCart = cartQuantity > 0;
-                                                const productAttachments = attachmentsByProductId.get(product.id) ?? [];
+                          const productAttachments =
+                            attachmentsByProductId.get(product.id) ?? [];
                                                 const combo = preloadedCombos.find(
                                                     (item) => item.product.id === product.id,
                                                 );
                                                 const comboLoading =
-                                                    product.productType === "combo" && comboProductsQuery.isPending;
+                            product.productType === "combo" &&
+                            comboProductsQuery.isPending;
                                                 const cardAction = getProductCardAction(product, {
                                                     hasAddOns: productAttachments.length > 0,
                                                     comboAvailable: Boolean(combo),
-                                                    comboHasSettings: Boolean(combo?.choiceGroups.length),
+                            comboHasSettings: Boolean(
+                              combo?.choiceGroups.length,
+                            ),
                                                     comboLoading,
                                                     comboHasError:
                                                         comboProductsQuery.isError ||
                                                         comboProductsQuery.data?.status === "error",
                                                 });
-                                                const cardActionLabel = getProductCardActionLabel(cardAction);
+                          const cardActionLabel =
+                            getProductCardActionLabel(cardAction);
                                                 const cardDisabled =
-                                                    cardAction === "disabled" || cardAction === "loading";
+                            cardAction === "disabled" ||
+                            cardAction === "loading";
 
                                                 return (
                                                     <button
@@ -2770,7 +3521,9 @@ const BillingPage = ({
                                                                     />
                                                                 </div>
                                                                 <div className="shrink-0">
-                                                                    <ProductTypeBadge productType={product.productType} />
+                                    <ProductTypeBadge
+                                      productType={product.productType}
+                                    />
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -2811,212 +3564,195 @@ const BillingPage = ({
                         />
                     ) : (
                         <>
-                            {/* Filters & Control Panel */}
-                            <div className="mb-6 space-y-4">
-                                {/* First Row: Search, Sort, View, Count */}
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                    {/* Sort Controls */}
-                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
-                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground text-xs font-semibold uppercase tracking-wider mr-1">
-                                            <ArrowUpDown className="size-3.5" />
-                                        </div>
-                                        {salesSortOptions.map((opt) => (
-                                            <button
-                                                key={opt.value}
-                                                type="button"
-                                                onClick={() => setSortBy(opt.value)}
-                                                className={cn(
-                                                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
-                                                    sortBy === opt.value
-                                                        ? "bg-foreground text-background shadow-md shadow-foreground/5"
-                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                                                )}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                </div>
-
-                                {/* Second Row: Filters (Payment & Date) */}
-                                <div className="flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:flex-wrap sm:items-center">
-                                    {/* Payment Method Filters */}
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
-                                            <Filter className="size-3.5" />
-                                        </div>
-                                        {salesPaymentMethodOptions.map((opt) => (
-                                            <button
-                                                key={opt.value}
-                                                type="button"
-                                                onClick={() => setPaymentMethodFilter(opt.value)}
-                                                className={cn(
-                                                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
-                                                    paymentMethodFilter === opt.value
-                                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                                                )}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* Divider for sm and up */}
-                                    <div className="hidden sm:block h-4 w-px bg-border/40 mx-2" />
-
-                                    {/* Date filters */}
-                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
-                                            <Calendar className="size-3.5" />
-                                        </div>
-                                        {dateFilter === "date" ? (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                className="size-8 shrink-0 rounded-lg"
-                                                aria-label="Previous date"
-                                                onClick={() => shiftSalesDate(-1)}
-                                            >
-                                                <ChevronLeft className="size-4" />
-                                            </Button>
-                                        ) : null}
-                                        <Popover open={salesDatePopoverOpen} onOpenChange={handleSalesDatePopoverOpenChange}>
-                                            <PopoverTrigger
-                                                render={
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        className="h-8 min-w-0 max-w-[280px] justify-start gap-2 rounded-lg px-2.5 text-xs"
-                                                    >
-                                                        <Calendar className="size-3.5 shrink-0" />
-                                                        <span className="truncate">
-                                                            {appliedDateFilter === "date"
-                                                                ? formatSalesDate(appliedSpecificDate)
-                                                                : appliedDatePreset === "all"
-                                                                  ? "All dates"
-                                                                  : appliedCustomFromDate && appliedCustomToDate
-                                                                    ? `${formatSalesDate(appliedCustomFromDate)} — ${formatSalesDate(appliedCustomToDate)}`
-                                                                    : "Select date range"}
-                                                        </span>
-                                                    </Button>
-                                                }
-                                            />
-                                            <PopoverContent
-                                                align="start"
-                                                className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-2"
-                                            >
-                                                <div className="flex min-w-0 flex-col gap-2">
-                                                    <div className="flex min-w-0 rounded-md border border-border/50 bg-muted/30 p-px">
-                                                        {(["date", "range"] as const).map((mode) => (
-                                                            <button
-                                                                key={mode}
-                                                                type="button"
-                                                                onClick={() => setSalesDateMode(mode)}
-                                                                className={cn(
-                                                                    "min-w-0 flex-1 rounded px-1.5 py-1 text-center text-[11px] font-semibold transition-colors",
-                                                                    dateFilter === mode
-                                                                        ? "bg-background text-foreground shadow-sm"
-                                                                        : "text-muted-foreground hover:text-foreground",
-                                                                )}
-                                                            >
-                                                                {mode === "date" ? "Date" : "Date range"}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-
-                                                    <div className="flex min-w-0 flex-wrap gap-1">
-                                                        {getSalesDatePresetOptions(dateFilter).map((preset) => (
-                                                            <button
-                                                                key={preset.value}
-                                                                type="button"
-                                                                onClick={() => applySalesDatePreset(preset.value)}
-                                                                className={cn(
-                                                                    "min-w-0 max-w-full rounded-full border px-2 py-0.5 text-center text-[11px] font-medium whitespace-normal break-words transition-colors",
-                                                                    datePreset === preset.value
-                                                                        ? "border-primary/40 bg-primary/10 text-primary"
-                                                                        : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                                                )}
-                                                            >
-                                                                {preset.label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-
-                                                    <div className="min-w-0 max-w-full overflow-x-auto">
-                                                        <div className="flex w-full min-w-max justify-center">
-                                                        {dateFilter === "date" ? (
-                                                            <DateCalendar
-                                                                mode="single"
-                                                                className="mx-auto p-1 [--cell-size:--spacing(6)]"
-                                                                classNames={{
-                                                                    day_button: "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
-                                                                }}
-                                                                selected={specificDate}
-                                                                onSelect={(date) => {
-                                                                    if (date) {
-                                                                        setSpecificDate(date);
-                                                                        setDatePreset("custom");
-                                                                    }
-                                                                }}
-                                                                autoFocus
-                                                            />
-                                                        ) : (
-                                                            <DateCalendar
-                                                                mode="range"
-                                                                className="mx-auto p-1 [--cell-size:--spacing(6)]"
-                                                                classNames={{
-                                                                    day_button: "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
-                                                                }}
-                                                                selected={{
-                                                                    from: customFromDate ?? undefined,
-                                                                    to: customToDate ?? undefined,
-                                                                }}
-                                                                onSelect={(range) => {
-                                                                    setDatePreset("custom");
-                                                                    setCustomFromDate(range?.from ?? null);
-                                                                    setCustomToDate(range?.to ?? null);
-                                                                }}
-                                                                autoFocus
-                                                            />
-                                                        )}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex justify-end border-t border-border/50 pt-3">
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            className="rounded-lg"
-                                                            disabled={
-                                                                dateFilter === "range" &&
-                                                                datePreset === "custom" &&
-                                                                (!customFromDate || !customToDate)
-                                                            }
-                                                            onClick={confirmSalesDateFilter}
+                            {/* Bills toolbar */}
+                            <div className="mb-6 flex flex-wrap items-center gap-2">
+                                <DataTableFacetedFilter
+                                    title="Payment"
+                                    options={salesPaymentMethodFilterOptions}
+                                    selectedValues={paymentMethodSelection}
+                                    onSelectedValuesChange={(values) =>
+                                        setPaymentMethodSelection(
+                                            new Set(
+                                                Array.from(values) as BillPaymentMethod[],
+                                            ),
+                                        )
+                                    }
+                                />
+                                <DataTableSortFilter
+                                    title="Sort"
+                                    value={sortBy}
+                                    onValueChange={(value) => setSortBy(value as SaleSort)}
+                                    options={salesSortOptions}
+                                />
+                                <div className="inline-flex items-center gap-1">
+                                    {appliedDateFilter === "date" ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="size-8 shrink-0 rounded-l-2xl rounded-r-md shadow-xs"
+                                            aria-label="Previous date"
+                                            onClick={() => shiftSalesDate(-1)}
+                                        >
+                                            <ChevronLeft className="size-4" />
+                                        </Button>
+                                    ) : null}
+                                    <Popover
+                                        open={salesDatePopoverOpen}
+                                        onOpenChange={handleSalesDatePopoverOpenChange}
+                                    >
+                                        <PopoverTrigger
+                                            render={
+                                                <DataTableFilterTrigger
+                                                    className={cn(
+                                                        appliedDateFilter === "date"
+                                                            ? "rounded-md"
+                                                            : "rounded-full",
+                                                    )}
+                                                >
+                                                    <Calendar />
+                                                    <span>Date</span>
+                                                    <DataTableFilterValue>
+                                                        <Badge
+                                                            variant="secondary"
+                                                            className="max-w-[12rem] truncate rounded-md px-1.5 font-normal"
                                                         >
-                                                            Confirm
-                                                        </Button>
-                                                    </div>
+                                                            {appliedSalesDateLabel}
+                                                        </Badge>
+                                                    </DataTableFilterValue>
+                                                </DataTableFilterTrigger>
+                                            }
+                                        />
+                                    <PopoverContent
+                                        align="start"
+                                        className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-2"
+                                    >
+                                        <div className="flex min-w-0 flex-col gap-2">
+                                            <div className="flex min-w-0 rounded-md border border-border/50 bg-muted/30 p-px">
+                                                {(["date", "range"] as const).map((mode) => (
+                                                    <button
+                                                        key={mode}
+                                                        type="button"
+                                                        onClick={() => setSalesDateMode(mode)}
+                                                        className={cn(
+                                                            "min-w-0 flex-1 rounded px-1.5 py-1 text-center text-[11px] font-semibold transition-colors",
+                                                            dateFilter === mode
+                                                                ? "bg-background text-foreground shadow-sm"
+                                                                : "text-muted-foreground hover:text-foreground",
+                                                        )}
+                                                    >
+                                                        {mode === "date" ? "Date" : "Date range"}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <div className="flex min-w-0 flex-wrap gap-1">
+                                                {getSalesDatePresetOptions(dateFilter).map(
+                                                    (preset) => (
+                                                        <button
+                                                            key={preset.value}
+                                                            type="button"
+                                                            onClick={() =>
+                                                                applySalesDatePreset(preset.value)
+                                                            }
+                                                            className={cn(
+                                                                "min-w-0 max-w-full rounded-full border px-2 py-0.5 text-center text-[11px] font-medium whitespace-normal break-words transition-colors",
+                                                                datePreset === preset.value
+                                                                    ? "border-primary/40 bg-primary/10 text-primary"
+                                                                    : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                                            )}
+                                                        >
+                                                            {preset.label}
+                                                        </button>
+                                                    ),
+                                                )}
+                                            </div>
+
+                                            <div className="min-w-0 max-w-full overflow-x-auto">
+                                                <div className="flex w-full min-w-max justify-center">
+                                                    {dateFilter === "date" ? (
+                                                        <DateCalendar
+                                                            mode="single"
+                                                            className="mx-auto p-1 [--cell-size:--spacing(6)]"
+                                                            classNames={{
+                                                                day_button:
+                                                                    "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
+                                                            }}
+                                                            selected={specificDate}
+                                                            onSelect={(date) => {
+                                                                if (date) {
+                                                                    setSpecificDate(date);
+                                                                    setDatePreset("custom");
+                                                                }
+                                                            }}
+                                                            autoFocus
+                                                        />
+                                                    ) : (
+                                                        <DateCalendar
+                                                            mode="range"
+                                                            className="mx-auto p-1 [--cell-size:--spacing(6)]"
+                                                            classNames={{
+                                                                day_button:
+                                                                    "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
+                                                            }}
+                                                            selected={{
+                                                                from: customFromDate ?? undefined,
+                                                                to: customToDate ?? undefined,
+                                                            }}
+                                                            onSelect={(range) => {
+                                                                setDatePreset("custom");
+                                                                setCustomFromDate(range?.from ?? null);
+                                                                setCustomToDate(range?.to ?? null);
+                                                            }}
+                                                            autoFocus
+                                                        />
+                                                    )}
                                                 </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                        {dateFilter === "date" ? (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                className="size-8 shrink-0 rounded-lg"
-                                                aria-label="Next date"
-                                                onClick={() => shiftSalesDate(1)}
-                                            >
-                                                <ChevronRight className="size-4" />
-                                            </Button>
-                                        ) : null}
-                                    </div>
+                                            </div>
+
+                                            <div className="flex justify-end border-t border-border/50 pt-3">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    className="rounded-lg"
+                                                    disabled={
+                                                        dateFilter === "range" &&
+                                                        datePreset === "custom" &&
+                                                        (!customFromDate || !customToDate)
+                                                    }
+                                                    onClick={confirmSalesDateFilter}
+                                                >
+                                                    Confirm
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </PopoverContent>
+                                    </Popover>
+                                    {appliedDateFilter === "date" ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="size-8 shrink-0 rounded-r-2xl rounded-l-md shadow-xs"
+                                            aria-label="Next date"
+                                            onClick={() => shiftSalesDate(1)}
+                                        >
+                                            <ChevronRight className="size-4" />
+                                        </Button>
+                                    ) : null}
                                 </div>
+                                {hasBillsToolbarFilters ? (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 rounded-full px-2.5 text-muted-foreground"
+                                        onClick={clearBillsToolbarFilters}
+                                    >
+                                        <RotateCcw className="size-3.5" />
+                                        Clear
+                                    </Button>
+                                ) : null}
                             </div>
 
                             <SalesSummaryBar summary={salesSummary} />
@@ -3025,7 +3761,9 @@ const BillingPage = ({
                             {dateRangeNeedsInput ? (
                                 <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
                                     <Calendar className="size-8 text-muted-foreground/50" />
-                                    <p className="mt-3 font-medium text-foreground">Choose a date range</p>
+                  <p className="mt-3 font-medium text-foreground">
+                    Choose a date range
+                  </p>
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         Select a From date or To date to view matching bills.
                                     </p>
@@ -3034,10 +3772,13 @@ const BillingPage = ({
                                 <div className="flex min-h-[320px] items-center justify-center">
                                     <Spinner className="size-6 text-primary" />
                                 </div>
-                            ) : salesPages.length === 0 && (salesQuery.isError || salesServiceError) ? (
+              ) : salesPages.length === 0 &&
+                (salesQuery.isError || salesServiceError) ? (
                                 <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/20 bg-destructive/5 p-5 text-center">
                                     <ReceiptText className="size-8 text-destructive/70" />
-                                    <p className="mt-3 font-medium text-foreground">Recent bills failed to load</p>
+                  <p className="mt-3 font-medium text-foreground">
+                    Recent bills failed to load
+                  </p>
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         {salesServiceError || "Please refresh the page."}
                                     </p>
@@ -3046,8 +3787,12 @@ const BillingPage = ({
                                 <>
                                     <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
                                         <ReceiptText className="size-8 text-muted-foreground/50" />
-                                        <p className="mt-3 font-medium text-foreground">No bills found</p>
-                                        <p className="mt-1 text-sm text-muted-foreground">No bills in this view yet.</p>
+                    <p className="mt-3 font-medium text-foreground">
+                      No bills found
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      No bills in this view yet.
+                    </p>
                                     </div>
                                 </>
                             ) : (
@@ -3094,7 +3839,9 @@ const BillingPage = ({
                                             );
                                         };
 
-                                        const renderPaymentMethodBadges = (sale: SaleSummaryDTO) => {
+                    const renderPaymentMethodBadges = (
+                      sale: SaleSummaryDTO,
+                    ) => {
                                             if (sale.status === "draft" || sale.status === "voided") {
                                                 return (
                                                     <span className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
@@ -3155,14 +3902,18 @@ const BillingPage = ({
                                                         <div className="min-w-0 flex-1 pr-2">
                                                             <div className="flex min-w-0 items-center gap-2">
                                                                 <p className="shrink-0 whitespace-nowrap text-xs font-bold text-amber-500 dark:text-amber-400">
-                                                                    {sale.tokenNumber ? `Token ${sale.tokenNumber} · ` : ""}
+                                  {sale.tokenNumber
+                                    ? `Token ${sale.tokenNumber} · `
+                                    : ""}
                                                                     {sale.kotNumbers && sale.kotNumbers.length > 0
                                                                         ? `KOT ${sale.kotNumbers.join(", ")} · `
                                                                         : ""}
                                                                     {sale.serviceTableLabel
                                                                         ? `Table ${sale.serviceTableLabel} · `
                                                                         : ""}
-                                                                    {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft"}
+                                  {sale.saleNumber
+                                    ? `Bill ${sale.saleNumber}`
+                                    : "Draft"}
                                                                 </p>
                                                                 <p className="min-w-0 truncate text-xs font-semibold text-foreground/80">
                                                                     {sale.customer?.name || "Walk-in customer"}
@@ -3175,7 +3926,8 @@ const BillingPage = ({
                                                                     </p>
                                                                 ) : null}
                                                                 <p className="truncate text-[10px] text-muted-foreground/80">
-                                                                    {sale.itemCount} item
+                                  {formatSaleServiceModeLabel(sale.serviceMode)}{" "}
+                                  · {sale.itemCount} item
                                                                     {sale.itemCount !== 1 ? "s" : ""} ·{" "}
                                                                     {formatDateTime(sale.createdAt)}
                                                                 </p>
@@ -3194,7 +3946,8 @@ const BillingPage = ({
                                                                 <p className="text-sm font-bold text-foreground">
                                                                     {formatCurrency(sale.grandTotal)}
                                                                 </p>
-                                                                {sale.status !== "draft" && sale.status !== "voided" ? (
+                                {sale.status !== "draft" &&
+                                sale.status !== "voided" ? (
                                                                     <p
                                                                         className={cn(
                                                                             "mt-0.5 text-[9px] font-bold",
@@ -3235,7 +3988,9 @@ const BillingPage = ({
                                                                             {resumingDraftId === sale.id ? (
                                                                                 <Spinner className="size-3.5" />
                                                                             ) : null}
-                                                                            {resumingDraftId === sale.id ? null : "Resume"}
+                                      {resumingDraftId === sale.id
+                                        ? null
+                                        : "Resume"}
                                                                         </Button>
                                                                         <Button
                                                                             type="button"
@@ -3247,7 +4002,9 @@ const BillingPage = ({
                                                                                 resumeDraftMutation.isPending ||
                                                                                 deleteDraftMutation.isPending
                                                                             }
-                                                                            onClick={() => setDraftToDeleteId(sale.id)}
+                                      onClick={() =>
+                                        setDraftToDeleteId(sale.id)
+                                      }
                                                                         >
                                                                             <Trash2 className="size-3.5" />
                                                                         </Button>
@@ -3305,7 +4062,9 @@ const BillingPage = ({
                                                 </span>
                                             </span>
                                         </span>
-                                        <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
+                    <span className="text-lg font-bold">
+                      {formatCurrency(grandTotal)}
+                    </span>
                                     </button>
                                 </div>
                             ) : null}
@@ -3325,7 +4084,9 @@ const BillingPage = ({
                                         ? "max-lg:fixed max-lg:inset-x-0 max-lg:top-[calc(var(--pos-header-height)+env(safe-area-inset-top,0px))] max-lg:bottom-[var(--pos-mobile-nav-height)] max-lg:z-[45] max-lg:max-h-none max-lg:overflow-hidden max-lg:overscroll-contain"
                                         : "hidden lg:flex",
                                 )}
-                                style={mobileCartOpen ? undefined : { maxHeight: panelMaxHeight }}
+                style={
+                  mobileCartOpen ? undefined : { maxHeight: panelMaxHeight }
+                }
                             >
                                 {/* Drag handle (mobile only) */}
                                 <div className="flex justify-center pt-1.5 pb-0 lg:hidden">
@@ -3382,19 +4143,56 @@ const BillingPage = ({
                                         selectedKotId={selectedKotId}
                                         onSelect={handleSelectTableKot}
                                     />
+                  <PosStandaloneKotList
+                    kots={activeStandaloneKots}
+                    selectedKotId={selectedStandaloneKotId}
+                    onSelect={(kotId) => {
+                      const nextKotId =
+                        selectedStandaloneKotId === kotId ? null : kotId;
+                      setSelectedStandaloneKotId(nextKotId);
+                      if (nextKotId) {
+                        setBaselineComposerItems(
+                          saleComposerItemsWithoutStandaloneKot(
+                            activeStandaloneSaleItems,
+                            activeStandaloneKots,
+                            nextKotId,
+                          ) as ComposerItem[],
+                        );
+                        setItems(
+                          selectedStandaloneKotItemsToComposerItems(
+                            activeStandaloneKots,
+                            nextKotId,
+                          ) as ComposerItem[],
+                        );
+                        return;
+                      }
+                      const split = splitKotBackedDraftComposer(
+                        activeStandaloneSaleItems,
+                        activeStandaloneKots,
+                      );
+                      setBaselineComposerItems(
+                        split.generatedItems as ComposerItem[],
+                      );
+                      setItems(split.pendingItems as ComposerItem[]);
+                    }}
+                  />
                                     {items.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-10 text-center">
                                             <ShoppingCart className="size-10 text-muted-foreground/30" />
                                             <p className="mt-3 text-sm font-medium text-muted-foreground">
                                                 {hasActiveTableOrder && tableKotItemCount > 0
                                                     ? "Ready to bill remaining KOTs"
+                          : activeStandaloneKots.length > 0
+                            ? "Add products for the next KOT"
                                                     : "Cart is empty"}
                                             </p>
                                             <p className="mt-1 text-xs text-muted-foreground/60">
                                                 {hasActiveTableOrder
                                                     ? activeTableOrder?.kots.length
-                                                        ? "Tap a KOT to edit it, or add products for another KOT"
-                                                        : "Add products, then generate the first Table KOT"
+                            ? "Tap a KOT to edit it, or add products and use Checkout to send the next KOT"
+                            : "Add products, then use Checkout to generate the first Table KOT"
+                          : activeStandaloneKots.length > 0
+                            ? "Earlier KOT batches stay listed above"
                                                     : "Click products to add"}
                                             </p>
                                         </div>
@@ -3430,7 +4228,10 @@ const BillingPage = ({
                                                                 <button
                                                                     type="button"
                                                                     onClick={() =>
-                                                                        updateItemQuantity(item.key, item.quantity - 1)
+                                    updateItemQuantity(
+                                      item.key,
+                                      item.quantity - 1,
+                                    )
                                                                     }
                                                                     className="flex size-7 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                                                     aria-label={`Decrease ${item.name} quantity`}
@@ -3443,7 +4244,10 @@ const BillingPage = ({
                                                                 <button
                                                                     type="button"
                                                                     onClick={() =>
-                                                                        updateItemQuantity(item.key, item.quantity + 1)
+                                    updateItemQuantity(
+                                      item.key,
+                                      item.quantity + 1,
+                                    )
                                                                     }
                                                                     className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
                                                                     aria-label={`Increase ${item.name} quantity`}
@@ -3597,7 +4401,9 @@ const BillingPage = ({
                                                 <span>Item discounts</span>
                                                 <span>
                                                     -{formatCurrency(displayLineDiscount)}
-                                                    {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
+                          {itemDiscountPercentage
+                            ? ` (${itemDiscountPercentage})`
+                            : ""}
                                                 </span>
                                             </div>
                                         ) : null}
@@ -3606,7 +4412,9 @@ const BillingPage = ({
                                                 <span>Order discount</span>
                                                 <span>
                                                     -{formatCurrency(orderDiscountAmount)}
-                                                    {orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}
+                          {orderDiscountPercentage
+                            ? ` (${orderDiscountPercentage})`
+                            : ""}
                                                 </span>
                                             </div>
                                         ) : null}
@@ -3614,7 +4422,8 @@ const BillingPage = ({
                                             <span>Total</span>
                                             <span>{formatCurrency(grandTotal)}</span>
                                         </div>
-                                        {displayedDueTotal > 0 && (items.length > 0 || canPlaceTableBill) ? (
+                    {displayedDueTotal > 0 &&
+                    (hasBillItems || canPlaceTableBill) ? (
                                             <div className="flex justify-between text-amber-600 dark:text-amber-400">
                                                 <span>Due after bill</span>
                                                 <span>{formatCurrency(displayedDueTotal)}</span>
@@ -3622,41 +4431,9 @@ const BillingPage = ({
                                         ) : null}
                                     </div>
 
-                                    <PosParcelKotAction
-                                        available={isParcelKotActionVisible({
-                                            isDeviceMode,
-                                            kotSystemEnabled: session?.store.kotSystemEnabled === true,
-                                            isReplacingSale,
-                                            hasActiveTableOrder,
-                                        })}
-                                        disabled={
-                                            parcelKotMutation.isPending ||
-                                            completeSaleMutation.isPending ||
-                                            saveDraftMutation.isPending ||
-                                            tableKotMutation.isPending ||
-                                            items.length === 0 ||
-                                            hasInvalidDiscount
-                                        }
-                                        isPending={parcelKotMutation.isPending}
-                                        onGenerate={submitParcelKot}
-                                    />
-
-                                    <div className={tableKotActionAvailable ? "mb-2" : undefined}>
-                                        <PosTableKotAction
-                                            available={tableKotActionAvailable}
-                                            disabled={
-                                                tableKotMutation.isPending ||
-                                                completeSaleMutation.isPending ||
-                                                items.length === 0 ||
-                                                hasInvalidDiscount
-                                            }
-                                            isPending={tableKotMutation.isPending}
-                                            editing={Boolean(editingKotId)}
-                                            onGenerate={submitTableKot}
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2">
+                  <div
+                    className={cn(isReplacingSale && "grid grid-cols-2 gap-2")}
+                  >
                                         {isReplacingSale ? (
                                             <Button
                                                 type="button"
@@ -3667,61 +4444,25 @@ const BillingPage = ({
                                             >
                                                 Cancel edit
                                             </Button>
-                                        ) : hasActiveTableOrder ? (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="h-9 rounded-lg text-xs font-semibold"
-                                                disabled={
-                                                    tableKotMutation.isPending ||
-                                                    completeSaleMutation.isPending
-                                                }
-                                                onClick={returnToTables}
-                                            >
-                                                Tables
-                                            </Button>
-                                        ) : (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="h-9 rounded-lg text-xs font-semibold"
-                                                disabled={
-                                                    saveDraftMutation.isPending ||
-                                                    completeSaleMutation.isPending ||
-                                                    parcelKotMutation.isPending ||
-                                                    tableKotMutation.isPending ||
-                                                    items.length === 0 ||
-                                                    hasInvalidDiscount
-                                                }
-                                                onClick={() => saveDraftMutation.mutate()}
-                                            >
-                                                {saveDraftMutation.isPending
-                                                    ? "Saving..."
-                                                    : activeDraftId
-                                                      ? "Update draft"
-                                                      : "Save draft"}
-                                            </Button>
-                                        )}
+                                        ) : null}
                                         <Button
                                             type="button"
-                                            className="h-9 rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+                                            className={cn(
+                                                "h-9 rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90",
+                                                !isReplacingSale && "w-full",
+                                            )}
                                             disabled={
                                                 completeSaleMutation.isPending ||
-                                                parcelKotMutation.isPending ||
                                                 saveDraftMutation.isPending ||
                                                 tableKotMutation.isPending ||
                                                 hasInvalidDiscount ||
-                                                (hasActiveTableOrder ? !canPlaceTableBill : items.length === 0)
-                                            }
-                                            onClick={() => {
-                                                if (hasActiveTableOrder && (items.length > 0 || editingKotId)) {
-                                                    toast.error("Generate KOT before placing the table bill");
-                                                    return;
+                        (hasActiveTableOrder
+                          ? !canOpenTableCheckout
+                          : !hasBillItems)
                                                 }
-                                                setPlaceOrderDialogOpen(true);
-                                            }}
+                      onClick={() => setPlaceOrderDialogOpen(true)}
                                         >
-                                            {completeSaleMutation.isPending ? "Completing..." : "Place Order"}
+                                            Checkout
                                         </Button>
                                     </div>
                                 </div>
@@ -3735,8 +4476,12 @@ const BillingPage = ({
                     >
                         <div className="grid gap-3 px-5 py-5">
                             <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Store</p>
-                                <p className="mt-2 text-lg font-semibold text-foreground">{selectedStore?.name ?? "Select a store"}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  Store
+                </p>
+                <p className="mt-2 text-lg font-semibold text-foreground">
+                  {selectedStore?.name ?? "Select a store"}
+                </p>
                             </div>
                             <>
                                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
@@ -3747,7 +4492,8 @@ const BillingPage = ({
                                             {filteredSales.length}
                                         </p>
                                         <p className="mt-1 text-xs text-muted-foreground">
-                                            Drafts, paid bills, open dues, and voided bills for this store.
+                    Drafts, paid bills, open dues, and voided bills for this
+                    store.
                                         </p>
                                     </div>
                                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
@@ -3766,7 +4512,8 @@ const BillingPage = ({
                                             {
                                                 sales.filter(
                                                     (sale) =>
-                                                        sale.status === "completed" && sale.paymentStatus !== "paid",
+                          sale.status === "completed" &&
+                          sale.paymentStatus !== "paid",
                                                 ).length
                                             }
                                         </p>
@@ -3795,7 +4542,9 @@ const BillingPage = ({
                 <DialogContent
                     className={cn(
                         "grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] rounded-2xl border-border/70 bg-background/95 p-2 shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:p-3",
-                        customerPickerOpen && customerCreateOpen ? "overflow-visible" : "overflow-hidden",
+            customerPickerOpen && customerCreateOpen
+              ? "overflow-visible"
+              : "overflow-hidden",
                     )}
                 >
                     <DialogHeader className="space-y-1 border-b border-border/50 pb-2">
@@ -3813,7 +4562,11 @@ const BillingPage = ({
                                         }
                                     }}
                                     className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                    aria-label={customerCreateOpen ? "Back to customer search" : "Back to complete order"}
+                  aria-label={
+                    customerCreateOpen
+                      ? "Back to customer search"
+                      : "Back to complete order"
+                  }
                                 >
                                     <ArrowLeft className="size-4" />
                                 </button>
@@ -3853,7 +4606,9 @@ const BillingPage = ({
                                                 className="h-12 rounded-xl bg-muted/40 text-base"
                                                 placeholder="Phone number"
                                                 value={newCustomerPhone || undefined}
-                                                onChange={(value: string | undefined) => setNewCustomerPhone(value ?? "")}
+                        onChange={(value: string | undefined) =>
+                          setNewCustomerPhone(value ?? "")
+                        }
                                                 aria-label="Customer phone"
                                             />
                                         </div>
@@ -3865,13 +4620,16 @@ const BillingPage = ({
                                                 className="h-12 rounded-xl bg-muted/40 text-base"
                                                 placeholder="Customer name"
                                                 value={newCustomerName}
-                                                onChange={(event) => setNewCustomerName(event.target.value)}
+                        onChange={(event) =>
+                          setNewCustomerName(event.target.value)
+                        }
                                                 aria-label="Customer name"
                                             />
                                         </div>
                                     </div>
                                     <p className="shrink-0 text-xs text-muted-foreground">
-                                        Phone first keeps the number pad open. Name is required to save.
+                    Phone first keeps the number pad open. Name is required to
+                    save.
                                     </p>
                                     <div className="min-h-0 flex-1" />
                                 </>
@@ -3884,7 +4642,9 @@ const BillingPage = ({
                                             className="h-11 rounded-xl bg-muted/40 pl-10 text-sm"
                                             placeholder="Search name or phone"
                                             value={customerSearch}
-                                            onChange={(event) => setCustomerSearch(event.target.value)}
+                      onChange={(event) =>
+                        setCustomerSearch(event.target.value)
+                      }
                                             aria-label="Search customer"
                                         />
                                     </div>
@@ -3910,12 +4670,16 @@ const BillingPage = ({
                                                 <User className="size-4" />
                                             </span>
                                             <span className="min-w-0 flex-1">
-                                                <span className="block text-sm font-semibold">Walk-in customer</span>
+                        <span className="block text-sm font-semibold">
+                          Walk-in customer
+                        </span>
                                                 <span className="block text-[11px] text-muted-foreground">
                                                     No account · fastest checkout
                                                 </span>
                                             </span>
-                                            {!selectedCustomer ? <Check className="size-4 shrink-0" /> : null}
+                      {!selectedCustomer ? (
+                        <Check className="size-4 shrink-0" />
+                      ) : null}
                                         </button>
 
                                         {filteredCustomers.length > 0 ? (
@@ -3965,7 +4729,9 @@ const BillingPage = ({
                                             </>
                                         ) : (
                                             <div className="space-y-3 px-1 py-6 text-center">
-                                                <p className="text-sm text-muted-foreground">No customers found</p>
+                        <p className="text-sm text-muted-foreground">
+                          No customers found
+                        </p>
                                                 {customerSearch.trim() ? (
                                                     <button
                                                         type="button"
@@ -4016,16 +4782,20 @@ const BillingPage = ({
                                                 : "bg-muted text-muted-foreground",
                                         )}
                                     >
-                                        {selectedCustomer
-                                            ? (selectedCustomer.name.trim()[0] || "?").toUpperCase()
-                                            : <User className="size-4" />}
+                      {selectedCustomer ? (
+                        (selectedCustomer.name.trim()[0] || "?").toUpperCase()
+                      ) : (
+                        <User className="size-4" />
+                      )}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                         <span className="block truncate text-sm font-semibold text-foreground">
                                             {selectedCustomer?.name || "Walk-in customer"}
                                         </span>
                                         <span className="block truncate text-[11px] text-muted-foreground">
-                                            {selectedCustomer?.phone ? selectedCustomer.phone : "Optional · tap to assign"}
+                        {selectedCustomer?.phone
+                          ? selectedCustomer.phone
+                          : "Optional · tap to assign"}
                                         </span>
                                     </span>
                                     <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -4043,6 +4813,7 @@ const BillingPage = ({
                             </div>
                         </section>
 
+              {showBillingAdjustments ? (
                         <section className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
                             <div className="flex items-center gap-2">
                                 <button
@@ -4051,7 +4822,11 @@ const BillingPage = ({
                                     onClick={() => setDiscountEditorOpen((open) => !open)}
                                     aria-expanded={discountEditorOpen}
                                 >
-                                    <span>{orderDiscountAmount > 0 ? "Order discount" : "Add discount"}</span>
+                      <span>
+                        {orderDiscountAmount > 0
+                          ? "Order discount"
+                          : "Add discount"}
+                      </span>
                                     <span
                                         className={
                                             orderDiscountAmount > 0
@@ -4121,11 +4896,17 @@ const BillingPage = ({
                                             discountValidationMessage &&
                                                 "border-destructive focus-visible:ring-destructive",
                                         )}
-                                        placeholder={discountMode === "percent" ? "0%" : "₹0.00"}
+                        placeholder={
+                          discountMode === "percent" ? "0%" : "₹0.00"
+                        }
                                         value={discountInput}
-                                        onChange={(event) => setDiscountInput(event.target.value)}
+                        onChange={(event) =>
+                          setDiscountInput(event.target.value)
+                        }
                                         aria-label={
-                                            discountMode === "percent" ? "Discount percentage" : "Discount amount"
+                          discountMode === "percent"
+                            ? "Discount percentage"
+                            : "Discount amount"
                                         }
                                         aria-invalid={hasInvalidDiscount}
                                     />
@@ -4142,7 +4923,12 @@ const BillingPage = ({
                                                         <button
                                                             key={preset.percentage}
                                                             type="button"
-                                                            onClick={() => applyDiscountPreset(preset.percentage, preset.amount)}
+                                  onClick={() =>
+                                    applyDiscountPreset(
+                                      preset.percentage,
+                                      preset.amount,
+                                    )
+                                  }
                                                             aria-pressed={isSelected}
                                                             className={cn(
                                                                 "rounded-full border px-2.5 py-1 text-[11px] font-semibold tabular-nums transition-colors",
@@ -4172,7 +4958,9 @@ const BillingPage = ({
                                 </div>
                             ) : null}
                         </section>
+              ) : null}
 
+              {showBillingAdjustments ? (
                         <section className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
                             <button
                                 type="button"
@@ -4213,14 +5001,20 @@ const BillingPage = ({
 
                                     {settlementMode !== "due" ? (
                                         <div className="space-y-2 border-t border-border/50 pt-2">
-                                            <p className="text-xs font-semibold text-foreground">Payment method</p>
+                          <p className="text-xs font-semibold text-foreground">
+                            Payment method
+                          </p>
                                             <div className="grid grid-cols-3 gap-1">
                                                 {paymentMethodOptions.map((option) => (
                                                     <button
                                                         key={option.value}
                                                         type="button"
-                                                        onClick={() => setSelectedPaymentMethod(option.value)}
-                                                        aria-pressed={selectedPaymentMethod === option.value}
+                                onClick={() =>
+                                  setSelectedPaymentMethod(option.value)
+                                }
+                                aria-pressed={
+                                  selectedPaymentMethod === option.value
+                                }
                                                         className={cn(
                                                             "h-8 min-h-8 rounded-lg px-1.5 text-[11px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                                                             selectedPaymentMethod === option.value
@@ -4244,7 +5038,9 @@ const BillingPage = ({
                                             className="h-8 rounded-lg bg-background/60 text-sm"
                                             placeholder="Amount received"
                                             value={partialPaymentAmount}
-                                            onChange={(event) => setPartialPaymentAmount(event.target.value)}
+                          onChange={(event) =>
+                            setPartialPaymentAmount(event.target.value)
+                          }
                                             aria-label="Amount received"
                                         />
                                     ) : null}
@@ -4254,25 +5050,97 @@ const BillingPage = ({
                                             Collected amount exceeds the bill total.
                                         </p>
                                     ) : null}
-                                    {settlementMode === "partial" && isPartialAmountMissing && !isOverpaid ? (
+                      {settlementMode === "partial" &&
+                      isPartialAmountMissing &&
+                      !isOverpaid ? (
                                         <p className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-2 text-xs text-sky-700 dark:text-sky-300">
                                             Enter the amount the customer is paying now.
                                         </p>
                                     ) : null}
-                                    {settlementMode === "partial" && matchesFullPayment && !isOverpaid ? (
+                      {settlementMode === "partial" &&
+                      matchesFullPayment &&
+                      !isOverpaid ? (
                                         <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-300">
-                                            Select &quot;Paid&quot; when the customer is settling the entire bill
-                                            amount.
+                          Select &quot;Paid&quot; when the customer is settling
+                          the entire bill amount.
                                         </p>
                                     ) : null}
                                 </div>
                             ) : null}
                         </section>
+              ) : null}
 
+              <PosGenerateKotToggle
+                available={
+                  directGenerateKotVisible &&
+                  !isEditingStandaloneKot &&
+                  items.length > 0
+                }
+                checked={generateKotEnabled}
+                disabled={
+                  completeSaleMutation.isPending || saveDraftMutation.isPending
+                }
+                onChange={setGenerateKotEnabled}
+              />
+
+              {showOrderTypeSelector ? (
                         <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
                             <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-semibold text-foreground">Invoice options</p>
-                                <p className="text-[11px] text-muted-foreground">After placing order</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {showTableKotFulfillmentSelector
+                        ? "KOT type"
+                        : "Order type"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Required
+                    </p>
+                            </div>
+                  <div
+                    className="grid grid-cols-2 gap-2"
+                    role="radiogroup"
+                    aria-label={
+                      showTableKotFulfillmentSelector
+                        ? "KOT type"
+                        : "Order type"
+                    }
+                  >
+                                {SERVICE_MODE_OPTIONS.map((option) => {
+                                    const Icon = option.icon;
+                                    const isSelected = serviceMode === option.value;
+
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={isSelected}
+                                            disabled={completeSaleMutation.isPending}
+                                            onClick={() => setServiceMode(option.value)}
+                                            className={cn(
+                                                "flex h-8 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                                isSelected
+                                                    ? "border-primary bg-primary text-primary-foreground"
+                                                    : "border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
+                                            )}
+                                        >
+                                            <Icon className="size-3.5" aria-hidden="true" />
+                                            {option.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </section>
+              ) : null}
+
+              {showInvoiceOptions ? (
+                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Invoice options
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      After placing order
+                    </p>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <button
@@ -4307,6 +5175,7 @@ const BillingPage = ({
                                 </button>
                             </div>
                         </section>
+              ) : null}
 
                         <aside className="space-y-3">
                             <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/30 p-4">
@@ -4325,7 +5194,9 @@ const BillingPage = ({
                                         <span>Item discounts</span>
                                         <span>
                                             -{formatCurrency(displayLineDiscount)}
-                                            {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
+                        {itemDiscountPercentage
+                          ? ` (${itemDiscountPercentage})`
+                          : ""}
                                         </span>
                                     </div>
                                 ) : null}
@@ -4334,7 +5205,9 @@ const BillingPage = ({
                                         <span>Order discount</span>
                                         <span>
                                             -{formatCurrency(orderDiscountAmount)}
-                                            {orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}
+                        {orderDiscountPercentage
+                          ? ` (${orderDiscountPercentage})`
+                          : ""}
                                         </span>
                                     </div>
                                 ) : null}
@@ -4347,7 +5220,9 @@ const BillingPage = ({
                                 {displayedDueTotal > 0 ? (
                                     <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
                                         <span>Due after bill</span>
-                                        <span className="font-semibold">{formatCurrency(displayedDueTotal)}</span>
+                      <span className="font-semibold">
+                        {formatCurrency(displayedDueTotal)}
+                      </span>
                                     </div>
                                 ) : null}
                             </div>
@@ -4386,7 +5261,9 @@ const BillingPage = ({
                                         createCustomerMutation.mutate(payload);
                                     }}
                                 >
-                                    {createCustomerMutation.isPending ? "Saving..." : "Save & use"}
+                  {createCustomerMutation.isPending
+                    ? "Saving..."
+                    : "Save & use"}
                                 </Button>
                             </div>
                         ) : customerPickerOpen ? (
@@ -4400,27 +5277,74 @@ const BillingPage = ({
                             </Button>
                         ) : (
                             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
-                                    onClick={() => {
-                                        setPlaceOrderDialogOpen(false);
-                                    }}
-                                >
-                                    Cancel
-                                </Button>
+                {isReplacingSale ||
+                hasActiveTableOrder ||
+                isEditingStandaloneKot ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
+                    disabled={
+                      completeSaleMutation.isPending ||
+                      tableKotMutation.isPending ||
+                      standaloneKotMutation.isPending
+                    }
+                                        onClick={() => {
+                                            setPlaceOrderDialogOpen(false);
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-10 w-full rounded-xl px-3 text-xs sm:w-auto"
+                                        disabled={
+                                            saveDraftMutation.isPending ||
+                                            completeSaleMutation.isPending ||
+                      !hasBillItems ||
+                                            hasInvalidDiscount
+                                        }
+                                        onClick={() => saveDraftMutation.mutate()}
+                                    >
+                                        {saveDraftMutation.isPending
+                                            ? "Saving..."
+                                            : activeDraftId
+                                              ? "Update draft"
+                                              : "Save draft"}
+                                    </Button>
+                                )}
                                 <Button
                                     type="button"
                                     className="h-10 w-full rounded-xl px-3 text-xs font-semibold sm:w-auto sm:px-5"
                                     disabled={
                                         completeSaleMutation.isPending ||
+                                        saveDraftMutation.isPending ||
+                    tableKotMutation.isPending ||
+                    standaloneKotMutation.isPending ||
                                         hasInvalidDiscount ||
-                                        hasInvalidPartialPayment
+                    (tableCheckoutMode === "place_order" || !hasActiveTableOrder
+                      ? hasInvalidPartialPayment
+                      : items.length === 0)
                                     }
                                     onClick={handleCompleteSale}
                                 >
-                                    {completeSaleMutation.isPending ? "Placing..." : "Place order"}
+                  {standaloneKotMutation.isPending
+                    ? "Saving..."
+                    : isEditingStandaloneKot
+                      ? "Save KOT"
+                      : tableKotMutation.isPending
+                        ? tableCheckoutMode === "save_kot"
+                          ? "Saving..."
+                          : "Generating..."
+                        : tableCheckoutMode === "generate_kot"
+                          ? "Generate KOT"
+                          : tableCheckoutMode === "save_kot"
+                            ? "Save KOT"
+                            : completeSaleMutation.isPending
+                              ? "Placing..."
+                              : "Place order"}
                                 </Button>
                             </div>
                         )}
@@ -4428,13 +5352,17 @@ const BillingPage = ({
                 </DialogContent>
             </Dialog>
 
-            <AlertDialog open={replaceConfirmationOpen} onOpenChange={setReplaceConfirmationOpen}>
+      <AlertDialog
+        open={replaceConfirmationOpen}
+        onOpenChange={setReplaceConfirmationOpen}
+      >
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Edit this bill?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will save your changes as a new bill and mark the old bill as voided. Existing
-                            payments on the old bill will remain attached to it.
+              This will save your changes as a new bill and mark the old bill as
+              voided. Existing payments on the old bill will remain attached to
+              it.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -4459,27 +5387,53 @@ const BillingPage = ({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <AlertDialog open={directScanActivationOpen} onOpenChange={setDirectScanActivationOpen}>
+      <AlertDialog
+        open={directScanActivationOpen}
+        onOpenChange={setDirectScanActivationOpen}
+      >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Enable direct barcode scan on this device?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Enable direct barcode scan on this device?
+            </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This changes only {session?.device.name ?? "this POS device"}. It does not enable scanner capture on other counters.
+              This changes only {session?.device.name ?? "this POS device"}. It
+              does not enable scanner capture on other counters.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
-                        <p className="font-medium text-foreground">Confirm before enabling:</p>
+            <p className="font-medium text-foreground">
+              Confirm before enabling:
+            </p>
                         <ul className="list-disc space-y-1 pl-5">
-                            <li>At least one active Product Code is assigned and resolves from this POS catalog.</li>
-                            <li>The USB or Bluetooth HID scanner is configured to send an Enter suffix.</li>
-                            <li>A printed internal label has been test-scanned using this counter&apos;s scanner, printer, and label stock when internal labels are used.</li>
-                            <li>The cashier knows to pause direct scan before ordinary typing, and to use manual search after an unknown code.</li>
+              <li>
+                At least one active Product Code is assigned and resolves from
+                this POS catalog.
+              </li>
+              <li>
+                The USB or Bluetooth HID scanner is configured to send an Enter
+                suffix.
+              </li>
+              <li>
+                A printed internal label has been test-scanned using this
+                counter&apos;s scanner, printer, and label stock when internal
+                labels are used.
+              </li>
+              <li>
+                The cashier knows to pause direct scan before ordinary typing,
+                and to use manual search after an unknown code.
+              </li>
                         </ul>
                     </div>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={updateDirectScanMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={updateDirectScanMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
                         <AlertDialogAction
-                            disabled={!canEnableDirectBarcodeScan || updateDirectScanMutation.isPending}
+              disabled={
+                !canEnableDirectBarcodeScan ||
+                updateDirectScanMutation.isPending
+              }
                             isLoading={updateDirectScanMutation.isPending}
                             loadingText="Enabling..."
                             onClick={() => {
@@ -4533,11 +5487,15 @@ const BillingPage = ({
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete this draft?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This draft and its saved items will be permanently removed. This action cannot be undone.
+              This draft and its saved items will be permanently removed. This
+              action cannot be undone.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={deleteDraftMutation.isPending} className="rounded-xl">
+            <AlertDialogCancel
+              disabled={deleteDraftMutation.isPending}
+              className="rounded-xl"
+            >
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction

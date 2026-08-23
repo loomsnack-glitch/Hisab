@@ -26,6 +26,7 @@ coverage
 out/
 build
 dist
+apps/backend/reports/bill-number-dry-run/
 apps/admin/public/version.json
 apps/pos/public/version.json
 

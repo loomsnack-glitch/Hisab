@@ -1,21 +1,12 @@
 import { useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import type { LucideIcon } from "lucide-react";
 import {
     Bell,
-    BarChart3,
-    Building2,
     ChevronLeft,
     ChevronRight,
     HelpCircle,
-    ReceiptText,
     Settings2,
-    Store,
-    Package2,
-    ShoppingBag,
-    Users,
-    Armchair,
 } from "lucide-react";
 import { getOrganizations } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
@@ -24,9 +15,8 @@ import { cn } from "@repo/ui/lib/utils";
 
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
-import { isStoresNavActive } from "@/lib/store-routes";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
-import WhatsAppIcon from "@/components/icons/whatsapp-icon";
+import { getVisibleAdminMainDestinations, type AdminNavDestination } from "@/components/dashboard/admin-nav-items";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
@@ -92,86 +82,21 @@ const AppSidebar = ({
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";
     const collapsedNavRowClass = "relative mx-auto flex h-10 w-10 items-center justify-center";
 
-    const mainNavItems = useMemo(() => {
-        const items: Array<{
-            to: string;
-            label: string;
-            icon: LucideIcon | typeof WhatsAppIcon;
-            isActive: boolean;
-        }> = [
-            {
-                to: "/organizations",
-                label: "Organizations",
-                icon: Building2,
-                isActive: location.pathname === "/organizations",
-            },
-        ];
+    const hasOrganization = organizations.length > 0 && Boolean(effectiveOrgId);
+    const mainNavItems = useMemo(
+        () => getVisibleAdminMainDestinations({ hasOrganization, organizationId: effectiveOrgId }),
+        [hasOrganization, effectiveOrgId],
+    );
 
-        if (organizations.length > 0 && effectiveOrgId) {
-            items.push(
-                {
-                    to: `/organizations/${effectiveOrgId}/stores`,
-                    label: "Stores",
-                    icon: Store,
-                    isActive: isStoresNavActive(location.pathname),
-                },
-                {
-                    to: `/organizations/${effectiveOrgId}/products`,
-                    label: "Product",
-                    icon: Package2,
-                    isActive: /\/organizations\/[^/]+\/products(\/|$)/.test(location.pathname),
-                },
-                {
-                    to: `/organizations/${effectiveOrgId}/whatsapp/accounts`,
-                    label: "WhatsApp",
-                    icon: WhatsAppIcon,
-                    isActive: /\/organizations\/[^/]+\/whatsapp(\/|$)/.test(location.pathname),
-                },
-                {
-                    to: `/organizations/${effectiveOrgId}/billing`,
-                    label: "Billing",
-                    icon: ReceiptText,
-                    isActive: /\/organizations\/[^/]+\/billing/.test(location.pathname),
-                },
-                {
-                    to: `/organizations/${effectiveOrgId}/reports`,
-                    label: "Reports",
-                    icon: BarChart3,
-                    isActive: /\/organizations\/[^/]+\/reports/.test(location.pathname),
-                },
-                {
-                    to: `/organizations/${effectiveOrgId}/customers`,
-                    label: "Customers",
-                    icon: Users,
-                    isActive: /\/organizations\/[^/]+\/customers/.test(location.pathname),
-                },
-                {
-                    to: `/organizations/${effectiveOrgId}/tables`,
-                    label: "Tables",
-                    icon: Armchair,
-                    isActive: /\/organizations\/[^/]+\/tables/.test(location.pathname),
-                },
-                {
-                    to: `/organizations/${effectiveOrgId}/purchases`,
-                    label: "Purchases",
-                    icon: ShoppingBag,
-                    isActive: /\/organizations\/[^/]+\/purchases/.test(location.pathname),
-                },
-            );
-        }
-
-        return items;
-    }, [location.pathname, organizations.length, effectiveOrgId]);
-
-    const renderNavItem = (item: (typeof mainNavItems)[number], badge?: number) => {
+    const renderNavItem = (item: AdminNavDestination, badge?: number) => {
         const Icon = item.icon;
         const collapsed = !isMobile && isCollapsed;
 
-        const active = item.isActive;
+        const active = item.isActive(location.pathname);
         const link = (
             <button
                 type="button"
-                onClick={() => goTo(item.to)}
+                onClick={() => goTo(item.path)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                     "sidebar-nav-link group cursor-pointer appearance-none rounded-xl border-0 bg-transparent text-sm font-medium transition-all duration-200",
@@ -342,7 +267,7 @@ const AppSidebar = ({
 
                 <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
                     {mainNavItems.map((item) =>
-                        renderNavItem(item, item.to === "/organizations" ? organizations.length : undefined),
+                        renderNavItem(item, item.id === "organizations" ? organizations.length : undefined),
                     )}
 
                     <div className="my-3 h-px bg-border/60" />

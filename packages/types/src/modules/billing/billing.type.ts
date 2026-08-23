@@ -1,4 +1,5 @@
 import type z from "zod";
+import type { KotDTO } from "../kot/kot.type";
 import type {
   AddOnSalesRollupsResponseSchema,
   AddOnScopedSalesRollupDTOSchema,
@@ -32,8 +33,10 @@ import type {
   SaleItemBundleComponentDTOSchema,
   SaleItemDTOSchema,
   SaleItemInputSchema,
+  SaleKotHistoryEntryDTOSchema,
   SaleNumberResetPeriodSchema,
   SaleNumberSettingsDTOSchema,
+  SaleServiceModeSchema,
   TokenNumberResetPeriodSchema,
   KotNumberResetPeriodSchema,
   SaleSummaryDTOSchema,
@@ -62,7 +65,12 @@ export type CustomerLedgerEntryDTO = z.infer<
 >;
 export type SaleDeviceAuditDTO = z.infer<typeof SaleDeviceAuditDTOSchema>;
 export type SaleSummaryDTO = z.infer<typeof SaleSummaryDTOSchema>;
-export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema>;
+export type SaleKotHistoryEntryDTO = z.infer<
+  typeof SaleKotHistoryEntryDTOSchema
+>;
+export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema> & {
+  standaloneKots?: KotDTO[];
+};
 export type SaleNumberResetPeriod = z.infer<typeof SaleNumberResetPeriodSchema>;
 export type TokenNumberResetPeriod = z.infer<
   typeof TokenNumberResetPeriodSchema
@@ -137,6 +145,8 @@ export type ProductSalesSummaryResponse = z.infer<
   typeof ProductSalesSummaryResponseSchema
 >;
 
+export type SaleServiceMode = z.infer<typeof SaleServiceModeSchema>;
+
 export type SaleItemAddOnInput = z.infer<typeof SaleItemAddOnInputSchema>;
 export type SaleItemInput = z.infer<typeof SaleItemInputSchema>;
 export type CreateDraftSaleJSON = z.infer<typeof CreateDraftSaleSchema>;
@@ -177,6 +187,7 @@ export type CreateSaleREPO = Pick<
   updatedByDeviceId?: string | null;
   customerId?: string | null;
   serviceTableId?: string | null;
+  serviceMode?: SaleServiceMode;
   customerNameSnapshot?: string | null;
   customerPhoneSnapshot?: string | null;
   notes?: string | null;
@@ -204,6 +215,7 @@ export type UpdateSaleREPO = Pick<
 > & {
   updatedByDeviceId?: string | null;
   customerId?: string | null;
+  serviceMode?: SaleServiceMode;
   customerNameSnapshot?: string | null;
   customerPhoneSnapshot?: string | null;
   notes?: string | null;
@@ -323,7 +335,9 @@ export type CustomerLedgerResponse = {
   ledger: CustomerLedgerEntryDTO[];
 };
 
-export type CustomerDueSalesResponse = z.infer<typeof CustomerDueSalesResponseSchema>;
+export type CustomerDueSalesResponse = z.infer<
+  typeof CustomerDueSalesResponseSchema
+>;
 
 export type SalesListResponse = {
   sales: SaleSummaryDTO[];

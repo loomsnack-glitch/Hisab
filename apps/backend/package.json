@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "cd ../../ && bun --env-file apps/backend/.env --watch apps/backend/src/index.ts",
     "start": "bun dist/index.js",
-    "build": "bun build src/index.ts src/scripts/console-create-owner.ts --outdir dist --minify --production --target bun --external pdfkit",
+    "build": "bun build src/index.ts src/scripts/console-create-owner.ts src/scripts/dry-run-bill-number-repair.ts --outdir dist --minify --production --target bun --external pdfkit",
     "test": "bun test src",
     "console:create-owner": "bun --env-file=.env dist/scripts/console-create-owner.js",
     "owner:create": "bun --env-file=.env dist/scripts/console-create-owner.js",
     "add-initial-data": "bun run src/scripts/add-initial-data.ts",
-    "grant-all-permissions-in-admin-roles": "bun run src/scripts/admin-permissions.ts"
+    "grant-all-permissions-in-admin-roles": "bun run src/scripts/admin-permissions.ts",
+    "billing:numbering-dry-run": "bun run src/scripts/dry-run-bill-number-repair.ts"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",

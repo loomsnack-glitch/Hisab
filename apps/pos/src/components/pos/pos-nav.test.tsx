@@ -9,22 +9,22 @@ describe("POS navigation visibility", () => {
     test("omits Tables from the sidebar and mobile nav when Table Management is disabled", () => {
         const enabledSidebar = renderToStaticMarkup(
             <MemoryRouter>
-                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled />
+                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled kotSystemEnabled />
             </MemoryRouter>,
         );
         const disabledSidebar = renderToStaticMarkup(
             <MemoryRouter>
-                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled={false} />
+                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled={false} kotSystemEnabled />
             </MemoryRouter>,
         );
         const enabledMobileNav = renderToStaticMarkup(
             <MemoryRouter>
-                <PosMobileBottomNav tableManagementEnabled />
+                <PosMobileBottomNav tableManagementEnabled kotSystemEnabled />
             </MemoryRouter>,
         );
         const disabledMobileNav = renderToStaticMarkup(
             <MemoryRouter>
-                <PosMobileBottomNav tableManagementEnabled={false} />
+                <PosMobileBottomNav tableManagementEnabled={false} kotSystemEnabled />
             </MemoryRouter>,
         );
 
@@ -36,5 +36,23 @@ describe("POS navigation visibility", () => {
         expect(enabledMobileNav).toContain("Tables");
         expect(disabledMobileNav).not.toContain('href="/tables"');
         expect(disabledMobileNav).not.toContain("Tables");
+    });
+
+    test("omits KOT from the sidebar and mobile nav when the KOT System is disabled", () => {
+        const enabledSidebar = renderToStaticMarkup(
+            <MemoryRouter>
+                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled kotSystemEnabled />
+            </MemoryRouter>,
+        );
+        const disabledSidebar = renderToStaticMarkup(
+            <MemoryRouter>
+                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled kotSystemEnabled={false} />
+            </MemoryRouter>,
+        );
+
+        expect(enabledSidebar).toContain('href="/kots"');
+        expect(enabledSidebar).toContain("KOT");
+        expect(disabledSidebar).not.toContain('href="/kots"');
+        expect(disabledSidebar).not.toContain("KOT");
     });
 });

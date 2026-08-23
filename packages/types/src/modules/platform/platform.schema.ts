@@ -11,6 +11,7 @@ import {
     ProductSalesSummaryDTOSchema,
     SaleDeviceAuditDTOSchema,
     SaleItemDTOSchema,
+    SaleServiceModeSchema,
     SaleStatusSchema,
     SalesListSummarySchema,
     SalesSortSchema,
@@ -349,6 +350,7 @@ export const PlatformSaleInspectionSummaryDTOSchema = z.object({
     itemsSummary: z.string().nullable(),
     paymentMethods: z.string().nullable(),
     customerName: z.string().nullable(),
+    serviceMode: SaleServiceModeSchema,
     store: PlatformSaleInspectionStoreDTOSchema,
 });
 

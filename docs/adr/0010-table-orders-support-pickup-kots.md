@@ -1,0 +1,3 @@
+# Table Orders support pickup KOTs
+
+A Kitchen Order Ticket's fulfillment type is independent of its Table Order association. A table order may therefore contain Dine-In and Pick-Up KOTs while producing exactly one final Sale at checkout; that Table-Linked Sale remains Dine-In, while each KOT preserves its own fulfillment type. Standalone Dine-In and Pick-Up KOTs are created alongside either a Draft Sale or a completed Sale, and their selected Sale Service Mode is copied to each generated KOT. A later KOT for the same order includes only newly added items, preventing duplicate kitchen preparation. This supports a seated party adding takeaway items without splitting its billing record.

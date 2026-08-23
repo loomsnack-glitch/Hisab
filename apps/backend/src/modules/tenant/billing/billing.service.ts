@@ -32,6 +32,7 @@ import {
   type SaleItemInput,
   type SaleNumberSettingsResponse,
   type SaleResponse,
+  type SaleServiceMode,
   type UpdateSaleNumberSettingsSVC,
   type SalesListQuery,
   type SalesListResponse,
@@ -42,7 +43,7 @@ import {
 } from "@repo/types";
 import * as billingRepository from "./billing.repository";
 import * as tableRepository from "@/modules/tenant/table-service/table-service.repository";
-import * as kotRepository from "@/modules/tenant/kot/kot.repository";
+import * as billingKotRead from "./billing-kot-read";
 import { decodeSalesCursor } from "./sales-pagination";
 import { DEFAULT_SALE_NUMBER_TIMEZONE } from "./sale-numbering";
 
@@ -50,6 +51,13 @@ const normalizeOptionalText = (value?: string | null) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 };
+
+const DEFAULT_SALE_SERVICE_MODE: SaleServiceMode = "dine_in";
+
+const resolveSaleServiceMode = (
+  value: SaleServiceMode | undefined,
+  fallback?: SaleServiceMode | null,
+): SaleServiceMode => value ?? fallback ?? DEFAULT_SALE_SERVICE_MODE;
 
 const normalizeOptionalUuid = (value?: string | null) => {
   const trimmed = value?.trim();
@@ -568,12 +576,19 @@ const buildSaleDetails = async (
   const items = await billingRepository.getSaleItemsBySaleId(saleId, tx);
   const payments = await billingRepository.getPaymentsBySaleId(saleId, tx);
   const lineDiscountTotal = getSaleLineDiscountTotal(items);
-  const kotNumbers = await kotRepository.getKotNumbersBySaleId(
+  const kotNumbers = await billingKotRead.getKotNumbersBySaleId(
     organizationId,
     storeId,
     saleId,
     tx,
   );
+  const linkedKots = await billingKotRead.getKotsBySaleId(
+    organizationId,
+    storeId,
+    saleId,
+    tx,
+  );
+  const standaloneKots = linkedKots.filter((kot) => kot.kotType === "parcel");
   const serviceTableLabel = sale.serviceTableId
     ? ((
         await tableRepository.getServiceTableById(
@@ -589,6 +604,15 @@ const buildSaleDetails = async (
     items,
     payments,
     ...(kotNumbers.length > 0 ? { kotNumbers } : {}),
+    ...(linkedKots.length > 0
+      ? {
+          kotHistory: linkedKots.map((kot) => ({
+            kotNumber: kot.kotNumber,
+            fulfillmentType: kot.fulfillmentType,
+          })),
+        }
+      : {}),
+    ...(standaloneKots.length > 0 ? { standaloneKots } : {}),
     ...(serviceTableLabel ? { serviceTableLabel } : {}),
     orderDiscountAmount: deriveOrderDiscountAmount(
       sale.discountTotal,
@@ -1738,6 +1762,263 @@ type SaleWriteActor = {
   deviceId?: string | null;
 };
 
+type SaleKotGenerationInput = {
+  items?: SaleItemInput[];
+  generateKot?: boolean;
+  kotBatchItems?: SaleItemInput[];
+  serviceMode?: SaleServiceMode;
+  kotRequestId?: string;
+};
+
+const validateStandaloneKotGenerationRequest = async (
+  actor: SaleWriteActor,
+  organizationId: string,
+  storeId: string,
+  saleData: SaleKotGenerationInput,
+): Promise<ServiceResponse<null> | null> => {
+  if (!saleData.generateKot || (saleData.kotBatchItems?.length ?? 0) === 0) {
+    return null;
+  }
+
+  if (!actor.deviceId) {
+    return {
+      status: "error",
+      message:
+        "Standalone KOT generation requires a device-authenticated billing session",
+      data: null,
+      code: STATUS_CODES.FORBIDDEN,
+    };
+  }
+
+  if (!saleData.kotRequestId) {
+    return {
+      status: "error",
+      message: "A KOT generation request id is required",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  const store = await organizationRepository.getStoreById(
+    organizationId,
+    storeId,
+  );
+  if (!store?.kotSystemEnabled) {
+    return {
+      status: "error",
+      message:
+        "Standalone KOT generation is available only when the KOT System is enabled",
+      data: null,
+      code: STATUS_CODES.FORBIDDEN,
+    };
+  }
+
+  return null;
+};
+
+const prepareStandaloneKotGeneration = async (
+  actor: SaleWriteActor,
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  saleData: SaleKotGenerationInput,
+  resolvedServiceMode: SaleServiceMode,
+  generatedAt?: Date,
+): Promise<
+  | { error: ServiceResponse<null>; persist?: never; existingSaleId?: never }
+  | {
+      error?: never;
+      persist: ((tx: Bun.TransactionSQL) => Promise<void>) | null;
+      existingSaleId: string | null;
+    }
+> => {
+  if (!saleData.generateKot || !actor.deviceId) {
+    return { persist: null, existingSaleId: null };
+  }
+
+  const batchItems = saleData.kotBatchItems ?? [];
+  if (batchItems.length === 0) {
+    return { persist: null, existingSaleId: null };
+  }
+
+  const {
+    getStandaloneKotByGenerationRequestIdForActor,
+    prepareStandaloneKotBatchForActor,
+    persistPreparedStandaloneKotBatch,
+  } = await import("./billing-kot-write");
+  const existingKot = await getStandaloneKotByGenerationRequestIdForActor({
+    organizationId,
+    storeId,
+    generationRequestId: saleData.kotRequestId!,
+  });
+  if (existingKot?.saleId) {
+    return { persist: null, existingSaleId: existingKot.saleId };
+  }
+
+  if (!saleData.kotBatchItems || !Array.isArray(saleData.items)) {
+    return {
+      error: {
+        status: "error",
+        message: "KOT batch items must be part of the submitted Sale items",
+        data: null,
+        code: STATUS_CODES.BAD_REQUEST,
+      },
+    };
+  }
+
+  const selectionKey = (item: SaleItemInput) =>
+    JSON.stringify({
+      productId: item.productId,
+      addOns: [...(item.addOns ?? [])]
+        .map((addOn) => ({ addOnId: addOn.addOnId, quantity: addOn.quantity }))
+        .sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
+      comboSelections: [...(item.comboSelections ?? [])]
+        .map((selection) => ({
+          groupId: selection.groupId,
+          optionProductId: selection.optionProductId,
+          quantity: selection.quantity,
+          addOns: [...(selection.addOns ?? [])]
+            .map((addOn) => ({
+              addOnId: addOn.addOnId,
+              quantity: addOn.quantity,
+            }))
+            .sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
+        }))
+        .sort((left, right) =>
+          `${left.groupId}:${left.optionProductId}`.localeCompare(
+            `${right.groupId}:${right.optionProductId}`,
+          ),
+        ),
+    });
+  const kotItemAsSelection = (
+    item: Awaited<
+      ReturnType<typeof billingKotRead.getKotsBySaleId>
+    >[number]["items"][number],
+  ): SaleItemInput => ({
+    productId: item.productId,
+    quantity: Number(item.quantity),
+    addOns: (item.addOns ?? []).map((addOn) => ({
+      addOnId: addOn.addOnId,
+      quantity: Number(addOn.quantityPerParent),
+    })),
+    comboSelections: (item.bundleComponents ?? [])
+      .filter((component) => Boolean(component.choiceGroupId))
+      .map((component) => ({
+        groupId: component.choiceGroupId!,
+        optionProductId: component.componentProductId,
+        quantity: Number(component.quantityPerBundle),
+        addOns: (component.addOns ?? []).map((addOn) => ({
+          addOnId: addOn.addOnId,
+          quantity: Number(addOn.quantityPerComponent),
+        })),
+      })),
+  });
+  const aggregate = (items: SaleItemInput[]) => {
+    const quantities = new Map<string, number>();
+    for (const item of items) {
+      const key = selectionKey(item);
+      quantities.set(key, (quantities.get(key) ?? 0) + Number(item.quantity));
+    }
+    return quantities;
+  };
+  const saleQuantities = aggregate(saleData.items);
+  const requestedQuantities = aggregate(saleData.kotBatchItems);
+  const historicKots = await billingKotRead.getKotsBySaleId(
+    organizationId,
+    storeId,
+    saleId,
+  );
+  const sentQuantities = aggregate(
+    historicKots
+      .filter((kot) => kot.kotType === "parcel")
+      .flatMap((kot) => kot.items.map(kotItemAsSelection)),
+  );
+  for (const [key, requestedQuantity] of requestedQuantities) {
+    const unsentQuantity = Math.max(
+      (saleQuantities.get(key) ?? 0) - (sentQuantities.get(key) ?? 0),
+      0,
+    );
+    if (requestedQuantity > unsentQuantity) {
+      return {
+        error: {
+          status: "error",
+          message:
+            "KOT batch contains items that are not in the Sale's unsent item delta",
+          data: null,
+          code: STATUS_CODES.CONFLICT,
+        },
+      };
+    }
+  }
+
+  const response = await prepareStandaloneKotBatchForActor({
+    organizationId,
+    storeId,
+    deviceId: actor.deviceId,
+    batchItems,
+    serviceMode: resolvedServiceMode,
+    generatedAt,
+    generationRequestId: saleData.kotRequestId,
+  });
+  if (response.status !== "success" || !response.data) {
+    return { error: response as ServiceResponse<null> };
+  }
+
+  return {
+    existingSaleId: null,
+    persist: async (tx) => {
+      await persistPreparedStandaloneKotBatch(
+        { organizationId, storeId, deviceId: actor.deviceId!, saleId },
+        response.data!,
+        tx,
+      );
+    },
+  };
+};
+
+const isUniqueViolation = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  (error as { code?: unknown }).code === "23505";
+
+const recoverStandaloneKotGenerationRace = async (
+  error: unknown,
+  organizationId: string,
+  storeId: string,
+  saleData: SaleKotGenerationInput,
+  expectedSaleId?: string,
+): Promise<ServiceResponse<SaleResponse | null> | null> => {
+  if (
+    !isUniqueViolation(error) ||
+    !saleData.generateKot ||
+    !saleData.kotRequestId
+  ) {
+    return null;
+  }
+
+  const { getStandaloneKotByGenerationRequestIdForActor } =
+    await import("./billing-kot-write");
+  const existingKot = await getStandaloneKotByGenerationRequestIdForActor({
+    organizationId,
+    storeId,
+    generationRequestId: saleData.kotRequestId,
+  });
+  if (!existingKot?.saleId) {
+    return null;
+  }
+  if (expectedSaleId && existingKot.saleId !== expectedSaleId) {
+    return {
+      status: "error",
+      message: "That KOT generation request was already used for another Sale",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  return getSaleDetailsInStore(organizationId, storeId, existingKot.saleId);
+};
+
 const createDraftSaleInStore = async (
   actor: SaleWriteActor,
   organizationId: string,
@@ -1753,6 +2034,16 @@ const createDraftSaleInStore = async (
     return customerResult;
   }
 
+  const kotValidation = await validateStandaloneKotGenerationRequest(
+    actor,
+    organizationId,
+    storeId,
+    saleData,
+  );
+  if (kotValidation) {
+    return kotValidation;
+  }
+
   const saleId = crypto.randomUUID();
   const prepared = await prepareSaleItems(
     organizationId,
@@ -1765,6 +2056,27 @@ const createDraftSaleInStore = async (
     return prepared.error;
   }
 
+  const resolvedServiceMode = resolveSaleServiceMode(saleData.serviceMode);
+  const kotWrite = await prepareStandaloneKotGeneration(
+    actor,
+    organizationId,
+    storeId,
+    saleId,
+    saleData,
+    resolvedServiceMode,
+  );
+  if (kotWrite.error) {
+    return kotWrite.error;
+  }
+  if (kotWrite.existingSaleId) {
+    return getSaleDetailsInStore(
+      organizationId,
+      storeId,
+      kotWrite.existingSaleId,
+    );
+  }
+
+  try {
   await pg.begin(async (tx) => {
     const sale = await billingRepository.createSale(
       {
@@ -1783,6 +2095,7 @@ const createDraftSaleInStore = async (
         discountTotal: prepared.totals.discountTotal,
         grandTotal: prepared.totals.grandTotal,
         notes: normalizeOptionalText(saleData.notes),
+        serviceMode: resolveSaleServiceMode(saleData.serviceMode),
       },
       tx,
     );
@@ -1792,7 +2105,10 @@ const createDraftSaleInStore = async (
     }
 
     for (const line of prepared.lines) {
-      const createdItem = await billingRepository.createSaleItem(line.item, tx);
+        const createdItem = await billingRepository.createSaleItem(
+          line.item,
+          tx,
+        );
       if (!createdItem) {
         throw new Error("Failed to create sale item");
       }
@@ -1831,7 +2147,21 @@ const createDraftSaleInStore = async (
         }
       }
     }
+
+      await kotWrite.persist?.(tx);
   });
+  } catch (error) {
+    const recovered = await recoverStandaloneKotGenerationRace(
+      error,
+      organizationId,
+      storeId,
+      saleData,
+    );
+    if (recovered) {
+      return recovered;
+    }
+    throw error;
+  }
 
   const sale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!sale) {
@@ -1857,6 +2187,7 @@ const updateSaleInStore = async (
   storeId: string,
   saleId: string,
   saleData: UpdateDraftSaleSVC,
+  additionalWrite?: (tx: Bun.TransactionSQL) => Promise<void>,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
   const existingSale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!existingSale) {
@@ -1890,10 +2221,24 @@ const updateSaleInStore = async (
     return customerResult;
   }
 
+  const kotValidation = await validateStandaloneKotGenerationRequest(
+    actor,
+    organizationId,
+    storeId,
+    saleData,
+  );
+  if (kotValidation) {
+    return kotValidation;
+  }
+
   const nextNotes =
     saleData.notes === undefined
       ? (existingSale.notes ?? null)
       : normalizeOptionalText(saleData.notes);
+  const nextServiceMode = resolveSaleServiceMode(
+    saleData.serviceMode,
+    existingSale.serviceMode,
+  );
   const nextOrderDiscountAmount =
     saleData.orderDiscountAmount === undefined
       ? moneyFrom(existingSale.orderDiscountAmount)
@@ -2005,7 +2350,37 @@ const updateSaleInStore = async (
     return preparedItems.error;
   }
 
-  const updated = await pg.begin(async (tx) => {
+  if (saleData.generateKot && existingSale.serviceTableId) {
+    return {
+      status: "error",
+      message: "A standalone KOT cannot be linked to a Service Table",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+  const kotWrite = await prepareStandaloneKotGeneration(
+    actor,
+    organizationId,
+    storeId,
+    saleId,
+    saleData,
+    nextServiceMode,
+  );
+  if (kotWrite.error) {
+    return kotWrite.error;
+  }
+  if (kotWrite.existingSaleId && kotWrite.existingSaleId !== saleId) {
+    return {
+      status: "error",
+      message: "That KOT generation request was already used for another Sale",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  let updated: boolean;
+  try {
+    updated = await pg.begin(async (tx) => {
     if (existingSale.serviceTableId) {
       const table = await tableRepository.lockServiceTableForSale(
         organizationId,
@@ -2045,6 +2420,7 @@ const updateSaleInStore = async (
         discountTotal: preparedItems.totals.discountTotal,
         grandTotal: preparedItems.totals.grandTotal,
         notes: nextNotes,
+        serviceMode: nextServiceMode,
         committedAt: null,
         saleNumber: null,
         voidedAt: null,
@@ -2120,8 +2496,23 @@ const updateSaleInStore = async (
       }
     }
 
+      await kotWrite.persist?.(tx);
+      await additionalWrite?.(tx);
     return true;
   });
+  } catch (error) {
+    const recovered = await recoverStandaloneKotGenerationRace(
+      error,
+      organizationId,
+      storeId,
+      saleData,
+      saleId,
+    );
+    if (recovered) {
+      return recovered;
+    }
+    throw error;
+  }
 
   if (!updated) {
     return {
@@ -2224,9 +2615,78 @@ const commitSaleInStore = async (
   saleId: string,
   commitData: CommitSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const existingSaleSnapshot = await buildSaleDetails(
+    organizationId,
+    storeId,
+    saleId,
+  );
+  if (!existingSaleSnapshot) {
+    return {
+      status: "error",
+      message: "Sale not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const kotValidation = await validateStandaloneKotGenerationRequest(
+    actor,
+    organizationId,
+    storeId,
+    commitData,
+  );
+  if (kotValidation) {
+    return kotValidation;
+  }
+
+  if (commitData.generateKot && existingSaleSnapshot.serviceTableId) {
+    return {
+      status: "error",
+      message: "A standalone KOT cannot be linked to a Service Table",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+  const resolvedServiceMode = resolveSaleServiceMode(
+    commitData.serviceMode,
+    existingSaleSnapshot.serviceMode,
+  );
+  const kotWrite = await prepareStandaloneKotGeneration(
+    actor,
+    organizationId,
+    storeId,
+    saleId,
+    commitData,
+    resolvedServiceMode,
+  );
+  if (kotWrite.error) {
+    return kotWrite.error;
+  }
+  if (kotWrite.existingSaleId) {
+    if (
+      kotWrite.existingSaleId === saleId &&
+      existingSaleSnapshot.status === "completed"
+    ) {
+      return getSaleDetailsInStore(organizationId, storeId, saleId);
+    }
+    return {
+      status: "error",
+      message: "That KOT generation request was already used",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
   const payments = commitData.payments ?? [];
   const totalPayment = sumMoney(payments.map((payment) => payment.amount));
-  const transactionResult = await pg.begin(async (tx) => {
+  let transactionResult:
+    | { committed: true }
+    | {
+        committed: false;
+        response: ServiceResponse<SaleResponse | null>;
+      };
+  try {
+    transactionResult = await pg.begin(async (tx) => {
     const saleSnapshot = await billingRepository.getSaleById(
       organizationId,
       storeId,
@@ -2273,7 +2733,8 @@ const commitSaleInStore = async (
           committed: false as const,
           response: {
             status: "error" as const,
-            message: "Sale is no longer the current order for its service table",
+              message:
+                "Sale is no longer the current order for its service table",
             data: null,
             code: STATUS_CODES.CONFLICT,
           },
@@ -2284,7 +2745,8 @@ const commitSaleInStore = async (
           committed: false as const,
           response: {
             status: "error" as const,
-            message: "Service table must have an active draft order before placing sale",
+              message:
+                "Service table must have an active draft order before placing sale",
             data: null,
             code: STATUS_CODES.CONFLICT,
           },
@@ -2378,7 +2840,8 @@ const commitSaleInStore = async (
 
     const committedTotals = pricingTotals.totals;
     const grandTotal = committedTotals.grandTotal;
-    const itemCount = preparedItems?.lines.length ?? existingSale.items.length;
+      const itemCount =
+        preparedItems?.lines.length ?? existingSale.items.length;
     if (itemCount === 0 || grandTotal <= 0) {
       return {
         committed: false as const,
@@ -2413,6 +2876,10 @@ const commitSaleInStore = async (
       commitData.notes === undefined
         ? (existingSale.notes ?? null)
         : normalizeOptionalText(commitData.notes);
+    const nextServiceMode = resolveSaleServiceMode(
+      commitData.serviceMode,
+      existingSale.serviceMode,
+    );
     const committedAt = new Date();
     const saleNumber = await billingRepository.allocateSaleNumber(
       organizationId,
@@ -2436,6 +2903,7 @@ const commitSaleInStore = async (
         discountTotal: committedTotals.discountTotal,
         grandTotal,
         notes: nextNotes,
+        serviceMode: nextServiceMode,
         committedAt,
         saleNumber: saleNumber.saleNumber,
         saleSequenceNumber: saleNumber.saleSequenceNumber,
@@ -2484,7 +2952,9 @@ const commitSaleInStore = async (
           collectedBy: actor.userId ?? null,
           amount: roundMoney(paymentInput.amount),
           method: paymentInput.method,
-          referenceNumber: normalizeOptionalText(paymentInput.referenceNumber),
+            referenceNumber: normalizeOptionalText(
+              paymentInput.referenceNumber,
+            ),
           notes: normalizeOptionalText(paymentInput.notes),
           collectedAt: committedAt,
         },
@@ -2520,12 +2990,28 @@ const commitSaleInStore = async (
         tx,
       );
       if (!table) {
-        throw new Error("Failed to transition service table after placing sale");
+          throw new Error(
+            "Failed to transition service table after placing sale",
+          );
       }
     }
 
+      await kotWrite.persist?.(tx);
     return { committed: true as const };
   });
+  } catch (error) {
+    const recovered = await recoverStandaloneKotGenerationRace(
+      error,
+      organizationId,
+      storeId,
+      commitData,
+      saleId,
+    );
+    if (recovered) {
+      return recovered;
+    }
+    throw error;
+  }
 
   if (!transactionResult.committed) {
     return transactionResult.response;
@@ -2549,12 +3035,6 @@ const commitSaleInStore = async (
   };
 };
 
-const isUniqueViolation = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "code" in error &&
-  (error as { code?: unknown }).code === "23505";
-
 type CompletedSaleTransactionParams = {
   actor: SaleWriteActor;
   organizationId: string;
@@ -2571,6 +3051,7 @@ type CompletedSaleTransactionParams = {
   requestId: string;
   replacementOfSaleId?: string | null;
   serviceTableId?: string | null;
+  serviceMode: SaleServiceMode;
 };
 
 const persistCompletedSale = async (
@@ -2616,6 +3097,7 @@ const persistCompletedSale = async (
       completionRequestId: params.requestId,
       replacementOfSaleId: params.replacementOfSaleId ?? null,
       serviceTableId: params.serviceTableId ?? null,
+      serviceMode: params.serviceMode,
     },
     tx,
   );
@@ -2695,6 +3177,16 @@ const completeSaleInStore = async (
     return customerResult;
   }
 
+  const kotValidation = await validateStandaloneKotGenerationRequest(
+    actor,
+    organizationId,
+    storeId,
+    saleData,
+  );
+  if (kotValidation) {
+    return kotValidation;
+  }
+
   const saleId = crypto.randomUUID();
   const prepared = await prepareSaleItems(
     organizationId,
@@ -2738,10 +3230,31 @@ const completeSaleInStore = async (
 
   const committedAt = new Date();
   const notes = normalizeOptionalText(saleData.notes);
+  const resolvedServiceMode = resolveSaleServiceMode(saleData.serviceMode);
+  const kotWrite = await prepareStandaloneKotGeneration(
+    actor,
+    organizationId,
+    storeId,
+    saleId,
+    saleData,
+    resolvedServiceMode,
+    committedAt,
+  );
+  if (kotWrite.error) {
+    return kotWrite.error;
+  }
+  if (kotWrite.existingSaleId) {
+    return {
+      status: "error",
+      message: "That KOT generation request was already used for another Sale",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
 
   try {
-    await pg.begin((tx) =>
-      persistCompletedSale(tx, {
+    await pg.begin(async (tx) => {
+      await persistCompletedSale(tx, {
         actor,
         organizationId,
         storeId,
@@ -2752,8 +3265,10 @@ const completeSaleInStore = async (
         notes,
         committedAt,
         requestId: saleData.requestId,
-      }),
-    );
+        serviceMode: resolvedServiceMode,
+      });
+      await kotWrite.persist?.(tx);
+    });
   } catch (error) {
     if (isUniqueViolation(error)) {
       const completedSaleId =
@@ -2765,6 +3280,16 @@ const completeSaleInStore = async (
       if (completedSaleId) {
         return getSaleDetailsInStore(organizationId, storeId, completedSaleId);
       }
+    }
+
+    const recovered = await recoverStandaloneKotGenerationRace(
+      error,
+      organizationId,
+      storeId,
+      saleData,
+    );
+    if (recovered) {
+      return recovered;
     }
 
     throw error;
@@ -2894,6 +3419,10 @@ const replaceSaleInStore = async (
         committedAt,
         requestId: saleData.requestId,
         replacementOfSaleId: originalSaleId,
+        serviceMode: resolveSaleServiceMode(
+          saleData.serviceMode,
+          originalSale.serviceMode,
+        ),
       });
 
       const updatedOriginal = await billingRepository.updateSale(
@@ -3074,7 +3603,12 @@ const collectPaymentInStore = async (
 
     if (
       existingSale.serviceTableId &&
-      !(await billingRepository.lockCommittedSale(organizationId, storeId, saleId, tx))
+      !(await billingRepository.lockCommittedSale(
+        organizationId,
+        storeId,
+        saleId,
+        tx,
+      ))
     ) {
       throw new Error("Sale is no longer available for payment collection");
     }
@@ -3085,11 +3619,14 @@ const collectPaymentInStore = async (
       saleId,
       tx,
     );
-    if (!latestSale) throw new Error("Sale is no longer available for payment collection");
+    if (!latestSale)
+      throw new Error("Sale is no longer available for payment collection");
     saleForPayment = latestSale;
     const latestDueTotal = moneyFrom(latestSale.dueTotal);
     if (amount > latestDueTotal) {
-      throw new Error("Collected payment cannot exceed the remaining due amount");
+      throw new Error(
+        "Collected payment cannot exceed the remaining due amount",
+      );
     }
 
     createdPayment = await billingRepository.createPayment(
@@ -3128,7 +3665,9 @@ const collectPaymentInStore = async (
       moneyFrom(saleForPayment.paidTotal) + amount,
     );
     const nextPaymentStatus =
-      nextPaidTotal === moneyFrom(saleForPayment.grandTotal) ? "paid" : "partial";
+      nextPaidTotal === moneyFrom(saleForPayment.grandTotal)
+        ? "paid"
+        : "partial";
 
     const updatedSale = await billingRepository.updateSale(
       {
@@ -3172,7 +3711,9 @@ const collectPaymentInStore = async (
         tx,
       );
       if (!table) {
-        throw new Error("Failed to transition service table after payment collection");
+        throw new Error(
+          "Failed to transition service table after payment collection",
+        );
       }
     }
   });
@@ -3369,13 +3910,27 @@ export const getCustomerDueSales = async (
   storeId: string,
   customerId: string,
 ): Promise<ServiceResponse<CustomerDueSalesResponse | null>> => {
-  const scopeError = await verifyOrganizationAndStore(userId, organizationId, storeId);
-  if (scopeError) return scopeError as ServiceResponse<CustomerDueSalesResponse | null>;
+  const scopeError = await verifyOrganizationAndStore(
+    userId,
+    organizationId,
+    storeId,
+  );
+  if (scopeError)
+    return scopeError as ServiceResponse<CustomerDueSalesResponse | null>;
   const customer = await getCustomerForOrganization(organizationId, customerId);
   if (!customer) {
-    return { status: "error", message: "Customer not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    return {
+      status: "error",
+      message: "Customer not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
   }
-  const sales = await billingRepository.getDueSalesByCustomerStore(organizationId, storeId, customerId);
+  const sales = await billingRepository.getDueSalesByCustomerStore(
+    organizationId,
+    storeId,
+    customerId,
+  );
   return {
     status: "success",
     data: { customer, sales },
@@ -3860,6 +4415,22 @@ export const updateDraftSaleForDevice = async (
     session.store.id,
     saleId,
     saleData,
+  );
+};
+
+export const updateDraftSaleWithWriteForDevice = async (
+  session: DeviceSessionDTO,
+  saleId: string,
+  saleData: UpdateDraftSaleSVC,
+  additionalWrite: (tx: Bun.TransactionSQL) => Promise<void>,
+): Promise<ServiceResponse<SaleResponse | null>> => {
+  return updateSaleInStore(
+    { deviceId: session.device.id },
+    session.organization.id,
+    session.store.id,
+    saleId,
+    saleData,
+    additionalWrite,
   );
 };
 

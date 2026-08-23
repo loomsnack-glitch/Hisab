@@ -9,6 +9,7 @@ import {
     type PlatformSaleInspectionSummaryDTO,
     type SalesListSummary,
     type SalesSort,
+    formatSaleServiceModeLabel,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
@@ -411,6 +412,9 @@ const ReadOnlySaleDialog = ({
                                             </span>
                                             <span className={cn("rounded-full border px-2.5 py-0.5 text-xs capitalize", paymentStatusStyles[sale.paymentStatus])}>
                                                 {sale.paymentStatus}
+                                            </span>
+                                            <span className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-xs text-foreground">
+                                                {formatSaleServiceModeLabel(sale.serviceMode)}
                                             </span>
                                         </div>
                                     </div>
@@ -1083,7 +1087,7 @@ const ConsoleBillingInspection = ({
                                                 </p>
                                             </div>
                                             <p className="truncate text-[10px] text-muted-foreground/80">
-                                                {saleRow.itemCount} item{saleRow.itemCount !== 1 ? "s" : ""} · {formatDateTime(saleRow.createdAt)}
+                                                {formatSaleServiceModeLabel(saleRow.serviceMode)} · {saleRow.itemCount} item{saleRow.itemCount !== 1 ? "s" : ""} · {formatDateTime(saleRow.createdAt)}
                                             </p>
                                             <a
                                                 href={storeHref}

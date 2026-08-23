@@ -753,6 +753,7 @@ export type PlatformOrganizationSaleSummaryMetricsRow = {
     itemsSummary: string | null;
     paymentMethods: string | null;
     customerName: string | null;
+    serviceMode: "dine_in" | "pick_up";
     storeId: string;
     storeName: string;
 };
@@ -782,6 +783,8 @@ const asPaymentStatus = (value: unknown): "pending" | "partial" | "paid" | null 
     if (value === "pending" || value === "partial" || value === "paid") return value;
     return null;
 };
+const asSaleServiceMode = (value: unknown): "dine_in" | "pick_up" =>
+    value === "pick_up" ? "pick_up" : "dine_in";
 
 export const listOrganizationSales = async (
     query: PlatformOrganizationSalesMetricsQuery,
@@ -867,6 +870,7 @@ export const listOrganizationSales = async (
             s.sale_number,
             s.status::text AS status,
             s.payment_status::text AS payment_status,
+            s.service_mode::text AS service_mode,
             s.grand_total,
             s.created_at,
             s.committed_at,
@@ -959,6 +963,7 @@ export const listOrganizationSales = async (
                 itemsSummary: row.items_summary ? String(row.items_summary) : null,
                 paymentMethods: row.payment_methods ? String(row.payment_methods) : null,
                 customerName: row.customer_name ? String(row.customer_name) : null,
+                serviceMode: asSaleServiceMode(row.service_mode),
                 storeId: String(row.store_id),
                 storeName: String(row.store_name),
             }];
@@ -1744,6 +1749,7 @@ export const getOrganizationCustomerContext = async (
             s.sale_number,
             s.status::text AS status,
             s.payment_status::text AS payment_status,
+            s.service_mode::text AS service_mode,
             s.grand_total,
             s.created_at,
             s.committed_at,
@@ -1835,6 +1841,7 @@ export const getOrganizationCustomerContext = async (
                 itemsSummary: row.items_summary ? String(row.items_summary) : null,
                 paymentMethods: row.payment_methods ? String(row.payment_methods) : null,
                 customerName: row.customer_name ? String(row.customer_name) : null,
+                serviceMode: asSaleServiceMode(row.service_mode),
                 storeId: String(row.store_id),
                 storeName: String(row.store_name),
             }];

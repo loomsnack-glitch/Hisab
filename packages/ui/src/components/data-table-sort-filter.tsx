@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ArrowUpDown, Check } from "lucide-react"
+import { ArrowUpDown } from "lucide-react"
 
 import { cn } from "@repo/ui/lib/utils"
 import { Badge } from "@repo/ui/components/badge"
@@ -50,12 +50,14 @@ export function DataTableSortFilter({
                     <CommandInput placeholder={title} />
                     <CommandList>
                         <CommandEmpty>No results found.</CommandEmpty>
-                        <CommandGroup>
+                        <CommandGroup role="radiogroup" aria-label={title}>
                             {options.map((option) => {
                                 const isSelected = value === option.value
                                 return (
                                     <CommandItem
                                         key={option.value}
+                                        role="radio"
+                                        aria-checked={isSelected}
                                         onSelect={() => {
                                             onValueChange(option.value)
                                             setOpen(false)
@@ -63,13 +65,16 @@ export function DataTableSortFilter({
                                     >
                                         <div
                                             className={cn(
-                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                                                isSelected
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "opacity-50 [&_svg]:invisible"
+                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-full border border-primary",
+                                                isSelected ? "border-primary" : "opacity-50",
                                             )}
                                         >
-                                            <Check className="text-white" />
+                                            <span
+                                                className={cn(
+                                                    "size-2 rounded-full bg-primary transition-opacity",
+                                                    isSelected ? "opacity-100" : "opacity-0",
+                                                )}
+                                            />
                                         </div>
                                         <span>{option.label}</span>
                                     </CommandItem>

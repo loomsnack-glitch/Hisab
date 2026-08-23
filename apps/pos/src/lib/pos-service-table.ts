@@ -95,4 +95,14 @@ export const shouldReturnToPosTablesAfterSale = (sale: {
   serviceTableId?: string | null;
 }) => Boolean(sale.serviceTableId);
 
+// Android Chrome only one-finger-scrolls a nested overflow box with a definite
+// height (flex-1 used height is not enough). `100dvh` calcs that re-subtract
+// the header/nav leave a gap because Tables already sits inside `main`.
+// Absolute top/bottom against `main` gives both: a real scrollport and a flush nav.
+export const posTablesPageClassName =
+  "absolute inset-x-0 top-0 bottom-[var(--pos-mobile-nav-height)] flex flex-col overflow-hidden";
+
+export const posTablesScrollerClassName =
+  "h-0 min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]";
+
 export { hasActiveTableWorkspace };

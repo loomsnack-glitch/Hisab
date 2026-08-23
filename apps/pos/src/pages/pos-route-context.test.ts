@@ -51,7 +51,9 @@ describe("POS route context", () => {
         expect(getPosLoginPath("/reports")).toBe("/login?returnTo=%2Freports");
         expect(getPosLoginPath("/purchases")).toBe("/login?returnTo=%2Fpurchases");
         expect(getPosLoginPath("/whatsapp")).toBe("/login?returnTo=%2Fwhatsapp");
-        expect(getPosLoginPath("/appearance")).toBe("/login?returnTo=%2Fappearance");
+    expect(getPosLoginPath("/appearance")).toBe(
+      "/login?returnTo=%2Fappearance",
+    );
     });
 
     test("preserves only internal POS return paths after login", () => {
@@ -69,23 +71,50 @@ describe("POS route context", () => {
     });
 
     test("exposes Tables and Customers in POS navigation and marks them active in the mobile More menu", () => {
-        expect(posWorkspaceDestinations.map((destination) => destination.id)).toEqual([
+    expect(
+      posWorkspaceDestinations.map((destination) => destination.id),
+    ).toEqual([
             "products",
             "tables",
             "bills",
-            "customers",
+      "kots",
+      "customers",
             "reports",
             "purchases",
             "appearance",
         ]);
-        const tablesDestination = posWorkspaceDestinations.find((destination) => destination.id === "tables");
-        expect(tablesDestination).toMatchObject({ label: "Tables", path: "/tables", tab: "tables" });
-        const customersDestination = posWorkspaceDestinations.find((destination) => destination.id === "customers");
-        expect(customersDestination).toMatchObject({ label: "Customers", path: "/customers", tab: "customers" });
-        const reportsDestination = posWorkspaceDestinations.find((destination) => destination.id === "reports");
-        expect(reportsDestination).toMatchObject({ label: "Reports", path: "/reports", tab: "reports" });
-        const purchasesDestination = posWorkspaceDestinations.find((destination) => destination.id === "purchases");
-        expect(purchasesDestination).toMatchObject({ label: "Purchases", path: "/purchases", tab: "purchases" });
+    const tablesDestination = posWorkspaceDestinations.find(
+      (destination) => destination.id === "tables",
+    );
+    expect(tablesDestination).toMatchObject({
+      label: "Tables",
+      path: "/tables",
+      tab: "tables",
+    });
+    const customersDestination = posWorkspaceDestinations.find(
+      (destination) => destination.id === "customers",
+    );
+    expect(customersDestination).toMatchObject({
+      label: "Customers",
+      path: "/customers",
+      tab: "customers",
+    });
+    const reportsDestination = posWorkspaceDestinations.find(
+      (destination) => destination.id === "reports",
+    );
+    expect(reportsDestination).toMatchObject({
+      label: "Reports",
+      path: "/reports",
+      tab: "reports",
+    });
+    const purchasesDestination = posWorkspaceDestinations.find(
+      (destination) => destination.id === "purchases",
+    );
+    expect(purchasesDestination).toMatchObject({
+      label: "Purchases",
+      path: "/purchases",
+      tab: "purchases",
+    });
         expect(isPosMoreDestinationActive("/tables")).toBe(false);
         expect(isPosMoreDestinationActive("/customers")).toBe(true);
         expect(isPosMoreDestinationActive("/purchases")).toBe(true);
@@ -105,14 +134,14 @@ describe("POS route context", () => {
             ),
         ).not.toContain("tables");
         expect(
-            getVisiblePosPrimaryMobileDestinations({ tableManagementEnabled: false }).map(
-                (destination) => destination.id,
-            ),
+      getVisiblePosPrimaryMobileDestinations({
+        tableManagementEnabled: false,
+      }).map((destination) => destination.id),
         ).toEqual(["products", "bills"]);
         expect(
-            getVisiblePosPrimaryMobileDestinations({ tableManagementEnabled: true }).map(
-                (destination) => destination.id,
-            ),
+      getVisiblePosPrimaryMobileDestinations({
+        tableManagementEnabled: true,
+      }).map((destination) => destination.id),
         ).toEqual(["products", "tables", "bills"]);
     });
 

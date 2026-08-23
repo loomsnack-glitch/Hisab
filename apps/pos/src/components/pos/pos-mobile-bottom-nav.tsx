@@ -14,16 +14,17 @@ import { getPosPanelTabFromPath } from "@/pages/pos-route-context";
 type PosMobileBottomNavProps = {
     billsCount?: number;
     tableManagementEnabled: boolean;
+    kotSystemEnabled: boolean;
 };
 
-const PosMobileBottomNav = ({ billsCount = 0, tableManagementEnabled }: PosMobileBottomNavProps) => {
+const PosMobileBottomNav = ({ billsCount = 0, tableManagementEnabled, kotSystemEnabled }: PosMobileBottomNavProps) => {
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
     const activeTab = getPosPanelTabFromPath(location.pathname);
     const isAppearanceRoute = location.pathname === "/appearance" || location.pathname === "/settings";
     const isMoreActive = isPosMoreDestinationActive(location.pathname) || moreOpen;
-    const primaryDestinations = getVisiblePosPrimaryMobileDestinations({ tableManagementEnabled });
-    const workspaceDestinations = getVisiblePosWorkspaceDestinations({ tableManagementEnabled });
+    const primaryDestinations = getVisiblePosPrimaryMobileDestinations({ tableManagementEnabled, kotSystemEnabled });
+    const workspaceDestinations = getVisiblePosWorkspaceDestinations({ tableManagementEnabled, kotSystemEnabled });
 
     const navButtonClassName = (isActive: boolean) =>
         cn(

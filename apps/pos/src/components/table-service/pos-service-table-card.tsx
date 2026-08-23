@@ -182,7 +182,7 @@ const SimpleTileFooterButton = ({ action, divided }: { action: TileAction; divid
     variant="ghost"
     size="xs"
     className={cn(
-      "h-8 min-w-0 flex-1 rounded-none border-0 border-t border-border/60 px-1 text-[10px] font-semibold shadow-none sm:text-[11px]",
+      "h-8 min-w-0 flex-1 touch-pan-y rounded-none border-0 border-t border-border/60 px-1 text-[10px] font-semibold shadow-none sm:text-[11px]",
       tileActionClassName[action.variant],
       divided && "border-r border-border/60",
     )}
@@ -216,7 +216,7 @@ const SimpleTableTile = ({
     <div
       data-testid={`pos-table-${table.id}`}
       className={cn(
-        "flex w-full min-w-0 flex-col overflow-hidden rounded-xl border",
+        "flex w-full min-w-0 touch-pan-y flex-col overflow-hidden rounded-xl border",
         collecting ? "min-h-32" : "aspect-square",
         occupied && "border-l-[3px]",
         posServiceTableSimpleToneClassName[table.state],
@@ -288,7 +288,7 @@ const PosServiceTableCard = (props: PosServiceTableCardProps) => {
               type="button"
               size="xs"
               variant="ghost"
-              className={cn("h-7 text-[11px] font-semibold shadow-none", tileActionClassName.collect)}
+              className={cn("h-7 touch-pan-y text-[11px] font-semibold shadow-none", tileActionClassName.collect)}
               disabled={actionProps.busy.collecting}
               isLoading={actionProps.busy.collecting}
               loadingText=""
@@ -301,7 +301,7 @@ const PosServiceTableCard = (props: PosServiceTableCardProps) => {
               type="button"
               size="xs"
               variant="ghost"
-              className={cn("h-7 text-[11px] font-semibold shadow-none", tileActionClassName.muted)}
+              className={cn("h-7 touch-pan-y text-[11px] font-semibold shadow-none", tileActionClassName.muted)}
               disabled={actionProps.busy.releasing}
               onClick={() => actionProps.onFreeDue(table.id)}
               aria-label="Free with bill due"

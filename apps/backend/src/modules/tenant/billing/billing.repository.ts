@@ -36,7 +36,10 @@ import type {
     UpdateCustomerREPO,
     UpdateSaleREPO,
 } from "@repo/types";
-import { decodeCustomerCursor, encodeCustomerCursor } from "./customer-pagination";
+import {
+  decodeCustomerCursor,
+  encodeCustomerCursor,
+} from "./customer-pagination";
 import { decodeSalesCursor, encodeSalesCursor } from "./sales-pagination";
 import {
     DEFAULT_SALE_NUMBER_TIMEZONE,
@@ -47,6 +50,26 @@ import {
 } from "./sale-numbering";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
+
+const resolveSalesPaymentMethods = (query: SalesListQuery): string[] => {
+    if (query.paymentMethods && query.paymentMethods.length > 0) {
+        return query.paymentMethods;
+    }
+    if (query.paymentMethod) {
+        return [query.paymentMethod];
+    }
+    return [];
+};
+
+const salesPaymentMethodsClause = (paymentMethods: string[]) =>
+    paymentMethods.length === 0
+        ? sql`TRUE`
+        : sql`EXISTS (
+              SELECT 1
+              FROM payments payment_filter
+              WHERE payment_filter.sale_id = s.id
+                AND payment_filter.method::text IN ${sql(paymentMethods)}
+          )`;
 
 type SaleSummaryRow = Record<string, unknown> & {
     customer_name?: string | null;
@@ -70,11 +93,16 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
     const customerName = summary.customerName as string | null | undefined;
     const customerPhone = summary.customerPhone as string | null | undefined;
     const customerBalance = summary.customerBalance as number | null | undefined;
-    const customerIsActive = summary.customerIsActive as boolean | null | undefined;
-    const createdByDeviceId = summary.createdByDeviceId as string | null | undefined;
-    const createdByDeviceName = summary.createdByDeviceName as string | null | undefined;
-    const updatedByDeviceId = summary.updatedByDeviceId as string | null | undefined;
-    const updatedByDeviceName = summary.updatedByDeviceName as string | null | undefined;
+  const customerIsActive = summary.customerIsActive as
+    boolean | null | undefined;
+  const createdByDeviceId = summary.createdByDeviceId as
+    string | null | undefined;
+  const createdByDeviceName = summary.createdByDeviceName as
+    string | null | undefined;
+  const updatedByDeviceId = summary.updatedByDeviceId as
+    string | null | undefined;
+  const updatedByDeviceName = summary.updatedByDeviceName as
+    string | null | undefined;
 
     const customer = customerId
         ? {
@@ -109,11 +137,13 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
     return {
         ...(summary as Omit<SaleSummaryDTO, "customer">),
         saleSequenceNumber:
-            summary.saleSequenceNumber === null || summary.saleSequenceNumber === undefined
+      summary.saleSequenceNumber === null ||
+      summary.saleSequenceNumber === undefined
                 ? null
                 : Number(summary.saleSequenceNumber),
         tokenSequenceNumber:
-            summary.tokenSequenceNumber === null || summary.tokenSequenceNumber === undefined
+      summary.tokenSequenceNumber === null ||
+      summary.tokenSequenceNumber === undefined
                 ? null
                 : Number(summary.tokenSequenceNumber),
         paidTotal: Number(summary.paidTotal ?? 0),
@@ -123,7 +153,8 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
         grandTotal: Number(summary.grandTotal ?? 0),
         itemCount: Number(summary.itemCount ?? 0),
         itemsSummary: (summary.itemsSummary as string | undefined | null) ?? null,
-        paymentMethods: (summary.paymentMethods as string | undefined | null) ?? null,
+    paymentMethods:
+      (summary.paymentMethods as string | undefined | null) ?? null,
         customer,
         createdByDevice,
         updatedByDevice,
@@ -143,7 +174,9 @@ export const createCustomer = async (
     return result ? mapRow<CustomerDTO>(result) : null;
 };
 
-export const updateCustomer = async (customerData: UpdateCustomerREPO): Promise<CustomerDTO | null> => {
+export const updateCustomer = async (
+  customerData: UpdateCustomerREPO,
+): Promise<CustomerDTO | null> => {
     const [result] = await pg`
         UPDATE customers
         SET name = ${customerData.name},
@@ -179,7 +212,9 @@ export const getCustomersByOrganizationId = async (
     const search = query.search?.trim() ?? "";
     const searchPattern = search ? `%${search}%` : "";
     const normalizedPhoneSearch = normalizePhoneNumber(search);
-    const normalizedPhonePattern = normalizedPhoneSearch ? `%${normalizedPhoneSearch}%` : "";
+  const normalizedPhonePattern = normalizedPhoneSearch
+    ? `%${normalizedPhoneSearch}%`
+    : "";
     const status = query.status ?? "all";
     const sort = query.sort ?? "newest";
     const limit = query.limit ?? 50;
@@ -260,16 +295,21 @@ export const getCustomersByOrganizationId = async (
         LIMIT ${limit + 1}
     `;
 
-    const customersWithCursor: Array<CustomerDTO & { cursorCreatedAt: string }> = results
-        .slice(0, limit)
-        .map((result: Record<string, unknown>) => {
-            const { cursor_created_at: cursorCreatedAt, total_count: _totalCount, ...customerRow } = result;
+  const customersWithCursor: Array<CustomerDTO & { cursorCreatedAt: string }> =
+    results.slice(0, limit).map((result: Record<string, unknown>) => {
+      const {
+        cursor_created_at: cursorCreatedAt,
+        total_count: _totalCount,
+        ...customerRow
+      } = result;
             return {
                 ...mapRow<CustomerDTO>(customerRow),
                 cursorCreatedAt: cursorCreatedAt as string,
             };
         });
-    const customers = customersWithCursor.map(({ cursorCreatedAt: _cursorCreatedAt, ...customer }) => customer);
+  const customers = customersWithCursor.map(
+    ({ cursorCreatedAt: _cursorCreatedAt, ...customer }) => customer,
+  );
     const hasMore = results.length > limit;
     const lastCustomer = customersWithCursor.at(-1);
     const totalCount = Number(results[0]?.total_count ?? 0);
@@ -278,13 +318,19 @@ export const getCustomersByOrganizationId = async (
         customers,
         pageInfo: {
             hasMore,
-            nextCursor: hasMore && lastCustomer ? encodeCustomerCursor(lastCustomer, sort) : null,
+      nextCursor:
+        hasMore && lastCustomer
+          ? encodeCustomerCursor(lastCustomer, sort)
+          : null,
             totalCount,
         },
     };
 };
 
-export const getCustomerById = async (organizationId: string, customerId: string): Promise<CustomerDTO | null> => {
+export const getCustomerById = async (
+  organizationId: string,
+  customerId: string,
+): Promise<CustomerDTO | null> => {
     const [result] = await pg`
         SELECT *
         FROM customers
@@ -332,10 +378,15 @@ export const getCustomerLedgerByCustomerId = async (
         ORDER BY created_at ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<CustomerLedgerEntryDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<CustomerLedgerEntryDTO>(result),
+  );
 };
 
-export const createSale = async (saleData: CreateSaleREPO, tx?: Bun.TransactionSQL): Promise<SaleSummaryDTO | null> => {
+export const createSale = async (
+  saleData: CreateSaleREPO,
+  tx?: Bun.TransactionSQL,
+): Promise<SaleSummaryDTO | null> => {
     const db = tx || pg;
     const [result] = await db`
         INSERT INTO sales ${camelToSnakeSql(saleData)}
@@ -345,13 +396,20 @@ export const createSale = async (saleData: CreateSaleREPO, tx?: Bun.TransactionS
     return result ? mapSaleSummaryRow(result as SaleSummaryRow) : null;
 };
 
-export const updateSale = async (saleData: UpdateSaleREPO, tx?: Bun.TransactionSQL): Promise<SaleSummaryDTO | null> => {
+export const updateSale = async (
+  saleData: UpdateSaleREPO,
+  tx?: Bun.TransactionSQL,
+): Promise<SaleSummaryDTO | null> => {
     const db = tx || pg;
     const [result] = await db`
         UPDATE sales
         SET customer_id = ${saleData.customerId ?? null},
             customer_name_snapshot = ${saleData.customerNameSnapshot ?? null},
             customer_phone_snapshot = ${saleData.customerPhoneSnapshot ?? null},
+            service_mode = COALESCE(
+                ${saleData.serviceMode ?? null}::sale_service_mode_enum,
+                service_mode
+            ),
             status = ${saleData.status},
             payment_status = ${saleData.paymentStatus},
             updated_by_device_id = ${saleData.updatedByDeviceId ?? null},
@@ -423,6 +481,15 @@ export const deleteDraftSale = async (
     tx?: Bun.TransactionSQL,
 ): Promise<boolean> => {
     const db = tx || pg;
+
+    // Parcel KOTs reference draft sales directly; remove them before deleting the sale.
+    await db`
+        DELETE FROM kots
+        WHERE sale_id = ${saleId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
     const [result] = await db`
         DELETE FROM sales
         WHERE id = ${saleId}
@@ -450,7 +517,7 @@ export const getSalesByStore = async (
     const searchPattern = search ? `%${search}%` : "";
     const status = query.status ?? "";
     const paymentStatus = query.paymentStatus ?? "";
-    const paymentMethod = query.paymentMethod ?? "";
+    const paymentMethods = resolveSalesPaymentMethods(query);
     const customerId = query.customerId ?? "";
     const createdFrom = query.createdFrom ?? null;
     const createdTo = query.createdTo ?? null;
@@ -520,15 +587,7 @@ export const getSalesByStore = async (
           AND s.store_id = ${storeId}
           AND (${status} = '' OR s.status::text = ${status})
           AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
-          AND (
-              ${paymentMethod} = ''
-              OR EXISTS (
-                  SELECT 1
-                  FROM payments payment_filter
-                  WHERE payment_filter.sale_id = s.id
-                    AND payment_filter.method::text = ${paymentMethod}
-              )
-          )
+          AND ${salesPaymentMethodsClause(paymentMethods)}
           AND (${customerId} = '' OR s.customer_id::text = ${customerId})
           AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
           AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)
@@ -603,7 +662,9 @@ export const getSalesByStore = async (
             ...mapSaleSummaryRow(result as SaleSummaryRow),
             cursorCreatedAt: result.cursor_created_at as string,
         }));
-    const sales = salesWithCursor.map(({ cursorCreatedAt: _cursorCreatedAt, ...sale }) => sale);
+  const sales = salesWithCursor.map(
+    ({ cursorCreatedAt: _cursorCreatedAt, ...sale }) => sale,
+  );
     const hasMore = results.length > limit;
     const lastSale = salesWithCursor.at(-1);
 
@@ -611,7 +672,8 @@ export const getSalesByStore = async (
         sales,
         pageInfo: {
             hasMore,
-            nextCursor: hasMore && lastSale ? encodeSalesCursor(lastSale, sort) : null,
+      nextCursor:
+        hasMore && lastSale ? encodeSalesCursor(lastSale, sort) : null,
         },
     };
 };
@@ -651,7 +713,7 @@ export const getSalesSummaryByStore = async (
     const searchPattern = search ? `%${search}%` : "";
     const status = query.status ?? "";
     const paymentStatus = query.paymentStatus ?? "";
-    const paymentMethod = query.paymentMethod ?? "";
+    const paymentMethods = resolveSalesPaymentMethods(query);
     const customerId = query.customerId ?? "";
     const createdFrom = query.createdFrom ?? null;
     const createdTo = query.createdTo ?? null;
@@ -684,15 +746,7 @@ export const getSalesSummaryByStore = async (
           AND s.store_id = ${storeId}
           AND (${status} = '' OR s.status::text = ${status})
           AND (${paymentStatus} = '' OR s.payment_status::text = ${paymentStatus})
-          AND (
-              ${paymentMethod} = ''
-              OR EXISTS (
-                  SELECT 1
-                  FROM payments payment_filter
-                  WHERE payment_filter.sale_id = s.id
-                    AND payment_filter.method::text = ${paymentMethod}
-              )
-          )
+          AND ${salesPaymentMethodsClause(paymentMethods)}
           AND (${customerId} = '' OR s.customer_id::text = ${customerId})
           AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
           AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)
@@ -882,7 +936,9 @@ export const createSaleItemBundleComponent = async (
         RETURNING *
     `;
 
-    return result ? mapRow<Omit<SaleItemBundleComponentDTO, "addOns">>(result) : null;
+  return result
+    ? mapRow<Omit<SaleItemBundleComponentDTO, "addOns">>(result)
+    : null;
 };
 
 export const createSaleItemBundleComponentAddOn = async (
@@ -925,7 +981,9 @@ export const getSaleItemAddOnsBySaleId = async (
         ORDER BY created_at ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<SaleItemAddOnDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<SaleItemAddOnDTO>(result),
+  );
 };
 
 export const getSaleItemBundleComponentAddOnsBySaleId = async (
@@ -940,7 +998,9 @@ export const getSaleItemBundleComponentAddOnsBySaleId = async (
         ORDER BY created_at ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<SaleItemBundleComponentAddOnDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<SaleItemBundleComponentAddOnDTO>(result),
+  );
 };
 
 export const getSaleItemBundleComponentsBySaleId = async (
@@ -954,17 +1014,25 @@ export const getSaleItemBundleComponentsBySaleId = async (
         WHERE sale_id = ${saleId}
         ORDER BY created_at ASC
     `;
-    const addOnResults = await getSaleItemBundleComponentAddOnsBySaleId(saleId, tx);
+  const addOnResults = await getSaleItemBundleComponentAddOnsBySaleId(
+    saleId,
+    tx,
+  );
 
-    const addOnsByComponentId = new Map<string, SaleItemBundleComponentAddOnDTO[]>();
+  const addOnsByComponentId = new Map<
+    string,
+    SaleItemBundleComponentAddOnDTO[]
+  >();
     for (const addOn of addOnResults) {
-        const existing = addOnsByComponentId.get(addOn.saleItemBundleComponentId) ?? [];
+    const existing =
+      addOnsByComponentId.get(addOn.saleItemBundleComponentId) ?? [];
         existing.push(addOn);
         addOnsByComponentId.set(addOn.saleItemBundleComponentId, existing);
     }
 
     return componentResults.map((result: Record<string, unknown>) => {
-        const component = mapRow<Omit<SaleItemBundleComponentDTO, "addOns">>(result);
+    const component =
+      mapRow<Omit<SaleItemBundleComponentDTO, "addOns">>(result);
         return {
             ...component,
             addOns: addOnsByComponentId.get(component.id) ?? [],
@@ -972,7 +1040,10 @@ export const getSaleItemBundleComponentsBySaleId = async (
     });
 };
 
-export const getSaleItemsBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<SaleItemDTO[]> => {
+export const getSaleItemsBySaleId = async (
+  saleId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<SaleItemDTO[]> => {
     const db = tx || pg;
     // Bun's postgres driver hangs until idleTimeout if more than one query
     // is in flight on the same reserved transaction connection.
@@ -983,7 +1054,10 @@ export const getSaleItemsBySaleId = async (saleId: string, tx?: Bun.TransactionS
         ORDER BY created_at ASC
     `;
     const addOnResults = await getSaleItemAddOnsBySaleId(saleId, tx);
-    const bundleComponentResults = await getSaleItemBundleComponentsBySaleId(saleId, tx);
+  const bundleComponentResults = await getSaleItemBundleComponentsBySaleId(
+    saleId,
+    tx,
+  );
 
     const addOnsBySaleItemId = new Map<string, SaleItemAddOnDTO[]>();
     for (const addOn of addOnResults) {
@@ -992,15 +1066,20 @@ export const getSaleItemsBySaleId = async (saleId: string, tx?: Bun.TransactionS
         addOnsBySaleItemId.set(addOn.saleItemId, existing);
     }
 
-    const bundleComponentsBySaleItemId = new Map<string, SaleItemBundleComponentDTO[]>();
+  const bundleComponentsBySaleItemId = new Map<
+    string,
+    SaleItemBundleComponentDTO[]
+  >();
     for (const component of bundleComponentResults) {
-        const existing = bundleComponentsBySaleItemId.get(component.saleItemId) ?? [];
+    const existing =
+      bundleComponentsBySaleItemId.get(component.saleItemId) ?? [];
         existing.push(component);
         bundleComponentsBySaleItemId.set(component.saleItemId, existing);
     }
 
     return itemResults.map((result: Record<string, unknown>) => {
-        const item = mapRow<Omit<SaleItemDTO, "addOns" | "bundleComponents">>(result);
+    const item =
+      mapRow<Omit<SaleItemDTO, "addOns" | "bundleComponents">>(result);
         return {
             ...item,
             configurationSignature: String(item.configurationSignature ?? ""),
@@ -1023,7 +1102,10 @@ export const createPayment = async (
     return result ? mapRow<PaymentDTO>(result) : null;
 };
 
-export const getPaymentsBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<PaymentDTO[]> => {
+export const getPaymentsBySaleId = async (
+  saleId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<PaymentDTO[]> => {
     const db = tx || pg;
     const results = await db`
         SELECT *
@@ -1032,10 +1114,15 @@ export const getPaymentsBySaleId = async (saleId: string, tx?: Bun.TransactionSQ
         ORDER BY collected_at ASC, created_at ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<PaymentDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<PaymentDTO>(result),
+  );
 };
 
-export const getPaidTotalBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<number> => {
+export const getPaidTotalBySaleId = async (
+  saleId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<number> => {
     const db = tx || pg;
     const [result] = await db`
         SELECT COALESCE(SUM(amount), 0) AS total
@@ -1046,7 +1133,10 @@ export const getPaidTotalBySaleId = async (saleId: string, tx?: Bun.TransactionS
     return Number(result?.total ?? 0);
 };
 
-export const countPaymentsBySaleId = async (saleId: string, tx?: Bun.TransactionSQL): Promise<number> => {
+export const countPaymentsBySaleId = async (
+  saleId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<number> => {
     const db = tx || pg;
     const [result] = await db`
         SELECT COUNT(*)::int AS total
@@ -1296,7 +1386,9 @@ export const getParentScopedAddOnSalesRollups = async (
             MAX(sia.add_on_name_snapshot) ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<ParentScopedAddOnSalesRollupDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<ParentScopedAddOnSalesRollupDTO>(result),
+  );
 };
 
 export const getAddOnScopedSalesRollups = async (
@@ -1329,7 +1421,9 @@ export const getAddOnScopedSalesRollups = async (
         ORDER BY MAX(sia.add_on_name_snapshot) ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<AddOnScopedSalesRollupDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<AddOnScopedSalesRollupDTO>(result),
+  );
 };
 
 export const getBundleCommercialSalesRollups = async (
@@ -1365,7 +1459,9 @@ export const getBundleCommercialSalesRollups = async (
         ORDER BY MAX(si.product_name_snapshot) ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<BundleCommercialSalesRollupDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<BundleCommercialSalesRollupDTO>(result),
+  );
 };
 
 export const getBundleComponentProductUsageRollups = async (
@@ -1397,7 +1493,9 @@ export const getBundleComponentProductUsageRollups = async (
         ORDER BY MAX(si.product_name_snapshot) ASC, MAX(sibc.product_name_snapshot) ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<BundleComponentProductUsageRollupDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<BundleComponentProductUsageRollupDTO>(result),
+  );
 };
 
 export const getBundleComponentAddOnUsageRollups = async (
@@ -1440,5 +1538,7 @@ export const getBundleComponentAddOnUsageRollups = async (
             MAX(sibca.add_on_name_snapshot) ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<BundleComponentAddOnUsageRollupDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<BundleComponentAddOnUsageRollupDTO>(result),
+  );
 };

@@ -1,6 +1,6 @@
 import type { DeviceSessionDTO, SaleDetailDTO, ServiceTableDTO, TableOrderDTO } from "@repo/types";
 
-export type PosPanelTab = "products" | "tables" | "bills" | "reports" | "customers" | "purchases" | "whatsapp";
+export type PosPanelTab = "products" | "tables" | "bills" | "kots" | "reports" | "customers" | "purchases" | "whatsapp";
 
 export type PosComposerHandoff = {
     sale: SaleDetailDTO | null;
@@ -13,6 +13,7 @@ export const posPanelConfig = {
     products: { path: "/", searchPlaceholder: "Search products..." },
     tables: { path: "/tables", searchPlaceholder: "" },
     bills: { path: "/bills", searchPlaceholder: "Search bills..." },
+    kots: { path: "/kots", searchPlaceholder: "" },
     reports: { path: "/reports", searchPlaceholder: "" },
     customers: { path: "/customers", searchPlaceholder: "Search customers..." },
     purchases: { path: "/purchases", searchPlaceholder: "Search purchases..." },

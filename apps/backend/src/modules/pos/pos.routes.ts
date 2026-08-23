@@ -22,9 +22,9 @@ import {
   WhatsAppAttachConversationCustomerSchema,
   WhatsAppSendConversationTextSchema,
   WhatsAppDueReminderRequestSchema,
-  CreateParcelKotSchema,
   CreateTableKotSchema,
   UpdateTableKotSchema,
+  UpdateStandaloneKotSchema,
   UpdateTableOrderSchema,
   CheckoutTableOrderSchema,
 } from "@repo/types";
@@ -63,9 +63,28 @@ router.use("*", deviceAuthMiddleware);
 router.get("/whatsapp/templates", async (c) => {
   try {
     const rawKind = c.req.query("kind");
-    const kind = rawKind === "bill" || rawKind === "due_reminder" || rawKind === "promotion" ? rawKind : undefined;
-    if (rawKind && !kind) return c.json({ status: "error", message: "Invalid template kind", code: STATUS_CODES.BAD_REQUEST }, STATUS_CODES.BAD_REQUEST);
-    return handleServiceResponse(c, await whatsappService.listMessageTemplatesForDevice(c.get("authDevice"), kind));
+    const kind =
+      rawKind === "bill" ||
+      rawKind === "due_reminder" ||
+      rawKind === "promotion"
+        ? rawKind
+        : undefined;
+    if (rawKind && !kind)
+      return c.json(
+        {
+          status: "error",
+          message: "Invalid template kind",
+          code: STATUS_CODES.BAD_REQUEST,
+        },
+        STATUS_CODES.BAD_REQUEST,
+      );
+    return handleServiceResponse(
+      c,
+      await whatsappService.listMessageTemplatesForDevice(
+        c.get("authDevice"),
+        kind,
+      ),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "listMessageTemplatesForDevice", c, error);
   }
@@ -200,7 +219,12 @@ router.patch(
         ),
       );
     } catch (error) {
-      return handleError(FILE_NAME, "updateActiveTableOrderForDevice", c, error);
+      return handleError(
+        FILE_NAME,
+        "updateActiveTableOrderForDevice",
+        c,
+        error,
+      );
     }
   },
 );
@@ -249,6 +273,32 @@ router.patch(
       );
     } catch (error) {
       return handleError(FILE_NAME, "updateTableKotForDevice", c, error);
+    }
+  },
+);
+
+router.patch(
+  "/sales/:saleId/kots/:kotId",
+  validateSchema("json", UpdateStandaloneKotSchema),
+  async (c) => {
+    try {
+      const saleId = c.req.param("saleId");
+      const kotId = c.req.param("kotId");
+      const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+      if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
+      const invalidKotId = validateUuidParam(kotId, "Invalid KOT id");
+      if (invalidKotId) return c.json(invalidKotId, invalidKotId.code);
+      return handleServiceResponse(
+        c,
+        await kotService.updateStandaloneKotForDevice(
+          c.get("authDevice"),
+          saleId,
+          kotId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "updateStandaloneKotForDevice", c, error);
     }
   },
 );
@@ -549,13 +599,25 @@ router.post("/sales/:saleId/whatsapp", async (c) => {
     const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
     if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
     const payload = await c.req.json().catch(() => ({}));
-    const customMessage = typeof payload?.customMessage === "string" ? payload.customMessage : undefined;
-    const templateId = typeof payload?.templateId === "string" ? payload.templateId : undefined;
-    const invalidTemplateId = templateId ? validateUuidParam(templateId, "Invalid template id") : null;
-    if (invalidTemplateId) return c.json(invalidTemplateId, invalidTemplateId.code);
+    const customMessage =
+      typeof payload?.customMessage === "string"
+        ? payload.customMessage
+        : undefined;
+    const templateId =
+      typeof payload?.templateId === "string" ? payload.templateId : undefined;
+    const invalidTemplateId = templateId
+      ? validateUuidParam(templateId, "Invalid template id")
+      : null;
+    if (invalidTemplateId)
+      return c.json(invalidTemplateId, invalidTemplateId.code);
     return handleServiceResponse(
       c,
-      await whatsappService.queueInvoiceForDevice(c.get("authDevice"), saleId, customMessage, templateId),
+      await whatsappService.queueInvoiceForDevice(
+        c.get("authDevice"),
+        saleId,
+        customMessage,
+        templateId,
+      ),
     );
   } catch (error) {
     return handleError(FILE_NAME, "queueInvoiceForDevice", c, error);
@@ -583,8 +645,20 @@ router.post("/customers/:customerId/whatsapp/due-reminder", async (c) => {
     if (invalid) return c.json(invalid, invalid.code);
     const payload = await c.req.json().catch(() => ({}));
     const parsed = WhatsAppDueReminderRequestSchema.safeParse(payload);
-    if (!parsed.success) return c.json({ status: "error", message: "Invalid due reminder request" }, STATUS_CODES.BAD_REQUEST);
-    return handleServiceResponse(c, await whatsappService.queueDueReminderForDevice(c.get("authDevice"), customerId, parsed.data.customMessage, parsed.data.saleId));
+    if (!parsed.success)
+      return c.json(
+        { status: "error", message: "Invalid due reminder request" },
+        STATUS_CODES.BAD_REQUEST,
+      );
+    return handleServiceResponse(
+      c,
+      await whatsappService.queueDueReminderForDevice(
+        c.get("authDevice"),
+        customerId,
+        parsed.data.customMessage,
+        parsed.data.saleId,
+      ),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "queueDueReminderForDevice", c, error);
   }
@@ -595,7 +669,13 @@ router.get("/sales/:saleId/whatsapp/due-reminder", async (c) => {
     const saleId = c.req.param("saleId");
     const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
     if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
-    return handleServiceResponse(c, await whatsappService.getDueReminderStatusForDevice(c.get("authDevice"), saleId));
+    return handleServiceResponse(
+      c,
+      await whatsappService.getDueReminderStatusForDevice(
+        c.get("authDevice"),
+        saleId,
+      ),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "getDueReminderStatusForDevice", c, error);
   }
@@ -883,21 +963,30 @@ router.post(
   },
 );
 
-router.post(
-  "/kots/parcel",
-  validateSchema("json", CreateParcelKotSchema),
-  async (c) => {
-    try {
-      const serviceResponse = await kotService.createParcelKotForDevice(
-        c.get("authDevice"),
-        c.req.valid("json"),
-      );
-      return handleServiceResponse(c, serviceResponse);
-    } catch (error) {
-      return handleError(FILE_NAME, "createParcelKotForDevice", c, error);
-    }
-  },
-);
+router.get("/kots", async (c) => {
+  try {
+    return handleServiceResponse(
+      c,
+      await kotService.listKitchenKotsForDevice(c.get("authDevice")),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "listKitchenKotsForDevice", c, error);
+  }
+});
+
+router.post("/kots/:kotId/complete", async (c) => {
+  try {
+    const kotId = c.req.param("kotId");
+    const invalidKotId = validateUuidParam(kotId, "Invalid KOT id");
+    if (invalidKotId) return c.json(invalidKotId, invalidKotId.code);
+    return handleServiceResponse(
+      c,
+      await kotService.completeKitchenKotForDevice(c.get("authDevice"), kotId),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "completeKitchenKotForDevice", c, error);
+  }
+});
 
 router.get("/sales/:saleId", async (c) => {
   try {

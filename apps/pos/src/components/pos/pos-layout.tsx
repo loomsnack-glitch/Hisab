@@ -266,7 +266,12 @@ const PosLayout = ({
     };
 
     return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground [--pos-header-height:6.5rem] [--pos-mobile-nav-height:calc(3.375rem+env(safe-area-inset-bottom,0px))] sm:[--pos-header-height:3.5rem] lg:h-dvh lg:flex-row lg:[--pos-mobile-nav-height:0px] lg:overflow-hidden">
+    <div className={cn(
+        "flex min-h-dvh flex-col bg-background text-foreground [--pos-mobile-nav-height:calc(3.375rem+env(safe-area-inset-bottom,0px))] lg:h-dvh lg:flex-row lg:[--pos-mobile-nav-height:0px] lg:overflow-hidden",
+        showSearch
+            ? "[--pos-header-height:6.5rem] sm:[--pos-header-height:3.5rem]"
+            : "[--pos-header-height:3.5rem]",
+    )}>
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.1),_transparent_28%)]" />
             </div>
@@ -283,6 +288,7 @@ const PosLayout = ({
                         onToggle={toggleSidebar}
                         billsCount={billsCount}
                         tableManagementEnabled={session.store.tableManagementEnabled}
+                        kotSystemEnabled={session.store.kotSystemEnabled}
                     />
                 </div>
             </aside>
@@ -487,11 +493,12 @@ const PosLayout = ({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <main className="min-h-0 w-full flex-1 overflow-hidden px-0 max-lg:pb-[var(--pos-mobile-nav-height)]">{children}</main>
+            <main className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden px-0 max-lg:pb-[var(--pos-mobile-nav-height)]">{children}</main>
 
             <PosMobileBottomNav
                 billsCount={billsCount}
                 tableManagementEnabled={session.store.tableManagementEnabled}
+                kotSystemEnabled={session.store.kotSystemEnabled}
             />
             </div>
         </div>
