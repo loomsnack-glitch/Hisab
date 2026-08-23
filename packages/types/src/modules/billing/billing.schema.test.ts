@@ -202,6 +202,10 @@ describe("Configured sale billing contracts", () => {
             customer: null,
             orderDiscountAmount: 0,
             payments: [],
+      kotHistory: [
+        { kotNumber: "KOT-001", fulfillmentType: "dine_in" },
+        { kotNumber: "KOT-002", fulfillmentType: "pick_up" },
+      ],
             items: [
                 {
                     id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -245,8 +249,14 @@ describe("Configured sale billing contracts", () => {
         expect(result.success).toBe(true);
         if (result.success) {
             expect(result.data.items[0]?.addOns).toHaveLength(1);
-            expect(result.data.items[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+      expect(result.data.items[0]?.addOns[0]?.addOnNameSnapshot).toBe(
+        "Extra Cheese",
+      );
             expect(result.data.items[0]?.bundleComponents).toEqual([]);
+      expect(result.data.kotHistory).toEqual([
+        { kotNumber: "KOT-001", fulfillmentType: "dine_in" },
+        { kotNumber: "KOT-002", fulfillmentType: "pick_up" },
+      ]);
         }
     });
 
@@ -320,7 +330,8 @@ describe("Configured sale billing contracts", () => {
                                     storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
                                     saleId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
                                     saleItemId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-                                    saleItemBundleComponentId: "11111111-1111-4111-8111-111111111111",
+                  saleItemBundleComponentId:
+                    "11111111-1111-4111-8111-111111111111",
                                     addOnId: "44444444-4444-4444-8444-444444444444",
                                     quantityPerComponent: 1,
                                     totalQuantity: 1,
@@ -340,8 +351,12 @@ describe("Configured sale billing contracts", () => {
         expect(result.success).toBe(true);
         if (result.success) {
             expect(result.data.items[0]?.bundleComponents).toHaveLength(1);
-            expect(result.data.items[0]?.bundleComponents[0]?.productNameSnapshot).toBe("Burger");
-            expect(result.data.items[0]?.bundleComponents[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+      expect(
+        result.data.items[0]?.bundleComponents[0]?.productNameSnapshot,
+      ).toBe("Burger");
+      expect(
+        result.data.items[0]?.bundleComponents[0]?.addOns[0]?.addOnNameSnapshot,
+      ).toBe("Extra Cheese");
             expect(result.data.subtotal).toBe(99);
         }
     });

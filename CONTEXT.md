@@ -123,6 +123,10 @@ _Avoid_: Sale Number, Token Number, UUID, separate table and parcel sequences, c
 The lifecycle state of a Sale. In billing v1, a Sale may be draft, completed, or voided.
 _Avoid_: Payment status, order state
 
+**Sale Service Mode**:
+The Dine-In or Pick-Up fulfillment mode stored on a Draft Sale or completed Sale and shown in bill details. A Table-Linked Sale always remains Dine-In, even when its Table Order contains Pick-Up KOTs. When KOT generation is selected, the dialog's fulfillment selection is copied to the generated KOT; for a table KOT, it does not change the Table-Linked Sale.
+_Avoid_: Display-only order type, KOT-only fulfillment mode
+
 **Walk-in Sale**:
 A completed and fully paid Sale that does not belong to a specific Customer. Walk-in Sales are allowed in billing v1.
 _Avoid_: Anonymous receivable, guest credit sale
@@ -208,7 +212,7 @@ An Active Table Order intentionally abandoned before checkout because the guests
 _Avoid_: Discarded Table Draft, void completed sale, unpaid cancellation, retained abandoned cart
 
 **KOT System**:
-An optional Store feature that enables parcel KOTs; table KOTs are available only when the Store also enables Table Management.
+An optional Store feature that enables KOT generation. KOTs may be used for table service only when the Store also enables Table Management.
 _Avoid_: Table Management, required restaurant workflow, table-only KOT feature
 
 **Table Order**:
@@ -216,12 +220,12 @@ The non-financial parent record for a seated party's service, which collects one
 _Avoid_: Draft Sale, table cart, parallel table bill
 
 **Kitchen Order Ticket (KOT)**:
-An editable, non-financial kitchen work order for food or drink items, associated either with a Table Order or a parcel order. Each KOT item retains the trusted product configuration and price at KOT generation; editing a KOT does not require a change printout for the kitchen, and only its remaining items at checkout contribute to the final Sale.
+An editable, non-financial kitchen work order for one batch of food or drink items. A KOT may belong to a Table Order or be standalone, and its fulfillment type is Dine-In or Pick-Up. A standalone KOT is created alongside the Sale that the cashier saves as a Draft Sale or places as a completed Sale; a later KOT for that Sale contains only newly added items. Each KOT item retains the trusted product configuration and price at KOT generation; editing a KOT does not require a change printout for the kitchen, and only its remaining items at checkout contribute to the final Sale.
 _Avoid_: Final bill, completed sale, immutable kitchen ticket
 
 **Parcel KOT**:
-A KOT for a takeaway order that has no Table Order. Generating it immediately creates the final Sale with a pending payment status.
-_Avoid_: Table KOT, unpaid draft sale, tableless table order
+A KOT whose fulfillment type is Pick-Up. A standalone Parcel KOT may accompany either a Draft Sale or a completed Sale; a Parcel KOT in a Table Order remains part of that order and is paid at the table's final checkout.
+_Avoid_: Tableless KOT, separate parcel sale for a table order, all standalone KOTs
 
 **Table-Linked Sale**:
 A Sale associated with a Service Table as the setting in which it was ordered. The association may remain as historical context after the table is released for another guest.

@@ -9,9 +9,8 @@ import { Check, ChefHat } from "lucide-react";
 import { toast } from "sonner";
 
 import { kotKeys } from "@/lib/query-keys";
+import { getKitchenKotContext } from "@/lib/pos-kitchen-kot";
 import type { PosRouteContext } from "@/pages/pos-route-context";
-
-const formatTableLabel = (tableLabel: string | null) => tableLabel ?? "Parcel";
 
 const formatItemLine = (item: KitchenKotDTO["items"][number]) =>
     `${item.quantity}× ${item.productNameSnapshot}`;
@@ -37,7 +36,9 @@ const PosKotsPage = () => {
             toast.success(response.message || "KOT completed");
         },
         onError: (error) => {
-            toast.error((error as { message?: string })?.message || "Could not complete KOT");
+      toast.error(
+        (error as { message?: string })?.message || "Could not complete KOT",
+      );
         },
     });
 
@@ -49,7 +50,9 @@ const PosKotsPage = () => {
     if (!session.store.kotSystemEnabled) {
         return (
             <div className="flex h-full items-center justify-center px-6 py-10">
-                <p className="text-sm text-muted-foreground">KOT System is not enabled for this store.</p>
+        <p className="text-sm text-muted-foreground">
+          KOT System is not enabled for this store.
+        </p>
             </div>
         );
     }
@@ -88,7 +91,9 @@ const PosKotsPage = () => {
             <div className="border-b border-border/50 px-4 py-4 sm:px-6">
                 <div className="flex items-center gap-2">
                     <ChefHat className="size-5 text-primary" />
-                    <h1 className="font-display text-xl font-semibold tracking-tight">Kitchen Orders</h1>
+          <h1 className="font-display text-xl font-semibold tracking-tight">
+            Kitchen Orders
+          </h1>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
                     {kots.length === 0
@@ -102,7 +107,9 @@ const PosKotsPage = () => {
                     <div className="flex h-full min-h-48 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/40 px-6 py-10 text-center">
                         <div>
                             <ChefHat className="mx-auto size-8 text-muted-foreground/70" />
-                            <p className="mt-3 text-sm font-medium text-foreground">All caught up</p>
+              <p className="mt-3 text-sm font-medium text-foreground">
+                All caught up
+              </p>
                             <p className="mt-1 text-sm text-muted-foreground">
                                 New KOTs will appear here when orders are sent to the kitchen.
                             </p>
@@ -112,7 +119,9 @@ const PosKotsPage = () => {
                     <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
                         {kots.map((kot) => {
                             const isCompleting =
-                                completeMutation.isPending && completeMutation.variables === kot.id;
+                completeMutation.isPending &&
+                completeMutation.variables === kot.id;
+              const context = getKitchenKotContext(kot);
 
                             return (
                                 <Card
@@ -131,9 +140,9 @@ const PosKotsPage = () => {
                                             </div>
                                             <div className="rounded-xl bg-muted/60 px-3 py-2 text-right">
                                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                    Table
+                          {context.label}
                                                 </p>
-                                                <p className="text-lg font-semibold">{formatTableLabel(kot.tableLabel)}</p>
+                        <p className="text-lg font-semibold">{context.value}</p>
                                             </div>
                                         </div>
 

@@ -24,11 +24,25 @@ import {
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 
-const mapKot = (row: Record<string, unknown>, items: KotItemDTO[] = []): KotDTO => ({
+const mapKot = (
+  row: Record<string, unknown>,
+  items: KotItemDTO[] = [],
+): KotDTO => ({
     ...mapRow<Omit<KotDTO, "items">>(row),
     saleId: (row.sale_id as string | null | undefined) ?? null,
     tableOrderId: (row.table_order_id as string | null | undefined) ?? null,
-    kitchenCompletedAt: (row.kitchen_completed_at as Date | null | undefined) ?? null,
+  kitchenCompletedAt:
+    (row.kitchen_completed_at as Date | null | undefined) ?? null,
+  saleBatchSequence:
+    row.sale_batch_sequence == null ? null : Number(row.sale_batch_sequence),
+  generationRequestId:
+    (row.generation_request_id as string | null | undefined) ?? null,
+  fulfillmentType:
+    row.fulfillment_type === "pick_up"
+      ? "pick_up"
+      : row.fulfillment_type === "dine_in"
+        ? "dine_in"
+        : "dine_in",
     items,
 });
 
@@ -40,7 +54,10 @@ const remainingTotalsFromKots = (kots: KotDTO[]) => {
                 (itemSum, item) =>
                     itemSum +
                     Number(item.lineSubtotal ?? 0) +
-                    item.addOns.reduce((addOnSum, addOn) => addOnSum + Number(addOn.lineSubtotal ?? 0), 0),
+          item.addOns.reduce(
+            (addOnSum, addOn) => addOnSum + Number(addOn.lineSubtotal ?? 0),
+            0,
+          ),
                 0,
             ),
         0,
@@ -52,7 +69,10 @@ const remainingTotalsFromKots = (kots: KotDTO[]) => {
                 (itemSum, item) =>
                     itemSum +
                     Number(item.discountAmount ?? 0) +
-                    item.addOns.reduce((addOnSum, addOn) => addOnSum + Number(addOn.discountAmount ?? 0), 0),
+          item.addOns.reduce(
+            (addOnSum, addOn) => addOnSum + Number(addOn.discountAmount ?? 0),
+            0,
+          ),
                 0,
             ),
         0,
@@ -68,15 +88,59 @@ const mapTableOrder = (
     row: Record<string, unknown>,
     kots: KotDTO[] = [],
 ): TableOrderDTO => ({
-    ...mapRow<Omit<TableOrderDTO, "kots" | "remainingSubtotal" | "remainingDiscountTotal" | "remainingGrandTotal">>(
-        row,
-    ),
+  ...mapRow<
+    Omit<
+      TableOrderDTO,
+      | "kots"
+      | "remainingSubtotal"
+      | "remainingDiscountTotal"
+      | "remainingGrandTotal"
+    >
+  >(row),
     customerId: (row.customer_id as string | null | undefined) ?? null,
     saleId: (row.sale_id as string | null | undefined) ?? null,
     notes: (row.notes as string | null | undefined) ?? null,
     kots,
     ...remainingTotalsFromKots(kots),
 });
+
+export const allocateSaleBatchSequence = async (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<number> => {
+  const db = tx || pg;
+  const [result] = await db`
+        SELECT COALESCE(MAX(sale_batch_sequence), 0) + 1 AS next_sequence
+        FROM kots
+        WHERE sale_id = ${saleId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND kot_type = 'parcel'
+    `;
+  return Number(result?.next_sequence ?? 1);
+};
+
+export const getKotByGenerationRequestId = async (
+  organizationId: string,
+  storeId: string,
+  generationRequestId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<KotDTO | null> => {
+  const db = tx || pg;
+  const [result] = await db`
+        SELECT *
+        FROM kots
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND generation_request_id = ${generationRequestId}
+        LIMIT 1
+    `;
+  return result
+    ? mapKot(result, await getKotItemsByKotId(String(result.id), tx))
+    : null;
+};
 
 export const allocateKotNumber = async (
     organizationId: string,
@@ -96,7 +160,8 @@ export const allocateKotNumber = async (
           AND store_id = ${storeId}
     `;
     const timezone =
-        typeof settingsRow?.sale_number_timezone === "string" && settingsRow.sale_number_timezone.trim()
+    typeof settingsRow?.sale_number_timezone === "string" &&
+    settingsRow.sale_number_timezone.trim()
             ? settingsRow.sale_number_timezone
             : DEFAULT_SALE_NUMBER_TIMEZONE;
     const periodKey = getKotNumberPeriodKey(generatedAt, timezone);
@@ -256,7 +321,9 @@ const getKotItemAddOnsByKotId = async (
         WHERE kot_id = ${kotId}
         ORDER BY created_at ASC
     `;
-    return results.map((result: Record<string, unknown>) => mapRow<KotItemAddOnDTO>(result));
+  return results.map((result: Record<string, unknown>) =>
+    mapRow<KotItemAddOnDTO>(result),
+  );
 };
 
 const getKotItemBundleComponentAddOnsByKotId = async (
@@ -280,9 +347,13 @@ const getKotItemBundleComponentsByKotId = async (
     tx?: Bun.TransactionSQL,
 ): Promise<KotItemBundleComponentDTO[]> => {
     const addOns = await getKotItemBundleComponentAddOnsByKotId(kotId, tx);
-    const addOnsByComponentId = new Map<string, KotItemBundleComponentAddOnDTO[]>();
+  const addOnsByComponentId = new Map<
+    string,
+    KotItemBundleComponentAddOnDTO[]
+  >();
     for (const addOn of addOns) {
-        const existing = addOnsByComponentId.get(addOn.kotItemBundleComponentId) ?? [];
+    const existing =
+      addOnsByComponentId.get(addOn.kotItemBundleComponentId) ?? [];
         existing.push(addOn);
         addOnsByComponentId.set(addOn.kotItemBundleComponentId, existing);
     }
@@ -317,7 +388,10 @@ export const getKotItemsByKotId = async (
         ORDER BY created_at ASC
     `;
     const addOnResults = await getKotItemAddOnsByKotId(kotId, tx);
-    const bundleComponentResults = await getKotItemBundleComponentsByKotId(kotId, tx);
+  const bundleComponentResults = await getKotItemBundleComponentsByKotId(
+    kotId,
+    tx,
+  );
 
     const addOnsByItemId = new Map<string, KotItemAddOnDTO[]>();
     for (const addOn of addOnResults) {
@@ -334,7 +408,8 @@ export const getKotItemsByKotId = async (
     }
 
     return itemResults.map((result: Record<string, unknown>) => {
-        const item = mapRow<Omit<KotItemDTO, "addOns" | "bundleComponents">>(result);
+    const item =
+      mapRow<Omit<KotItemDTO, "addOns" | "bundleComponents">>(result);
         return {
             ...item,
             configurationSignature: String(item.configurationSignature ?? ""),
@@ -378,12 +453,42 @@ export const getKotBySaleId = async (
         WHERE sale_id = ${saleId}
           AND organization_id = ${organizationId}
           AND store_id = ${storeId}
+        ORDER BY
+            sale_batch_sequence ASC NULLS LAST,
+            created_at ASC,
+            kot_sequence_number ASC
+        LIMIT 1
     `;
     if (!result) {
         return null;
     }
 
     return mapKot(result, await getKotItemsByKotId(String(result.id), tx));
+};
+
+export const getKotsBySaleId = async (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<KotDTO[]> => {
+  const db = tx || pg;
+  const results = await db`
+        SELECT *
+        FROM kots
+        WHERE sale_id = ${saleId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+        ORDER BY
+            sale_batch_sequence ASC NULLS LAST,
+            created_at ASC,
+            kot_sequence_number ASC
+    `;
+  const kots: KotDTO[] = [];
+  for (const result of results) {
+    kots.push(mapKot(result, await getKotItemsByKotId(String(result.id), tx)));
+  }
+  return kots;
 };
 
 export const getKotNumbersBySaleId = async (
@@ -399,7 +504,10 @@ export const getKotNumbersBySaleId = async (
         WHERE sale_id = ${saleId}
           AND organization_id = ${organizationId}
           AND store_id = ${storeId}
-        ORDER BY created_at ASC, kot_sequence_number ASC
+        ORDER BY
+            sale_batch_sequence ASC NULLS LAST,
+            created_at ASC,
+            kot_sequence_number ASC
     `;
     return results.map((row) => String(row.kot_number));
 };
@@ -417,7 +525,10 @@ export const getKotsByTableOrderId = async (
         WHERE table_order_id = ${tableOrderId}
           AND organization_id = ${organizationId}
           AND store_id = ${storeId}
-        ORDER BY created_at ASC, kot_sequence_number ASC
+        ORDER BY
+            sale_batch_sequence ASC NULLS LAST,
+            created_at ASC,
+            kot_sequence_number ASC
     `;
     const kots: KotDTO[] = [];
     for (const result of results) {
@@ -642,6 +753,7 @@ export const listPendingKitchenKots = async (
             kots.id,
             kots.kot_number,
             kots.kot_type,
+            kots.fulfillment_type,
             service_tables.table_label
         FROM kots
         LEFT JOIN table_orders
@@ -665,6 +777,8 @@ export const listPendingKitchenKots = async (
         kots.push({
             id: kotId,
             kotNumber: String(result.kot_number),
+      fulfillmentType:
+        result.fulfillment_type === "pick_up" ? "pick_up" : "dine_in",
             tableLabel:
                 result.kot_type === "parcel"
                     ? null

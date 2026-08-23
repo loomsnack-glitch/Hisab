@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
-import { CreatePaymentSchema, SaleItemInputSchema } from "../billing/billing.schema";
+import {
+  CreatePaymentSchema,
+  SaleItemInputSchema,
+  UpdateDraftSaleSchema,
+} from "../billing/billing.schema";
 
 const nameSchema = z
   .string()
@@ -27,6 +31,8 @@ const optionalNotesSchema = z
 
 export const KotTypeSchema = z.enum(["table", "parcel"]);
 
+export const KotFulfillmentTypeSchema = z.enum(["dine_in", "pick_up"]);
+
 export const KotItemAddOnDTOSchema = z.object({
   id: z.uuid("Invalid KOT item add-on id"),
   organizationId: z.uuid("Invalid organization id"),
@@ -45,7 +51,6 @@ export const KotItemAddOnDTOSchema = z.object({
   createdAt: dtoDateSchema,
   updatedAt: dtoDateSchema,
 });
-
 export const KotItemBundleComponentAddOnDTOSchema = z.object({
   id: z.uuid("Invalid KOT item bundle component add-on id"),
   organizationId: z.uuid("Invalid organization id"),
@@ -110,8 +115,25 @@ export const KotDTOSchema = z.object({
   organizationId: z.uuid("Invalid organization id"),
   storeId: z.uuid("Invalid store id"),
   saleId: z.uuid("Invalid sale id").nullable(),
-  tableOrderId: z.uuid("Invalid table order id").nullable().optional().default(null),
+  tableOrderId: z
+    .uuid("Invalid table order id")
+    .nullable()
+    .optional()
+    .default(null),
   kotType: KotTypeSchema,
+  fulfillmentType: KotFulfillmentTypeSchema,
+  saleBatchSequence: z
+    .number()
+    .int()
+    .positive()
+    .nullable()
+    .optional()
+    .default(null),
+  generationRequestId: z
+    .uuid("Invalid generation request id")
+    .nullable()
+    .optional()
+    .default(null),
   kotNumber: z.string().min(1).max(64),
   kotSequenceNumber: z.number().int().positive(),
   kotPeriodKey: z.string().min(1).max(32),
@@ -131,6 +153,7 @@ export const KitchenKotItemSummarySchema = z.object({
 export const KitchenKotDTOSchema = z.object({
   id: z.uuid("Invalid KOT id"),
   kotNumber: z.string().min(1).max(64),
+  fulfillmentType: KotFulfillmentTypeSchema,
   tableLabel: z.string().nullable(),
   items: z.array(KitchenKotItemSummarySchema).default([]),
 });
@@ -139,7 +162,11 @@ export const KitchenKotsListResponseSchema = z.object({
   kots: z.array(KitchenKotDTOSchema).default([]),
 });
 
-export const TableOrderStatusSchema = z.enum(["active", "checked_out", "discarded"]);
+export const TableOrderStatusSchema = z.enum([
+  "active",
+  "checked_out",
+  "discarded",
+]);
 
 export const TableOrderDTOSchema = z.object({
   id: z.uuid("Invalid table order id"),
@@ -161,7 +188,9 @@ export const TableOrderDTOSchema = z.object({
 });
 
 export const CreateTableKotSchema = z.object({
+  requestId: z.uuid("Invalid KOT generation request id"),
   items: z.array(SaleItemInputSchema).min(1, "At least one item is required"),
+  fulfillmentType: KotFulfillmentTypeSchema.optional().default("dine_in"),
   customerId: z
     .union([z.literal(""), z.uuid("Invalid customer id")])
     .nullable()
@@ -171,6 +200,13 @@ export const CreateTableKotSchema = z.object({
 
 export const UpdateTableKotSchema = z.object({
   items: z.array(SaleItemInputSchema),
+});
+
+export const UpdateStandaloneKotSchema = z.object({
+  items: z
+    .array(SaleItemInputSchema)
+    .min(1, "At least one KOT item is required"),
+  sale: UpdateDraftSaleSchema,
 });
 
 export const UpdateTableOrderSchema = z.object({
@@ -190,15 +226,4 @@ export const CheckoutTableOrderSchema = z.object({
   orderDiscountAmount: moneySchema.optional(),
   notes: optionalNotesSchema,
   payments: z.array(CreatePaymentSchema).optional().default([]),
-});
-
-export const CreateParcelKotSchema = z.object({
-  requestId: z.uuid("Invalid completion request id"),
-  customerId: z
-    .union([z.literal(""), z.uuid("Invalid customer id")])
-    .nullable()
-    .optional(),
-  orderDiscountAmount: moneySchema.optional(),
-  notes: optionalNotesSchema,
-  items: z.array(SaleItemInputSchema).min(1, "At least one item is required"),
 });

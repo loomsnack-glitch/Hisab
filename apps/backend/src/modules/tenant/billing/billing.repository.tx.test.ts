@@ -37,3 +37,31 @@ describe("Sale item reads on a reserved connection", () => {
         expect(tx.maxInFlight()).toBe(1);
     });
 });
+
+describe("Sale Service Mode updates", () => {
+  test("preserves the stored mode when a non-order update omits serviceMode", async () => {
+    let sql = "";
+    const tx = (strings: TemplateStringsArray) => {
+      sql = strings.join("?");
+      return Promise.resolve([]);
+    };
+
+    await billingRepository.updateSale(
+      {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        storeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        status: "completed",
+        paymentStatus: "paid",
+        subtotal: 100,
+        discountTotal: 0,
+        grandTotal: 100,
+      },
+      tx as never,
+    );
+
+    expect(sql).toContain("service_mode = COALESCE");
+    expect(sql).toContain("::sale_service_mode_enum");
+    expect(sql).not.toContain("service_mode = ?");
+  });
+});

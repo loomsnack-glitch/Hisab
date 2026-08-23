@@ -341,7 +341,11 @@ const SaleDetailDialog = ({
                                                     Token {sale.tokenNumber}
                                                 </p>
                                             ) : null}
-                                            {sale.kotNumbers && sale.kotNumbers.length > 0 ? (
+                                            {sale.kotHistory && sale.kotHistory.length > 0 ? (
+                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                                    KOT history {sale.kotHistory.map((kot) => `${kot.kotNumber} · ${kot.fulfillmentType === "pick_up" ? "Pick-Up" : "Dine-In"}`).join(", ")}
+                                                </p>
+                                            ) : sale.kotNumbers && sale.kotNumbers.length > 0 ? (
                                                 <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                                                     KOT token numbers {sale.kotNumbers.join(", ")}
                                                 </p>

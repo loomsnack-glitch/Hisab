@@ -8,13 +8,11 @@ import {
     STATUS_CODES,
     type CheckoutTableOrderSVC,
     type CreateKotItemREPO,
-    type CreateParcelKotSVC,
     type CreateTableKotSVC,
     type DeviceSessionDTO,
     type KotDTO,
     type KitchenKotsListResponse,
     type KotItemDTO,
-    type ParcelKotResponse,
     type SaleDetailDTO,
     type SaleItemInput,
     type ServiceResponse,
@@ -22,15 +20,20 @@ import {
     type ServiceTableSaleResponse,
     type TableOrderDTO,
     type UpdateTableKotSVC,
+  type UpdateStandaloneKotSVC,
     type UpdateTableOrderSVC,
 } from "@repo/types";
 
-const moneyFrom = (value: number | string | null | undefined) => Number(value ?? 0);
+const moneyFrom = (value: number | string | null | undefined) =>
+  Number(value ?? 0);
 
-const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const roundMoney = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
 
-const configurationKeyFor = (productId: string, configurationSignature: string) =>
-    `${productId}::${configurationSignature}`;
+const configurationKeyFor = (
+  productId: string,
+  configurationSignature: string,
+) => `${productId}::${configurationSignature}`;
 
 const bundleComponentKeyFor = (
     choiceGroupId: string | null | undefined,
@@ -41,7 +44,10 @@ const mergeKotItemsByConfiguration = (items: KotItemDTO[]): KotItemDTO[] => {
     const mergedByKey = new Map<string, KotItemDTO>();
 
     for (const item of items) {
-        const key = configurationKeyFor(item.productId, item.configurationSignature ?? "");
+    const key = configurationKeyFor(
+      item.productId,
+      item.configurationSignature ?? "",
+    );
         const existing = mergedByKey.get(key);
         if (!existing) {
             mergedByKey.set(key, {
@@ -62,22 +68,29 @@ const mergeKotItemsByConfiguration = (items: KotItemDTO[]): KotItemDTO[] => {
         existing.lineSubtotal = roundMoney(
             moneyFrom(existing.lineSubtotal) + moneyFrom(item.lineSubtotal),
         );
-        existing.lineTotal = roundMoney(moneyFrom(existing.lineTotal) + moneyFrom(item.lineTotal));
+    existing.lineTotal = roundMoney(
+      moneyFrom(existing.lineTotal) + moneyFrom(item.lineTotal),
+    );
 
         for (const addOn of item.addOns) {
-            const matched = existing.addOns.find((row) => row.addOnId === addOn.addOnId);
+      const matched = existing.addOns.find(
+        (row) => row.addOnId === addOn.addOnId,
+      );
             if (!matched) {
                 existing.addOns.push({ ...addOn });
                 continue;
             }
-            matched.totalQuantity = Number(matched.totalQuantity) + Number(addOn.totalQuantity);
+      matched.totalQuantity =
+        Number(matched.totalQuantity) + Number(addOn.totalQuantity);
             matched.discountAmount = roundMoney(
                 moneyFrom(matched.discountAmount) + moneyFrom(addOn.discountAmount),
             );
             matched.lineSubtotal = roundMoney(
                 moneyFrom(matched.lineSubtotal) + moneyFrom(addOn.lineSubtotal),
             );
-            matched.lineTotal = roundMoney(moneyFrom(matched.lineTotal) + moneyFrom(addOn.lineTotal));
+      matched.lineTotal = roundMoney(
+        moneyFrom(matched.lineTotal) + moneyFrom(addOn.lineTotal),
+      );
         }
 
         for (const component of item.bundleComponents) {
@@ -87,7 +100,8 @@ const mergeKotItemsByConfiguration = (items: KotItemDTO[]): KotItemDTO[] => {
             );
             const matched = existing.bundleComponents.find(
                 (row) =>
-                    bundleComponentKeyFor(row.choiceGroupId, row.componentProductId) === componentKey,
+          bundleComponentKeyFor(row.choiceGroupId, row.componentProductId) ===
+          componentKey,
             );
             if (!matched) {
                 existing.bundleComponents.push({
@@ -99,7 +113,9 @@ const mergeKotItemsByConfiguration = (items: KotItemDTO[]): KotItemDTO[] => {
             matched.totalQuantity =
                 Number(matched.totalQuantity) + Number(component.totalQuantity);
             for (const addOn of component.addOns) {
-                const matchedAddOn = matched.addOns.find((row) => row.addOnId === addOn.addOnId);
+        const matchedAddOn = matched.addOns.find(
+          (row) => row.addOnId === addOn.addOnId,
+        );
                 if (!matchedAddOn) {
                     matched.addOns.push({ ...addOn });
                     continue;
@@ -111,190 +127,6 @@ const mergeKotItemsByConfiguration = (items: KotItemDTO[]): KotItemDTO[] => {
     }
 
     return [...mergedByKey.values()];
-};
-
-const mapSaleItemsToKotItems = (sale: SaleDetailDTO, kotId: string): CreateKotItemREPO[] =>
-    sale.items.map((item) => {
-        const kotItemId = crypto.randomUUID();
-        return {
-            id: kotItemId,
-            organizationId: sale.organizationId,
-            storeId: sale.storeId,
-            kotId,
-            productId: item.productId,
-            quantity: Number(item.quantity),
-            configurationSignature: item.configurationSignature ?? "",
-            productNameSnapshot: item.productNameSnapshot,
-            unitPriceSnapshot: moneyFrom(item.unitPriceSnapshot),
-            discountAmount: moneyFrom(item.discountAmount),
-            lineSubtotal: moneyFrom(item.lineSubtotal),
-            lineTotal: moneyFrom(item.lineTotal),
-            addOns: (item.addOns ?? []).map((addOn) => ({
-                id: crypto.randomUUID(),
-                organizationId: sale.organizationId,
-                storeId: sale.storeId,
-                kotId,
-                kotItemId,
-                addOnId: addOn.addOnId,
-                quantityPerParent: Number(addOn.quantityPerParent),
-                totalQuantity: Number(addOn.totalQuantity),
-                addOnNameSnapshot: addOn.addOnNameSnapshot,
-                unitPriceSnapshot: moneyFrom(addOn.unitPriceSnapshot),
-                unitDiscountSnapshot: moneyFrom(addOn.unitDiscountSnapshot),
-                discountAmount: moneyFrom(addOn.discountAmount),
-                lineSubtotal: moneyFrom(addOn.lineSubtotal),
-                lineTotal: moneyFrom(addOn.lineTotal),
-            })),
-            bundleComponents: (item.bundleComponents ?? []).map((component) => {
-                const kotItemBundleComponentId = crypto.randomUUID();
-                return {
-                    id: kotItemBundleComponentId,
-                    organizationId: sale.organizationId,
-                    storeId: sale.storeId,
-                    kotId,
-                    kotItemId,
-                    choiceGroupId: component.choiceGroupId ?? null,
-                    componentProductId: component.componentProductId,
-                    quantityPerBundle: Number(component.quantityPerBundle),
-                    totalQuantity: Number(component.totalQuantity),
-                    productNameSnapshot: component.productNameSnapshot,
-                    unitPriceSnapshot: moneyFrom(component.unitPriceSnapshot),
-                    unitDiscountSnapshot: moneyFrom(component.unitDiscountSnapshot),
-                    priceAdjustmentSnapshot: moneyFrom(component.priceAdjustmentSnapshot),
-                    addOns: (component.addOns ?? []).map((addOn) => ({
-                        id: crypto.randomUUID(),
-                        organizationId: sale.organizationId,
-                        storeId: sale.storeId,
-                        kotId,
-                        kotItemId,
-                        kotItemBundleComponentId,
-                        addOnId: addOn.addOnId,
-                        quantityPerComponent: Number(addOn.quantityPerComponent),
-                        totalQuantity: Number(addOn.totalQuantity),
-                        addOnNameSnapshot: addOn.addOnNameSnapshot,
-                        unitPriceSnapshot: moneyFrom(addOn.unitPriceSnapshot),
-                        unitDiscountSnapshot: moneyFrom(addOn.unitDiscountSnapshot),
-                    })),
-                };
-            }),
-        };
-    });
-
-const parcelKotResponse = (
-    kot: KotDTO,
-    sale: SaleDetailDTO,
-    created: boolean,
-): ServiceResponse<ParcelKotResponse> => ({
-    status: "success",
-    data: {
-        kot,
-        sale: {
-            ...sale,
-            kotNumbers: [kot.kotNumber],
-        },
-    },
-    message: created ? "Parcel KOT generated successfully" : "Parcel KOT fetched successfully",
-    code: created ? STATUS_CODES.CREATED : STATUS_CODES.SUCCESS,
-});
-
-export const createParcelKotForDevice = async (
-    session: DeviceSessionDTO,
-    kotData: CreateParcelKotSVC,
-): Promise<ServiceResponse<ParcelKotResponse | null>> => {
-    const store = await organizationRepository.getStoreById(
-        session.organization.id,
-        session.store.id,
-    );
-    if (!store) {
-        return {
-            status: "error",
-            message: "Store not found",
-            data: null,
-            code: STATUS_CODES.NOT_FOUND,
-        };
-    }
-
-    if (!store.kotSystemEnabled) {
-        return {
-            status: "error",
-            message: "Parcel KOT is available only when the KOT System is enabled",
-            data: null,
-            code: STATUS_CODES.FORBIDDEN,
-        };
-    }
-
-    const saleResponse = await billingService.completeSaleForDevice(session, {
-        ...kotData,
-        payments: [],
-    });
-    if (saleResponse.status !== "success" || !saleResponse.data?.sale) {
-        return saleResponse as ServiceResponse<ParcelKotResponse | null>;
-    }
-
-    const sale = saleResponse.data.sale;
-    if (sale.serviceTableId) {
-        return {
-            status: "error",
-            message: "A Parcel KOT cannot be linked to a Service Table",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-        };
-    }
-
-    const existingKot = await kotRepository.getKotBySaleId(
-        session.organization.id,
-        session.store.id,
-        sale.id,
-    );
-    if (existingKot) {
-        return parcelKotResponse(existingKot, sale, false);
-    }
-
-    const generatedAt = sale.committedAt ? new Date(sale.committedAt) : new Date();
-    const kotId = crypto.randomUUID();
-
-    try {
-        const kot = await pg.begin(async (tx) => {
-            const allocated = await kotRepository.allocateKotNumber(
-                session.organization.id,
-                session.store.id,
-                generatedAt,
-                tx,
-            );
-            const created = await kotRepository.createKot(
-                {
-                    id: kotId,
-                    organizationId: session.organization.id,
-                    storeId: session.store.id,
-                    saleId: sale.id,
-                    kotType: "parcel",
-                    kotNumber: allocated.kotNumber,
-                    kotSequenceNumber: allocated.kotSequenceNumber,
-                    kotPeriodKey: allocated.kotPeriodKey,
-                    createdByDeviceId: session.device.id,
-                    updatedByDeviceId: session.device.id,
-                    items: mapSaleItemsToKotItems(sale, kotId),
-                },
-                tx,
-            );
-            if (!created) {
-                throw new Error("Failed to create Parcel KOT");
-            }
-            return created;
-        });
-
-        return parcelKotResponse(kot, sale, true);
-    } catch (error) {
-        const racedKot = await kotRepository.getKotBySaleId(
-            session.organization.id,
-            session.store.id,
-            sale.id,
-        );
-        if (racedKot) {
-            return parcelKotResponse(racedKot, sale, false);
-        }
-        throw error;
-    }
 };
 
 const normalizeOptionalUuid = (value?: string | null) => {
@@ -328,7 +160,8 @@ const requireTableKotStore = async (session: DeviceSessionDTO) => {
             ok: false as const,
             response: {
                 status: "error" as const,
-                message: "Table KOT is available only when the KOT System and Table Management are enabled",
+        message:
+          "Table KOT is available only when the KOT System and Table Management are enabled",
                 data: null,
                 code: STATUS_CODES.FORBIDDEN,
             },
@@ -351,7 +184,9 @@ const tableOrderWorkspace = (
 });
 
 const mapPreparedLinesToKotItems = (
-    lines: Awaited<ReturnType<typeof billingService.prepareTrustedSaleLines>> extends {
+  lines: Awaited<
+    ReturnType<typeof billingService.prepareTrustedSaleLines>
+  > extends {
         lines: infer L;
     }
         ? L
@@ -403,8 +238,12 @@ const mapPreparedLinesToKotItems = (
                     totalQuantity: Number(component.component.totalQuantity),
                     productNameSnapshot: component.component.productNameSnapshot,
                     unitPriceSnapshot: moneyFrom(component.component.unitPriceSnapshot),
-                    unitDiscountSnapshot: moneyFrom(component.component.unitDiscountSnapshot),
-                    priceAdjustmentSnapshot: moneyFrom(component.component.priceAdjustmentSnapshot),
+          unitDiscountSnapshot: moneyFrom(
+            component.component.unitDiscountSnapshot,
+          ),
+          priceAdjustmentSnapshot: moneyFrom(
+            component.component.priceAdjustmentSnapshot,
+          ),
                     addOns: component.addOns.map((addOn) => ({
                         id: crypto.randomUUID(),
                         organizationId: addOn.organizationId,
@@ -479,7 +318,9 @@ const mapKotItemsToTrustedSaleLines = (
                         productNameSnapshot: component.productNameSnapshot,
                         unitPriceSnapshot: moneyFrom(component.unitPriceSnapshot),
                         unitDiscountSnapshot: moneyFrom(component.unitDiscountSnapshot),
-                        priceAdjustmentSnapshot: moneyFrom(component.priceAdjustmentSnapshot),
+            priceAdjustmentSnapshot: moneyFrom(
+              component.priceAdjustmentSnapshot,
+            ),
                     },
                     addOns: component.addOns.map((addOn) => ({
                         id: crypto.randomUUID(),
@@ -553,7 +394,11 @@ export const startActiveTableOrderForDevice = async (
             tx,
         );
         if (!table) return { kind: "not_found" as const };
-        if (table.state !== "allocated" || table.currentSaleId || table.currentTableOrderId) {
+    if (
+      table.state !== "allocated" ||
+      table.currentSaleId ||
+      table.currentTableOrderId
+    ) {
             return { kind: "conflict" as const };
         }
 
@@ -653,7 +498,11 @@ export const getActiveTableOrderForDevice = async (
         session.store.id,
         table.currentTableOrderId,
     );
-    if (!tableOrder || tableOrder.status !== "active" || tableOrder.serviceTableId !== tableId) {
+  if (
+    !tableOrder ||
+    tableOrder.status !== "active" ||
+    tableOrder.serviceTableId !== tableId
+  ) {
         return {
             status: "error",
             message: "The table's Active Table Order is unavailable",
@@ -662,7 +511,13 @@ export const getActiveTableOrderForDevice = async (
         };
     }
 
-    return tableOrderWorkspace(table, tableOrder, null, "Table order loaded", STATUS_CODES.SUCCESS);
+  return tableOrderWorkspace(
+    table,
+    tableOrder,
+    null,
+    "Table order loaded",
+    STATUS_CODES.SUCCESS,
+  );
 };
 
 export const updateActiveTableOrderForDevice = async (
@@ -676,7 +531,9 @@ export const updateActiveTableOrderForDevice = async (
     }
 
     const customerId =
-        update.customerId === undefined ? undefined : normalizeOptionalUuid(update.customerId);
+    update.customerId === undefined
+      ? undefined
+      : normalizeOptionalUuid(update.customerId);
     if (customerId !== undefined) {
         const customerResult = await billingService.resolveCustomerAssignment(
             session.organization.id,
@@ -712,7 +569,9 @@ export const updateActiveTableOrderForDevice = async (
             session.store.id,
             tableOrder.id,
             customerId === undefined ? tableOrder.customerId : customerId,
-            update.notes === undefined ? undefined : normalizeOptionalText(update.notes),
+      update.notes === undefined
+        ? undefined
+        : normalizeOptionalText(update.notes),
             session.device.id,
             tx,
         );
@@ -780,7 +639,12 @@ export const discardActiveTableOrderForDevice = async (
         if (!freeTable) throw new Error("Failed to free service table");
         return {
             kind: "discarded" as const,
-            table: { ...freeTable, currentTableOrderId: null, currentSaleId: null, currentSaleTotal: null },
+      table: {
+        ...freeTable,
+        currentTableOrderId: null,
+        currentSaleId: null,
+        currentSaleTotal: null,
+      },
         };
     });
 
@@ -814,7 +678,12 @@ const createOrReplaceTableKotItems = async (
     existingItems: KotItemDTO[],
     kotId: string,
 ) => {
-    const prepared = await priceKotSelections(session, kotId, items, existingItems);
+  const prepared = await priceKotSelections(
+    session,
+    kotId,
+    items,
+    existingItems,
+  );
     if ("error" in prepared && prepared.error) {
         return { error: prepared.error };
     }
@@ -831,18 +700,299 @@ const createOrReplaceTableKotItems = async (
     return { items: mapPreparedLinesToKotItems(prepared.lines, kotId) };
 };
 
+const saleServiceModeToFulfillment = (
+  serviceMode: SaleDetailDTO["serviceMode"],
+): "dine_in" | "pick_up" => (serviceMode === "pick_up" ? "pick_up" : "dine_in");
+
+export const generateStandaloneKotBatchForActor = async (params: {
+  organizationId: string;
+  storeId: string;
+  deviceId: string;
+  saleId: string;
+  batchItems: SaleItemInput[];
+  serviceMode: SaleDetailDTO["serviceMode"];
+}): Promise<ServiceResponse<null>> => {
+  if (params.batchItems.length === 0) {
+    return {
+      status: "success",
+      data: null,
+      message: "No KOT batch items to generate",
+      code: STATUS_CODES.SUCCESS,
+    };
+  }
+
+  const sale = await billingRepository.getSaleById(
+    params.organizationId,
+    params.storeId,
+    params.saleId,
+  );
+  if (!sale) {
+    return {
+      status: "error",
+      message: "Sale not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  if (sale.serviceTableId) {
+    return {
+      status: "error",
+      message: "A standalone KOT cannot be linked to a Service Table",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  const prepared = await prepareStandaloneKotBatchForActor({
+    ...params,
+    generatedAt: sale.committedAt ? new Date(sale.committedAt) : new Date(),
+  });
+  if (prepared.status !== "success" || !prepared.data) {
+    return prepared as ServiceResponse<null>;
+  }
+
+  try {
+    await pg.begin((tx) =>
+      persistPreparedStandaloneKotBatch(params, prepared.data!, tx),
+    );
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "23505"
+    ) {
+      return {
+        status: "error",
+        message:
+          "A standalone KOT could not be generated because its sequence was already used",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+    throw error;
+  }
+
+  return {
+    status: "success",
+    data: null,
+    message: "Standalone KOT batch generated successfully",
+    code: STATUS_CODES.CREATED,
+  };
+};
+
+export type PreparedStandaloneKotBatch = {
+  kotId: string;
+  fulfillmentType: "dine_in" | "pick_up";
+  generatedAt: Date;
+  items: CreateKotItemREPO[];
+  generationRequestId: string | null;
+};
+
+export const getStandaloneKotByGenerationRequestIdForActor = async (params: {
+  organizationId: string;
+  storeId: string;
+  generationRequestId: string;
+}) =>
+  kotRepository.getKotByGenerationRequestId(
+    params.organizationId,
+    params.storeId,
+    params.generationRequestId,
+  );
+
+export const prepareStandaloneKotBatchForActor = async (params: {
+  organizationId: string;
+  storeId: string;
+  deviceId: string;
+  batchItems: SaleItemInput[];
+  serviceMode: SaleDetailDTO["serviceMode"];
+  generatedAt?: Date;
+  generationRequestId?: string;
+}): Promise<ServiceResponse<PreparedStandaloneKotBatch | null>> => {
+  const store = await organizationRepository.getStoreById(
+    params.organizationId,
+    params.storeId,
+  );
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+  if (!store.kotSystemEnabled) {
+    return {
+      status: "error",
+      message:
+        "Standalone KOT generation is available only when the KOT System is enabled",
+      data: null,
+      code: STATUS_CODES.FORBIDDEN,
+    };
+  }
+
+  const session = {
+    device: {
+      id: params.deviceId,
+      organizationId: params.organizationId,
+      storeId: params.storeId,
+      name: "POS",
+      loginUsername: "pos",
+      status: "active" as const,
+      lastSeenAt: null,
+    },
+    store: { ...store, address: null },
+    organization: {
+      id: params.organizationId,
+      name: store.name,
+      username: "pos",
+      tagline: null,
+    },
+  } satisfies DeviceSessionDTO;
+
+  const kotId = crypto.randomUUID();
+  const priced = await createOrReplaceTableKotItems(
+    session,
+    params.batchItems,
+    [],
+    kotId,
+  );
+  if ("error" in priced && priced.error) {
+    return priced.error;
+  }
+
+  return {
+    status: "success",
+    data: {
+      kotId,
+      fulfillmentType: saleServiceModeToFulfillment(params.serviceMode),
+      generatedAt: params.generatedAt ?? new Date(),
+      items: priced.items!,
+      generationRequestId: params.generationRequestId ?? null,
+    },
+    message: "Standalone KOT batch prepared",
+    code: STATUS_CODES.CREATED,
+  };
+};
+
+export const persistPreparedStandaloneKotBatch = async (
+  params: {
+    organizationId: string;
+    storeId: string;
+    deviceId: string;
+    saleId: string;
+  },
+  prepared: PreparedStandaloneKotBatch,
+  tx: Bun.TransactionSQL,
+): Promise<KotDTO> => {
+  const saleBatchSequence = await kotRepository.allocateSaleBatchSequence(
+    params.organizationId,
+    params.storeId,
+    params.saleId,
+    tx,
+  );
+  const allocated = await kotRepository.allocateKotNumber(
+    params.organizationId,
+    params.storeId,
+    prepared.generatedAt,
+    tx,
+  );
+  const created = await kotRepository.createKot(
+    {
+      id: prepared.kotId,
+      organizationId: params.organizationId,
+      storeId: params.storeId,
+      saleId: params.saleId,
+      kotType: "parcel",
+      fulfillmentType: prepared.fulfillmentType,
+      saleBatchSequence,
+      generationRequestId: prepared.generationRequestId,
+      kotNumber: allocated.kotNumber,
+      kotSequenceNumber: allocated.kotSequenceNumber,
+      kotPeriodKey: allocated.kotPeriodKey,
+      createdByDeviceId: params.deviceId,
+      updatedByDeviceId: params.deviceId,
+      items: prepared.items,
+    },
+    tx,
+  );
+  if (!created) {
+    throw new Error("Failed to create standalone KOT batch");
+  }
+  return created;
+};
+
+const replayTableKotGeneration = async (
+  session: DeviceSessionDTO,
+  tableId: string,
+  generationRequestId: string,
+): Promise<ServiceResponse<ServiceTableSaleResponse | null> | null> => {
+  const existingKot = await kotRepository.getKotByGenerationRequestId(
+    session.organization.id,
+    session.store.id,
+    generationRequestId,
+  );
+  if (!existingKot) {
+    return null;
+  }
+
+  const workspace = await getActiveTableOrderForDevice(session, tableId);
+  if (
+    existingKot.kotType === "table" &&
+    existingKot.tableOrderId &&
+    workspace.status === "success" &&
+    workspace.data?.tableOrder.id === existingKot.tableOrderId &&
+    workspace.data.tableOrder.kots.some((kot) => kot.id === existingKot.id)
+  ) {
+    return {
+      ...workspace,
+      message: "Table KOT already generated",
+      code: STATUS_CODES.SUCCESS,
+    };
+  }
+
+  return {
+    status: "error",
+    message: "That KOT generation request was already used",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+  };
+};
+
 export const createTableKotForDevice = async (
     session: DeviceSessionDTO,
     tableId: string,
     kotData: CreateTableKotSVC,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  const generationRequestId = kotData.requestId;
+  if (!generationRequestId) {
+    return {
+      status: "error",
+      message: "A KOT generation request id is required",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
     const features = await requireTableKotStore(session);
     if (!features.ok) {
         return features.response;
     }
 
+  const replay = await replayTableKotGeneration(
+    session,
+    tableId,
+    generationRequestId,
+  );
+  if (replay) {
+    return replay;
+  }
+
     const customerId =
-        kotData.customerId === undefined ? undefined : normalizeOptionalUuid(kotData.customerId);
+    kotData.customerId === undefined
+      ? undefined
+      : normalizeOptionalUuid(kotData.customerId);
     if (customerId !== undefined) {
         const customerResult = await billingService.resolveCustomerAssignment(
             session.organization.id,
@@ -854,7 +1004,12 @@ export const createTableKotForDevice = async (
     }
 
     const kotId = crypto.randomUUID();
-    const priced = await createOrReplaceTableKotItems(session, kotData.items, [], kotId);
+  const priced = await createOrReplaceTableKotItems(
+    session,
+    kotData.items,
+    [],
+    kotId,
+  );
     if ("error" in priced && priced.error) {
         return priced.error;
     }
@@ -891,7 +1046,9 @@ export const createTableKotForDevice = async (
                     session.store.id,
                     tableOrder.id,
                     customerId === undefined ? tableOrder.customerId : customerId,
-                    kotData.notes === undefined ? undefined : normalizeOptionalText(kotData.notes),
+          kotData.notes === undefined
+            ? undefined
+            : normalizeOptionalText(kotData.notes),
                     session.device.id,
                     tx,
                 );
@@ -911,6 +1068,9 @@ export const createTableKotForDevice = async (
                     saleId: null,
                     tableOrderId: tableOrder.id,
                     kotType: "table",
+          fulfillmentType: kotData.fulfillmentType ?? "dine_in",
+          saleBatchSequence: null,
+          generationRequestId,
                     kotNumber: allocated.kotNumber,
                     kotSequenceNumber: allocated.kotSequenceNumber,
                     kotPeriodKey: allocated.kotPeriodKey,
@@ -963,9 +1123,18 @@ export const createTableKotForDevice = async (
             "code" in error &&
             (error as { code?: unknown }).code === "23505"
         ) {
+      const concurrentReplay = await replayTableKotGeneration(
+        session,
+        tableId,
+        generationRequestId,
+      );
+      if (concurrentReplay) {
+        return concurrentReplay;
+      }
             return {
                 status: "error",
-                message: "A Table KOT could not be generated because the KOT Number was already used",
+        message:
+          "A Table KOT could not be generated because the KOT Number was already used",
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };
@@ -1084,14 +1253,99 @@ export const updateTableKotForDevice = async (
     );
 };
 
+export const updateStandaloneKotForDevice = async (
+  session: DeviceSessionDTO,
+  saleId: string,
+  kotId: string,
+  kotData: UpdateStandaloneKotSVC,
+): Promise<ServiceResponse<import("@repo/types").SaleResponse | null>> => {
+  const store = await organizationRepository.getStoreById(
+    session.organization.id,
+    session.store.id,
+  );
+  if (!store?.kotSystemEnabled) {
+    return {
+      status: "error",
+      message:
+        "Standalone KOT editing is available only when the KOT System is enabled",
+      data: null,
+      code: STATUS_CODES.FORBIDDEN,
+    };
+  }
+
+  const [sale, existingKot] = await Promise.all([
+    billingRepository.getSaleById(
+      session.organization.id,
+      session.store.id,
+      saleId,
+    ),
+    kotRepository.getKotById(session.organization.id, session.store.id, kotId),
+  ]);
+  if (!sale || sale.status !== "draft") {
+    return {
+      status: "error",
+      message: "Only a Draft Sale KOT can be edited",
+      data: null,
+      code: sale ? STATUS_CODES.CONFLICT : STATUS_CODES.NOT_FOUND,
+    };
+  }
+  if (
+    !existingKot ||
+    existingKot.kotType !== "parcel" ||
+    existingKot.saleId !== saleId ||
+    existingKot.tableOrderId
+  ) {
+    return {
+      status: "error",
+      message: "Standalone KOT not found on this Sale",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const priced = await createOrReplaceTableKotItems(
+    session,
+    kotData.items,
+    existingKot.items,
+    kotId,
+  );
+  if ("error" in priced && priced.error) {
+    return priced.error;
+  }
+  return billingService.updateDraftSaleWithWriteForDevice(
+    session,
+    saleId,
+    { ...kotData.sale, generateKot: false, kotBatchItems: undefined },
+    async (tx) => {
+      const updated = await kotRepository.replaceKotItems(
+        kotId,
+        priced.items!,
+        session.device.id,
+        tx,
+      );
+      if (!updated) {
+        throw new Error("Failed to edit standalone KOT");
+      }
+    },
+  );
+};
+
 export const checkoutTableOrderForDevice = async (
     session: DeviceSessionDTO,
     tableId: string,
     checkoutData: CheckoutTableOrderSVC,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
-    const features = await requireTableKotStore(session);
-    if (!features.ok) {
-        return features.response;
+  const store = await organizationRepository.getStoreById(
+    session.organization.id,
+    session.store.id,
+  );
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
     }
 
     const existingSaleId = await billingRepository.getSaleIdByCompletionRequestId(
@@ -1100,7 +1354,10 @@ export const checkoutTableOrderForDevice = async (
         checkoutData.requestId,
     );
     if (existingSaleId) {
-        const saleResponse = await billingService.getSaleDetailsForDevice(session, existingSaleId);
+    const saleResponse = await billingService.getSaleDetailsForDevice(
+      session,
+      existingSaleId,
+    );
         if (saleResponse.status !== "success" || !saleResponse.data?.sale) {
             return saleResponse as ServiceResponse<ServiceTableSaleResponse | null>;
         }
@@ -1189,7 +1446,10 @@ export const checkoutTableOrderForDevice = async (
             }
 
             const payments = checkoutData.payments ?? [];
-            const totalPayment = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const totalPayment = payments.reduce(
+        (sum, payment) => sum + Number(payment.amount),
+        0,
+      );
             if (totalPayment > pricingTotals.totals.grandTotal) {
                 return { kind: "overpay" as const };
             }
@@ -1229,6 +1489,7 @@ export const checkoutTableOrderForDevice = async (
                 committedAt,
                 requestId: checkoutData.requestId,
                 serviceTableId: tableId,
+        serviceMode: "dine_in",
             });
 
             await kotRepository.linkKotsToSale(
@@ -1260,7 +1521,8 @@ export const checkoutTableOrderForDevice = async (
                 session.device.id,
                 tx,
             );
-            if (!nextTable) throw new Error("Failed to transition service table after checkout");
+      if (!nextTable)
+        throw new Error("Failed to transition service table after checkout");
 
             return {
                 kind: "checked_out" as const,
@@ -1288,7 +1550,8 @@ export const checkoutTableOrderForDevice = async (
         if (result.kind === "empty") {
             return {
                 status: "error",
-                message: "A sale must have at least one billable item before it can be completed",
+        message:
+          "A sale must have at least one billable item before it can be completed",
                 data: null,
                 code: STATUS_CODES.BAD_REQUEST,
             };
@@ -1305,7 +1568,10 @@ export const checkoutTableOrderForDevice = async (
             return result.response as ServiceResponse<ServiceTableSaleResponse | null>;
         }
 
-        const saleResponse = await billingService.getSaleDetailsForDevice(session, saleId);
+    const saleResponse = await billingService.getSaleDetailsForDevice(
+      session,
+      saleId,
+    );
         if (saleResponse.status !== "success" || !saleResponse.data?.sale) {
             return {
                 status: "error",
@@ -1334,7 +1600,8 @@ export const checkoutTableOrderForDevice = async (
             "code" in error &&
             (error as { code?: unknown }).code === "23505"
         ) {
-            const completedSaleId = await billingRepository.getSaleIdByCompletionRequestId(
+      const completedSaleId =
+        await billingRepository.getSaleIdByCompletionRequestId(
                 session.organization.id,
                 session.store.id,
                 checkoutData.requestId,

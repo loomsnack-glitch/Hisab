@@ -2,8 +2,9 @@ import { describe, expect, mock, test } from "bun:test";
 
 const executedQueries: string[] = [];
 const pg = (strings: TemplateStringsArray) => {
-    executedQueries.push(strings.join("?"));
-    if (strings.join("?").includes("store_billing_settings")) {
+  const sql = strings.join("?");
+  executedQueries.push(sql);
+  if (sql.includes("store_billing_settings")) {
         return Promise.resolve([
             {
                 kot_number_reset_period: "daily",
@@ -11,6 +12,9 @@ const pg = (strings: TemplateStringsArray) => {
             },
         ]);
     }
+  if (sql.includes("sale_batch_sequence")) {
+    return Promise.resolve([{ next_sequence: 1 }]);
+  }
     return Promise.resolve([{ sequence_number: 1 }]);
 };
 
@@ -38,6 +42,22 @@ describe("KOT Number sequence allocation", () => {
         expect(allocated.kotSequenceNumber).toBe(1);
         expect(allocated.kotPeriodKey).toBe("20260821");
     });
+});
+
+describe("Standalone KOT batch sequence allocation", () => {
+  test("allocates the next batch number from existing standalone KOTs on a Sale", async () => {
+    executedQueries.length = 0;
+    const nextSequence = await kotRepository.allocateSaleBatchSequence(
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    );
+
+    const sql = executedQueries.join("\n");
+    expect(sql).toContain("sale_batch_sequence");
+    expect(sql).toContain("kot_type = 'parcel'");
+    expect(nextSequence).toBe(1);
+  });
 });
 
 describe("KOT item reads on a reserved connection", () => {

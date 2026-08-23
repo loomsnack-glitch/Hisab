@@ -272,10 +272,16 @@ export const SaleSummaryDTOSchema = z.object({
   updatedByDevice: SaleDeviceAuditDTOSchema.nullable().optional(),
 });
 
+export const SaleKotHistoryEntryDTOSchema = z.object({
+  kotNumber: z.string().min(1),
+  fulfillmentType: SaleServiceModeSchema,
+});
+
 export const SaleDetailDTOSchema = SaleSummaryDTOSchema.extend({
   items: z.array(SaleItemDTOSchema),
   payments: z.array(PaymentDTOSchema),
   orderDiscountAmount: moneySchema,
+  kotHistory: z.array(SaleKotHistoryEntryDTOSchema).optional(),
 });
 
 export const CustomerDueSalesResponseSchema = z.object({
@@ -354,6 +360,12 @@ export const SaleItemInputSchema = z.object({
   comboSelections: z.array(ComboSelectionInputSchema).optional(),
 });
 
+const saleKotGenerationSchema = {
+  generateKot: z.boolean().optional().default(false),
+  kotBatchItems: z.array(SaleItemInputSchema).optional(),
+  kotRequestId: z.uuid("Invalid KOT generation request id").optional(),
+};
+
 export const CreateDraftSaleSchema = z.object({
   customerId: z
     .union([z.literal(""), z.uuid("Invalid customer id")])
@@ -363,6 +375,7 @@ export const CreateDraftSaleSchema = z.object({
   notes: optionalNotesSchema,
   serviceMode: SaleServiceModeSchema.default("dine_in"),
   items: z.array(SaleItemInputSchema).optional().default([]),
+  ...saleKotGenerationSchema,
 });
 
 export const UpdateDraftSaleSchema = z
@@ -375,6 +388,9 @@ export const UpdateDraftSaleSchema = z
     notes: optionalNotesSchema,
     serviceMode: SaleServiceModeSchema.optional(),
     items: z.array(SaleItemInputSchema).optional(),
+    generateKot: z.boolean().optional(),
+    kotBatchItems: z.array(SaleItemInputSchema).optional(),
+    kotRequestId: z.uuid("Invalid KOT generation request id").optional(),
   })
   .refine(
     (value) =>
@@ -382,7 +398,10 @@ export const UpdateDraftSaleSchema = z
       value.orderDiscountAmount !== undefined ||
       value.notes !== undefined ||
       value.serviceMode !== undefined ||
-      value.items !== undefined,
+      value.items !== undefined ||
+      value.generateKot !== undefined ||
+      value.kotBatchItems !== undefined ||
+      value.kotRequestId !== undefined,
     { message: "At least one field is required" },
   );
 
@@ -415,6 +434,7 @@ export const CommitSaleSchema = z.object({
     .min(1, "At least one item is required")
     .optional(),
   payments: z.array(CreatePaymentSchema).optional().default([]),
+  ...saleKotGenerationSchema,
 });
 
 export const CompleteSaleSchema = z.object({
@@ -428,6 +448,7 @@ export const CompleteSaleSchema = z.object({
   serviceMode: SaleServiceModeSchema,
   items: z.array(SaleItemInputSchema).min(1, "At least one item is required"),
   payments: z.array(CreatePaymentSchema).optional().default([]),
+  ...saleKotGenerationSchema,
 });
 
 export const ReplaceSaleSchema = CompleteSaleSchema.extend({

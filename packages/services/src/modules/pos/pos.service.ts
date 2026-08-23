@@ -5,8 +5,6 @@ import type {
   ComboProductsListResponse,
   CommitSaleJSON,
   CompleteSaleJSON,
-  CreateParcelKotJSON,
-  ParcelKotResponse,
   ReplaceSaleJSON,
   CreateCustomerJSON,
   CreateDraftSaleJSON,
@@ -49,6 +47,7 @@ import type {
   ServiceAreasListResponse,
   CreateTableKotJSON,
   UpdateTableKotJSON,
+  UpdateStandaloneKotJSON,
   UpdateTableOrderJSON,
   CheckoutTableOrderJSON,
   KitchenKotsListResponse,
@@ -195,7 +194,26 @@ export const updatePosTableKot = async (
   data: UpdateTableKotJSON,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
   try {
-    const response = await api.patch(`/pos/tables/${tableId}/kots/${kotId}`, data);
+    const response = await api.patch(
+      `/pos/tables/${tableId}/kots/${kotId}`,
+      data,
+    );
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const updatePosStandaloneKot = async (
+  saleId: string,
+  kotId: string,
+  data: UpdateStandaloneKotJSON,
+): Promise<ServiceResponse<SaleResponse | null>> => {
+  try {
+    const response = await api.patch(
+      `/pos/sales/${saleId}/kots/${kotId}`,
+      data,
+    );
     return response.data;
   } catch (error) {
     return handleApiError(error);
@@ -427,17 +445,6 @@ export const completePosSale = async (
   }
 };
 
-export const createPosParcelKot = async (
-  data: CreateParcelKotJSON,
-): Promise<ServiceResponse<ParcelKotResponse | null>> => {
-  try {
-    const response = await api.post("/pos/kots/parcel", data);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-};
-
 export const getPosKitchenKots = async (): Promise<
   ServiceResponse<KitchenKotsListResponse | null>
 > => {
@@ -501,7 +508,10 @@ export const queuePosWhatsAppInvoice = async (
   templateId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   try {
-    const response = await api.post(`/pos/sales/${saleId}/whatsapp`, { customMessage, templateId });
+    const response = await api.post(`/pos/sales/${saleId}/whatsapp`, {
+      customMessage,
+      templateId,
+    });
     return response.data;
   } catch (error) {
     return handleApiError(error);
@@ -512,7 +522,9 @@ export const getPosWhatsAppMessageTemplates = async (): Promise<
   ServiceResponse<WhatsAppMessageTemplatesResponseDTO | null>
 > => {
   try {
-    const response = await api.get("/pos/whatsapp/templates", { params: { kind: "bill" } });
+    const response = await api.get("/pos/whatsapp/templates", {
+      params: { kind: "bill" },
+    });
     return response.data;
   } catch (error) {
     return handleApiError(error);
@@ -530,18 +542,29 @@ export const retryPosWhatsAppInvoice = async (
   }
 };
 
-export const queuePosWhatsAppDueReminder = async (customerId: string, customMessage?: string, saleId?: string): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+export const queuePosWhatsAppDueReminder = async (
+  customerId: string,
+  customMessage?: string,
+  saleId?: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
   try {
-    const response = await api.post(`/pos/customers/${customerId}/whatsapp/due-reminder`, { customMessage, saleId });
+    const response = await api.post(
+      `/pos/customers/${customerId}/whatsapp/due-reminder`,
+      { customMessage, saleId },
+    );
     return response.data;
   } catch (error) {
     return handleApiError(error);
   }
 };
 
-export const getPosWhatsAppDueReminderStatus = async (saleId: string): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+export const getPosWhatsAppDueReminderStatus = async (
+  saleId: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
   try {
-    const response = await api.get(`/pos/sales/${saleId}/whatsapp/due-reminder`);
+    const response = await api.get(
+      `/pos/sales/${saleId}/whatsapp/due-reminder`,
+    );
     return response.data;
   } catch (error) {
     return handleApiError(error);

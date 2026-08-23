@@ -1,8 +1,6 @@
 import type z from "zod";
-import type { SaleDetailDTO } from "../billing";
 import type {
   CheckoutTableOrderSchema,
-  CreateParcelKotSchema,
   CreateTableKotSchema,
   KitchenKotDTOSchema,
   KitchenKotsListResponseSchema,
@@ -11,14 +9,17 @@ import type {
   KotItemBundleComponentAddOnDTOSchema,
   KotItemBundleComponentDTOSchema,
   KotItemDTOSchema,
+  KotFulfillmentTypeSchema,
   KotTypeSchema,
   TableOrderDTOSchema,
   TableOrderStatusSchema,
   UpdateTableKotSchema,
+  UpdateStandaloneKotSchema,
   UpdateTableOrderSchema,
 } from "./kot.schema";
 
 export type KotType = z.infer<typeof KotTypeSchema>;
+export type KotFulfillmentType = z.infer<typeof KotFulfillmentTypeSchema>;
 export type TableOrderStatus = z.infer<typeof TableOrderStatusSchema>;
 export type TableOrderDTO = z.infer<typeof TableOrderDTOSchema>;
 export type KotItemAddOnDTO = z.infer<typeof KotItemAddOnDTOSchema>;
@@ -31,10 +32,9 @@ export type KotItemBundleComponentDTO = z.infer<
 export type KotItemDTO = z.infer<typeof KotItemDTOSchema>;
 export type KotDTO = z.infer<typeof KotDTOSchema>;
 export type KitchenKotDTO = z.infer<typeof KitchenKotDTOSchema>;
-export type KitchenKotsListResponse = z.infer<typeof KitchenKotsListResponseSchema>;
-
-export type CreateParcelKotJSON = z.infer<typeof CreateParcelKotSchema>;
-export type CreateParcelKotSVC = CreateParcelKotJSON;
+export type KitchenKotsListResponse = z.infer<
+  typeof KitchenKotsListResponseSchema
+>;
 
 export type CreateKotItemAddOnREPO = Pick<
   KotItemAddOnDTO,
@@ -115,6 +115,9 @@ export type CreateKotREPO = Pick<
   | "storeId"
   | "saleId"
   | "kotType"
+  | "fulfillmentType"
+  | "saleBatchSequence"
+  | "generationRequestId"
   | "kotNumber"
   | "kotSequenceNumber"
   | "kotPeriodKey"
@@ -127,7 +130,12 @@ export type CreateKotREPO = Pick<
 
 export type CreateTableOrderREPO = Pick<
   TableOrderDTO,
-  "id" | "organizationId" | "storeId" | "serviceTableId" | "customerId" | "status"
+  | "id"
+  | "organizationId"
+  | "storeId"
+  | "serviceTableId"
+  | "customerId"
+  | "status"
 > & {
   notes?: string | null;
   createdByDeviceId?: string | null;
@@ -138,15 +146,12 @@ export type CreateTableKotJSON = z.infer<typeof CreateTableKotSchema>;
 export type CreateTableKotSVC = CreateTableKotJSON;
 export type UpdateTableKotJSON = z.infer<typeof UpdateTableKotSchema>;
 export type UpdateTableKotSVC = UpdateTableKotJSON;
+export type UpdateStandaloneKotJSON = z.infer<typeof UpdateStandaloneKotSchema>;
+export type UpdateStandaloneKotSVC = UpdateStandaloneKotJSON;
 export type UpdateTableOrderJSON = z.infer<typeof UpdateTableOrderSchema>;
 export type UpdateTableOrderSVC = UpdateTableOrderJSON;
 export type CheckoutTableOrderJSON = z.infer<typeof CheckoutTableOrderSchema>;
 export type CheckoutTableOrderSVC = CheckoutTableOrderJSON;
-
-export type ParcelKotResponse = {
-  kot: KotDTO;
-  sale: SaleDetailDTO;
-};
 
 export type TableKotResponse = {
   kot: KotDTO;

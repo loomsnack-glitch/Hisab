@@ -1,4 +1,5 @@
 import type z from "zod";
+import type { KotDTO } from "../kot/kot.type";
 import type {
   AddOnSalesRollupsResponseSchema,
   AddOnScopedSalesRollupDTOSchema,
@@ -32,6 +33,7 @@ import type {
   SaleItemBundleComponentDTOSchema,
   SaleItemDTOSchema,
   SaleItemInputSchema,
+  SaleKotHistoryEntryDTOSchema,
   SaleNumberResetPeriodSchema,
   SaleNumberSettingsDTOSchema,
   SaleServiceModeSchema,
@@ -63,7 +65,12 @@ export type CustomerLedgerEntryDTO = z.infer<
 >;
 export type SaleDeviceAuditDTO = z.infer<typeof SaleDeviceAuditDTOSchema>;
 export type SaleSummaryDTO = z.infer<typeof SaleSummaryDTOSchema>;
-export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema>;
+export type SaleKotHistoryEntryDTO = z.infer<
+  typeof SaleKotHistoryEntryDTOSchema
+>;
+export type SaleDetailDTO = z.infer<typeof SaleDetailDTOSchema> & {
+  standaloneKots?: KotDTO[];
+};
 export type SaleNumberResetPeriod = z.infer<typeof SaleNumberResetPeriodSchema>;
 export type TokenNumberResetPeriod = z.infer<
   typeof TokenNumberResetPeriodSchema
@@ -328,7 +335,9 @@ export type CustomerLedgerResponse = {
   ledger: CustomerLedgerEntryDTO[];
 };
 
-export type CustomerDueSalesResponse = z.infer<typeof CustomerDueSalesResponseSchema>;
+export type CustomerDueSalesResponse = z.infer<
+  typeof CustomerDueSalesResponseSchema
+>;
 
 export type SalesListResponse = {
   sales: SaleSummaryDTO[];

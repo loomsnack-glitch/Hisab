@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from "bun:test";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const storeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -181,19 +189,24 @@ const createSaleItemAddOn = mock(async (data: Record<string, unknown>) => {
     return addOnRow;
 });
 
-const createSaleItemBundleComponent = mock(async (data: Record<string, unknown>) => {
+const createSaleItemBundleComponent = mock(
+  async (data: Record<string, unknown>) => {
     const component = { ...data, createdAt: now, updatedAt: now };
     createdSaleItemBundleComponents.push(component);
     return component;
-});
+  },
+);
 
-const createSaleItemBundleComponentAddOn = mock(async (data: Record<string, unknown>) => {
+const createSaleItemBundleComponentAddOn = mock(
+  async (data: Record<string, unknown>) => {
     const addOnRow = { ...data, createdAt: now, updatedAt: now };
     createdSaleItemBundleComponentAddOns.push(addOnRow);
     return addOnRow;
-});
+  },
+);
 
-const getSaleById = mock(async (_organizationId: string, _storeId: string, saleId: string) => {
+const getSaleById = mock(
+  async (_organizationId: string, _storeId: string, saleId: string) => {
     const sale = createdSales.find((row) => row.id === saleId);
     if (!sale) {
         return null;
@@ -201,17 +214,21 @@ const getSaleById = mock(async (_organizationId: string, _storeId: string, saleI
 
     return {
         ...sale,
-        itemCount: createdSaleItems.filter((item) => item.saleId === saleId).length,
+      itemCount: createdSaleItems.filter((item) => item.saleId === saleId)
+        .length,
         itemsSummary: "Burger Combo",
     };
-});
+  },
+);
 
 const getSaleItemsBySaleId = mock(async (saleId: string) => {
     return createdSaleItems
         .filter((item) => item.saleId === saleId)
         .map((item) => ({
             ...item,
-            addOns: createdSaleItemAddOns.filter((addOnRow) => addOnRow.saleItemId === item.id),
+      addOns: createdSaleItemAddOns.filter(
+        (addOnRow) => addOnRow.saleItemId === item.id,
+      ),
             bundleComponents: createdSaleItemBundleComponents
                 .filter((component) => component.saleItemId === item.id)
                 .map((component) => ({
@@ -225,15 +242,36 @@ const getSaleItemsBySaleId = mock(async (saleId: string) => {
 
 const getPaymentsBySaleId = mock(async () => []);
 
-const deleteSaleItemsBySaleId = mock(async (_organizationId: string, _storeId: string, saleId: string) => {
-    const itemIds = new Set(createdSaleItems.filter((item) => item.saleId === saleId).map((item) => item.id as string));
-    for (let index = createdSaleItemBundleComponentAddOns.length - 1; index >= 0; index -= 1) {
-        if (itemIds.has(createdSaleItemBundleComponentAddOns[index]?.saleItemId as string)) {
+const deleteSaleItemsBySaleId = mock(
+  async (_organizationId: string, _storeId: string, saleId: string) => {
+    const itemIds = new Set(
+      createdSaleItems
+        .filter((item) => item.saleId === saleId)
+        .map((item) => item.id as string),
+    );
+    for (
+      let index = createdSaleItemBundleComponentAddOns.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
+      if (
+        itemIds.has(
+          createdSaleItemBundleComponentAddOns[index]?.saleItemId as string,
+        )
+      ) {
             createdSaleItemBundleComponentAddOns.splice(index, 1);
         }
     }
-    for (let index = createdSaleItemBundleComponents.length - 1; index >= 0; index -= 1) {
-        if (itemIds.has(createdSaleItemBundleComponents[index]?.saleItemId as string)) {
+    for (
+      let index = createdSaleItemBundleComponents.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
+      if (
+        itemIds.has(
+          createdSaleItemBundleComponents[index]?.saleItemId as string,
+        )
+      ) {
             createdSaleItemBundleComponents.splice(index, 1);
         }
     }
@@ -247,7 +285,8 @@ const deleteSaleItemsBySaleId = mock(async (_organizationId: string, _storeId: s
             createdSaleItems.splice(index, 1);
         }
     }
-});
+  },
+);
 
 const updateSale = mock(async (data: Record<string, unknown>) => {
     const index = createdSales.findIndex((row) => row.id === data.id);
@@ -324,11 +363,13 @@ mock.module("./billing.repository", () => ({
     getBundleComponentAddOnUsageRollups,
 }));
 
-mock.module("@/modules/tenant/kot/kot.repository", () => ({
+mock.module("./billing-kot-read", () => ({
     getKotNumbersBySaleId: mock(async () => []),
+  getKotsBySaleId: mock(async () => []),
 }));
 
-const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
+const catalogRepository =
+  await import("@/modules/tenant/catalog/catalog.repository");
 const billingService = await import("./billing.service");
 
 const resolveProductById = (productId: string) => {
@@ -368,8 +409,12 @@ describe("Bundle product billing with trusted snapshots", () => {
         deleteSaleItemsBySaleId.mockClear();
         updateSale.mockClear();
 
-        getProductByIdSpy = spyOn(catalogRepository, "getProductById").mockImplementation(
-            async (_organizationId, productId) => resolveProductById(productId) as never,
+    getProductByIdSpy = spyOn(
+      catalogRepository,
+      "getProductById",
+    ).mockImplementation(
+      async (_organizationId, productId) =>
+        resolveProductById(productId) as never,
         );
         getBundleComponentsSpy = spyOn(
             catalogRepository,
@@ -379,7 +424,10 @@ describe("Bundle product billing with trusted snapshots", () => {
             catalogRepository,
             "getBundleProductComponentAddOnsByComponentIds",
         ).mockResolvedValue(bundleComponentAddOns as never);
-        getAddOnByIdSpy = spyOn(catalogRepository, "getAddOnById").mockResolvedValue(cheeseAddOn as never);
+    getAddOnByIdSpy = spyOn(
+      catalogRepository,
+      "getAddOnById",
+    ).mockResolvedValue(cheeseAddOn as never);
         getSelectableAttachmentSpy = spyOn(
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
@@ -395,9 +443,14 @@ describe("Bundle product billing with trusted snapshots", () => {
     });
 
     test("rejects new legacy Bundle selections", async () => {
-        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const response = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 2, addOns: [] }],
-        });
+      },
+    );
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot be added to new sales");
@@ -406,9 +459,14 @@ describe("Bundle product billing with trusted snapshots", () => {
     });
 
     test("rejects legacy Bundle selections before expanding components", async () => {
-        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const response = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
-        });
+      },
+    );
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot be added to new sales");
@@ -417,9 +475,14 @@ describe("Bundle product billing with trusted snapshots", () => {
     });
 
     test("rejects legacy Bundle quantity changes for new sales", async () => {
-        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const response = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 3, addOns: [] }],
-        });
+      },
+    );
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot be added to new sales");
@@ -427,12 +490,17 @@ describe("Bundle product billing with trusted snapshots", () => {
     });
 
     test("rejects repeated legacy Bundle additions", async () => {
-        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const response = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [
                 { productId: bundleProductId, quantity: 1, addOns: [] },
                 { productId: bundleProductId, quantity: 2, addOns: [] },
             ],
-        });
+      },
+    );
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot be added to new sales");
@@ -441,9 +509,14 @@ describe("Bundle product billing with trusted snapshots", () => {
     });
 
     test("rejects creating a new draft from a legacy Bundle", async () => {
-        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const created = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
-        });
+      },
+    );
 
         expect(created.status).toBe("error");
         expect(created.message).toContain("cannot be added to new sales");
@@ -452,9 +525,14 @@ describe("Bundle product billing with trusted snapshots", () => {
     });
 
     test("rejects legacy Bundle drafts before catalog snapshot expansion", async () => {
-        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const created = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
-        });
+      },
+    );
 
         expect(created.status).toBe("error");
         expect(created.message).toContain("cannot be added to new sales");
@@ -463,9 +541,14 @@ describe("Bundle product billing with trusted snapshots", () => {
     });
 
     test("rejects legacy Bundles before applying order discounts", async () => {
-        const created = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const created = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
-        });
+      },
+    );
 
         expect(created.status).toBe("error");
         expect(created.message).toContain("cannot be added to new sales");
@@ -508,10 +591,18 @@ describe("Bundle product billing with trusted snapshots", () => {
         ];
 
         getBundleCommercialSalesRollups.mockResolvedValue(commercial as never);
-        getBundleComponentProductUsageRollups.mockResolvedValue(componentProductUsage as never);
-        getBundleComponentAddOnUsageRollups.mockResolvedValue(componentAddOnUsage as never);
+    getBundleComponentProductUsageRollups.mockResolvedValue(
+      componentProductUsage as never,
+    );
+    getBundleComponentAddOnUsageRollups.mockResolvedValue(
+      componentAddOnUsage as never,
+    );
 
-        const response = await billingService.getBundleSalesRollups(userId, organizationId, storeId);
+    const response = await billingService.getBundleSalesRollups(
+      userId,
+      organizationId,
+      storeId,
+    );
 
         expect(response.status).toBe("success");
         expect(response.data?.rollups).toEqual({
@@ -519,20 +610,37 @@ describe("Bundle product billing with trusted snapshots", () => {
             componentProductUsage,
             componentAddOnUsage,
         });
-        expect(response.data?.rollups.componentProductUsage[0]).not.toHaveProperty("lineTotal");
-        expect(response.data?.rollups.componentAddOnUsage[0]).not.toHaveProperty("discountAmount");
+    expect(response.data?.rollups.componentProductUsage[0]).not.toHaveProperty(
+      "lineTotal",
+    );
+    expect(response.data?.rollups.componentAddOnUsage[0]).not.toHaveProperty(
+      "discountAmount",
+    );
         expect(response.data?.rollups.componentAddOnUsage[0]).toMatchObject({
             bundleProductId,
             componentProductId: burgerProductId,
             addOnId,
         });
-        expect(getBundleCommercialSalesRollups).toHaveBeenCalledWith(organizationId, storeId);
-        expect(getBundleComponentProductUsageRollups).toHaveBeenCalledWith(organizationId, storeId);
-        expect(getBundleComponentAddOnUsageRollups).toHaveBeenCalledWith(organizationId, storeId);
+    expect(getBundleCommercialSalesRollups).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+    );
+    expect(getBundleComponentProductUsageRollups).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+    );
+    expect(getBundleComponentAddOnUsageRollups).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+    );
     });
 
     test("rejects add-on selections on bundle products", async () => {
-        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const response = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [
                 {
                     productId: bundleProductId,
@@ -540,7 +648,8 @@ describe("Bundle product billing with trusted snapshots", () => {
                     addOns: [{ addOnId, quantity: 1 }],
                 },
             ],
-        });
+      },
+    );
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot be added to new sales");
@@ -550,9 +659,14 @@ describe("Bundle product billing with trusted snapshots", () => {
     test("rejects legacy Bundles even when composition is missing", async () => {
         getBundleComponentsSpy.mockResolvedValue([]);
 
-        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const response = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
-        });
+      },
+    );
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot be added to new sales");
@@ -560,16 +674,23 @@ describe("Bundle product billing with trusted snapshots", () => {
     });
 
     test("rejects legacy Bundles even when a component is inactive", async () => {
-        getProductByIdSpy.mockImplementation(async (_organizationId: string, productId: string) => {
+    getProductByIdSpy.mockImplementation(
+      async (_organizationId: string, productId: string) => {
             if (productId === burgerProductId) {
                 return { ...burgerProduct, status: "inactive" as const } as never;
             }
             return resolveProductById(productId) as never;
-        });
+      },
+    );
 
-        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const response = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
-        });
+      },
+    );
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot be added to new sales");
@@ -579,9 +700,14 @@ describe("Bundle product billing with trusted snapshots", () => {
     test("rejects legacy Bundles even when a component add-on is unavailable", async () => {
         getSelectableAttachmentSpy.mockResolvedValue(null);
 
-        const response = await billingService.createDraftSale(userId, organizationId, storeId, {
+    const response = await billingService.createDraftSale(
+      userId,
+      organizationId,
+      storeId,
+      {
             items: [{ productId: bundleProductId, quantity: 1, addOns: [] }],
-        });
+      },
+    );
 
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot be added to new sales");
