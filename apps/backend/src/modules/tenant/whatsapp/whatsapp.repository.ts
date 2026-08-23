@@ -1552,7 +1552,7 @@ export const updateCloudMessageStatus = async (
                 message.provider_message_id = ${providerMessageId}
                 OR (
                   message.provider_message_id IS NULL
-                  AND ${callbackData} IS NOT NULL
+                  AND ${callbackData}::text IS NOT NULL
                   AND message.idempotency_key = ${callbackData}
                 )
               )

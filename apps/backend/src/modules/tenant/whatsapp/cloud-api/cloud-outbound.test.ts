@@ -108,6 +108,27 @@ describe("WhatsApp Cloud outbound transport", () => {
     });
   });
 
+  test("accepts Meta WAMIDs with Base64 padding", async () => {
+    const result = await dispatchCloudOutboundMessage(
+      {
+        sendMessage: async () => ({
+          messages: [{
+            id: "wamid.HBgMOTE4ODY2Mjg4NjAyFQIAERgSREUxNEUzMEFGMkM0N0E3NjE4AA==",
+          }],
+        }),
+      },
+      "1234567890",
+      "+919876543210",
+      { type: "text", body: "Hello" },
+    );
+
+    expect(result).toEqual({
+      status: "accepted",
+      providerMessageId:
+        "wamid.HBgMOTE4ODY2Mjg4NjAyFQIAERgSREUxNEUzMEFGMkM0N0E3NjE4AA==",
+    });
+  });
+
   test("treats a network failure during POST as reconciling", async () => {
     const result = await dispatchCloudOutboundMessage(
       {

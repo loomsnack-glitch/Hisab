@@ -175,7 +175,11 @@ export const buildCloudOutboundPayload = (
 const providerMessageId = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
-  return /^wamid(?:\.|$)[A-Za-z0-9._:-]+$/.test(normalized) ? normalized : null;
+  return normalized.length > 0 &&
+    normalized.length <= 255 &&
+    !/[\u0000-\u001F\u007F\s]/.test(normalized)
+    ? normalized
+    : null;
 };
 
 const providerMessageIdFromResponse = (response: unknown): string | null => {
