@@ -26,6 +26,7 @@ import { Card, CardContent } from "@repo/ui/components/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { Separator } from "@repo/ui/components/separator";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
@@ -37,12 +38,14 @@ import {
     Clock,
     CreditCard,
     Download,
+    Hash,
     Link2,
     Printer,
     ReceiptText,
     Smartphone,
     User,
     Pencil,
+    UtensilsCrossed,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -82,6 +85,22 @@ const paymentStatusStyles: Record<string, string> = {
     pending: "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
     partial: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
     paid: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+};
+
+const paymentMethodIcon = (method: string) => {
+    const normalized = method.toLowerCase();
+    if (normalized === "cash") return Banknote;
+    if (normalized === "card") return CreditCard;
+    if (normalized === "upi") return Smartphone;
+    return CircleDollarSign;
+};
+
+const paymentMethodColor = (method: string) => {
+    const normalized = method.toLowerCase();
+    if (normalized === "cash") return "text-emerald-600 dark:text-emerald-400";
+    if (normalized === "card") return "text-violet-600 dark:text-violet-400";
+    if (normalized === "upi") return "text-sky-600 dark:text-sky-400";
+    return "text-muted-foreground";
 };
 
 const SaleDetailDialog = ({
@@ -300,18 +319,28 @@ const SaleDetailDialog = ({
         URL.revokeObjectURL(url);
     };
 
+    const whatsappInvoiceLabel = whatsappInvoiceMutation.isPending
+        ? "Queueing..."
+        : whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter"
+          ? "Retry WhatsApp"
+          : whatsappInvoice?.messageStatus
+            ? "Send again"
+            : "WhatsApp";
+
     return (
-        <>
         <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
-            <DialogContent className="max-h-[92vh] w-[95vw] sm:w-[90vw] md:w-[85vw] max-w-4xl sm:max-w-4xl md:max-w-4xl lg:max-w-4xl overflow-y-auto overflow-x-hidden rounded-[32px] border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">
+            <DialogContent
+                className="gap-0 max-h-[calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-2rem)] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto overflow-x-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl sm:max-w-5xl"
+                showCloseButton
+            >
                 {saleQuery.isPending ? (
-                    <div className="flex min-h-[420px] items-center justify-center">
+                    <div className="flex min-h-[360px] items-center justify-center">
                         <Spinner className="size-6 text-primary" />
                     </div>
                 ) : saleQuery.isError || saleQuery.data?.status === "error" || !sale ? (
                     <div className="p-8">
-                        <Card className="rounded-[28px] border-border/70 bg-card/70">
-                            <CardContent className="flex min-h-[240px] items-center justify-center">
+                        <Card className="rounded-xl border-border/70">
+                            <CardContent className="flex min-h-[200px] items-center justify-center">
                                 <div className="space-y-3 text-center">
                                     <AlertTriangle className="mx-auto size-6 text-amber-500" />
                                     <p className="font-medium text-foreground">Unable to load this bill</p>
@@ -329,118 +358,11 @@ const SaleDetailDialog = ({
                         </Card>
                     </div>
                 ) : (
-                    <div className="space-y-0">
-                        {/* Interactive screen header */}
-                        <div className="border-b border-border/60 px-6 py-5 sm:px-8">
-                            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                <DialogHeader className="min-w-0 flex-1 space-y-3">
-                                    <div className="flex flex-wrap items-end gap-3">
-                                        <div className="min-w-0">
-                                            {sale.tokenNumber ? (
-                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-                                                    Token {sale.tokenNumber}
-                                                </p>
-                                            ) : null}
-                                            {sale.kotHistory && sale.kotHistory.length > 0 ? (
-                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                                                    KOT history {sale.kotHistory.map((kot) => `${kot.kotNumber} · ${kot.fulfillmentType === "pick_up" ? "Pick-Up" : "Dine-In"}`).join(", ")}
-                                                </p>
-                                            ) : sale.kotNumbers && sale.kotNumbers.length > 0 ? (
-                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                                                    KOT token numbers {sale.kotNumbers.join(", ")}
-                                                </p>
-                                            ) : null}
-                                            {sale.serviceTableLabel ? (
-                                                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                                                    Table {sale.serviceTableLabel}
-                                                </p>
-                                            ) : null}
-                                            <DialogTitle className="whitespace-nowrap font-display text-3xl font-semibold tracking-tight">
-                                                {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft bill"}
-                                            </DialogTitle>
-                                        </div>
-                                        <div className="flex items-center gap-2 pb-1">
-                                            <Badge
-                                                className={cn("rounded-full border text-xs", saleStatusStyles[sale.status])}
-                                            >
-                                                {sale.status}
-                                            </Badge>
-                                            {sale.status === "completed" ? (
-                                                <Badge className="rounded-full border border-[#25D366]/25 bg-[#25D366]/10 text-xs text-[#168c45] dark:text-[#6ee7a1]">
-                                                    WhatsApp {whatsappInvoice?.messageStatus ?? "not sent"}
-                                                </Badge>
-                                            ) : null}
-                                            {sale.status === "completed" && sale.paymentStatus !== "paid" && sale.customerId ? (
-                                                <Badge className="rounded-full border border-orange-500/25 bg-orange-500/10 text-xs text-orange-700 dark:text-orange-300">
-                                                    Due reminder {whatsappDueReminder?.messageStatus ?? "not sent"}
-                                                </Badge>
-                                            ) : null}
-                                            <Badge
-                                                className={cn(
-                                                    "rounded-full border text-xs",
-                                                    paymentStatusStyles[sale.paymentStatus],
-                                                )}
-                                            >
-                                                {sale.paymentStatus}
-                                            </Badge>
-                                            <Badge className="rounded-full border border-border/60 bg-muted/40 text-xs text-foreground">
-                                                {formatSaleServiceModeLabel(sale.serviceMode)}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                    <DialogDescription className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-muted-foreground mt-2">
-                                        <div className="flex items-center gap-1.5">
-                                            <Calendar className="size-3.5" />
-                                            <span>
-                                                Created:{" "}
-                                                <span className="text-foreground/80">
-                                                    {formatDateTime(sale.createdAt)}
-                                                </span>
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <Clock className="size-3.5" />
-                                            <span>
-                                                Updated:{" "}
-                                                <span className="text-foreground/80">
-                                                    {formatDateTime(sale.updatedAt)}
-                                                </span>
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <User className="size-3.5" />
-                                            <span>
-                                                Customer:{" "}
-                                                <span className="text-foreground/80 font-semibold">
-                                                    {sale.customer?.name || "Walk-in Customer"}
-                                                </span>
-                                            </span>
-                                        </div>
-                                        {sale.replacementOfSaleId ? (
-                                            <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
-                                                <Link2 className="size-3.5" />
-                                                <span>
-                                                    Edited from:{" "}
-                                                    {sale.replacementOfSaleNumber
-                                                        ? `Bill ${sale.replacementOfSaleNumber}`
-                                                        : "linked bill"}
-                                                </span>
-                                            </div>
-                                        ) : sale.replacementSaleId ? (
-                                            <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
-                                                <Link2 className="size-3.5" />
-                                                <span>
-                                                    Edited as:{" "}
-                                                    {sale.replacementSaleNumber
-                                                        ? `Bill ${sale.replacementSaleNumber}`
-                                                        : "linked bill"}
-                                                </span>
-                                            </div>
-                                        ) : null}
-                                    </DialogDescription>
-                                </DialogHeader>
-
-                                <div className="flex min-w-0 w-full flex-wrap items-center gap-2 pr-8 sm:w-auto sm:max-w-[52%] sm:justify-end">
+                    <div>
+                        {/* Header */}
+                        <div className="border-b border-border/60 bg-muted/20 px-5 py-5 sm:px-6">
+                            <div className="flex flex-col gap-4">
+                                <div className="flex flex-wrap items-center gap-2 pr-10">
                                     {canMutate && sale.status === "completed" && onEdit ? (
                                         <Button
                                             variant="default"
@@ -449,22 +371,20 @@ const SaleDetailDialog = ({
                                                 onEdit(sale);
                                                 onOpenChange(false);
                                             }}
-                                            className="h-9 rounded-xl px-2.5 cursor-pointer"
-                                            title="Edit bill"
+                                            className="h-8 rounded-lg px-2.5"
                                         >
                                             <Pencil className="size-4" />
-                                            <span className="hidden lg:inline">Edit bill</span>
+                                            Edit
                                         </Button>
                                     ) : null}
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={handlePrint}
-                                        className="h-9 rounded-xl px-2.5 cursor-pointer"
-                                        title="Print bill"
+                                        className="h-8 rounded-lg px-2.5"
                                     >
                                         <Printer className="size-4" />
-                                        <span className="hidden lg:inline">Print</span>
+                                        Print
                                     </Button>
                                     {sale.status === "completed" ? (
                                         <Button
@@ -472,19 +392,10 @@ const SaleDetailDialog = ({
                                             size="sm"
                                             disabled={whatsappInvoiceMutation.isPending || whatsappInvoiceQuery.isPending}
                                             onClick={() => whatsappInvoiceMutation.mutate()}
-                                            className="h-9 rounded-xl px-2.5 cursor-pointer"
-                                            title="Send bill on WhatsApp"
+                                            className="h-8 rounded-lg px-2.5"
                                         >
                                             <Smartphone className="size-4 text-[#25D366]" />
-                                                <span className="hidden lg:inline">
-                                                {whatsappInvoiceMutation.isPending
-                                                    ? "Queueing..."
-                                                    : whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter"
-                                                      ? "Retry WhatsApp"
-                                                      : whatsappInvoice?.messageStatus
-                                                        ? "Send again"
-                                                        : "WhatsApp"}
-                                            </span>
+                                            {whatsappInvoiceLabel}
                                         </Button>
                                     ) : null}
                                     {sale.status === "completed" && sale.paymentStatus !== "paid" && sale.customerId ? (
@@ -493,36 +404,170 @@ const SaleDetailDialog = ({
                                             size="sm"
                                             disabled={dueReminderMutation.isPending || whatsappDueReminderQuery.isPending}
                                             onClick={() => dueReminderMutation.mutate()}
-                                            className="h-9 rounded-xl px-2.5 cursor-pointer"
-                                            title="Send due reminder"
+                                            className="h-8 rounded-lg px-2.5"
                                         >
                                             <Clock className="size-4 text-orange-500" />
-                                            <span className="hidden lg:inline">{dueReminderMutation.isPending ? "Queueing..." : whatsappDueReminder ? "Remind again" : "Remind due"}</span>
+                                            {dueReminderMutation.isPending
+                                                ? "Queueing..."
+                                                : whatsappDueReminder
+                                                  ? "Remind again"
+                                                  : "Remind due"}
                                         </Button>
                                     ) : null}
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={handleDownloadTxt}
-                                        className="h-9 rounded-xl px-2.5 cursor-pointer"
-                                        title="Download bill text"
+                                        className="h-8 rounded-lg px-2.5"
                                     >
                                         <Download className="size-4" />
-                                        <span className="hidden lg:inline">Download</span>
+                                        Download
                                     </Button>
                                 </div>
+
+                                <DialogHeader className="min-w-0 space-y-3 text-left">
+                                    {(sale.tokenNumber ||
+                                        sale.serviceTableLabel ||
+                                        (sale.kotHistory && sale.kotHistory.length > 0) ||
+                                        (sale.kotNumbers && sale.kotNumbers.length > 0)) && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {sale.tokenNumber ? (
+                                                <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                                                    <Hash className="size-3.5 shrink-0" />
+                                                    Token {sale.tokenNumber}
+                                                </span>
+                                            ) : null}
+                                            {sale.serviceTableLabel ? (
+                                                <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                                                    <UtensilsCrossed className="size-3.5 shrink-0" />
+                                                    Table {sale.serviceTableLabel}
+                                                </span>
+                                            ) : null}
+                                            {sale.kotHistory && sale.kotHistory.length > 0 ? (
+                                                sale.kotHistory.map((kot) => (
+                                                    <span
+                                                        key={kot.kotNumber}
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground"
+                                                    >
+                                                        <ReceiptText className="size-3.5 shrink-0" />
+                                                        {kot.kotNumber} ·{" "}
+                                                        {kot.fulfillmentType === "pick_up" ? "Pick-Up" : "Dine-In"}
+                                                    </span>
+                                                ))
+                                            ) : sale.kotNumbers && sale.kotNumbers.length > 0 ? (
+                                                <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                                                    <ReceiptText className="size-3.5 shrink-0" />
+                                                    KOT {sale.kotNumbers.join(", ")}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                    )}
+
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                        <DialogTitle className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                                            {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft bill"}
+                                        </DialogTitle>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <Badge
+                                                className={cn("rounded-md border text-xs capitalize", saleStatusStyles[sale.status])}
+                                            >
+                                                {sale.status}
+                                            </Badge>
+                                            <Badge
+                                                className={cn(
+                                                    "rounded-md border text-xs capitalize",
+                                                    paymentStatusStyles[sale.paymentStatus],
+                                                )}
+                                            >
+                                                {sale.paymentStatus}
+                                            </Badge>
+                                            <Badge
+                                                variant="outline"
+                                                className="rounded-md text-xs text-muted-foreground"
+                                            >
+                                                {formatSaleServiceModeLabel(sale.serviceMode)}
+                                            </Badge>
+                                            {sale.status === "completed" && whatsappInvoice?.messageStatus ? (
+                                                <Badge
+                                                    className="rounded-md border border-[#25D366]/25 bg-[#25D366]/10 text-xs text-[#168c45] dark:text-[#6ee7a1]"
+                                                >
+                                                    WhatsApp {whatsappInvoice.messageStatus}
+                                                </Badge>
+                                            ) : null}
+                                            {sale.status === "completed" &&
+                                            sale.paymentStatus !== "paid" &&
+                                            sale.customerId &&
+                                            whatsappDueReminder?.messageStatus ? (
+                                                <Badge
+                                                    className="rounded-md border border-orange-500/25 bg-orange-500/10 text-xs text-orange-700 dark:text-orange-300"
+                                                >
+                                                    Reminder {whatsappDueReminder.messageStatus}
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                    </div>
+
+                                    <DialogDescription className="flex flex-col gap-2 text-sm">
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <User className="size-4 shrink-0" />
+                                            <span className="font-medium text-foreground">
+                                                {sale.customer?.name || "Walk-in Customer"}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Calendar className="size-4 shrink-0" />
+                                            <span>{formatDateTime(sale.createdAt)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Clock className="size-4 shrink-0" />
+                                            <span>Updated {formatDateTime(sale.updatedAt)}</span>
+                                        </div>
+                                        {sale.replacementOfSaleId ? (
+                                            <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
+                                                <Link2 className="size-4 shrink-0" />
+                                                <span>
+                                                    Edited from{" "}
+                                                    {sale.replacementOfSaleNumber
+                                                        ? `Bill ${sale.replacementOfSaleNumber}`
+                                                        : "linked bill"}
+                                                </span>
+                                            </div>
+                                        ) : sale.replacementSaleId ? (
+                                            <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
+                                                <Link2 className="size-4 shrink-0" />
+                                                <span>
+                                                    Edited as{" "}
+                                                    {sale.replacementSaleNumber
+                                                        ? `Bill ${sale.replacementSaleNumber}`
+                                                        : "linked bill"}
+                                                </span>
+                                            </div>
+                                        ) : null}
+                                    </DialogDescription>
+                                </DialogHeader>
                             </div>
                         </div>
 
-                        <div className="grid gap-6 px-6 py-6 sm:px-8 grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]">
-                            <div className="space-y-5">
-                                <Card className="rounded-[28px] border-border/60 bg-card/70">
-                                    <CardContent className="p-5">
-                                        <div className="flex items-center gap-2">
-                                            <ReceiptText className="size-4 text-primary" />
-                                            <h3 className="font-semibold text-foreground">Line items</h3>
+                        {/* Body */}
+                        <div className="grid gap-6 px-5 py-5 sm:px-6 md:grid-cols-[1fr_280px] md:gap-8">
+                            <div className="space-y-6 min-w-0">
+                                {/* Line items */}
+                                <section className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold text-foreground">
+                                            Items
+                                            <span className="ml-2 text-muted-foreground font-normal">
+                                                ({sale.items.length})
+                                            </span>
+                                        </h3>
+                                    </div>
+                                    <div className="rounded-xl border border-border/60 overflow-hidden">
+                                        <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-0 border-b border-border/60 bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground sm:grid-cols-[1fr_80px_96px]">
+                                            <span>Product</span>
+                                            <span className="text-right">Qty</span>
+                                            <span className="text-right">Amount</span>
                                         </div>
-                                        <div className="mt-4 space-y-2">
+                                        <div className="divide-y divide-border/50">
                                             {sale.items.map((item) => {
                                                 const addOns = item.addOns ?? [];
                                                 const bundleComponents = item.bundleComponents ?? [];
@@ -542,7 +587,7 @@ const SaleDetailDialog = ({
                                                     Number(item.discountAmount) - comboChildAddOnDiscount,
                                                     0,
                                                 );
-                                                const itemDiscountPercentage = formatDiscountPercentage(
+                                                const itemDiscountPct = formatDiscountPercentage(
                                                     displayedItemDiscount,
                                                     Number(item.unitPriceSnapshot) * Number(item.quantity),
                                                 );
@@ -551,49 +596,36 @@ const SaleDetailDialog = ({
                                                     addOns.reduce((total, addOn) => total + Number(addOn.lineTotal), 0);
 
                                                 return (
-                                                    <div
-                                                        key={item.id}
-                                                        className="rounded-2xl border border-border/50 bg-background/40 px-4 py-3.5"
-                                                    >
-                                                        <div className="flex items-center justify-between gap-3">
-                                                            <div className="flex items-start gap-3">
-                                                                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                                                    <ReceiptText className="size-4" />
-                                                                </div>
-                                                                <div>
-                                                                    <p className="font-semibold text-sm text-foreground/90">
-                                                                        {item.productNameSnapshot}
-                                                                    </p>
-                                                                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                                                                        <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-bold text-foreground/75">
-                                                                            Qty {Number(item.quantity)}
+                                                    <div key={item.id} className="px-4 py-3">
+                                                        <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-start sm:grid-cols-[1fr_80px_96px]">
+                                                            <div className="min-w-0">
+                                                                <p className="font-medium text-sm text-foreground leading-snug">
+                                                                    {item.productNameSnapshot}
+                                                                </p>
+                                                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                                                    {formatCurrency(item.unitPriceSnapshot)} each
+                                                                    {displayedItemDiscount > 0 && (
+                                                                        <span className="text-rose-500">
+                                                                            {" "}
+                                                                            · -{formatCurrency(displayedItemDiscount)}
+                                                                            {itemDiscountPct ? ` (${itemDiscountPct})` : ""}
                                                                         </span>
-                                                                        <span>×</span>
-                                                                        <span>
-                                                                            {formatCurrency(item.unitPriceSnapshot)}
-                                                                        </span>
-                                                                        {displayedItemDiscount > 0 && (
-                                                                            <span className="text-rose-500 font-medium">
-                                                                                (Disc. -
-                                                                                {formatCurrency(displayedItemDiscount)}
-                                                                                {itemDiscountPercentage
-                                                                                    ? `, ${itemDiscountPercentage}`
-                                                                                    : ""})
-                                                                            </span>
-                                                                        )}
-                                                                    </p>
-                                                                </div>
+                                                                    )}
+                                                                </p>
                                                             </div>
-                                                            <p className="font-bold text-sm text-foreground">
+                                                            <p className="text-sm text-muted-foreground text-right tabular-nums">
+                                                                {Number(item.quantity)}
+                                                            </p>
+                                                            <p className="text-sm font-semibold text-foreground text-right tabular-nums">
                                                                 {formatCurrency(configuredLineTotal)}
                                                             </p>
                                                         </div>
 
                                                         {addOns.length > 0 ? (
-                                                            <div className="mt-3 space-y-2 border-l border-border/60 ml-3.5 pl-4">
+                                                            <div className="mt-2 space-y-1.5 pl-3 border-l-2 border-border/40">
                                                                 {addOns.map((addOn) => {
                                                                     const addOnDiscountAmount = Number(addOn.discountAmount);
-                                                                    const addOnDiscountPercentage = formatDiscountPercentage(
+                                                                    const addOnDiscountPct = formatDiscountPercentage(
                                                                         addOnDiscountAmount,
                                                                         Number(addOn.unitPriceSnapshot) * Number(addOn.totalQuantity),
                                                                     );
@@ -601,21 +633,23 @@ const SaleDetailDialog = ({
                                                                     return (
                                                                         <div
                                                                             key={addOn.id}
-                                                                            className="flex items-center justify-between gap-3"
+                                                                            className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-start sm:grid-cols-[1fr_80px_96px]"
                                                                         >
-                                                                            <div>
+                                                                            <div className="min-w-0">
                                                                                 <p className="text-sm text-foreground/85">
                                                                                     + {addOn.addOnNameSnapshot}
                                                                                 </p>
-                                                                                <p className="text-xs text-muted-foreground mt-0.5">
-                                                                                    Qty {Number(addOn.totalQuantity)} ×{" "}
-                                                                                    {formatCurrency(addOn.unitPriceSnapshot)}
+                                                                                <p className="text-xs text-muted-foreground">
+                                                                                    {formatCurrency(addOn.unitPriceSnapshot)} each
                                                                                     {addOnDiscountAmount > 0
-                                                                                        ? ` (Disc. -${formatCurrency(addOnDiscountAmount)}${addOnDiscountPercentage ? `, ${addOnDiscountPercentage}` : ""})`
+                                                                                        ? ` · -${formatCurrency(addOnDiscountAmount)}${addOnDiscountPct ? ` (${addOnDiscountPct})` : ""}`
                                                                                         : ""}
                                                                                 </p>
                                                                             </div>
-                                                                            <p className="text-sm font-semibold text-foreground/90">
+                                                                            <p className="text-xs text-muted-foreground text-right tabular-nums">
+                                                                                {Number(addOn.totalQuantity)}
+                                                                            </p>
+                                                                            <p className="text-sm font-medium text-foreground/90 text-right tabular-nums">
                                                                                 {formatCurrency(addOn.lineTotal)}
                                                                             </p>
                                                                         </div>
@@ -625,33 +659,33 @@ const SaleDetailDialog = ({
                                                         ) : null}
 
                                                         {bundleComponents.length > 0 ? (
-                                                            <div className="mt-3 space-y-2 border-l border-border/60 ml-3.5 pl-4">
+                                                            <div className="mt-2 space-y-2 pl-3 border-l-2 border-border/40">
                                                                 {bundleComponents.map((component) => (
-                                                                    <div key={component.id} className="space-y-1.5">
-                                                                        <div className="flex items-center justify-between gap-3">
-                                                                            <div>
-                                                                                <p className="text-sm text-foreground/85">
-                                                                                    {component.productNameSnapshot}
-                                                                                </p>
-                                                                                <p className="text-xs text-muted-foreground mt-0.5">
-                                                                                    Qty{" "}
-                                                                                    {Number(component.totalQuantity)}
-                                                                                    {Number(
-                                                                                        component.priceAdjustmentSnapshot ??
-                                                                                            0,
-                                                                                    ) !== 0
-                                                                                        ? ` • Adjustment ${Number(component.priceAdjustmentSnapshot) > 0 ? "+" : ""}${formatCurrency(component.priceAdjustmentSnapshot)}`
+                                                                    <div key={component.id} className="space-y-1">
+                                                                        <p className="text-sm text-foreground/85">
+                                                                            {component.productNameSnapshot}
+                                                                            <span className="text-muted-foreground">
+                                                                                {" "}
+                                                                                × {Number(component.totalQuantity)}
+                                                                            </span>
+                                                                            {Number(component.priceAdjustmentSnapshot ?? 0) !== 0 ? (
+                                                                                <span className="text-muted-foreground">
+                                                                                    {" "}
+                                                                                    ·{" "}
+                                                                                    {Number(component.priceAdjustmentSnapshot) > 0
+                                                                                        ? "+"
                                                                                         : ""}
-                                                                                </p>
-                                                                            </div>
-                                                                        </div>
+                                                                                    {formatCurrency(component.priceAdjustmentSnapshot)}
+                                                                                </span>
+                                                                            ) : null}
+                                                                        </p>
                                                                         {(component.addOns ?? []).length > 0 ? (
-                                                                            <div className="space-y-1 border-l border-border/50 ml-2 pl-3">
+                                                                            <div className="space-y-0.5 pl-2">
                                                                                 {(component.addOns ?? []).map((addOn) => {
                                                                                     const addOnDiscountAmount =
                                                                                         Number(addOn.unitDiscountSnapshot) *
                                                                                         Number(addOn.totalQuantity);
-                                                                                    const addOnDiscountPercentage = formatDiscountPercentage(
+                                                                                    const addOnDiscountPct = formatDiscountPercentage(
                                                                                         addOnDiscountAmount,
                                                                                         Number(addOn.unitPriceSnapshot) * Number(addOn.totalQuantity),
                                                                                     );
@@ -661,15 +695,15 @@ const SaleDetailDialog = ({
                                                                                             key={addOn.id}
                                                                                             className="text-xs text-muted-foreground"
                                                                                         >
-                                                                                            + {addOn.addOnNameSnapshot}{" "}
-                                                                                            × {Number(addOn.totalQuantity)} •{" "}
+                                                                                            + {addOn.addOnNameSnapshot} ×{" "}
+                                                                                            {Number(addOn.totalQuantity)} ·{" "}
                                                                                             {formatCurrency(
                                                                                                 (Number(addOn.unitPriceSnapshot) -
                                                                                                     Number(addOn.unitDiscountSnapshot)) *
                                                                                                     Number(addOn.totalQuantity),
                                                                                             )}
                                                                                             {addOnDiscountAmount > 0
-                                                                                                ? ` (Disc. -${formatCurrency(addOnDiscountAmount)}${addOnDiscountPercentage ? `, ${addOnDiscountPercentage}` : ""})`
+                                                                                                ? ` · -${formatCurrency(addOnDiscountAmount)}${addOnDiscountPct ? ` (${addOnDiscountPct})` : ""}`
                                                                                                 : ""}
                                                                                         </p>
                                                                                     );
@@ -684,298 +718,279 @@ const SaleDetailDialog = ({
                                                 );
                                             })}
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </section>
 
-                                <Card className="rounded-[28px] border-border/60 bg-card/70">
-                                    <CardContent className="p-5">
-                                        <div className="flex items-center gap-2">
-                                            <CircleDollarSign className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                            <h3 className="font-semibold text-foreground">Payments</h3>
+                                {/* Payments */}
+                                <section className="space-y-3">
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                        Payments
+                                        {sale.payments.length > 0 ? (
+                                            <span className="ml-2 text-muted-foreground font-normal">
+                                                ({sale.payments.length})
+                                            </span>
+                                        ) : null}
+                                    </h3>
+                                    {sale.payments.length === 0 ? (
+                                        <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
+                                            No payments collected yet.
                                         </div>
-                                        <div className="mt-4 space-y-2">
-                                            {sale.payments.length === 0 ? (
-                                                <div className="rounded-2xl border border-dashed border-border/70 bg-background/30 px-4 py-6 text-center text-sm text-muted-foreground">
-                                                    No money collected yet for this bill.
-                                                </div>
-                                            ) : (
-                                                sale.payments.map((payment) => {
-                                                    const method = payment.method.toLowerCase();
-                                                    const Icon =
-                                                        method === "cash"
-                                                            ? Banknote
-                                                            : method === "card"
-                                                              ? CreditCard
-                                                              : method === "upi"
-                                                                ? Smartphone
-                                                                : CircleDollarSign;
-                                                    const colorClass =
-                                                        method === "cash"
-                                                            ? "bg-emerald-500/10 text-emerald-500"
-                                                            : method === "card"
-                                                              ? "bg-purple-500/10 text-purple-500"
-                                                              : method === "upi"
-                                                                ? "bg-blue-500/10 text-blue-500"
-                                                                : "bg-zinc-500/10 text-zinc-400";
-                                                    return (
-                                                        <div
-                                                            key={payment.id}
-                                                            className="group flex items-center justify-between rounded-2xl border border-border/50 bg-background/40 hover:bg-background/80 px-4 py-3.5 transition-all duration-200"
-                                                        >
-                                                            <div className="flex items-start gap-3">
-                                                                <div
-                                                                    className={cn(
-                                                                        "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg font-bold",
-                                                                        colorClass,
-                                                                    )}
-                                                                >
-                                                                    <Icon className="size-4" />
-                                                                </div>
-                                                                <div>
-                                                                    <p className="font-semibold text-sm capitalize text-foreground/90">
-                                                                        {payment.method.replace("_", " ")}
-                                                                    </p>
-                                                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                                                        {formatDateTime(payment.collectedAt)}
-                                                                        {payment.referenceNumber
-                                                                            ? ` • Ref: ${payment.referenceNumber}`
-                                                                            : ""}
-                                                                    </p>
-                                                                </div>
+                                    ) : (
+                                        <div className="rounded-xl border border-border/60 divide-y divide-border/50">
+                                            {sale.payments.map((payment) => {
+                                                const Icon = paymentMethodIcon(payment.method);
+                                                const colorClass = paymentMethodColor(payment.method);
+
+                                                return (
+                                                    <div
+                                                        key={payment.id}
+                                                        className="flex items-center justify-between gap-4 px-4 py-3"
+                                                    >
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <div className={cn("shrink-0", colorClass)}>
+                                                                <Icon className="size-4" />
                                                             </div>
-                                                            <p className="font-bold text-sm text-foreground">
-                                                                {formatCurrency(payment.amount)}
-                                                            </p>
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-medium capitalize text-foreground">
+                                                                    {payment.method.replace("_", " ")}
+                                                                </p>
+                                                                <p className="text-xs text-muted-foreground truncate">
+                                                                    {formatDateTime(payment.collectedAt)}
+                                                                    {payment.referenceNumber
+                                                                        ? ` · Ref ${payment.referenceNumber}`
+                                                                        : ""}
+                                                                </p>
+                                                            </div>
                                                         </div>
-                                                    );
-                                                })
-                                            )}
+                                                        <p className="text-sm font-semibold tabular-nums text-foreground shrink-0">
+                                                            {formatCurrency(payment.amount)}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    )}
+                                </section>
 
                                 {canMutate && sale.status === "completed" && Number(sale.paidTotal) === 0 ? (
-                                    <Card className="rounded-[28px] border-destructive/20 bg-destructive/5">
-                                        <CardContent className="space-y-4 p-5">
-                                            <div>
-                                                <h3 className="font-semibold text-foreground">Void bill</h3>
-                                                <p className="mt-1 text-sm text-muted-foreground">
-                                                    This is available because no payment has been collected yet.
-                                                </p>
-                                            </div>
+                                    <section className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 space-y-4">
+                                        <div>
+                                            <h3 className="font-semibold text-foreground">Void bill</h3>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                Available because no payment has been collected yet.
+                                            </p>
+                                        </div>
 
-                                            <Field>
-                                                <FieldLabel>Reason</FieldLabel>
-                                                <FieldContent>
-                                                    <Textarea
-                                                        className="min-h-24 rounded-2xl bg-background/80"
-                                                        placeholder="Why is this bill being voided?"
-                                                        value={voidDraft.reason}
-                                                        onChange={(event) =>
-                                                            setVoidDraft({
-                                                                reason: event.target.value,
-                                                            })
-                                                        }
-                                                    />
-                                                </FieldContent>
-                                            </Field>
+                                        <Field>
+                                            <FieldLabel>Reason</FieldLabel>
+                                            <FieldContent>
+                                                <Textarea
+                                                    className="min-h-20 rounded-lg bg-background"
+                                                    placeholder="Why is this bill being voided?"
+                                                    value={voidDraft.reason}
+                                                    onChange={(event) =>
+                                                        setVoidDraft({
+                                                            reason: event.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </FieldContent>
+                                        </Field>
 
-                                            <Button
-                                                variant="destructive"
-                                                className="w-full rounded-2xl"
-                                                disabled={voidSaleMutation.isPending || !voidDraft.reason.trim()}
-                                                onClick={() => voidSaleMutation.mutate()}
-                                            >
-                                                {voidSaleMutation.isPending ? "Voiding..." : "Void bill"}
-                                            </Button>
-                                        </CardContent>
-                                    </Card>
+                                        <Button
+                                            variant="destructive"
+                                            className="w-full rounded-lg"
+                                            disabled={voidSaleMutation.isPending || !voidDraft.reason.trim()}
+                                            onClick={() => voidSaleMutation.mutate()}
+                                        >
+                                            {voidSaleMutation.isPending ? "Voiding..." : "Void bill"}
+                                        </Button>
+                                    </section>
                                 ) : null}
                             </div>
 
-                            <div className="space-y-5">
-                                <Card className="rounded-[28px] border border-primary/20 bg-gradient-to-br from-slate-900 to-slate-950 text-white shadow-xl shadow-black/35 overflow-hidden relative">
-                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.1),_transparent_40%)]" />
-                                    <CardContent className="relative space-y-5 p-6">
-                                        <div className="space-y-1.5 pb-2 border-b border-white/5">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/50">
-                                                Settlement Total
-                                            </p>
-                                            <p className="text-4xl font-extrabold tracking-tight text-white">
-                                                {formatCurrency(sale.grandTotal)}
-                                            </p>
+                            {/* Summary sidebar */}
+                            <div className="space-y-4 lg:sticky lg:top-0 lg:self-start">
+                                <div className="rounded-xl border border-border/60 bg-card p-5 space-y-4">
+                                    <div>
+                                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                                            Bill total
+                                        </p>
+                                        <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground">
+                                            {formatCurrency(sale.grandTotal)}
+                                        </p>
+                                    </div>
+
+                                    <Separator />
+
+                                    <div className="space-y-2.5 text-sm">
+                                        <div className="flex justify-between gap-4">
+                                            <span className="text-muted-foreground">Items subtotal</span>
+                                            <span className="font-medium tabular-nums">
+                                                {formatCurrency(discountedItemsSubtotal)}
+                                            </span>
                                         </div>
-                                        <div className="space-y-3.5 text-xs">
-                                            <div className="flex items-center justify-between gap-4 text-white/70 w-full">
-                                                <span className="font-medium">Items subtotal</span>
-                                                <span className="font-semibold text-white/90">
-                                                    {formatCurrency(discountedItemsSubtotal)}
+                                        {itemDiscountTotal > 0 && (
+                                            <div className="flex justify-between gap-4">
+                                                <span className="text-muted-foreground">Item discounts</span>
+                                                <span className="font-medium tabular-nums text-rose-600 dark:text-rose-400">
+                                                    -{formatCurrency(itemDiscountTotal)}
+                                                    {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
                                                 </span>
                                             </div>
-                                            {itemDiscountTotal > 0 && (
-                                                <div className="flex items-center justify-between gap-4 text-white/60 w-full">
-                                                    <span className="font-medium">Item discount included</span>
-                                                    <span className="font-semibold text-white/80">
-                                                        {formatCurrency(itemDiscountTotal)}
-                                                        {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {Number(sale.orderDiscountAmount) > 0 && (
-                                                <div className="flex items-center justify-between gap-4 text-white/70 w-full">
-                                                    <span className="font-medium">Order discount</span>
-                                                    <span className="font-semibold text-white/90">
-                                                        -{formatCurrency(sale.orderDiscountAmount)}
-                                                        {orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            <div className="flex items-center justify-between gap-4 text-white/70 w-full">
-                                                <span className="font-medium">Collected</span>
-                                                <span className="font-semibold text-emerald-400">
-                                                    {formatCurrency(sale.paidTotal)}
+                                        )}
+                                        {Number(sale.orderDiscountAmount) > 0 && (
+                                            <div className="flex justify-between gap-4">
+                                                <span className="text-muted-foreground">Order discount</span>
+                                                <span className="font-medium tabular-nums text-rose-600 dark:text-rose-400">
+                                                    -{formatCurrency(sale.orderDiscountAmount)}
+                                                    {orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}
                                                 </span>
                                             </div>
-                                            <div className="border-t border-white/10 my-2" />
-                                            <div className="flex items-center justify-between gap-4 pt-1.5 w-full">
-                                                <span className="text-sm font-bold text-white/80">Due Amount</span>
-                                                <span
-                                                    className={cn(
-                                                        "text-lg font-extrabold",
-                                                        Number(sale.dueTotal) > 0
-                                                            ? "text-amber-400"
-                                                            : "text-emerald-400",
-                                                    )}
-                                                >
-                                                    {formatCurrency(sale.dueTotal)}
-                                                </span>
-                                            </div>
+                                        )}
+                                        <div className="flex justify-between gap-4">
+                                            <span className="text-muted-foreground">Collected</span>
+                                            <span className="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                                                {formatCurrency(sale.paidTotal)}
+                                            </span>
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+
+                                    <Separator />
+
+                                    <div className="flex justify-between items-baseline gap-4">
+                                        <span className="font-semibold text-foreground">Due</span>
+                                        <span
+                                            className={cn(
+                                                "text-xl font-bold tabular-nums",
+                                                Number(sale.dueTotal) > 0
+                                                    ? "text-amber-600 dark:text-amber-400"
+                                                    : "text-emerald-600 dark:text-emerald-400",
+                                            )}
+                                        >
+                                            {formatCurrency(sale.dueTotal)}
+                                        </span>
+                                    </div>
+                                </div>
 
                                 {formError ? (
-                                    <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                                    <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
                                         {formError}
                                     </div>
                                 ) : null}
 
                                 {canMutate && sale.status === "completed" && Number(sale.dueTotal) > 0 ? (
-                                    <Card className="rounded-[28px] border-border/60 bg-card/70">
-                                        <CardContent className="space-y-4 p-5">
-                                            <div>
-                                                <h3 className="font-semibold text-foreground">Collect payment</h3>
-                                                <p className="mt-1 text-sm text-muted-foreground">
-                                                    Add the next money movement for this receivable sale.
-                                                </p>
-                                            </div>
+                                    <div className="rounded-xl border border-border/60 bg-card p-4 space-y-4">
+                                        <div>
+                                            <h3 className="font-semibold text-foreground">Collect payment</h3>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                Record the next payment for this bill.
+                                            </p>
+                                        </div>
 
-                                            <Field>
-                                                <FieldLabel>Method</FieldLabel>
-                                                <FieldContent>
-                                                    <select
-                                                        value={paymentValues.method}
-                                                        onChange={(event) =>
-                                                            updatePaymentDraft({
-                                                                method: event.target.value as PaymentMethod,
-                                                            })
-                                                        }
-                                                        aria-label="Payment method"
-                                                        className="h-11 w-full rounded-2xl border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-                                                    >
-                                                        {paymentMethods.map((method) => (
-                                                            <option key={method.value} value={method.value}>
-                                                                {method.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </FieldContent>
-                                            </Field>
+                                        <Field>
+                                            <FieldLabel>Method</FieldLabel>
+                                            <FieldContent>
+                                                <select
+                                                    value={paymentValues.method}
+                                                    onChange={(event) =>
+                                                        updatePaymentDraft({
+                                                            method: event.target.value as PaymentMethod,
+                                                        })
+                                                    }
+                                                    aria-label="Payment method"
+                                                    className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+                                                >
+                                                    {paymentMethods.map((method) => (
+                                                        <option key={method.value} value={method.value}>
+                                                            {method.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </FieldContent>
+                                        </Field>
 
-                                            <Field>
-                                                <FieldLabel>Amount</FieldLabel>
-                                                <FieldContent>
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        className="h-11 rounded-2xl"
-                                                        value={paymentValues.amount}
-                                                        onChange={(event) =>
-                                                            updatePaymentDraft({
-                                                                amount: Number(event.target.value || 0),
-                                                            })
-                                                        }
-                                                    />
-                                                    <FieldError
-                                                        errors={
-                                                            paymentValues.amount > Number(sale.dueTotal)
-                                                                ? [
-                                                                      {
-                                                                          message:
-                                                                              "Amount cannot exceed the remaining due total",
-                                                                      },
-                                                                  ]
-                                                                : undefined
-                                                        }
-                                                    />
-                                                </FieldContent>
-                                            </Field>
+                                        <Field>
+                                            <FieldLabel>Amount</FieldLabel>
+                                            <FieldContent>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    className="h-10 rounded-lg"
+                                                    value={paymentValues.amount}
+                                                    onChange={(event) =>
+                                                        updatePaymentDraft({
+                                                            amount: Number(event.target.value || 0),
+                                                        })
+                                                    }
+                                                />
+                                                <FieldError
+                                                    errors={
+                                                        paymentValues.amount > Number(sale.dueTotal)
+                                                            ? [
+                                                                  {
+                                                                      message:
+                                                                          "Amount cannot exceed the remaining due total",
+                                                                  },
+                                                              ]
+                                                            : undefined
+                                                    }
+                                                />
+                                            </FieldContent>
+                                        </Field>
 
-                                            <Field>
-                                                <FieldLabel>Reference</FieldLabel>
-                                                <FieldContent>
-                                                    <Input
-                                                        className="h-11 rounded-2xl"
-                                                        placeholder="Optional reference number"
-                                                        value={paymentValues.referenceNumber ?? ""}
-                                                        onChange={(event) =>
-                                                            updatePaymentDraft({
-                                                                referenceNumber: event.target.value,
-                                                            })
-                                                        }
-                                                    />
-                                                </FieldContent>
-                                            </Field>
+                                        <Field>
+                                            <FieldLabel>Reference</FieldLabel>
+                                            <FieldContent>
+                                                <Input
+                                                    className="h-10 rounded-lg"
+                                                    placeholder="Optional reference number"
+                                                    value={paymentValues.referenceNumber ?? ""}
+                                                    onChange={(event) =>
+                                                        updatePaymentDraft({
+                                                            referenceNumber: event.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </FieldContent>
+                                        </Field>
 
-                                            <Field>
-                                                <FieldLabel>Notes</FieldLabel>
-                                                <FieldContent>
-                                                    <Textarea
-                                                        className="min-h-24 rounded-2xl"
-                                                        placeholder="Optional payment note"
-                                                        value={paymentValues.notes ?? ""}
-                                                        onChange={(event) =>
-                                                            updatePaymentDraft({
-                                                                notes: event.target.value,
-                                                            })
-                                                        }
-                                                    />
-                                                </FieldContent>
-                                            </Field>
+                                        <Field>
+                                            <FieldLabel>Notes</FieldLabel>
+                                            <FieldContent>
+                                                <Textarea
+                                                    className="min-h-20 rounded-lg"
+                                                    placeholder="Optional payment note"
+                                                    value={paymentValues.notes ?? ""}
+                                                    onChange={(event) =>
+                                                        updatePaymentDraft({
+                                                            notes: event.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </FieldContent>
+                                        </Field>
 
-                                            <Button
-                                                className="w-full rounded-2xl"
-                                                disabled={
-                                                    collectPaymentMutation.isPending ||
-                                                    paymentValues.amount <= 0 ||
-                                                    paymentValues.amount > Number(sale.dueTotal)
-                                                }
-                                                onClick={() => collectPaymentMutation.mutate()}
-                                            >
-                                                {collectPaymentMutation.isPending ? "Collecting..." : "Collect payment"}
-                                            </Button>
-                                        </CardContent>
-                                    </Card>
+                                        <Button
+                                            className="w-full rounded-lg"
+                                            disabled={
+                                                collectPaymentMutation.isPending ||
+                                                paymentValues.amount <= 0 ||
+                                                paymentValues.amount > Number(sale.dueTotal)
+                                            }
+                                            onClick={() => collectPaymentMutation.mutate()}
+                                        >
+                                            {collectPaymentMutation.isPending ? "Collecting..." : "Collect payment"}
+                                        </Button>
+                                    </div>
                                 ) : null}
-
                             </div>
                         </div>
                     </div>
                 )}
             </DialogContent>
         </Dialog>
-        </>
     );
 };
 

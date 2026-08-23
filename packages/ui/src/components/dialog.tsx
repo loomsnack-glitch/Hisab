@@ -122,11 +122,13 @@ function DialogContent({
           aria-hidden
           className="pointer-events-none fixed inset-0 hidden bg-black/10 supports-backdrop-filter:backdrop-blur-xs dark:bg-black/20 dark:supports-backdrop-filter:backdrop-blur group-has-[[data-nested][data-open]]/dialog-layer:block"
         />
-        <div className="flex min-h-full items-center justify-center p-4">
+        <div
+          className="flex min-h-full w-full items-center justify-center px-[max(1rem,env(safe-area-inset-left,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))]"
+        >
           <DialogPrimitive.Popup
             data-slot="dialog-content"
             className={cn(
-              "bg-background/90 data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 text-sm ring-1 sm:max-w-md w-full outline-none relative transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50 border border-border/80 shadow-2xl backdrop-blur-md overflow-hidden",
+              "bg-background/90 data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-h-[calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-2rem)] max-w-[calc(100%-2rem)] shrink-0 gap-4 rounded-xl p-4 text-sm ring-1 sm:max-w-md w-full outline-none relative transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50 border border-border/80 shadow-2xl backdrop-blur-md overflow-hidden",
               className
             )}
             style={getNestedPopupStyle(style, 60)}
@@ -139,7 +141,7 @@ function DialogContent({
                 render={
                   <Button
                     variant="ghost"
-                    className="absolute top-2 right-2"
+                    className="absolute top-2 right-2 z-10"
                     size="icon-sm"
                   />
                 }
@@ -172,7 +174,7 @@ function DialogHeader({
       <div
         data-slot="dialog-header"
         className={cn(
-          "flex flex-row items-center gap-3 border-b border-border/30 pb-3",
+          "flex flex-row items-center gap-3 border-b border-border/30 pb-3 pr-8",
           className
         )}
         {...props}
@@ -202,7 +204,7 @@ function DialogHeader({
   return (
     <div
       data-slot="dialog-header"
-      className={cn("gap-2 flex flex-col", className)}
+      className={cn("gap-2 flex flex-col pr-8", className)}
       {...props}
     >
       {children}
@@ -222,7 +224,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t border-border/30 p-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        "bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t border-border/30 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:pb-4",
         className
       )}
       {...props}
