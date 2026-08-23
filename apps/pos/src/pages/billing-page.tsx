@@ -3584,38 +3584,45 @@ const BillingPage = ({
                                     onValueChange={(value) => setSortBy(value as SaleSort)}
                                     options={salesSortOptions}
                                 />
-                                {appliedDateFilter === "date" ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        className="size-8 shrink-0 rounded-full"
-                                        aria-label="Previous date"
-                                        onClick={() => shiftSalesDate(-1)}
+                                <div className="inline-flex items-center gap-1">
+                                    {appliedDateFilter === "date" ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="size-8 shrink-0 rounded-l-2xl rounded-r-md shadow-xs"
+                                            aria-label="Previous date"
+                                            onClick={() => shiftSalesDate(-1)}
+                                        >
+                                            <ChevronLeft className="size-4" />
+                                        </Button>
+                                    ) : null}
+                                    <Popover
+                                        open={salesDatePopoverOpen}
+                                        onOpenChange={handleSalesDatePopoverOpenChange}
                                     >
-                                        <ChevronLeft className="size-4" />
-                                    </Button>
-                                ) : null}
-                                <Popover
-                                    open={salesDatePopoverOpen}
-                                    onOpenChange={handleSalesDatePopoverOpenChange}
-                                >
-                                    <PopoverTrigger
-                                        render={
-                                            <DataTableFilterTrigger>
-                                                <Calendar />
-                                                <span>Date</span>
-                                                <DataTableFilterValue>
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className="max-w-[12rem] truncate rounded-full px-1.5 font-normal"
-                                                    >
-                                                        {appliedSalesDateLabel}
-                                                    </Badge>
-                                                </DataTableFilterValue>
-                                            </DataTableFilterTrigger>
-                                        }
-                                    />
+                                        <PopoverTrigger
+                                            render={
+                                                <DataTableFilterTrigger
+                                                    className={cn(
+                                                        appliedDateFilter === "date"
+                                                            ? "rounded-md"
+                                                            : "rounded-full",
+                                                    )}
+                                                >
+                                                    <Calendar />
+                                                    <span>Date</span>
+                                                    <DataTableFilterValue>
+                                                        <Badge
+                                                            variant="secondary"
+                                                            className="max-w-[12rem] truncate rounded-md px-1.5 font-normal"
+                                                        >
+                                                            {appliedSalesDateLabel}
+                                                        </Badge>
+                                                    </DataTableFilterValue>
+                                                </DataTableFilterTrigger>
+                                            }
+                                        />
                                     <PopoverContent
                                         align="start"
                                         className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-2"
@@ -3720,19 +3727,20 @@ const BillingPage = ({
                                             </div>
                                         </div>
                                     </PopoverContent>
-                                </Popover>
-                                {appliedDateFilter === "date" ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        className="size-8 shrink-0 rounded-full"
-                                        aria-label="Next date"
-                                        onClick={() => shiftSalesDate(1)}
-                                    >
-                                        <ChevronRight className="size-4" />
-                                    </Button>
-                                ) : null}
+                                    </Popover>
+                                    {appliedDateFilter === "date" ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="size-8 shrink-0 rounded-r-2xl rounded-l-md shadow-xs"
+                                            aria-label="Next date"
+                                            onClick={() => shiftSalesDate(1)}
+                                        >
+                                            <ChevronRight className="size-4" />
+                                        </Button>
+                                    ) : null}
+                                </div>
                                 {hasBillsToolbarFilters ? (
                                     <Button
                                         type="button"
