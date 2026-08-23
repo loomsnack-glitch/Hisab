@@ -3674,11 +3674,7 @@ const BillingPage = ({
                                         />
                                     </div>
 
-                                    <div
-                                        className={cn(
-                                            (isReplacingSale || hasActiveTableOrder) && "grid grid-cols-2 gap-2",
-                                        )}
-                                    >
+                                    <div className={cn(isReplacingSale && "grid grid-cols-2 gap-2")}>
                                         {isReplacingSale ? (
                                             <Button
                                                 type="button"
@@ -3689,25 +3685,12 @@ const BillingPage = ({
                                             >
                                                 Cancel edit
                                             </Button>
-                                        ) : hasActiveTableOrder ? (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="h-9 rounded-lg text-xs font-semibold"
-                                                disabled={
-                                                    tableKotMutation.isPending ||
-                                                    completeSaleMutation.isPending
-                                                }
-                                                onClick={returnToTables}
-                                            >
-                                                Tables
-                                            </Button>
                                         ) : null}
                                         <Button
                                             type="button"
                                             className={cn(
                                                 "h-9 rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90",
-                                                !isReplacingSale && !hasActiveTableOrder && "w-full",
+                                                !isReplacingSale && "w-full",
                                             )}
                                             disabled={
                                                 completeSaleMutation.isPending ||
