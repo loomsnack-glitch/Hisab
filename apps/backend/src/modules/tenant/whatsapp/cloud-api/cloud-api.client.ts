@@ -134,7 +134,7 @@ export class WhatsAppCloudApiClient {
     if (!graphVersion)
       throw new Error("WhatsApp Graph API version is required");
     if (!/^v\d+\.\d+$/.test(graphVersion))
-      throw new Error("WhatsApp Graph API version must look like v23.0");
+      throw new Error("WhatsApp Graph API version must look like v<major>.<minor>");
     if (
       options.timeoutMs !== undefined &&
       (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 1)

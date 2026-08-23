@@ -8,7 +8,7 @@ describe("WhatsApp Cloud provider exchange", () => {
       appId: process.env.WHATSAPP_CLOUD_APP_ID,
       appSecret: process.env.WHATSAPP_CLOUD_APP_SECRET,
     };
-    process.env.WHATSAPP_CLOUD_GRAPH_VERSION = "v23.0";
+    process.env.WHATSAPP_CLOUD_GRAPH_VERSION = "v26.0";
     process.env.WHATSAPP_CLOUD_APP_ID = "app-id";
     process.env.WHATSAPP_CLOUD_APP_SECRET = "app-secret";
     let requestedUrl = "";

@@ -61,7 +61,6 @@ export const persistCloudWebhookEvent = async (
     params.wabaId,
     params.phoneNumberId,
   );
-  const payload = JSON.stringify(params.payload);
   const [inserted] = await pg`
     INSERT INTO whatsapp_cloud_webhook_events (
       event_key,
@@ -77,7 +76,7 @@ export const persistCloudWebhookEvent = async (
       ${params.wabaId},
       ${params.phoneNumberId},
       ${accountId},
-      ${payload}::jsonb,
+      ${params.payload}::jsonb,
       'pending',
       0
     )

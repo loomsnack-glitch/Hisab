@@ -70,7 +70,8 @@ const getEmbeddedSignupSdk = async (): Promise<EmbeddedSignupSdk> => {
     });
     const sdk = (window as Window & { FB?: EmbeddedSignupSdk }).FB;
     if (!sdk) throw new Error("Meta Embedded Signup is unavailable");
-    sdk.init({ appId, cookie: true, xfbml: true, version: "v23.0" });
+    const sdkVersion = import.meta.env.VITE_WHATSAPP_CLOUD_GRAPH_VERSION?.trim() || "v26.0";
+    sdk.init({ appId, cookie: true, xfbml: true, version: sdkVersion });
     return sdk;
 };
 

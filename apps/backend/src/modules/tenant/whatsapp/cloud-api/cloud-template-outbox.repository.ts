@@ -192,7 +192,7 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
       status, cloud_template_binding_id, cloud_template_snapshot, cloud_quota_reservation_id
     ) VALUES (
       ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${message.id}, ${params.saleId ?? null}, 'template', 'pending',
-      ${params.snapshot.bindingId}, ${JSON.stringify(params.snapshot)}::jsonb, ${quota.id}
+      ${params.snapshot.bindingId}, ${params.snapshot}::jsonb, ${quota.id}
     )
     RETURNING id, status
   `;

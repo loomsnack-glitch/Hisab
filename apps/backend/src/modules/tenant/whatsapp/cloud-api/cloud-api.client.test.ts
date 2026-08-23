@@ -15,7 +15,7 @@ describe("WhatsAppCloudApiClient", () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
-      graphVersion: "v23.0",
+      graphVersion: "v26.0",
       baseUrl: "https://graph.example.test",
       fetchImpl: async (url, init) => {
         calls.push({ url: String(url), init });
@@ -27,7 +27,7 @@ describe("WhatsAppCloudApiClient", () => {
       id: "waba-1",
     });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("https://graph.example.test/v23.0/waba-1");
+    expect(calls[0]?.url).toBe("https://graph.example.test/v26.0/waba-1");
     expect(new Headers(calls[0]?.init?.headers).get("Authorization")).toBe(
       "Bearer test-secret-token",
     );
@@ -36,7 +36,7 @@ describe("WhatsAppCloudApiClient", () => {
   test("maps Graph API errors and only retries transient HTTP statuses", async () => {
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
-      graphVersion: "v23.0",
+      graphVersion: "v26.0",
       fetchImpl: async () =>
         jsonResponse(
           {
@@ -69,7 +69,7 @@ describe("WhatsAppCloudApiClient", () => {
     const calls: string[] = [];
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
-      graphVersion: "v23.0",
+      graphVersion: "v26.0",
       baseUrl: "https://graph.example.test",
       fetchImpl: async url => {
         const value = String(url);
@@ -77,7 +77,7 @@ describe("WhatsAppCloudApiClient", () => {
         return calls.length === 1
           ? jsonResponse({
               data: [{ id: "template-1" }],
-              paging: { next: "https://graph.example.test/v23.0/waba-1/message_templates?after=cursor-1" },
+              paging: { next: "https://graph.example.test/v26.0/waba-1/message_templates?after=cursor-1" },
             })
           : jsonResponse({ data: [{ id: "template-2" }] });
       },
@@ -87,15 +87,15 @@ describe("WhatsAppCloudApiClient", () => {
       data: [{ id: "template-1" }, { id: "template-2" }],
     });
     expect(calls).toEqual([
-      "https://graph.example.test/v23.0/waba-1/message_templates",
-      "https://graph.example.test/v23.0/waba-1/message_templates?after=cursor-1",
+      "https://graph.example.test/v26.0/waba-1/message_templates",
+      "https://graph.example.test/v26.0/waba-1/message_templates?after=cursor-1",
     ]);
   });
 
   test("marks rate limits as retryable", async () => {
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
-      graphVersion: "v23.0",
+      graphVersion: "v26.0",
       fetchImpl: async () =>
         jsonResponse(
           { error: { message: "Too many requests", code: 429 } },
@@ -114,7 +114,7 @@ describe("WhatsAppCloudApiClient", () => {
   test("recognizes a provider rate-limit code on a definitive error response", async () => {
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
-      graphVersion: "v23.0",
+      graphVersion: "v26.0",
       fetchImpl: async () =>
         jsonResponse(
           { error: { message: "Rate limit hit", code: 130429 } },
@@ -134,7 +134,7 @@ describe("WhatsAppCloudApiClient", () => {
   test("converts network failures and timeouts into retryable errors", async () => {
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
-      graphVersion: "v23.0",
+      graphVersion: "v26.0",
       timeoutMs: 5,
       fetchImpl: async (_url, init) => {
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -153,7 +153,7 @@ describe("WhatsAppCloudApiClient", () => {
   test("marks a timed-out message submission as uncertain", async () => {
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
-      graphVersion: "v23.0",
+      graphVersion: "v26.0",
       timeoutMs: 5,
       fetchImpl: async (_url, init) => {
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -172,7 +172,7 @@ describe("WhatsAppCloudApiClient", () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const client = new WhatsAppCloudApiClient({
       accessToken: "test-secret-token",
-      graphVersion: "v23.0",
+      graphVersion: "v26.0",
       baseUrl: "https://graph.example.test",
       fetchImpl: async (url, init) => {
         calls.push({ url: String(url), init });
@@ -188,7 +188,7 @@ describe("WhatsAppCloudApiClient", () => {
       }),
     ).resolves.toEqual({ id: "media-1" });
     expect(calls[0]?.url).toBe(
-      "https://graph.example.test/v23.0/9876543210/media",
+      "https://graph.example.test/v26.0/9876543210/media",
     );
     expect(calls[0]?.init?.headers).toEqual({
       Authorization: "Bearer test-secret-token",

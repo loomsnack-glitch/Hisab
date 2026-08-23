@@ -179,7 +179,7 @@ export const upsertCloudTemplateAssets = async (
           provider_updated_at, last_synced_at
         ) VALUES (
           ${asset.organizationId}, ${asset.whatsappBusinessAccountId}, ${asset.metaTemplateId}, ${asset.name},
-          ${asset.languageCode}, ${asset.category}, ${asset.status}, ${JSON.stringify(asset.components)}::jsonb,
+          ${asset.languageCode}, ${asset.category}, ${asset.status}, ${asset.components}::jsonb,
           ${asset.rejectionReason}, ${asset.providerUpdatedAt}, NOW()
         )
         ON CONFLICT (whatsapp_business_account_id, meta_template_id)
@@ -292,7 +292,7 @@ export const createCloudTemplateBinding = async (input: {
       kind, is_default, created_by, updated_by
     ) VALUES (
       ${input.organizationId}, ${input.storeId}, ${input.localTemplateId}, ${asset.id},
-      ${input.whatsappBusinessAccountId}, ${localTemplate.body}, ${JSON.stringify(variableMapping)}::jsonb,
+      ${input.whatsappBusinessAccountId}, ${localTemplate.body}, ${variableMapping}::jsonb,
       ${input.kind}, ${input.isDefault}, ${input.createdBy}, ${input.createdBy}
     )
     ON CONFLICT (organization_id, store_id, local_template_id, cloud_template_id)

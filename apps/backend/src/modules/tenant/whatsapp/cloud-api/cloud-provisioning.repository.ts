@@ -74,7 +74,7 @@ export const createCloudProvisioningAttempt = async (input: {
       credential_reference, credential_key_version, created_by
     ) VALUES (
       ${input.organizationId}, NULL, ${input.idempotencyKey}, ${input.state.status},
-      ${input.state.currentStep}, ${JSON.stringify(input.state.completedSteps)}::jsonb,
+      ${input.state.currentStep}, ${input.state.completedSteps}::jsonb,
       ${input.state.safeErrorCode}, ${input.state.safeErrorMessage},
       ${input.providerWabaId}, ${input.providerPhoneNumberId},
       ${input.credentialReference}, ${input.credentialKeyVersion}, ${input.createdBy}
@@ -98,7 +98,7 @@ export const updateCloudProvisioningAttempt = async (input: {
     UPDATE whatsapp_cloud_provisioning_attempts
     SET status = ${input.state.status},
         current_step = ${input.state.currentStep},
-        completed_steps = ${JSON.stringify(input.state.completedSteps)}::jsonb,
+        completed_steps = ${input.state.completedSteps}::jsonb,
         safe_error_code = ${input.state.safeErrorCode},
         safe_error_message = ${input.state.safeErrorMessage},
         whatsapp_account_id = COALESCE(${input.whatsappAccountId ?? null}, whatsapp_account_id),
