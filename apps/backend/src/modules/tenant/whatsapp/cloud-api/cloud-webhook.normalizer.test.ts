@@ -29,6 +29,62 @@ const messagePayload = (message: Record<string, unknown>) => ({
 });
 
 describe("WhatsApp Cloud webhook normalization", () => {
+  test("accepts Meta WAMIDs with base64 padding", () => {
+    const [event] = normalizeCloudWebhookReceipt(
+      receiptFrom(
+        messagePayload({
+          from: "919812345678",
+          id: "wamid.HBgMOTE4ODY2Mjg4NjAyFQIAERgSMzg4RDNGNDk3MzlGNUQwODMwAA==",
+          timestamp: "1760000000",
+          type: "text",
+          text: { body: "Hello Hisab" },
+        }),
+      ),
+    );
+
+    expect(event).toMatchObject({
+      kind: "message",
+      providerMessageId:
+        "wamid.HBgMOTE4ODY2Mjg4NjAyFQIAERgSMzg4RDNGNDk3MzlGNUQwODMwAA==",
+    });
+  });
+
+  test("accepts padded Meta WAMIDs in status updates", () => {
+    const [event] = normalizeCloudWebhookReceipt(
+      receiptFrom({
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            id: "waba-1",
+            changes: [
+              {
+                value: {
+                  metadata: { phone_number_id: "phone-1" },
+                  statuses: [
+                    {
+                      id: "wamid.HBgMOTE4ODY2Mjg4NjAyFQIAERgSMzg4RDNGNDk3MzlGNUQwODMwAA==",
+                      status: "delivered",
+                      timestamp: "1760000000",
+                      recipient_id: "919812345678",
+                    },
+                  ],
+                },
+                field: "messages",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(event).toMatchObject({
+      kind: "status",
+      providerMessageId:
+        "wamid.HBgMOTE4ODY2Mjg4NjAyFQIAERgSMzg4RDNGNDk3MzlGNUQwODMwAA==",
+      status: "delivered",
+    });
+  });
+
   test("normalizes inbound text into the existing conversation event shape", () => {
     const [event] = normalizeCloudWebhookReceipt(
       receiptFrom(

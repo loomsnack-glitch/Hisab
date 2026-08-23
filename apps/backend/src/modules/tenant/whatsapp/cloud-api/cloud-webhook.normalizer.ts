@@ -92,6 +92,17 @@ const identifier = (value: unknown, maxLength: number): string | null => {
     : null;
 };
 
+// Meta message IDs are opaque provider values. Real WAMIDs can contain
+// base64 padding and symbols such as `=` that are not valid in our local IDs.
+const providerMessageIdentifier = (value: unknown): string | null => {
+  const normalized = stringValue(value);
+  return normalized &&
+    normalized.length <= 255 &&
+    !/[\u0000-\u001F\u007F\s]/.test(normalized)
+    ? normalized
+    : null;
+};
+
 const requiredString = (value: unknown, label: string): string => {
   const normalized = stringValue(value);
   if (!normalized)
@@ -188,7 +199,7 @@ const normalizeMessage = (
   value: JsonRecord,
   message: JsonRecord,
 ): CloudNormalizedEvent => {
-  const providerMessageId = identifier(message.id, 255);
+  const providerMessageId = providerMessageIdentifier(message.id);
   const messageType = stringValue(message.type);
   const metadata = (() => {
     try {
@@ -276,7 +287,7 @@ const normalizeStatus = (
   value: JsonRecord,
   status: JsonRecord,
 ): CloudNormalizedEvent => {
-  const providerMessageId = identifier(status.id, 255);
+  const providerMessageId = providerMessageIdentifier(status.id);
   const rawStatus = stringValue(status.status);
   let metadata: ReturnType<typeof metadataFor> | null = null;
   try {

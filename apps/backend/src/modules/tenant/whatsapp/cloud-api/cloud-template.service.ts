@@ -95,8 +95,8 @@ export const listCloudTemplatesForAccount = async (
   const deps = { ...dependencies(), ...injected };
   if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   const account = await deps.getAccount(organizationId, accountId);
-  if (!account?.wabaId) return accountNotFound();
-  const templates = await deps.list(organizationId, account.wabaId);
+  if (!account?.whatsappBusinessAccountId) return accountNotFound();
+  const templates = await deps.list(organizationId, account.whatsappBusinessAccountId);
   return { status: "success", message: "WhatsApp Cloud templates fetched successfully", data: { templates }, code: STATUS_CODES.SUCCESS };
 };
 
