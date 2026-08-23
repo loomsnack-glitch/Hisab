@@ -741,6 +741,7 @@ export type PlatformOrganizationSalesMetricsQuery = {
 export type PlatformOrganizationSaleSummaryMetricsRow = {
     id: string;
     saleNumber: string | null;
+    tokenNumber: string | null;
     status: "draft" | "completed" | "voided";
     paymentStatus: "pending" | "partial" | "paid";
     grandTotal: number;
@@ -868,6 +869,7 @@ export const listOrganizationSales = async (
         SELECT
             s.id,
             s.sale_number,
+            s.token_number,
             s.status::text AS status,
             s.payment_status::text AS payment_status,
             s.service_mode::text AS service_mode,
@@ -951,6 +953,7 @@ export const listOrganizationSales = async (
             return [{
                 id: String(row.id),
                 saleNumber: row.sale_number == null ? null : String(row.sale_number),
+                tokenNumber: row.token_number == null ? null : String(row.token_number),
                 status: statusValue,
                 paymentStatus: paymentStatusValue,
                 grandTotal: asMoney(row.grand_total),
@@ -1747,6 +1750,7 @@ export const getOrganizationCustomerContext = async (
         SELECT
             s.id,
             s.sale_number,
+            s.token_number,
             s.status::text AS status,
             s.payment_status::text AS payment_status,
             s.service_mode::text AS service_mode,
@@ -1829,6 +1833,7 @@ export const getOrganizationCustomerContext = async (
             return [{
                 id: String(row.id),
                 saleNumber: row.sale_number == null ? null : String(row.sale_number),
+                tokenNumber: row.token_number == null ? null : String(row.token_number),
                 status: statusValue,
                 paymentStatus: paymentStatusValue,
                 grandTotal: asMoney(row.grand_total),

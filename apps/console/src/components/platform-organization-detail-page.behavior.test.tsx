@@ -615,6 +615,7 @@ const successSales = (
         {
             id: mixedRecentSales[0]!.id,
             saleNumber: "12",
+            tokenNumber: "021",
             status: "completed",
             paymentStatus: "paid",
             grandTotal: 50.5,
@@ -659,6 +660,7 @@ const successSaleDetail = (): ServiceResponse<PlatformSaleInspectionDetailRespon
         sale: {
             id: mixedRecentSales[0]!.id,
             saleNumber: "12",
+            tokenNumber: "021",
             status: "completed",
             paymentStatus: "paid",
             grandTotal: 50.5,
@@ -1121,7 +1123,7 @@ describe("Organization Inspection Workspace", () => {
         expect(view.queryByText("Create Store")).toBeNull();
 
         fireEvent.click(view.getByRole("link", { name: "Billing" }));
-        fireEvent.click(await view.findByRole("link", { name: "Bill 12" }));
+        fireEvent.click(await view.findByRole("button", { name: "Open Details" }));
         expect(`${window.location.pathname}${window.location.search}`).toBe(
             organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id),
         );
@@ -1337,22 +1339,21 @@ describe("Organization Billing inspection", () => {
 
     test("shows a read-only bill list with Store attribution and independent billing filters", async () => {
         const requested: PlatformBillingInspectionQueryJSON[] = [];
-        const view = renderBillingSection(organizationInspectionPath(mixedBistro.id, "billing", undefined, { storeId: mixedStores[0]!.id }), {
+        const view = renderBillingSection(organizationInspectionPath(mixedBistro.id, "billing"), {
             getPlatformOrganizationSales: async (_organizationId, query = {}) => {
                 requested.push(query);
                 return successSales();
             },
         });
 
-        expect(await view.findByRole("heading", { name: "Billing history" })).toBeTruthy();
         expect(await view.findByRole("link", { name: "Front Hall" })).toBeTruthy();
-        expect(view.getByText(/not the Dashboard reporting period/)).toBeTruthy();
-        expect(view.getByRole("link", { name: "Bill 12" })).toBeTruthy();
+        expect(view.getByText("Token 021")).toBeTruthy();
+        expect(view.getByText("Bill 12")).toBeTruthy();
         expect(view.getByRole("button", { name: "Open Details" })).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
         expect(view.queryByText("Collect Payment")).toBeNull();
         await waitFor(() => {
-            expect(requested.some((query) => query.storeId === mixedStores[0]!.id)).toBe(true);
+            expect(requested.some((query) => !query.storeId)).toBe(true);
         });
     });
 
@@ -1360,13 +1361,12 @@ describe("Organization Billing inspection", () => {
         const view = renderBillingSection(organizationInspectionPath(mixedBistro.id, "billing", mixedRecentSales[0]!.id));
 
         expect(await view.findByRole("heading", { name: "Bill 12" })).toBeTruthy();
-        expect(view.getByText("Line items")).toBeTruthy();
+        expect(view.getByText("Items")).toBeTruthy();
         expect(view.getByText("Tea")).toBeTruthy();
         expect(view.getByText("Payments")).toBeTruthy();
         expect(view.getByText("Device attribution")).toBeTruthy();
         expect(view.getByText(/Created by Counter POS/)).toBeTruthy();
         expect(view.getByText("Receipt preview")).toBeTruthy();
-        expect(view.getByRole("button", { name: "Back to billing" })).toBeTruthy();
         expect(view.queryByText("Void")).toBeNull();
         expect(view.queryByText("Print")).toBeNull();
         expect(view.queryByText("Download")).toBeNull();

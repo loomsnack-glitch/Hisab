@@ -12,18 +12,22 @@ import {
     formatSaleServiceModeLabel,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
+import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Calendar as DateCalendar } from "@repo/ui/components/calendar";
 import { Card, CardContent } from "@repo/ui/components/card";
+import {
+    DataTableFilterTrigger,
+    DataTableFilterValue,
+} from "@repo/ui/components/data-table-filter-trigger";
+import { DataTableSortFilter } from "@repo/ui/components/data-table-sort-filter";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
 import { Input } from "@repo/ui/components/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
-    ArrowUpDown,
     Banknote,
     Calendar,
     ChevronLeft,
@@ -31,11 +35,10 @@ import {
     CircleDollarSign,
     Clock,
     CreditCard,
-    Filter,
     ReceiptText,
+    RotateCcw,
     Search,
     Smartphone,
-    Store,
     User,
 } from "lucide-react";
 
@@ -230,31 +233,21 @@ const inferBillingDatePreset = (filters: BillingInspectionFilters, today: string
     return "custom";
 };
 
-const FilterPill = ({
-    active,
-    children,
-    onClick,
-    tone = "neutral",
-}: {
-    active: boolean;
-    children: string;
-    onClick: () => void;
-    tone?: "neutral" | "primary";
-}) => (
-    <button
-        type="button"
-        onClick={onClick}
-        className={cn(
-            "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
-            active
-                ? tone === "primary"
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                    : "bg-foreground text-background shadow-md shadow-foreground/5"
-                : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-        )}
-    >
-        {children}
-    </button>
+const renderSaleMetaRow = (sale: PlatformSaleInspectionSummaryDTO) => (
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-foreground/75">
+            {formatSaleServiceModeLabel(sale.serviceMode)}
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+            {sale.itemCount} item{sale.itemCount !== 1 ? "s" : ""}
+        </span>
+        <time
+            className="min-w-0 basis-full text-[11px] leading-tight text-muted-foreground sm:basis-auto sm:text-xs"
+            dateTime={typeof sale.createdAt === "string" ? sale.createdAt : undefined}
+        >
+            {formatDateTime(sale.createdAt)}
+        </time>
+    </div>
 );
 
 const renderPaymentStatusBadge = (sale: PlatformSaleInspectionSummaryDTO) => {
@@ -373,9 +366,12 @@ const ReadOnlySaleDialog = ({
 
     return (
         <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
-            <DialogContent className="max-h-[92vh] w-[95vw] sm:w-[90vw] md:w-[85vw] max-w-4xl overflow-y-auto overflow-x-hidden rounded-[32px] border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">
+            <DialogContent
+                className="gap-0 max-h-[calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-2rem)] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto overflow-x-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl sm:max-w-5xl"
+                showCloseButton
+            >
                 {isLoading ? (
-                    <div className="flex min-h-[420px] items-center justify-center" aria-busy="true" aria-label="Loading bill">
+                    <div className="flex min-h-[360px] items-center justify-center" aria-busy="true" aria-label="Loading bill">
                         <DialogTitle className="sr-only">Loading bill</DialogTitle>
                         <Spinner className="size-6 text-primary" />
                     </div>
@@ -396,62 +392,67 @@ const ReadOnlySaleDialog = ({
                         </Alert>
                     </div>
                 ) : (
-                    <div className="space-y-0">
-                        <div className="border-b border-border/60 px-6 py-5 sm:px-8">
-                            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                <DialogHeader className="min-w-0 flex-1 space-y-3">
-                                    <div className="flex flex-wrap items-end gap-3">
-                                        <div className="min-w-0">
-                                            <DialogTitle className="whitespace-nowrap font-display text-3xl font-semibold tracking-tight">
-                                                {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft bill"}
-                                            </DialogTitle>
-                                        </div>
-                                        <div className="flex items-center gap-2 pb-1">
-                                            <span className={cn("rounded-full border px-2.5 py-0.5 text-xs capitalize", saleStatusStyles[sale.status])}>
-                                                {sale.status}
-                                            </span>
-                                            <span className={cn("rounded-full border px-2.5 py-0.5 text-xs capitalize", paymentStatusStyles[sale.paymentStatus])}>
-                                                {sale.paymentStatus}
-                                            </span>
-                                            <span className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-xs text-foreground">
-                                                {formatSaleServiceModeLabel(sale.serviceMode)}
-                                            </span>
-                                        </div>
+                    <div>
+                        <div className="border-b border-border/60 bg-muted/20 px-5 py-5 sm:px-6">
+                            <DialogHeader className="min-w-0 space-y-3 text-left">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                    <DialogTitle className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                                        {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft bill"}
+                                    </DialogTitle>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        {sale.tokenNumber ? (
+                                            <Badge className="rounded-md border border-amber-500/20 bg-amber-500/10 text-xs text-amber-700 dark:text-amber-300">
+                                                Token {sale.tokenNumber}
+                                            </Badge>
+                                        ) : null}
+                                        <Badge className={cn("rounded-md border text-xs capitalize", saleStatusStyles[sale.status])}>
+                                            {sale.status}
+                                        </Badge>
+                                        <Badge className={cn("rounded-md border text-xs capitalize", paymentStatusStyles[sale.paymentStatus])}>
+                                            {sale.paymentStatus}
+                                        </Badge>
+                                        <Badge variant="outline" className="rounded-md text-xs text-muted-foreground">
+                                            {formatSaleServiceModeLabel(sale.serviceMode)}
+                                        </Badge>
                                     </div>
-                                    <DialogDescription className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-muted-foreground">
-                                        <span className="flex items-center gap-1.5">
-                                            <Calendar className="size-3.5" />
-                                            Created: <span className="text-foreground/80">{formatDateTime(sale.createdAt)}</span>
+                                </div>
+                                <DialogDescription className="sr-only">
+                                    Bill details for {sale.customer?.name || sale.customerName || "walk-in customer"} at{" "}
+                                    {sale.store.name}
+                                </DialogDescription>
+                                <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                                    <div className="flex items-center gap-2">
+                                        <User className="size-4 shrink-0" />
+                                        <span className="font-medium text-foreground">
+                                            {sale.customer?.name || sale.customerName || "Walk-in Customer"}
                                         </span>
-                                        <span className="flex items-center gap-1.5">
-                                            <Clock className="size-3.5" />
-                                            Store: <span className="font-semibold text-foreground/80">{sale.store.name}</span>
-                                        </span>
-                                        <span className="flex items-center gap-1.5">
-                                            <User className="size-3.5" />
-                                            Customer:{" "}
-                                            <span className="font-semibold text-foreground/80">
-                                                {sale.customer?.name || sale.customerName || "Walk-in Customer"}
-                                            </span>
-                                        </span>
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl" onClick={onClose}>
-                                    <ArrowLeft className="size-4" />
-                                    Back to billing
-                                </Button>
-                            </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Calendar className="size-4 shrink-0" />
+                                        <span>{formatDateTime(sale.createdAt)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="size-4 shrink-0" />
+                                        <span>Store: {sale.store.name}</span>
+                                    </div>
+                                </div>
+                            </DialogHeader>
                         </div>
 
-                        <div className="grid gap-6 px-6 py-6 sm:px-8 grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]">
-                            <div className="space-y-5">
-                                <Card className="rounded-[28px] border-border/60 bg-card/70">
-                                    <CardContent className="p-5">
-                                        <div className="flex items-center gap-2">
-                                            <ReceiptText className="size-4 text-primary" />
-                                            <h3 className="font-semibold text-foreground">Line items</h3>
+                        <div className="grid gap-6 px-5 py-5 sm:px-6 md:grid-cols-[1fr_280px] md:gap-8">
+                            <div className="min-w-0 space-y-6">
+                                <section className="space-y-3">
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                        Items
+                                        <span className="ml-2 font-normal text-muted-foreground">({sale.items.length})</span>
+                                    </h3>
+                                    <div className="overflow-hidden rounded-xl border border-border/60">
+                                        <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 border-b border-border/60 bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground sm:grid-cols-[1fr_80px_96px]">
+                                            <span>Product</span>
+                                            <span className="text-right">Qty</span>
+                                            <span className="text-right">Amount</span>
                                         </div>
-                                        <div className="mt-4 space-y-2">
+                                        <div className="divide-y divide-border/50">
                                             {sale.items.map((item) => {
                                                 const addOns = item.addOns ?? [];
                                                 const bundleComponents = item.bundleComponents ?? [];
@@ -475,52 +476,64 @@ const ReadOnlySaleDialog = ({
                                                     Number(item.lineTotal) + addOns.reduce((total, addOn) => total + Number(addOn.lineTotal), 0);
 
                                                 return (
-                                                    <div key={item.id} className="rounded-2xl border border-border/50 bg-background/40 px-4 py-3.5">
-                                                        <div className="flex items-center justify-between gap-3">
-                                                            <div className="flex items-start gap-3">
-                                                                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                                                    <ReceiptText className="size-4" />
-                                                                </div>
-                                                                <div>
-                                                                    <p className="font-semibold text-sm text-foreground/90">{item.productNameSnapshot}</p>
-                                                                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold text-foreground/75">
-                                                                            Qty {Number(item.quantity)}
+                                                    <div key={item.id} className="px-4 py-3">
+                                                        <div className="grid grid-cols-[1fr_auto_auto] items-start gap-x-4 sm:grid-cols-[1fr_80px_96px]">
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-medium leading-snug text-foreground">
+                                                                    {item.productNameSnapshot}
+                                                                </p>
+                                                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                                                    {formatCurrency(item.unitPriceSnapshot)} each
+                                                                    {displayedItemDiscount > 0 ? (
+                                                                        <span className="text-rose-500">
+                                                                            {" "}
+                                                                            · -{formatCurrency(displayedItemDiscount)}
+                                                                            {itemDiscountLabel ? ` (${itemDiscountLabel})` : ""}
                                                                         </span>
-                                                                        <span>×</span>
-                                                                        <span>{formatCurrency(item.unitPriceSnapshot)}</span>
-                                                                        {displayedItemDiscount > 0 ? (
-                                                                            <span className="font-medium text-rose-500">
-                                                                                (Disc. -{formatCurrency(displayedItemDiscount)}
-                                                                                {itemDiscountLabel ? `, ${itemDiscountLabel}` : ""})
-                                                                            </span>
-                                                                        ) : null}
-                                                                    </p>
-                                                                </div>
+                                                                    ) : null}
+                                                                </p>
                                                             </div>
-                                                            <p className="text-sm font-bold text-foreground">{formatCurrency(configuredLineTotal)}</p>
+                                                            <p className="text-right text-sm tabular-nums text-muted-foreground">
+                                                                {Number(item.quantity)}
+                                                            </p>
+                                                            <p className="text-right text-sm font-semibold tabular-nums text-foreground">
+                                                                {formatCurrency(configuredLineTotal)}
+                                                            </p>
                                                         </div>
                                                         {addOns.length > 0 ? (
-                                                            <div className="ml-3.5 mt-3 space-y-2 border-l border-border/60 pl-4">
+                                                            <div className="mt-2 space-y-1.5 border-l-2 border-border/40 pl-3">
                                                                 {addOns.map((addOn) => (
-                                                                    <div key={addOn.id} className="flex items-center justify-between gap-3">
-                                                                        <div>
+                                                                    <div
+                                                                        key={addOn.id}
+                                                                        className="grid grid-cols-[1fr_auto_auto] items-start gap-x-4 sm:grid-cols-[1fr_80px_96px]"
+                                                                    >
+                                                                        <div className="min-w-0">
                                                                             <p className="text-sm text-foreground/85">+ {addOn.addOnNameSnapshot}</p>
-                                                                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                                                                Qty {Number(addOn.totalQuantity)} × {formatCurrency(addOn.unitPriceSnapshot)}
+                                                                            <p className="text-xs text-muted-foreground">
+                                                                                {formatCurrency(addOn.unitPriceSnapshot)} each
                                                                             </p>
                                                                         </div>
-                                                                        <p className="text-sm font-semibold text-foreground/90">{formatCurrency(addOn.lineTotal)}</p>
+                                                                        <p className="text-right text-xs tabular-nums text-muted-foreground">
+                                                                            {Number(addOn.totalQuantity)}
+                                                                        </p>
+                                                                        <p className="text-right text-sm font-medium tabular-nums text-foreground/90">
+                                                                            {formatCurrency(addOn.lineTotal)}
+                                                                        </p>
                                                                     </div>
                                                                 ))}
                                                             </div>
                                                         ) : null}
                                                         {bundleComponents.length > 0 ? (
-                                                            <div className="ml-3.5 mt-3 space-y-2 border-l border-border/60 pl-4">
+                                                            <div className="mt-2 space-y-2 border-l-2 border-border/40 pl-3">
                                                                 {bundleComponents.map((component) => (
-                                                                    <div key={component.id} className="space-y-1.5">
-                                                                        <p className="text-sm text-foreground/85">{component.productNameSnapshot}</p>
-                                                                        <p className="text-xs text-muted-foreground">Qty {Number(component.totalQuantity)}</p>
+                                                                    <div key={component.id} className="space-y-1">
+                                                                        <p className="text-sm text-foreground/85">
+                                                                            {component.productNameSnapshot}
+                                                                            <span className="text-muted-foreground">
+                                                                                {" "}
+                                                                                × {Number(component.totalQuantity)}
+                                                                            </span>
+                                                                        </p>
                                                                         {(component.addOns ?? []).map((addOn) => (
                                                                             <p key={addOn.id} className="text-xs text-muted-foreground">
                                                                                 + {addOn.addOnNameSnapshot} × {Number(addOn.totalQuantity)}
@@ -534,128 +547,133 @@ const ReadOnlySaleDialog = ({
                                                 );
                                             })}
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </section>
 
-                                <Card className="rounded-[28px] border-border/60 bg-card/70">
-                                    <CardContent className="p-5">
-                                        <div className="flex items-center gap-2">
-                                            <CircleDollarSign className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                            <h3 className="font-semibold text-foreground">Payments</h3>
+                                <section className="space-y-3">
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                        Payments
+                                        {sale.payments.length > 0 ? (
+                                            <span className="ml-2 font-normal text-muted-foreground">({sale.payments.length})</span>
+                                        ) : null}
+                                    </h3>
+                                    {sale.payments.length === 0 ? (
+                                        <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
+                                            No payments collected yet.
                                         </div>
-                                        <div className="mt-4 space-y-2">
-                                            {sale.payments.length === 0 ? (
-                                                <div className="rounded-2xl border border-dashed border-border/70 bg-background/30 px-4 py-6 text-center text-sm text-muted-foreground">
-                                                    No money collected yet for this bill.
-                                                </div>
-                                            ) : (
-                                                sale.payments.map((payment) => {
-                                                    const method = payment.method.toLowerCase();
-                                                    const Icon =
-                                                        method === "cash"
-                                                            ? Banknote
-                                                            : method === "card"
-                                                              ? CreditCard
-                                                              : method === "upi"
-                                                                ? Smartphone
-                                                                : CircleDollarSign;
-                                                    const colorClass =
-                                                        method === "cash"
-                                                            ? "bg-emerald-500/10 text-emerald-500"
-                                                            : method === "card"
-                                                              ? "bg-purple-500/10 text-purple-500"
-                                                              : method === "upi"
-                                                                ? "bg-blue-500/10 text-blue-500"
-                                                                : "bg-zinc-500/10 text-zinc-400";
-                                                    return (
-                                                        <div
-                                                            key={payment.id}
-                                                            className="flex items-center justify-between rounded-2xl border border-border/50 bg-background/40 px-4 py-3.5"
-                                                        >
-                                                            <div className="flex items-start gap-3">
-                                                                <div className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", colorClass)}>
-                                                                    <Icon className="size-4" />
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-sm font-semibold capitalize text-foreground/90">
-                                                                        {payment.method.replace("_", " ")}
-                                                                    </p>
-                                                                    <p className="mt-0.5 text-xs text-muted-foreground">
-                                                                        {formatDateTime(payment.collectedAt)}
-                                                                        {payment.referenceNumber ? ` • Ref: ${payment.referenceNumber}` : ""}
-                                                                    </p>
-                                                                </div>
+                                    ) : (
+                                        <div className="divide-y divide-border/50 rounded-xl border border-border/60">
+                                            {sale.payments.map((payment) => {
+                                                const method = payment.method.toLowerCase();
+                                                const Icon =
+                                                    method === "cash"
+                                                        ? Banknote
+                                                        : method === "card"
+                                                          ? CreditCard
+                                                          : method === "upi"
+                                                            ? Smartphone
+                                                            : CircleDollarSign;
+                                                return (
+                                                    <div
+                                                        key={payment.id}
+                                                        className="flex items-center justify-between gap-3 px-4 py-3"
+                                                    >
+                                                        <div className="flex items-start gap-3">
+                                                            <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                                                            <div>
+                                                                <p className="text-sm font-medium capitalize text-foreground">
+                                                                    {payment.method.replace("_", " ")}
+                                                                </p>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    {formatDateTime(payment.collectedAt)}
+                                                                    {payment.referenceNumber ? ` · Ref: ${payment.referenceNumber}` : ""}
+                                                                </p>
                                                             </div>
-                                                            <p className="text-sm font-bold text-foreground">{formatCurrency(payment.amount)}</p>
                                                         </div>
-                                                    );
-                                                })
-                                            )}
+                                                        <p className="text-sm font-semibold tabular-nums text-foreground">
+                                                            {formatCurrency(payment.amount)}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    )}
+                                </section>
 
-                                <Card className="rounded-[28px] border-border/60 bg-card/70">
-                                    <CardContent className="p-5">
-                                        <h3 className="font-semibold text-foreground">Device attribution</h3>
-                                        <p className="mt-1 text-xs text-muted-foreground">Console-safe operational metadata only.</p>
-                                        <div className="mt-3 space-y-1 text-sm">
-                                            <p>{`Created by ${sale.createdByDevice?.name ?? "Unknown device"}`}</p>
-                                            <p>{`Last updated by ${sale.updatedByDevice?.name ?? "Unknown device"}`}</p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                <section className="space-y-3">
+                                    <h3 className="text-sm font-semibold text-foreground">Device attribution</h3>
+                                    <p className="text-xs text-muted-foreground">Console-safe operational metadata only.</p>
+                                    <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
+                                        <p>Created by {sale.createdByDevice?.name ?? "Unknown device"}</p>
+                                        <p className="mt-1 text-muted-foreground">
+                                            Last updated by {sale.updatedByDevice?.name ?? "Unknown device"}
+                                        </p>
+                                    </div>
+                                </section>
                             </div>
 
                             <div className="space-y-5">
-                                <Card className="relative overflow-hidden rounded-[28px] border border-primary/20 bg-gradient-to-br from-slate-900 to-slate-950 text-white shadow-xl shadow-black/35">
-                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.1),_transparent_40%)]" />
-                                    <CardContent className="relative space-y-5 p-6">
-                                        <div className="space-y-1.5 border-b border-white/5 pb-2">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/50">Settlement Total</p>
-                                            <p className="text-4xl font-extrabold tracking-tight text-white">{formatCurrency(sale.grandTotal)}</p>
+                                <Card className="rounded-xl border-border/70">
+                                    <CardContent className="space-y-4 p-5">
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                                Settlement total
+                                            </p>
+                                            <p className="mt-1 text-3xl font-bold tracking-tight text-foreground">
+                                                {formatCurrency(sale.grandTotal)}
+                                            </p>
                                         </div>
-                                        <div className="space-y-3.5 text-xs">
-                                            <div className="flex items-center justify-between gap-4 text-white/70">
-                                                <span className="font-medium">Items subtotal</span>
-                                                <span className="font-semibold text-white/90">{formatCurrency(discountedItemsSubtotal)}</span>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex items-center justify-between gap-4">
+                                                <span className="text-muted-foreground">Items subtotal</span>
+                                                <span className="font-medium">{formatCurrency(discountedItemsSubtotal)}</span>
                                             </div>
                                             {itemDiscountTotal > 0 ? (
-                                                <div className="flex items-center justify-between gap-4 text-white/60">
-                                                    <span className="font-medium">Item discount included</span>
-                                                    <span className="font-semibold text-white/80">
+                                                <div className="flex items-center justify-between gap-4 text-muted-foreground">
+                                                    <span>Item discount included</span>
+                                                    <span>
                                                         {formatCurrency(itemDiscountTotal)}
                                                         {itemDiscountPercentage ? ` (${itemDiscountPercentage})` : ""}
                                                     </span>
                                                 </div>
                                             ) : null}
                                             {Number(sale.orderDiscountAmount) > 0 ? (
-                                                <div className="flex items-center justify-between gap-4 text-white/70">
-                                                    <span className="font-medium">Order discount</span>
-                                                    <span className="font-semibold text-white/90">
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <span className="text-muted-foreground">Order discount</span>
+                                                    <span className="font-medium text-rose-500">
                                                         -{formatCurrency(sale.orderDiscountAmount)}
                                                         {orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}
                                                     </span>
                                                 </div>
                                             ) : null}
-                                            <div className="flex items-center justify-between gap-4 text-white/70">
-                                                <span className="font-medium">Collected</span>
-                                                <span className="font-semibold text-emerald-400">{formatCurrency(sale.paidTotal)}</span>
-                                            </div>
-                                            <div className="my-2 border-t border-white/10" />
-                                            <div className="flex items-center justify-between gap-4 pt-1.5">
-                                                <span className="text-sm font-bold text-white/80">Due Amount</span>
-                                                <span className={cn("text-lg font-extrabold", Number(sale.dueTotal) > 0 ? "text-amber-400" : "text-emerald-400")}>
-                                                    {formatCurrency(sale.dueTotal)}
+                                            <div className="flex items-center justify-between gap-4">
+                                                <span className="text-muted-foreground">Collected</span>
+                                                <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                                                    {formatCurrency(sale.paidTotal)}
                                                 </span>
+                                            </div>
+                                            <div className="border-t border-border/60 pt-2">
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <span className="font-medium">Due amount</span>
+                                                    <span
+                                                        className={cn(
+                                                            "text-lg font-bold",
+                                                            Number(sale.dueTotal) > 0
+                                                                ? "text-amber-600 dark:text-amber-400"
+                                                                : "text-emerald-600 dark:text-emerald-400",
+                                                        )}
+                                                    >
+                                                        {formatCurrency(sale.dueTotal)}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     </CardContent>
                                 </Card>
 
-                                <Card className="rounded-[28px] border-border/60 bg-card/70">
+                                <Card className="rounded-xl border-border/70">
                                     <CardContent className="p-5">
-                                        <h3 className="font-medium">Receipt preview</h3>
+                                        <h3 className="text-sm font-semibold text-foreground">Receipt preview</h3>
                                         <p className="mt-1 text-xs text-muted-foreground">
                                             Historical receipt data for inspection only. Printing and messaging are not available in Console.
                                         </p>
@@ -741,7 +759,6 @@ const ConsoleBillingInspection = ({
 
     const stores = salesList?.stores ?? [];
     const sales = salesList?.sales ?? [];
-    const selectedStoreName = stores.find((store) => store.id === filters.storeId)?.name;
     const dateLabel = filters.dateScope === "all" || (!appliedStartDate && !appliedEndDate)
         ? "All dates"
         : appliedIsSingleDate
@@ -814,30 +831,235 @@ const ConsoleBillingInspection = ({
     const page = salesList?.pagination.page ?? 1;
     const limit = salesList?.pagination.limit ?? 20;
     const totalPages = Math.max(1, Math.ceil((salesList?.pagination.totalCount ?? 0) / limit));
-    const draftCount = sales.filter((saleRow) => saleRow.status === "draft").length;
-    const openDueCount = sales.filter((saleRow) => saleRow.status === "completed" && saleRow.paymentStatus !== "paid").length;
     const organizationNotFound = salesErrorCode === 404 || salesErrorMessage === "Organization not found";
 
-    const dateTrigger = useMemo(
-        () => (
-            <Button type="button" variant="outline" className="h-8 min-w-0 max-w-[280px] justify-start gap-2 rounded-lg px-2.5 text-xs">
-                <Calendar className="size-3.5 shrink-0" />
-                <span className="truncate">{dateLabel}</span>
-            </Button>
-        ),
-        [dateLabel],
+    const storeFilterOptions = useMemo(
+        () => [
+            { value: "all", label: "All stores" },
+            ...stores.map((storeOption) => ({ value: storeOption.id, label: storeOption.name })),
+        ],
+        [stores],
     );
+
+    const hasToolbarFilters =
+        Boolean(filters.storeId) ||
+        Boolean(filters.paymentMethod) ||
+        Boolean(filters.status) ||
+        Boolean(filters.paymentStatus) ||
+        Boolean(filters.search?.trim()) ||
+        (filters.sort ?? "newest") !== "newest" ||
+        filters.dateScope === "all" ||
+        appliedStartDate !== today ||
+        appliedEndDate !== today;
+
+    const clearToolbarFilters = () => {
+        onSearchInputChange("");
+        onUpdateFilters({
+            storeId: undefined,
+            paymentMethod: undefined,
+            status: undefined,
+            paymentStatus: undefined,
+            search: undefined,
+            sort: "newest",
+            startDate: today,
+            endDate: today,
+            dateScope: undefined,
+            page: 1,
+        });
+    };
 
     return (
         <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-xl shadow-black/5">
-            <header className="flex flex-col gap-3 border-b border-border/50 bg-card/60 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h2 className="font-display text-xl font-bold tracking-tight text-foreground">Billing history</h2>
-                    <p className="text-xs text-muted-foreground">Read-only inspection · not the Dashboard reporting period</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <div className="mb-6 flex flex-wrap items-center gap-2">
+                    {storeFilterOptions.length > 1 ? (
+                        <DataTableSortFilter
+                            title="Store"
+                            value={filters.storeId ?? "all"}
+                            onValueChange={(value) =>
+                                onUpdateFilters({ storeId: value === "all" ? undefined : value })
+                            }
+                            options={storeFilterOptions}
+                        />
+                    ) : null}
+                    <DataTableSortFilter
+                        title="Payment"
+                        value={filters.paymentMethod ?? "all"}
+                        onValueChange={(value) =>
+                            onUpdateFilters({
+                                paymentMethod:
+                                    value === "all"
+                                        ? undefined
+                                        : (value as PlatformBillingInspectionQueryJSON["paymentMethod"]),
+                            })
+                        }
+                        options={salesPaymentMethodOptions}
+                    />
+                    <DataTableSortFilter
+                        title="Sort"
+                        value={filters.sort ?? "newest"}
+                        onValueChange={(value) => onUpdateFilters({ sort: value as SalesSort })}
+                        options={salesSortOptions}
+                    />
+                    <DataTableSortFilter
+                        title="Status"
+                        value={filters.status ?? "all"}
+                        onValueChange={(value) =>
+                            onUpdateFilters({
+                                status: value === "all" ? undefined : (value as BillingInspectionFilters["status"]),
+                            })
+                        }
+                        options={saleStatusOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    />
+                    <DataTableSortFilter
+                        title="Due"
+                        value={filters.paymentStatus ?? "all"}
+                        onValueChange={(value) =>
+                            onUpdateFilters({
+                                paymentStatus:
+                                    value === "all" ? undefined : (value as BillingInspectionFilters["paymentStatus"]),
+                            })
+                        }
+                        options={paymentStatusOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    />
+                    <div className="inline-flex items-center gap-1">
+                        {appliedIsSingleDate ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="size-8 shrink-0 rounded-l-2xl rounded-r-md shadow-xs"
+                                aria-label="Previous date"
+                                onClick={() => shiftSingleDate(-1)}
+                            >
+                                <ChevronLeft className="size-4" />
+                            </Button>
+                        ) : null}
+                        <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                            <PopoverTrigger
+                                render={
+                                    <DataTableFilterTrigger
+                                        className={cn(appliedIsSingleDate ? "rounded-md" : "rounded-full")}
+                                    >
+                                        <Calendar />
+                                        <span>Date</span>
+                                        <DataTableFilterValue>
+                                            <Badge
+                                                variant="secondary"
+                                                className="max-w-[12rem] truncate rounded-md px-1.5 font-normal"
+                                            >
+                                                {dateLabel}
+                                            </Badge>
+                                        </DataTableFilterValue>
+                                    </DataTableFilterTrigger>
+                                }
+                            />
+                            <PopoverContent align="start" className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-2">
+                                <div className="flex min-w-0 flex-col gap-2">
+                                    <div className="flex min-w-0 rounded-md border border-border/50 bg-muted/30 p-px">
+                                        {(["date", "range"] as const).map((mode) => (
+                                            <button
+                                                key={mode}
+                                                type="button"
+                                                onClick={() => {
+                                                    setDateMode(mode);
+                                                    setDatePreset(
+                                                        mode === "date"
+                                                            ? "custom"
+                                                            : datePreset === "today" || datePreset === "yesterday"
+                                                              ? "custom"
+                                                              : datePreset,
+                                                    );
+                                                }}
+                                                className={cn(
+                                                    "min-w-0 flex-1 rounded px-1.5 py-1 text-center text-[11px] font-semibold transition-colors",
+                                                    dateMode === mode
+                                                        ? "bg-background text-foreground shadow-sm"
+                                                        : "text-muted-foreground hover:text-foreground",
+                                                )}
+                                            >
+                                                {mode === "date" ? "Date" : "Date range"}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex min-w-0 flex-wrap gap-1">
+                                        {getSalesDatePresetOptions(dateMode).map((preset) => (
+                                            <button
+                                                key={preset.value}
+                                                type="button"
+                                                onClick={() => applyDatePreset(preset.value)}
+                                                className={cn(
+                                                    "min-w-0 max-w-full rounded-full border px-2 py-0.5 text-center text-[11px] font-medium transition-colors",
+                                                    datePreset === preset.value
+                                                        ? "border-primary/40 bg-primary/10 text-primary"
+                                                        : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                                )}
+                                            >
+                                                {preset.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="min-w-0 max-w-full overflow-x-auto">
+                                        {dateMode === "date" ? (
+                                            <DateCalendar
+                                                mode="single"
+                                                className="mx-auto p-1 [--cell-size:--spacing(6)]"
+                                                selected={specificDate}
+                                                onSelect={(date) => {
+                                                    if (date) {
+                                                        setSpecificDate(date);
+                                                        setDatePreset("custom");
+                                                    }
+                                                }}
+                                                autoFocus
+                                            />
+                                        ) : (
+                                            <DateCalendar
+                                                mode="range"
+                                                className="mx-auto p-1 [--cell-size:--spacing(6)]"
+                                                selected={{ from: customFromDate ?? undefined, to: customToDate ?? undefined }}
+                                                onSelect={(range) => {
+                                                    setDatePreset("custom");
+                                                    setCustomFromDate(range?.from ?? null);
+                                                    setCustomToDate(range?.to ?? null);
+                                                }}
+                                                autoFocus
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="flex justify-end border-t border-border/50 pt-3">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            className="rounded-lg"
+                                            disabled={
+                                                dateMode === "range" &&
+                                                datePreset === "custom" &&
+                                                (!customFromDate || !customToDate)
+                                            }
+                                            onClick={confirmDateFilter}
+                                        >
+                                            Confirm
+                                        </Button>
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                        {appliedIsSingleDate ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="size-8 shrink-0 rounded-r-2xl rounded-l-md shadow-xs"
+                                aria-label="Next date"
+                                onClick={() => shiftSingleDate(1)}
+                            >
+                                <ChevronRight className="size-4" />
+                            </Button>
+                        ) : null}
+                    </div>
                     <form
-                        className="relative min-w-0 flex-1 sm:w-56 sm:flex-none"
+                        className="relative min-w-[180px] flex-1 sm:max-w-[220px]"
                         role="search"
                         onSubmit={(event: FormEvent<HTMLFormElement>) => {
                             event.preventDefault();
@@ -849,192 +1071,23 @@ const ConsoleBillingInspection = ({
                             value={searchInput}
                             onChange={(event) => onSearchInputChange(event.target.value)}
                             aria-label="Search bills"
-                            placeholder="Search bill number or customer"
-                            className="h-9 rounded-xl pl-8 text-sm"
+                            placeholder="Search bills"
+                            className="h-8 rounded-full pl-8 text-sm"
                         />
                     </form>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Store className="size-4" />
-                        <span className="hidden sm:inline">Store:</span>
-                    </div>
-                    <Select
-                        value={filters.storeId ?? "all"}
-                        onValueChange={(value) => onUpdateFilters({ storeId: value === "all" ? undefined : value || undefined })}
-                    >
-                        <SelectTrigger aria-label="Store filter" className="h-9 min-w-[160px] max-w-[240px] rounded-xl bg-background/80 px-3 text-sm">
-                            <SelectValue placeholder="All stores">{selectedStoreName ?? "All stores"}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent align="end">
-                            <SelectItem value="all">All stores</SelectItem>
-                            {stores.map((storeOption) => (
-                                <SelectItem key={storeOption.id} value={storeOption.id}>{storeOption.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    {hasToolbarFilters ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 rounded-full px-2.5 text-muted-foreground"
+                            onClick={clearToolbarFilters}
+                        >
+                            <RotateCcw className="size-3.5" />
+                            Clear
+                        </Button>
+                    ) : null}
                 </div>
-            </header>
-
-            <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-                <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:min-w-0">
-                    <div className="mb-6 space-y-4">
-                        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
-                            <ArrowUpDown className="size-3.5 shrink-0 text-muted-foreground" />
-                            {salesSortOptions.map((option) => (
-                                <FilterPill
-                                    key={option.value}
-                                    active={(filters.sort ?? "newest") === option.value}
-                                    onClick={() => onUpdateFilters({ sort: option.value })}
-                                >
-                                    {option.label}
-                                </FilterPill>
-                            ))}
-                        </div>
-
-                        <div className="flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:flex-wrap sm:items-center">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Filter className="size-3.5 shrink-0 text-muted-foreground" />
-                                {salesPaymentMethodOptions.map((option) => (
-                                    <FilterPill
-                                        key={option.value}
-                                        tone="primary"
-                                        active={(filters.paymentMethod ?? "all") === option.value}
-                                        onClick={() =>
-                                            onUpdateFilters({
-                                                paymentMethod: option.value === "all"
-                                                    ? undefined
-                                                    : option.value as PlatformBillingInspectionQueryJSON["paymentMethod"],
-                                            })}
-                                    >
-                                        {option.label}
-                                    </FilterPill>
-                                ))}
-                            </div>
-                            <div className="hidden h-4 w-px bg-border/40 sm:block" />
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                <Calendar className="size-3.5 shrink-0 text-muted-foreground" />
-                                {appliedIsSingleDate ? (
-                                    <Button type="button" variant="outline" size="icon" className="size-8 shrink-0 rounded-lg" aria-label="Previous date" onClick={() => shiftSingleDate(-1)}>
-                                        <ChevronLeft className="size-4" />
-                                    </Button>
-                                ) : null}
-                                <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
-                                    <PopoverTrigger render={dateTrigger} />
-                                    <PopoverContent align="start" className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-2">
-                                        <div className="flex min-w-0 flex-col gap-2">
-                                            <div className="flex min-w-0 rounded-md border border-border/50 bg-muted/30 p-px">
-                                                {(["date", "range"] as const).map((mode) => (
-                                                    <button
-                                                        key={mode}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setDateMode(mode);
-                                                            setDatePreset(mode === "date" ? "custom" : datePreset === "today" || datePreset === "yesterday" ? "custom" : datePreset);
-                                                        }}
-                                                        className={cn(
-                                                            "min-w-0 flex-1 rounded px-1.5 py-1 text-center text-[11px] font-semibold transition-colors",
-                                                            dateMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                                                        )}
-                                                    >
-                                                        {mode === "date" ? "Date" : "Date range"}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <div className="flex min-w-0 flex-wrap gap-1">
-                                                {getSalesDatePresetOptions(dateMode).map((preset) => (
-                                                    <button
-                                                        key={preset.value}
-                                                        type="button"
-                                                        onClick={() => applyDatePreset(preset.value)}
-                                                        className={cn(
-                                                            "min-w-0 max-w-full rounded-full border px-2 py-0.5 text-center text-[11px] font-medium transition-colors",
-                                                            datePreset === preset.value
-                                                                ? "border-primary/40 bg-primary/10 text-primary"
-                                                                : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                                        )}
-                                                    >
-                                                        {preset.label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <div className="min-w-0 max-w-full overflow-x-auto">
-                                                {dateMode === "date" ? (
-                                                    <DateCalendar
-                                                        mode="single"
-                                                        className="mx-auto p-1 [--cell-size:--spacing(6)]"
-                                                        selected={specificDate}
-                                                        onSelect={(date) => {
-                                                            if (date) {
-                                                                setSpecificDate(date);
-                                                                setDatePreset("custom");
-                                                            }
-                                                        }}
-                                                        autoFocus
-                                                    />
-                                                ) : (
-                                                    <DateCalendar
-                                                        mode="range"
-                                                        className="mx-auto p-1 [--cell-size:--spacing(6)]"
-                                                        selected={{ from: customFromDate ?? undefined, to: customToDate ?? undefined }}
-                                                        onSelect={(range) => {
-                                                            setDatePreset("custom");
-                                                            setCustomFromDate(range?.from ?? null);
-                                                            setCustomToDate(range?.to ?? null);
-                                                        }}
-                                                        autoFocus
-                                                    />
-                                                )}
-                                            </div>
-                                            <div className="flex justify-end border-t border-border/50 pt-3">
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    className="rounded-lg"
-                                                    disabled={dateMode === "range" && datePreset === "custom" && (!customFromDate || !customToDate)}
-                                                    onClick={confirmDateFilter}
-                                                >
-                                                    Confirm
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                                {appliedIsSingleDate ? (
-                                    <Button type="button" variant="outline" size="icon" className="size-8 shrink-0 rounded-lg" aria-label="Next date" onClick={() => shiftSingleDate(1)}>
-                                        <ChevronRight className="size-4" />
-                                    </Button>
-                                ) : null}
-                            </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                            {saleStatusOptions.map((option) => (
-                                <FilterPill
-                                    key={option.value}
-                                    active={(filters.status ?? "all") === option.value}
-                                    onClick={() =>
-                                        onUpdateFilters({
-                                            status: option.value === "all" ? undefined : option.value,
-                                        })}
-                                >
-                                    {option.label}
-                                </FilterPill>
-                            ))}
-                            <div className="hidden h-4 w-px bg-border/40 sm:block" />
-                            {paymentStatusOptions.map((option) => (
-                                <FilterPill
-                                    key={option.value}
-                                    tone="primary"
-                                    active={(filters.paymentStatus ?? "all") === option.value}
-                                    onClick={() =>
-                                        onUpdateFilters({
-                                            paymentStatus: option.value === "all" ? undefined : option.value,
-                                        })}
-                                >
-                                    {option.label}
-                                </FilterPill>
-                            ))}
-                        </div>
-                    </div>
 
                     <SalesSummaryBar summary={salesList?.summary ?? null} />
 
@@ -1062,40 +1115,46 @@ const ConsoleBillingInspection = ({
                     ) : (
                         <div className="grid gap-1.5 xl:grid-cols-2">
                             {sales.map((saleRow) => {
-                                const href = organizationInspectionPath(organizationId, "billing", saleRow.id, filters);
                                 const storeHref = organizationInspectionPath(organizationId, "stores", saleRow.store.id);
-                                const billLabel = saleRow.saleNumber ? `Bill ${saleRow.saleNumber}` : "Draft";
                                 return (
                                     <div
                                         key={saleRow.id}
                                         className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border/40 bg-card/70 px-3 py-2 transition-all hover:border-primary/20 hover:bg-card/90 hover:shadow-xs"
                                     >
                                         <div className="min-w-0 flex-1 pr-2">
-                                            <div className="flex min-w-0 items-center gap-2">
-                                                <a
-                                                    href={href}
-                                                    className="shrink-0 whitespace-nowrap text-xs font-bold text-amber-500 dark:text-amber-400"
-                                                    onClick={(event) => {
-                                                        event.preventDefault();
-                                                        onOpenSale(saleRow.id);
-                                                    }}
-                                                >
-                                                    {billLabel}
-                                                </a>
-                                                <p className="min-w-0 truncate text-xs font-semibold text-foreground/80">
-                                                    {saleRow.customerName || "Walk-in customer"}
-                                                </p>
+                                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                                <div className="flex shrink-0 items-center gap-1.5">
+                                                    {saleRow.tokenNumber ? (
+                                                        <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
+                                                            Token {saleRow.tokenNumber}
+                                                        </span>
+                                                    ) : null}
+                                                    {saleRow.saleNumber ? (
+                                                        <span className="rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 text-[10px] font-semibold text-foreground/70">
+                                                            Bill {saleRow.saleNumber}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-500">
+                                                            Draft
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {saleRow.customerName ? (
+                                                    <span className="min-w-0 max-w-full truncate rounded-md border border-sky-500/20 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-400">
+                                                        {saleRow.customerName}
+                                                    </span>
+                                                ) : null}
                                             </div>
-                                            <p className="truncate text-[10px] text-muted-foreground/80">
-                                                {formatSaleServiceModeLabel(saleRow.serviceMode)} · {saleRow.itemCount} item{saleRow.itemCount !== 1 ? "s" : ""} · {formatDateTime(saleRow.createdAt)}
-                                            </p>
-                                            <a
-                                                href={storeHref}
-                                                className="truncate text-[10px] text-muted-foreground underline-offset-2 hover:underline"
-                                                onClick={(event) => onFollowLink(event, storeHref)}
-                                            >
-                                                {saleRow.store.name}
-                                            </a>
+                                            {renderSaleMetaRow(saleRow)}
+                                            {!filters.storeId ? (
+                                                <a
+                                                    href={storeHref}
+                                                    className="mt-0.5 inline-block truncate text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+                                                    onClick={(event) => onFollowLink(event, storeHref)}
+                                                >
+                                                    {saleRow.store.name}
+                                                </a>
+                                            ) : null}
                                         </div>
                                         <div className="flex shrink-0 items-center gap-2">
                                             <div className="hidden sm:block">
@@ -1142,29 +1201,6 @@ const ConsoleBillingInspection = ({
                             </div>
                         </div>
                     ) : null}
-                </div>
-
-                <aside className="hidden w-full flex-col border-t border-border/50 bg-card/90 lg:flex lg:w-[320px] lg:border-t-0 lg:border-l">
-                    <div className="grid gap-3 px-5 py-5">
-                        <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Store</p>
-                            <p className="mt-2 text-lg font-semibold text-foreground">{selectedStoreName ?? "All stores"}</p>
-                        </div>
-                        <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Bills in view</p>
-                            <p className="mt-2 text-3xl font-semibold text-foreground">{sales.length}</p>
-                            <p className="mt-1 text-xs text-muted-foreground">Drafts, paid bills, open dues, and voided bills for this view.</p>
-                        </div>
-                        <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Drafts</p>
-                            <p className="mt-2 text-2xl font-semibold text-foreground">{draftCount}</p>
-                        </div>
-                        <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Open dues</p>
-                            <p className="mt-2 text-2xl font-semibold text-foreground">{openDueCount}</p>
-                        </div>
-                    </div>
-                </aside>
             </div>
 
             <ReadOnlySaleDialog

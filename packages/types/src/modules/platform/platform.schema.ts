@@ -338,6 +338,7 @@ export const PlatformSaleInspectionStoreDTOSchema = z.object({
 export const PlatformSaleInspectionSummaryDTOSchema = z.object({
     id: z.uuid("Invalid sale id"),
     saleNumber: z.string().nullable(),
+    tokenNumber: z.string().nullable().optional(),
     status: SaleStatusSchema,
     paymentStatus: PaymentStatusSchema,
     grandTotal: nonNegativeMoneySchema,

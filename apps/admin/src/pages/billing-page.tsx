@@ -52,7 +52,14 @@ import type {
     UpdateDraftSaleJSON,
 } from "@repo/types";
 import { normalizePhoneNumber } from "@repo/types";
+import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
+import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
+import {
+    DataTableFilterTrigger,
+    DataTableFilterValue,
+} from "@repo/ui/components/data-table-filter-trigger";
+import { DataTableSortFilter } from "@repo/ui/components/data-table-sort-filter";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -75,28 +82,25 @@ import { Calendar as DateCalendar } from "@repo/ui/components/calendar";
 import { Input } from "@repo/ui/components/input";
 import { PhoneInput } from "@repo/ui/components/phone-input";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowLeft,
-    ArrowUpDown,
     Barcode,
     Calendar,
     Check,
     ChevronLeft,
     ChevronRight,
     Copy,
-    Filter,
     Minus,
     Pause,
     Plus,
     Play,
     Printer,
     ReceiptText,
+    RotateCcw,
     Search,
     ShoppingCart,
-    Store,
     Trash2,
     Utensils,
     User,
@@ -116,7 +120,7 @@ import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode, PosComposerHandoff, PosPanelTab } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
-import { formatCurrency, formatDateTime, formatDiscountPercentage, formatLongDate, getAverageBillPerOrder } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatDiscountPercentage, getAverageBillPerOrder } from "@/lib/format";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
@@ -240,6 +244,7 @@ const isSameComposerConfiguration = (
 type SettlementMode = "full" | "partial" | "due";
 type SaleSort = "newest" | "oldest" | "highest" | "lowest";
 type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
+type BillPaymentMethod = Exclude<SalesPaymentMethodFilter, "all">;
 type SalesDateMode = "date" | "range";
 type SalesDatePreset = "today" | "yesterday" | "this-week" | "this-month" | "custom" | "all";
 type BillingPanelTab = "products" | "bills" | "reports" | "purchases" | "customers";
@@ -297,6 +302,10 @@ const salesPaymentMethodOptions: Array<{
     { value: "upi", label: "UPI" },
     { value: "card", label: "Card" },
 ];
+
+const salesPaymentMethodFilterOptions = salesPaymentMethodOptions.filter(
+    (option) => option.value !== "all",
+);
 
 const salesDatePresetOptions: Array<{ value: SalesDatePreset; label: string }> = [
     { value: "today", label: "Today" },
@@ -521,7 +530,7 @@ const BillingPage = ({
     );
 
     const [sortBy, setSortBy] = useState<SaleSort>("newest");
-    const [paymentMethodFilter, setPaymentMethodFilter] = useState<SalesPaymentMethodFilter>("all");
+    const [paymentMethodSelection, setPaymentMethodSelection] = useState<Set<BillPaymentMethod>>(new Set());
     const [dateFilter, setDateFilter] = useState<SalesDateMode>("date");
     const [datePreset, setDatePreset] = useState<SalesDatePreset>("today");
     const [specificDate, setSpecificDate] = useState(new Date());
@@ -650,6 +659,32 @@ const BillingPage = ({
         setSalesDatePopoverOpen(open);
     };
 
+    const appliedSalesDateLabel =
+        appliedDateFilter === "date"
+            ? formatSalesDate(appliedSpecificDate)
+            : appliedDatePreset === "all"
+              ? "All dates"
+              : appliedCustomFromDate && appliedCustomToDate
+                ? `${formatSalesDate(appliedCustomFromDate)} — ${formatSalesDate(appliedCustomToDate)}`
+                : "Select date range";
+
+    const hasBillsToolbarFilters =
+        paymentMethodSelection.size > 0 ||
+        sortBy !== "newest" ||
+        appliedDatePreset !== "today" ||
+        appliedDateFilter !== "date";
+
+    const clearBillsToolbarFilters = () => {
+        setPaymentMethodSelection(new Set());
+        setSortBy("newest");
+        applySalesDatePreset("today");
+        setAppliedDateFilter("date");
+        setAppliedDatePreset("today");
+        setAppliedSpecificDate(startOfLocalDay(new Date()));
+        setAppliedCustomFromDate(null);
+        setAppliedCustomToDate(null);
+    };
+
     const changePanelTab = (tab: BillingPanelTab) => {
         if (tab === "bills" && leftPanelTab !== "bills") {
             applySalesDatePreset("today");
@@ -716,11 +751,22 @@ const BillingPage = ({
             status: salesStatusFilter,
             paymentStatus: salesPaymentStatusFilter,
             search: deferredSalesSearch || undefined,
-            paymentMethod: paymentMethodFilter === "all" ? undefined : paymentMethodFilter,
+            paymentMethods:
+                paymentMethodSelection.size > 0
+                    ? Array.from(paymentMethodSelection)
+                    : undefined,
             createdFrom: salesDateBounds.from?.toISOString(),
             createdTo: salesDateBounds.to?.toISOString(),
         };
-    }, [deferredSalesSearch, paymentMethodFilter, salesDateBounds.from, salesDateBounds.to, salesPaymentStatusFilter, salesStatusFilter, sortBy]);
+    }, [
+        deferredSalesSearch,
+        paymentMethodSelection,
+        salesDateBounds.from,
+        salesDateBounds.to,
+        salesPaymentStatusFilter,
+        salesStatusFilter,
+        sortBy,
+    ]);
 
     const customersQuery = useQuery({
         queryKey: billingKeys.customers(organizationId, { mode: "device", search: deferredCustomerSearch }),
@@ -2115,7 +2161,7 @@ const BillingPage = ({
 
     const panelMaxHeight = isDeviceMode
         ? "calc(100dvh - var(--pos-header-height, 3.5rem) - env(safe-area-inset-top, 0px) - var(--pos-mobile-nav-height, 0px))"
-        : "calc(100dvh - 3.5rem - 57px)";
+        : "calc(100dvh - 3.5rem)";
 
     return (
         <div className="billing-pos-layout flex min-h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] flex-col gap-0 max-lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px)-var(--pos-mobile-nav-height,0px))] lg:h-[calc(100dvh-var(--pos-header-height,3.5rem)-env(safe-area-inset-top,0px))] lg:min-h-0 lg:overflow-hidden">
@@ -2124,43 +2170,6 @@ const BillingPage = ({
                     Preparing receipt for printing
                 </span>
             ) : null}
-            {!isDeviceMode ? (
-                <header className="flex flex-col gap-3 border-b border-border/50 bg-card/60 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-4">
-                        <div>
-                            <h1 className="font-display text-xl font-bold tracking-tight text-foreground">
-                                Billing history
-                            </h1>
-                            <p className="text-xs text-muted-foreground">Admin read-only mode</p>
-                        </div>
-                        <span className="text-sm text-muted-foreground hidden sm:inline">{formatLongDate()}</span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Store className="size-4" />
-                            <span className="hidden sm:inline">Store:</span>
-                        </div>
-                        <Select
-                            key={`${selectedStoreId}-${organizationStores.length}`}
-                            value={selectedStoreId}
-                            onValueChange={setStore}
-                        >
-                            <SelectTrigger className="h-9 min-w-[160px] max-w-[240px] rounded-xl bg-background/80 px-3 text-sm">
-                                <SelectValue placeholder="Choose store">{selectedStore?.name}</SelectValue>
-                            </SelectTrigger>
-                            <SelectContent alignItemWithTrigger={false} align="end">
-                                {organizationStores.map((store) => (
-                                    <SelectItem key={store.id} value={store.id}>
-                                        {store.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </header>
-            ) : null}
-
             {/* ─── Main Two-Panel Layout ─── */}
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
                 {/* ─── LEFT PANEL: Product Grid ─── */}
@@ -2555,148 +2564,124 @@ const BillingPage = ({
                         />
                     ) : (
                         <>
-                            {/* Filters & Control Panel */}
-                            <div className="mb-6 space-y-4">
-                                {/* First Row: Search, Sort, View, Count */}
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                    {/* Sort Controls */}
-                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
-                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground text-xs font-semibold uppercase tracking-wider mr-1">
-                                            <ArrowUpDown className="size-3.5" />
-                                        </div>
-                                        {salesSortOptions.map((opt) => (
-                                            <button
-                                                key={opt.value}
-                                                type="button"
-                                                onClick={() => setSortBy(opt.value)}
-                                                className={cn(
-                                                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
-                                                    sortBy === opt.value
-                                                        ? "bg-foreground text-background shadow-md shadow-foreground/5"
-                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                                                )}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
+                            {/* Bills toolbar */}
+                            <div className="mb-6 flex flex-wrap items-center gap-2">
+                                {!isDeviceMode && organizationStores.length > 0 ? (
+                                    <DataTableSortFilter
+                                        title="Store"
+                                        value={selectedStoreId}
+                                        onValueChange={setStore}
+                                        options={organizationStores.map((store) => ({
+                                            value: store.id,
+                                            label: store.name,
+                                        }))}
+                                    />
+                                ) : null}
+                                <DataTableFacetedFilter
+                                    title="Payment"
+                                    options={salesPaymentMethodFilterOptions}
+                                    selectedValues={paymentMethodSelection}
+                                    onSelectedValuesChange={(values) =>
+                                        setPaymentMethodSelection(
+                                            new Set(Array.from(values) as BillPaymentMethod[]),
+                                        )
+                                    }
+                                />
+                                <DataTableSortFilter
+                                    title="Sort"
+                                    value={sortBy}
+                                    onValueChange={(value) => setSortBy(value as SaleSort)}
+                                    options={salesSortOptions}
+                                />
+                                <div className="inline-flex items-center gap-1">
+                                    {appliedDateFilter === "date" ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="size-8 shrink-0 rounded-l-2xl rounded-r-md shadow-xs"
+                                            aria-label="Previous date"
+                                            onClick={() => shiftSalesDate(-1)}
+                                        >
+                                            <ChevronLeft className="size-4" />
+                                        </Button>
+                                    ) : null}
+                                    <Popover
+                                        open={salesDatePopoverOpen}
+                                        onOpenChange={handleSalesDatePopoverOpenChange}
+                                    >
+                                        <PopoverTrigger
+                                            render={
+                                                <DataTableFilterTrigger
+                                                    className={cn(
+                                                        appliedDateFilter === "date"
+                                                            ? "rounded-md"
+                                                            : "rounded-full",
+                                                    )}
+                                                >
+                                                    <Calendar />
+                                                    <span>Date</span>
+                                                    <DataTableFilterValue>
+                                                        <Badge
+                                                            variant="secondary"
+                                                            className="max-w-[12rem] truncate rounded-md px-1.5 font-normal"
+                                                        >
+                                                            {appliedSalesDateLabel}
+                                                        </Badge>
+                                                    </DataTableFilterValue>
+                                                </DataTableFilterTrigger>
+                                            }
+                                        />
+                                        <PopoverContent
+                                            align="start"
+                                            className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-2"
+                                        >
+                                            <div className="flex min-w-0 flex-col gap-2">
+                                                <div className="flex min-w-0 rounded-md border border-border/50 bg-muted/30 p-px">
+                                                    {(["date", "range"] as const).map((mode) => (
+                                                        <button
+                                                            key={mode}
+                                                            type="button"
+                                                            onClick={() => setSalesDateMode(mode)}
+                                                            className={cn(
+                                                                "min-w-0 flex-1 rounded px-1.5 py-1 text-center text-[11px] font-semibold transition-colors",
+                                                                dateFilter === mode
+                                                                    ? "bg-background text-foreground shadow-sm"
+                                                                    : "text-muted-foreground hover:text-foreground",
+                                                            )}
+                                                        >
+                                                            {mode === "date" ? "Date" : "Date range"}
+                                                        </button>
+                                                    ))}
+                                                </div>
 
-                                </div>
+                                                <div className="flex min-w-0 flex-wrap gap-1">
+                                                    {getSalesDatePresetOptions(dateFilter).map((preset) => (
+                                                        <button
+                                                            key={preset.value}
+                                                            type="button"
+                                                            onClick={() => applySalesDatePreset(preset.value)}
+                                                            className={cn(
+                                                                "min-w-0 max-w-full rounded-full border px-2 py-0.5 text-center text-[11px] font-medium whitespace-normal break-words transition-colors",
+                                                                datePreset === preset.value
+                                                                    ? "border-primary/40 bg-primary/10 text-primary"
+                                                                    : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                                            )}
+                                                        >
+                                                            {preset.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
 
-                                {/* Second Row: Filters (Payment & Date) */}
-                                <div className="flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:flex-wrap sm:items-center">
-                                    {/* Payment Method Filters */}
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
-                                            <Filter className="size-3.5" />
-                                        </div>
-                                        {salesPaymentMethodOptions.map((opt) => (
-                                            <button
-                                                key={opt.value}
-                                                type="button"
-                                                onClick={() => setPaymentMethodFilter(opt.value)}
-                                                className={cn(
-                                                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 shrink-0 cursor-pointer",
-                                                    paymentMethodFilter === opt.value
-                                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                                                        : "bg-muted/40 border border-border/10 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                                                )}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* Divider for sm and up */}
-                                    <div className="hidden sm:block h-4 w-px bg-border/40 mx-2" />
-
-                                    {/* Date filters */}
-                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                        <div className="flex items-center gap-1 shrink-0 text-muted-foreground mr-1">
-                                            <Calendar className="size-3.5" />
-                                        </div>
-                                        {dateFilter === "date" ? (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                className="size-8 shrink-0 rounded-lg"
-                                                aria-label="Previous date"
-                                                onClick={() => shiftSalesDate(-1)}
-                                            >
-                                                <ChevronLeft className="size-4" />
-                                            </Button>
-                                        ) : null}
-                                        <Popover open={salesDatePopoverOpen} onOpenChange={handleSalesDatePopoverOpenChange}>
-                                            <PopoverTrigger
-                                                render={
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        className="h-8 min-w-0 max-w-[280px] justify-start gap-2 rounded-lg px-2.5 text-xs"
-                                                    >
-                                                        <Calendar className="size-3.5 shrink-0" />
-                                                        <span className="truncate">
-                                                            {appliedDateFilter === "date"
-                                                                ? formatSalesDate(appliedSpecificDate)
-                                                                : appliedDatePreset === "all"
-                                                                  ? "All dates"
-                                                                  : appliedCustomFromDate && appliedCustomToDate
-                                                                    ? `${formatSalesDate(appliedCustomFromDate)} — ${formatSalesDate(appliedCustomToDate)}`
-                                                                    : "Select date range"}
-                                                        </span>
-                                                    </Button>
-                                                }
-                                            />
-                                            <PopoverContent
-                                                align="start"
-                                                className="w-[240px] max-w-[calc(100vw-1rem)] overflow-hidden p-2"
-                                            >
-                                                <div className="flex min-w-0 flex-col gap-2">
-                                                    <div className="flex min-w-0 rounded-md border border-border/50 bg-muted/30 p-px">
-                                                        {(["date", "range"] as const).map((mode) => (
-                                                            <button
-                                                                key={mode}
-                                                                type="button"
-                                                                onClick={() => setSalesDateMode(mode)}
-                                                                className={cn(
-                                                                    "min-w-0 flex-1 rounded px-1.5 py-1 text-center text-[11px] font-semibold transition-colors",
-                                                                    dateFilter === mode
-                                                                        ? "bg-background text-foreground shadow-sm"
-                                                                        : "text-muted-foreground hover:text-foreground",
-                                                                )}
-                                                            >
-                                                                {mode === "date" ? "Date" : "Date range"}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-
-                                                    <div className="flex min-w-0 flex-wrap gap-1">
-                                                        {getSalesDatePresetOptions(dateFilter).map((preset) => (
-                                                            <button
-                                                                key={preset.value}
-                                                                type="button"
-                                                                onClick={() => applySalesDatePreset(preset.value)}
-                                                                className={cn(
-                                                                    "min-w-0 max-w-full rounded-full border px-2 py-0.5 text-center text-[11px] font-medium whitespace-normal break-words transition-colors",
-                                                                    datePreset === preset.value
-                                                                        ? "border-primary/40 bg-primary/10 text-primary"
-                                                                        : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                                                )}
-                                                            >
-                                                                {preset.label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-
-                                                    <div className="min-w-0 max-w-full overflow-x-auto">
-                                                        <div className="flex w-full min-w-max justify-center">
+                                                <div className="min-w-0 max-w-full overflow-x-auto">
+                                                    <div className="flex w-full min-w-max justify-center">
                                                         {dateFilter === "date" ? (
                                                             <DateCalendar
                                                                 mode="single"
                                                                 className="mx-auto p-1 [--cell-size:--spacing(6)]"
                                                                 classNames={{
-                                                                    day_button: "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
+                                                                    day_button:
+                                                                        "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
                                                                 }}
                                                                 selected={specificDate}
                                                                 onSelect={(date) => {
@@ -2712,7 +2697,8 @@ const BillingPage = ({
                                                                 mode="range"
                                                                 className="mx-auto p-1 [--cell-size:--spacing(6)]"
                                                                 classNames={{
-                                                                    day_button: "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
+                                                                    day_button:
+                                                                        "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
                                                                 }}
                                                                 selected={{
                                                                     from: customFromDate ?? undefined,
@@ -2726,41 +2712,52 @@ const BillingPage = ({
                                                                 autoFocus
                                                             />
                                                         )}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex justify-end border-t border-border/50 pt-3">
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            className="rounded-lg"
-                                                            disabled={
-                                                                dateFilter === "range" &&
-                                                                datePreset === "custom" &&
-                                                                (!customFromDate || !customToDate)
-                                                            }
-                                                            onClick={confirmSalesDateFilter}
-                                                        >
-                                                            Confirm
-                                                        </Button>
                                                     </div>
                                                 </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                        {dateFilter === "date" ? (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                className="size-8 shrink-0 rounded-lg"
-                                                aria-label="Next date"
-                                                onClick={() => shiftSalesDate(1)}
-                                            >
-                                                <ChevronRight className="size-4" />
-                                            </Button>
-                                        ) : null}
-                                    </div>
+
+                                                <div className="flex justify-end border-t border-border/50 pt-3">
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        className="rounded-lg"
+                                                        disabled={
+                                                            dateFilter === "range" &&
+                                                            datePreset === "custom" &&
+                                                            (!customFromDate || !customToDate)
+                                                        }
+                                                        onClick={confirmSalesDateFilter}
+                                                    >
+                                                        Confirm
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                    {appliedDateFilter === "date" ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="size-8 shrink-0 rounded-r-2xl rounded-l-md shadow-xs"
+                                            aria-label="Next date"
+                                            onClick={() => shiftSalesDate(1)}
+                                        >
+                                            <ChevronRight className="size-4" />
+                                        </Button>
+                                    ) : null}
                                 </div>
+                                {hasBillsToolbarFilters ? (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 rounded-full px-2.5 text-muted-foreground"
+                                        onClick={clearBillsToolbarFilters}
+                                    >
+                                        <RotateCcw className="size-3.5" />
+                                        Clear
+                                    </Button>
+                                ) : null}
                             </div>
 
                             <SalesSummaryBar summary={salesSummary} />
@@ -3402,53 +3399,7 @@ const BillingPage = ({
                             </aside>
                         </>
                     ) : null
-                ) : (
-                    <aside
-                        className="hidden w-full flex-col overflow-y-auto border-t border-border/50 bg-card/90 backdrop-blur-sm lg:flex lg:w-[320px] lg:border-t-0 lg:border-l"
-                        style={{ maxHeight: panelMaxHeight }}
-                    >
-                        <div className="grid gap-3 px-5 py-5">
-                            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Store</p>
-                                <p className="mt-2 text-lg font-semibold text-foreground">{selectedStore?.name ?? "Select a store"}</p>
-                            </div>
-                            <>
-                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                            Bills in view
-                                        </p>
-                                        <p className="mt-2 text-3xl font-semibold text-foreground">
-                                            {filteredSales.length}
-                                        </p>
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            Drafts, paid bills, open dues, and voided bills for this store.
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                            Drafts
-                                        </p>
-                                        <p className="mt-2 text-2xl font-semibold text-foreground">
-                                            {sales.filter((sale) => sale.status === "draft").length}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                                            Open dues
-                                        </p>
-                                        <p className="mt-2 text-2xl font-semibold text-foreground">
-                                            {
-                                                sales.filter(
-                                                    (sale) =>
-                                                        sale.status === "completed" && sale.paymentStatus !== "paid",
-                                                ).length
-                                            }
-                                        </p>
-                                    </div>
-                            </>
-                        </div>
-                    </aside>
-                )}
+                ) : null}
             </div>
 
             <Dialog

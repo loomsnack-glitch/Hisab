@@ -181,6 +181,7 @@ const toSaleInspectionSummary = (
 ) => ({
     id: sale.id,
     saleNumber: sale.saleNumber,
+    tokenNumber: sale.tokenNumber,
     status: sale.status,
     paymentStatus: sale.paymentStatus,
     grandTotal: sale.grandTotal,
@@ -774,6 +775,7 @@ export const createPlatformReportingService = (dependencies: PlatformReportingDe
                     ...toSaleInspectionSummary({
                         id: sale.id,
                         saleNumber: sale.saleNumber ?? null,
+                        tokenNumber: sale.tokenNumber ?? null,
                         status: sale.status,
                         paymentStatus: sale.paymentStatus,
                         grandTotal: sale.grandTotal,
