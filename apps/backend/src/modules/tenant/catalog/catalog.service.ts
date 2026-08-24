@@ -327,9 +327,14 @@ const resolveProducts = async (
     return [];
   }
 
+  const firstProduct = products[0];
+  if (!firstProduct) {
+    return [];
+  }
+
   const labelProfiles =
     await catalogRepository.getProductLabelProfilesByProductIds(
-      products[0].organizationId,
+      firstProduct.organizationId,
       products.map((product) => product.id),
     );
 

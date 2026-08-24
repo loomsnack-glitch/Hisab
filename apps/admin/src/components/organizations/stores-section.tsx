@@ -10,6 +10,7 @@ import { Pencil, PlusCircle, Store, Search, Settings2, X } from "lucide-react";
 
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
 import EditStoreDialog from "@/components/organizations/edit-store-dialog";
+import StoreWhatsAppDialog from "@/components/organizations/store-whatsapp-dialog";
 import { formatDateTime } from "@/lib/format";
 import { getStoreDetailPath } from "@/lib/store-routes";
 
@@ -139,21 +140,24 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                                     {store.address ?? "Address not added yet"}
                                                 </p>
                                             </div>
-                                            <EditStoreDialog
-                                                organizationId={organizationId}
-                                                store={store}
-                                                trigger={
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        className="pointer-events-auto relative z-10 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                                                        aria-label={`Edit ${store.name}`}
-                                                    >
-                                                        <Pencil className="size-4" />
-                                                    </Button>
-                                                }
-                                            />
+                                            <div className="flex shrink-0 items-center gap-1">
+                                                <StoreWhatsAppDialog organizationId={organizationId} storeId={store.id} storeName={store.name} />
+                                                <EditStoreDialog
+                                                    organizationId={organizationId}
+                                                    store={store}
+                                                    trigger={
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon-sm"
+                                                            className="pointer-events-auto relative z-10 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                            aria-label={`Edit ${store.name}`}
+                                                        >
+                                                            <Pencil className="size-4" />
+                                                        </Button>
+                                                    }
+                                                />
+                                            </div>
                                         </div>
                                         <div className="mt-3 flex flex-wrap gap-2">
                                             <Badge variant="outline" className="rounded-full text-xs">

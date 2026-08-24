@@ -45,7 +45,7 @@ export const listTemplates = async (
                 WHERE organization_id = ${organizationId} AND store_id = ${storeId}
                 ORDER BY kind ASC, is_default DESC, is_active DESC, LOWER(name) ASC
             `;
-        return rows.map(row => mapTemplate(row as Record<string, unknown>));
+        return rows.map((row: Record<string, unknown>) => mapTemplate(row));
     } catch (error) {
         if (isMissingTemplateTable(error)) return [];
         throw error;

@@ -1,10 +1,14 @@
 # Ganatri Deployment Guide
 
-> **Still the live host.** This guide deploys **ganatri.loomsnack.com** only.
-> The new parallel stack is **ganatri.in** (Admin / POS / Console + API on
-> port 8181). Use `docs/development/ganatri_in_deployment_guide.md` for that.
-> Do not rsync new builds into the paths below until you are ready to take
-> this host down.
+> **Retired host.** `ganatri.loomsnack.com` is no longer the live stack.
+> Do not start `ganatri-backend` or `ganatri-whatsapp-worker`. Do not rsync
+> here. Live deploys are **ganatri.in** — follow
+> `docs/development/ganatri_in_deployment_guide.md` (Admin / POS / Console,
+> API on port 8181, WhatsApp worker on port 8100).
+>
+> To shut this host down: stop and delete the old PM2 apps, then optionally
+> disable its nginx site. The exact commands are in the ganatri.in guide
+> under **Stop ganatri.loomsnack.com**.
 
 Deploy **ganatri.loomsnack.com** on the Ubuntu VPS at `216.158.228.89` (same machine as `loomsnack.com` and `boxmap.loomsnack.com`).
 
@@ -137,11 +141,22 @@ WHATSAPP_WORKER_URL=http://127.0.0.1:8100
 WHATSAPP_WORKER_TOKEN=replace-with-a-long-random-shared-secret
 WHATSAPP_MAX_PENDING_OUTBOX_PER_ACCOUNT=1000
 
+# Backend-only AES-256-GCM keyring for WhatsApp Cloud credentials. Keep every
+# prior key version during rotation so existing credentials remain readable.
+WHATSAPP_CLOUD_CREDENTIAL_KEYS_JSON='{"v1":"base64-encoded-32-byte-key"}'
+WHATSAPP_CLOUD_CREDENTIAL_ACTIVE_KEY_VERSION=v1
+
 # Optional legacy Cloud API path; it is separate from the worker's internal
 # WHATSAPP_API_URL and can remain unused by the Baileys invoice flow.
 WHATSAPP_API_URL=https://graph.facebook.com/v22.0/<phone_number_id>/messages
 WHATSAPP_API_TOKEN=your_whatsapp_api_token
 ```
+
+`WHATSAPP_CLOUD_CREDENTIAL_KEYS_JSON` and
+`WHATSAPP_CLOUD_CREDENTIAL_ACTIVE_KEY_VERSION` are backend-only deployment
+secrets. Generate a 32-byte key with `openssl rand -base64 32`, provision it
+through the server's protected environment/secret store, and never commit it
+or place it in the WhatsApp worker environment.
 
 ### WhatsApp worker `.env`
 

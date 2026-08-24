@@ -19,6 +19,12 @@ import {
     WhatsAppWorkerInvoiceResultSchema,
     WhatsAppWorkerMessageStatusSchema,
     WhatsAppWorkerStatusUpdateSchema,
+    WhatsAppCreateCloudTemplateBindingSchema,
+    WhatsAppRecordCustomerConsentSchema,
+    WhatsAppSetCustomerSuppressionSchema,
+    WhatsAppCloudQuotaPolicySchema,
+    WhatsAppCreateCloudTemplateSubmissionSchema,
+    WhatsAppUseCloudTemplateForStoreSchema,
 } from "@repo/types";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { handleServiceResponse } from "@/helpers/service.helper";
@@ -26,6 +32,28 @@ import { validateSchema } from "@/middlewares/validate";
 import { whatsappWorkerMiddleware } from "@/middlewares/whatsapp-worker.middleware";
 import type { AppVariables } from "@/types/hono";
 import * as service from "./whatsapp.service";
+import { registerCloudOnboardingRoutes } from "./cloud-api/cloud-onboarding.routes";
+import { startCloudOnboarding } from "./cloud-api/cloud-onboarding.service";
+import {
+    completeCloudAccountProvisioning,
+    getCloudAccountForOrganization,
+    listCloudAccountsForOrganization,
+    manuallyProvisionCloudAccount,
+    refreshCloudAccountForOrganization,
+    revokeCloudAccountForOrganization,
+} from "./cloud-api/cloud-account.service";
+import {
+    listCloudTemplatesForAccount,
+    syncCloudTemplatesForAccount,
+    createCloudTemplateBindingForStore,
+    listCloudTemplateBindingsForStore,
+    submitCloudTemplateForAccount,
+    listCloudTemplateSubmissionsForAccount,
+    setCloudTemplateDefaultForSubmission,
+    setCloudTemplateAssetDefaultForStore,
+} from "./cloud-api/cloud-template.service";
+import * as consentService from "./cloud-api/customer-consent.service";
+import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
 
 const uuidSchema = z.uuid("Invalid id");
 const userRouter = new Hono<{ Variables: AppVariables }>();
@@ -59,6 +87,37 @@ const workerPartitionFromQuery = (c: Context): { count: number; index: number } 
 };
 
 userRouter.use("*", authMiddleware);
+registerCloudOnboardingRoutes(userRouter, startCloudOnboarding, {
+    complete: completeCloudAccountProvisioning,
+    list: listCloudAccountsForOrganization,
+    get: getCloudAccountForOrganization,
+    refresh: refreshCloudAccountForOrganization,
+    revoke: revokeCloudAccountForOrganization,
+});
+
+const manualCloudAccountSchema = z.object({
+    wabaId: z.string().regex(/^\d{1,64}$/, "Invalid WABA ID"),
+    phoneNumberId: z.string().regex(/^\d{1,64}$/, "Invalid Phone Number ID"),
+    accessToken: z.string().trim().min(1).max(4096),
+});
+
+userRouter.post(
+    "/:organizationId/whatsapp/cloud/manual",
+    validateSchema("json", manualCloudAccountSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(
+                c,
+                await manuallyProvisionCloudAccount(c.get("authUser").id, organizationId, c.req.valid("json")),
+            );
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
 
 userRouter.get("/:organizationId/whatsapp/accounts", async c => {
     try {
@@ -120,6 +179,269 @@ userRouter.get("/:organizationId/whatsapp/accounts/:accountId", async c => {
         const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid account id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.getOrganizationAccountStatus(c.get("authUser").id, organizationId, accountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/accounts/:accountId/templates/sync", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const accountId = c.req.param("accountId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await syncCloudTemplatesForAccount(c.get("authUser").id, organizationId, accountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/templates", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const accountId = c.req.param("accountId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await listCloudTemplatesForAccount(c.get("authUser").id, organizationId, accountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/submissions", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const accountId = c.req.param("accountId");
+        const storeId = c.req.query("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+        if (invalid) return c.json(invalid, invalid.code);
+        if (storeId) {
+            const invalidStore = invalidUuid(storeId, "Invalid store id");
+            if (invalidStore) return c.json(invalidStore, invalidStore.code);
+        }
+        return handleServiceResponse(c, await listCloudTemplateSubmissionsForAccount(c.get("authUser").id, organizationId, accountId, storeId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/submissions/:submissionId/default", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const submissionId = c.req.param("submissionId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(submissionId, "Invalid submission id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await setCloudTemplateDefaultForSubmission(c.get("authUser").id, organizationId, submissionId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post(
+    "/:organizationId/stores/:storeId/whatsapp/cloud/template-bindings/import",
+    validateSchema("json", WhatsAppUseCloudTemplateForStoreSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await setCloudTemplateAssetDefaultForStore(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+                c.req.valid("json"),
+            ));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.post(
+    "/:organizationId/whatsapp/cloud/accounts/:accountId/templates",
+    validateSchema("json", WhatsAppCreateCloudTemplateSubmissionSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const accountId = c.req.param("accountId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await submitCloudTemplateForAccount(
+                c.get("authUser").id,
+                organizationId,
+                accountId,
+                c.req.valid("json"),
+            ));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.get("/:organizationId/whatsapp/cloud/safety", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.getCloudSafety(c.get("authUser").id, organizationId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/safety/reconcile", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.reconcileCloudOutboxNow(c.get("authUser").id, organizationId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.get("/:organizationId/whatsapp/cloud/outbox", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const requestedLimit = Number(c.req.query("limit") ?? 50);
+        const limit = Number.isInteger(requestedLimit) && requestedLimit >= 1 && requestedLimit <= 100 ? requestedLimit : 50;
+        return handleServiceResponse(c, await cloudSafetyService.getCloudOutboxOperations(c.get("authUser").id, organizationId, limit));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/outbox/:outboxId/retry", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const outboxId = c.req.param("outboxId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(outboxId, "Invalid Cloud outbox id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.retryCloudOutbox(c.get("authUser").id, organizationId, outboxId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/outbox/:outboxId/dead-letter", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const outboxId = c.req.param("outboxId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(outboxId, "Invalid Cloud outbox id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.deadLetterCloudOutbox(c.get("authUser").id, organizationId, outboxId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.patch(
+    "/:organizationId/whatsapp/cloud/safety/quota-policy",
+    validateSchema("json", WhatsAppCloudQuotaPolicySchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await cloudSafetyService.saveCloudQuotaPolicy(
+                c.get("authUser").id,
+                organizationId,
+                c.req.valid("json"),
+            ));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.post("/:organizationId/whatsapp/cloud/campaigns/:campaignKey/stop", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await cloudSafetyService.stopCloudCampaign(
+            c.get("authUser").id,
+            organizationId,
+            c.req.param("campaignKey"),
+        ));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post(
+    "/:organizationId/stores/:storeId/whatsapp/cloud/template-bindings",
+    validateSchema("json", WhatsAppCreateCloudTemplateBindingSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await createCloudTemplateBindingForStore(c.get("authUser").id, organizationId, storeId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/cloud/template-bindings", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const whatsappBusinessAccountId = c.req.query("whatsappBusinessAccountId");
+        const invalidAccount = whatsappBusinessAccountId ? invalidUuid(whatsappBusinessAccountId, "Invalid WABA id") : null;
+        if (invalidAccount) return c.json(invalidAccount, invalidAccount.code);
+        return handleServiceResponse(c, await listCloudTemplateBindingsForStore(c.get("authUser").id, organizationId, storeId, whatsappBusinessAccountId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post(
+    "/:organizationId/customers/:customerId/whatsapp/consent",
+    validateSchema("json", WhatsAppRecordCustomerConsentSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const customerId = c.req.param("customerId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(customerId, "Invalid customer id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await consentService.recordCustomerConsent(c.get("authUser").id, organizationId, customerId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.post(
+    "/:organizationId/customers/:customerId/whatsapp/suppression",
+    validateSchema("json", WhatsAppSetCustomerSuppressionSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const customerId = c.req.param("customerId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(customerId, "Invalid customer id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await consentService.setCustomerSuppression(c.get("authUser").id, organizationId, customerId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.get("/:organizationId/customers/:customerId/whatsapp/consent", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const customerId = c.req.param("customerId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(customerId, "Invalid customer id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await consentService.listCustomerConsentEvents(c.get("authUser").id, organizationId, customerId));
     } catch (error) {
         return unexpectedError(c, error);
     }
@@ -476,6 +798,45 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/promotions", async c =
         return unexpectedError(c, error);
     }
 });
+
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/promotions/:campaignId/recipients", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const campaignId = c.req.param("campaignId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id")
+            ?? invalidUuid(storeId, "Invalid store id")
+            ?? invalidUuid(campaignId, "Invalid campaign id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const status = c.req.query("status") ?? "all";
+        if (status !== "all" && status !== "failed" && status !== "retryable") return c.json({ status: "error", message: "Invalid recipient status" }, STATUS_CODES.BAD_REQUEST);
+        return handleServiceResponse(c, await service.getPromotionRecipients(c.get("authUser").id, organizationId, storeId, campaignId, status));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+for (const action of ["retry", "resend"] as const) {
+    userRouter.post(`/:organizationId/stores/:storeId/whatsapp/promotions/:campaignId/recipients/:recipientId/${action}`, async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const campaignId = c.req.param("campaignId");
+            const recipientId = c.req.param("recipientId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id")
+                ?? invalidUuid(storeId, "Invalid store id")
+                ?? invalidUuid(campaignId, "Invalid campaign id")
+                ?? invalidUuid(recipientId, "Invalid recipient id");
+            if (invalid) return c.json(invalid, invalid.code);
+            if (action === "retry") {
+                return handleServiceResponse(c, await service.retryPromotionRecipient(c.get("authUser").id, organizationId, storeId, campaignId, recipientId));
+            }
+            return handleServiceResponse(c, await service.resendPromotionRecipient(c.get("authUser").id, organizationId, storeId, campaignId, recipientId));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    });
+}
 
 export const whatsappInternalRoutes = new Hono();
 whatsappInternalRoutes.use("*", whatsappWorkerMiddleware);

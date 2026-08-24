@@ -528,7 +528,7 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
               <span className="sr-only">Store filter</span>
               <Select
                 value={selectedStoreId}
-                onValueChange={setSelectedStoreId}
+                onValueChange={(value) => setSelectedStoreId(value ?? "all")}
               >
                 <SelectTrigger className="h-9 min-w-0 max-w-[180px] rounded-lg bg-background/80 px-2.5 text-xs shadow-sm sm:max-w-[220px]">
                   <SelectValue placeholder="All stores">

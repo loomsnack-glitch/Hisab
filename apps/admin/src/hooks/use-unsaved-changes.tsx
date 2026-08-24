@@ -40,8 +40,8 @@ export function useUnsavedChanges({ isDirty, onSave, onDiscard }: UseUnsavedChan
 
     // 2. SPA Router protection
     const blocker = useBlocker(
-        ({ currentValue, nextLocation }) =>
-            isDirty && currentValue.pathname !== nextLocation.pathname
+        ({ currentLocation, nextLocation }) =>
+            isDirty && currentLocation.pathname !== nextLocation.pathname
     );
 
     const isBlocked = blocker.state === "blocked" || localProceed !== null;

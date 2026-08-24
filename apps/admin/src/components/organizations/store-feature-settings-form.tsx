@@ -8,7 +8,7 @@ import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Checkbox } from "@repo/ui/components/checkbox";
-import { Field, FieldContent, FieldLabel } from "@repo/ui/components/field";
+import { Field, FieldContent } from "@repo/ui/components/field";
 import { Label } from "@repo/ui/components/label";
 import { LayoutGrid, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";

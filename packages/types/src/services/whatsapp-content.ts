@@ -53,19 +53,23 @@ Total amount: {{total}}
 Paid: {{paid}}
 Balance due: {{balance_due}}
 
-Thank you.
-Regards,
-{{organization_name}}`,
+Please keep this invoice for your records.
+Regards from {{organization_name}}.
+Thank you for shopping with us.`,
   due_reminder: `Hello {{customer_name}},
 
 This is a friendly reminder from {{store_name}}.
 Your total outstanding balance is {{total_due}}.
 Number of bills: {{bill_count}}
 
-Please contact us if you have already made the payment.`,
+Please contact us if you have already made the payment.
+Thank you for your attention.`,
   promotion: `Hello {{customer_name}},
 
-We have an offer for you from {{store_name}}.`,
+We have an offer for you from {{store_name}}.
+Please check the offer details and contact us for assistance.
+
+Thank you for choosing {{store_name}}. We look forward to serving you.`,
 };
 
 const TEMPLATE_TOKEN_PATTERN = /{{\s*([^{}]+?)\s*}}/g;

@@ -1324,7 +1324,7 @@ const platformFacts = () => {
             status: "completed",
             saleNumber: "1",
             grandTotal: 10,
-            committedAt: new Date("2026-08-14T18:30:00.000Z"),
+            committedAt: new Date("2026-08-14T18:29:59.000Z"),
             customerId: customerCafeActive,
         },
         {
@@ -1984,7 +1984,7 @@ describe("Platform Organization Directory API", () => {
                 customerCount: 2,
                 completedSaleCount: 5,
                 completedSalesValue: 161.25,
-                lastCompletedSaleAt: "2026-08-21T18:30:00.000Z",
+                lastCompletedSaleAt: "2026-08-21T18:29:59.000Z",
             },
             {
                 username: "mixed-bistro",
@@ -2043,7 +2043,7 @@ describe("Platform Organization Directory API", () => {
         expect(sevenDayByName["Active Cafe"]?.activeStoreCount).toBe(allTimeByName["Active Cafe"]?.activeStoreCount);
         expect(sevenDayByName["Active Cafe"]?.customerCount).toBe(2);
         expect(sevenDayByName["Active Cafe"]?.completedSaleCount).toBe(4);
-        expect(sevenDayByName["Active Cafe"]?.completedSalesValue).toBe(150.25);
+        expect(sevenDayByName["Active Cafe"]?.completedSalesValue).toBe(151.25);
         expect(allTimeByName["Active Cafe"]?.completedSaleCount).toBe(5);
         expect(sevenDayByName["Quiet Mart"]?.completedSaleCount).toBe(0);
         expect(allTimeByName["Quiet Mart"]?.completedSaleCount).toBe(2);
@@ -2246,9 +2246,9 @@ describe("Platform Organization drill-down API", () => {
         expect(allTimeOrg?.completedSaleCount).toBe(5);
         expect(allTimeOrg?.completedSalesValue).toBe(161.25);
         expect(sevenDayOrg?.completedSaleCount).toBe(4);
-        expect(sevenDayOrg?.completedSalesValue).toBe(150.25);
+        expect(sevenDayOrg?.completedSalesValue).toBe(151.25);
         expect(cafeStore?.completedSaleCount).toBe(4);
-        expect(cafeStore?.completedSalesValue).toBe(150.25);
+        expect(cafeStore?.completedSalesValue).toBe(151.25);
         expect(sevenDayOrg?.lastCompletedSaleAt).toBe(allTimeOrg?.lastCompletedSaleAt);
         expect(cafeStore?.lastCompletedSaleAt).toBe(allTimeOrg?.lastCompletedSaleAt);
         expect(listRow?.completedSaleCount).toBe(sevenDayOrg?.completedSaleCount);

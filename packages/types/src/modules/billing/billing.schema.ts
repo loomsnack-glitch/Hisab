@@ -126,6 +126,17 @@ export const CustomerDTOSchema = z.object({
   balance: moneySchema,
   isActive: z.boolean(),
   marketingOptedOut: z.boolean().default(false),
+  marketingOptedIn: z.boolean().default(false),
+  marketingOptedInAt: dtoDateSchema.nullable().optional().default(null),
+  marketingOptInSource: z.string().trim().min(1).max(32).nullable().optional().default(null),
+  // Utility messages (bills and due reminders) are enabled for customers by default.
+  // An explicit utility opt-out is still represented as false by the API.
+  utilityOptedIn: z.boolean().default(true),
+  utilityOptedInAt: dtoDateSchema.nullable().optional().default(null),
+  utilityOptInSource: z.string().trim().min(1).max(32).nullable().optional().default(null),
+  whatsappSuppressed: z.boolean().default(false),
+  whatsappSuppressedAt: dtoDateSchema.nullable().optional().default(null),
+  whatsappSuppressionReason: z.string().trim().min(1).max(1000).nullable().optional().default(null),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,

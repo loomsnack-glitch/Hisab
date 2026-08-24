@@ -31,6 +31,10 @@ import {
     WhatsAppPromotionStatsSchema,
     WhatsAppPromotionCampaignDTOSchema,
     WhatsAppPromotionDashboardResponseSchema,
+    WhatsAppPromotionRecipientActionSchema,
+    WhatsAppPromotionRecipientDTOSchema,
+    WhatsAppPromotionRecipientsResponseSchema,
+    WhatsAppPromotionRecipientActionResponseSchema,
     WhatsAppSendTextSchema,
     WhatsAppSendConversationTextSchema,
     WhatsAppAttachConversationCustomerSchema,
@@ -46,6 +50,33 @@ import {
     WhatsAppAttachmentResponseSchema,
     WhatsAppWorkerStatusResponseSchema,
     WhatsAppWorkerStatusUpdateSchema,
+    WhatsAppCloudAccountStatusSchema,
+    WhatsAppCloudProvisioningStatusSchema,
+    WhatsAppCloudProvisioningStepSchema,
+    WhatsAppCloudTemplateStatusSchema,
+    WhatsAppCloudTemplateCategorySchema,
+    WhatsAppCloudTemplateSubmissionStatusSchema,
+    WhatsAppCloudTemplateAssetSchema,
+    WhatsAppCloudTemplateBindingSchema,
+    WhatsAppCreateCloudTemplateBindingSchema,
+    WhatsAppCloudTemplateSubmissionSchema,
+    WhatsAppCreateCloudTemplateSubmissionSchema,
+    WhatsAppUseCloudTemplateForStoreSchema,
+    WhatsAppCloudQuotaPolicySchema,
+    WhatsAppCloudSafetySchema,
+    WhatsAppCloudOutboxOperationSchema,
+    WhatsAppCloudOutboxOperationsResponseSchema,
+    WhatsAppCloudOutboxActionResponseSchema,
+    WhatsAppCustomerConsentKindSchema,
+    WhatsAppCustomerConsentStateSchema,
+    WhatsAppCustomerConsentSourceSchema,
+    WhatsAppCustomerConsentEventSchema,
+    WhatsAppRecordCustomerConsentSchema,
+    WhatsAppSetCustomerSuppressionSchema,
+    WhatsAppCloudAccountSnapshotSchema,
+    WhatsAppCloudProvisioningAttemptSchema,
+    WhatsAppCloudOnboardingStateResponseSchema,
+    WhatsAppCloudOnboardingResultSchema,
 } from "./whatsapp.schema";
 
 export type OTPRequestData = {
@@ -71,6 +102,33 @@ export type WhatsAppMessageType = z.infer<typeof WhatsAppMessageTypeSchema>;
 export type WhatsAppMessageStatus = z.infer<typeof WhatsAppMessageStatusSchema>;
 export type WhatsAppOutboxKind = z.infer<typeof WhatsAppOutboxKindSchema>;
 export type WhatsAppOutboxStatus = z.infer<typeof WhatsAppOutboxStatusSchema>;
+export type WhatsAppCloudAccountStatus = z.infer<typeof WhatsAppCloudAccountStatusSchema>;
+export type WhatsAppCloudProvisioningStatus = z.infer<typeof WhatsAppCloudProvisioningStatusSchema>;
+export type WhatsAppCloudProvisioningStep = z.infer<typeof WhatsAppCloudProvisioningStepSchema>;
+export type WhatsAppCloudTemplateStatus = z.infer<typeof WhatsAppCloudTemplateStatusSchema>;
+export type WhatsAppCloudTemplateCategory = z.infer<typeof WhatsAppCloudTemplateCategorySchema>;
+export type WhatsAppCloudTemplateSubmissionStatus = z.infer<typeof WhatsAppCloudTemplateSubmissionStatusSchema>;
+export type WhatsAppCloudTemplateAssetDTO = z.infer<typeof WhatsAppCloudTemplateAssetSchema>;
+export type WhatsAppCloudTemplateBindingDTO = z.infer<typeof WhatsAppCloudTemplateBindingSchema>;
+export type WhatsAppCreateCloudTemplateBindingJSON = z.infer<typeof WhatsAppCreateCloudTemplateBindingSchema>;
+export type WhatsAppCloudTemplateSubmissionDTO = z.infer<typeof WhatsAppCloudTemplateSubmissionSchema>;
+export type WhatsAppCreateCloudTemplateSubmissionJSON = z.infer<typeof WhatsAppCreateCloudTemplateSubmissionSchema>;
+export type WhatsAppUseCloudTemplateForStoreJSON = z.infer<typeof WhatsAppUseCloudTemplateForStoreSchema>;
+export type WhatsAppCloudQuotaPolicy = z.infer<typeof WhatsAppCloudQuotaPolicySchema>;
+export type WhatsAppCloudSafety = z.infer<typeof WhatsAppCloudSafetySchema>;
+export type WhatsAppCloudOutboxOperationDTO = z.infer<typeof WhatsAppCloudOutboxOperationSchema>;
+export type WhatsAppCloudOutboxOperationsResponseDTO = z.infer<typeof WhatsAppCloudOutboxOperationsResponseSchema>;
+export type WhatsAppCloudOutboxActionResponseDTO = z.infer<typeof WhatsAppCloudOutboxActionResponseSchema>;
+export type WhatsAppCustomerConsentKind = z.infer<typeof WhatsAppCustomerConsentKindSchema>;
+export type WhatsAppCustomerConsentState = z.infer<typeof WhatsAppCustomerConsentStateSchema>;
+export type WhatsAppCustomerConsentSource = z.infer<typeof WhatsAppCustomerConsentSourceSchema>;
+export type WhatsAppCustomerConsentEventDTO = z.infer<typeof WhatsAppCustomerConsentEventSchema>;
+export type WhatsAppRecordCustomerConsentJSON = z.infer<typeof WhatsAppRecordCustomerConsentSchema>;
+export type WhatsAppSetCustomerSuppressionJSON = z.infer<typeof WhatsAppSetCustomerSuppressionSchema>;
+export type WhatsAppCloudAccountSnapshot = z.infer<typeof WhatsAppCloudAccountSnapshotSchema>;
+export type WhatsAppCloudProvisioningAttempt = z.infer<typeof WhatsAppCloudProvisioningAttemptSchema>;
+export type WhatsAppCloudOnboardingStateResponseDTO = z.infer<typeof WhatsAppCloudOnboardingStateResponseSchema>;
+export type WhatsAppCloudOnboardingResultDTO = z.infer<typeof WhatsAppCloudOnboardingResultSchema>;
 export type WhatsAppMessageTemplateKind = z.infer<typeof WhatsAppMessageTemplateKindSchema>;
 export type WhatsAppMessageTemplateDTO = z.infer<typeof WhatsAppMessageTemplateDTOSchema>;
 export type WhatsAppCreateMessageTemplateJSON = z.infer<typeof WhatsAppCreateMessageTemplateSchema>;
@@ -101,6 +159,10 @@ export type WhatsAppPromotionCooldownDTO = z.infer<typeof WhatsAppPromotionCoold
 export type WhatsAppPromotionStatsDTO = z.infer<typeof WhatsAppPromotionStatsSchema>;
 export type WhatsAppPromotionCampaignDTO = z.infer<typeof WhatsAppPromotionCampaignDTOSchema>;
 export type WhatsAppPromotionDashboardResponseDTO = z.infer<typeof WhatsAppPromotionDashboardResponseSchema>;
+export type WhatsAppPromotionRecipientAction = z.infer<typeof WhatsAppPromotionRecipientActionSchema>;
+export type WhatsAppPromotionRecipientDTO = z.infer<typeof WhatsAppPromotionRecipientDTOSchema>;
+export type WhatsAppPromotionRecipientsResponseDTO = z.infer<typeof WhatsAppPromotionRecipientsResponseSchema>;
+export type WhatsAppPromotionRecipientActionResponseDTO = z.infer<typeof WhatsAppPromotionRecipientActionResponseSchema>;
 export type WhatsAppWorkerInvoiceJobDTO = z.infer<typeof WhatsAppWorkerInvoiceJobSchema>;
 export type WhatsAppWorkerInvoiceResultJSON = z.infer<typeof WhatsAppWorkerInvoiceResultSchema>;
 export type WhatsAppWorkerMessageStatusJSON = z.infer<typeof WhatsAppWorkerMessageStatusSchema>;

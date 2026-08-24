@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useFieldArray, useForm, useWatch, type SubmitHandler } from "react-hook-form";
+import { useFieldArray, useForm, useWatch, type Resolver, type SubmitHandler } from "react-hook-form";
 import { z } from "zod";
 import { CreatePurchaseSchema, type CreatePurchaseJSON, type PurchaseDetailDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
@@ -44,7 +44,14 @@ const PurchaseFormSchema = z.object({
         quantity: Number(item.quantity),
         rate: Number(item.rate),
     })),
-})).pipe(CreatePurchaseSchema);
+})).superRefine((value, context) => {
+    const result = CreatePurchaseSchema.safeParse(value);
+    if (!result.success) {
+        for (const issue of result.error.issues) {
+            context.addIssue({ code: "custom", path: issue.path, message: issue.message });
+        }
+    }
+});
 
 type PurchaseFormInput = z.input<typeof PurchaseFormSchema>;
 
@@ -72,7 +79,7 @@ const emptyItem = (): FormItem => ({ itemName: "", description: "", quantity: "1
 const PurchaseFormDialog = ({ open, onOpenChange, purchase, isLoading = false, isPending = false, onSubmit }: PurchaseFormDialogProps) => {
     const isEdit = Boolean(purchase);
     const form = useForm<PurchaseFormInput, unknown, CreatePurchaseJSON>({
-        resolver: zodResolver(PurchaseFormSchema),
+        resolver: zodResolver(PurchaseFormSchema as unknown as z.ZodType<CreatePurchaseJSON, PurchaseFormInput>) as unknown as Resolver<PurchaseFormInput, unknown, CreatePurchaseJSON>,
         defaultValues: {
             purchaseDate: getToday(),
             supplierName: "",

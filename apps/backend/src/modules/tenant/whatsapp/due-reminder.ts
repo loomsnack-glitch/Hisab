@@ -6,7 +6,22 @@ import {
 } from "@repo/types";
 
 const amount = (value: number | string | null | undefined) =>
-  `₹${Number(value ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  `₹${(Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+export const getDueReminderTemplateValues = (
+  customer: CustomerDTO,
+  sales: SaleSummaryDTO[],
+  storeName: string,
+  links: StoreMessageLink[] = [],
+): Record<string, string> => ({
+  customer_name: customer.name,
+  total_due: amount(sales.reduce((sum, sale) => sum + Number(sale.dueTotal ?? 0), 0)),
+  bill_count: String(sales.length),
+  store_name: storeName,
+  ...Object.fromEntries(
+    links.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url]),
+  ),
+});
 
 export const formatDueReminderText = (
   customer: CustomerDTO,
@@ -23,12 +38,7 @@ export const formatDueReminderText = (
     return renderWhatsAppMessage({
       kind: "due_reminder",
       template,
-      values: {
-        customer_name: customer.name,
-        total_due: amount(totalDue),
-        bill_count: String(sales.length),
-        store_name: storeName,
-      },
+      values: getDueReminderTemplateValues(customer, sales, storeName, links),
       links,
     });
   }

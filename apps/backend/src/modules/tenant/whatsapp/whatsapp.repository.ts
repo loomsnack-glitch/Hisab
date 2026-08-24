@@ -5,16 +5,27 @@ import type {
     WhatsAppMessageDTO,
     WhatsAppAccountDTO,
     WhatsAppAccountStatus,
+    WhatsAppCloudAccountStatus,
     WhatsAppWorkerAccountDTO,
     WhatsAppWorkerStatusUpdateJSON,
     WhatsAppWorkerMessageEventJSON,
     WhatsAppPromotionCampaignDTO,
     WhatsAppPromotionStatsDTO,
+    WhatsAppPromotionRecipientDTO,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
+import { releaseCloudQuota, settleCloudQuota } from "./cloud-api/cloud-quota.repository";
+import { promotionRecipientResendAvailableAt, promotionRecipientResendIsBlocked } from "./promotion-recipient-actions";
 
 type AccountRow = Record<string, unknown>;
+
+export class CloudTemplateRouteRequiredError extends Error {
+    constructor() {
+        super("Cloud WhatsApp accounts require the approved template send route");
+        this.name = "CloudTemplateRouteRequiredError";
+    }
+}
 
 export type InvoiceOutboxRecord = {
     messageId: string;
@@ -104,6 +115,7 @@ const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
         messageType: mapped.messageType as WhatsAppMessageDTO["messageType"],
         body: (mapped.body as string | null | undefined) ?? null,
         caption: (mapped.caption as string | null | undefined) ?? null,
+        templateName: (mapped.templateName as string | null | undefined) ?? null,
         attachmentFileName: (mapped.attachmentFileName as string | null | undefined) ?? null,
         attachmentMimeType: (mapped.attachmentMimeType as string | null | undefined) ?? null,
         status: mapped.status as WhatsAppMessageDTO["status"],
@@ -117,7 +129,16 @@ const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
 };
 
 type WhatsAppMessageStatus = "queued" | "sending" | "sent" | "delivered" | "read" | "failed";
-type WhatsAppOutboxStatus = "pending" | "processing" | "sent" | "retryable" | "dead_letter" | "cancelled";
+type WhatsAppOutboxStatus = "pending" | "processing" | "reconciling" | "sent" | "retryable" | "dead_letter" | "cancelled";
+
+export const shouldApplyCloudFailureSideEffects = (
+    messageStatus: string,
+    outboxStatus: WhatsAppOutboxStatus | null,
+): boolean => {
+    if (!outboxStatus) return false;
+    return !["delivered", "read", "failed"].includes(messageStatus)
+        && !["dead_letter", "cancelled"].includes(outboxStatus);
+};
 
 export type WorkerPartition = {
     count: number;
@@ -182,18 +203,34 @@ const parseProviderEventPayload = (value: unknown): WhatsAppWorkerMessageEventJS
     return value as WhatsAppWorkerMessageEventJSON;
 };
 
+const legacyStatusForCloud = (cloudStatus: WhatsAppCloudAccountStatus | null, fallback: WhatsAppAccountStatus): WhatsAppAccountStatus => {
+    if (cloudStatus === null) return fallback;
+    if (cloudStatus === "connected") return "connected";
+    if (cloudStatus === "revoked") return "revoked";
+    if (cloudStatus === "disconnected") return "disconnected";
+    return "failed";
+};
+
 const mapAccount = (row: AccountRow): WhatsAppAccountDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     const defaultStoreId = (mapped.defaultStoreId as string | null | undefined) ?? null;
     const assignedStoreIds = parseAssignedStoreIds(mapped.assignedStoreIds, defaultStoreId);
+    const provider = mapped.provider as WhatsAppAccountDTO["provider"];
+    const cloudStatus = provider === "cloud_api"
+        ? (mapped.cloudStatus as WhatsAppCloudAccountStatus | null | undefined) ?? null
+        : null;
+    const status: WhatsAppAccountStatus = provider === "cloud_api"
+        ? legacyStatusForCloud(cloudStatus, mapped.status as WhatsAppAccountStatus)
+        : mapped.status as WhatsAppAccountStatus;
     return {
         id: String(mapped.id),
         organizationId: String(mapped.organizationId),
         defaultStoreId,
         assignedStoreIds,
-        provider: mapped.provider as WhatsAppAccountDTO["provider"],
+        provider,
         phoneNumber: String(mapped.phoneNumber),
-        status: mapped.status as WhatsAppAccountStatus,
+        status,
+        cloudStatus,
         lastConnectedAt: (mapped.lastConnectedAt as string | null | undefined) ?? null,
         lastSeenAt: (mapped.lastSeenAt as string | null | undefined) ?? null,
         lastErrorCode: (mapped.lastErrorCode as string | null | undefined) ?? null,
@@ -448,7 +485,8 @@ export const getInvoiceOutbox = async (
           AND o.store_id = ${storeId}
           AND o.whatsapp_account_id = ${whatsappAccountId}
           AND o.sale_id = ${saleId}
-          AND o.kind = 'invoice'
+          AND o.kind IN ('invoice', 'template')
+          AND m.idempotency_key LIKE 'invoice:%'
         LIMIT 1
     `;
     if (!row) return null;
@@ -478,7 +516,10 @@ export const getCustomerReminderOutbox = async (
           AND o.store_id = ${storeId}
           AND o.whatsapp_account_id = ${whatsappAccountId}
           AND o.sale_id = ${saleId}
-          AND o.kind = 'text'
+          AND (
+              o.kind = 'text'
+              OR (o.kind = 'template' AND m.idempotency_key LIKE 'due-reminder:%')
+          )
         ORDER BY o.created_at DESC
         LIMIT 1
     `;
@@ -494,12 +535,13 @@ export const getCustomerReminderOutbox = async (
 export const createInvoiceOutbox = async (params: InvoiceOutboxParams): Promise<InvoiceOutboxRecord> => {
     return pg.begin(async tx => {
         const [account] = await tx`
-            SELECT id
+            SELECT id, provider
             FROM whatsapp_accounts
             WHERE id = ${params.whatsappAccountId}
             FOR UPDATE
         `;
         if (!account) throw new Error("WhatsApp account not found");
+        if (account.provider === "cloud_api") throw new CloudTemplateRouteRequiredError();
         const [existingOutbox] = await tx`
             SELECT o.id
             FROM whatsapp_outbox o
@@ -693,13 +735,14 @@ export const getConversationMessages = async (
     conversationId: string,
 ): Promise<WhatsAppMessageDTO[]> => {
     const rows = await pg`
-        SELECT *
-        FROM whatsapp_messages
-        WHERE conversation_id = ${conversationId}
-          AND organization_id = ${organizationId}
-          AND store_id = ${storeId}
-          AND whatsapp_account_id = ${accountId}
-        ORDER BY created_at ASC
+        SELECT message.*, outbox.cloud_template_snapshot ->> 'name' AS template_name
+        FROM whatsapp_messages message
+        LEFT JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+        WHERE message.conversation_id = ${conversationId}
+          AND message.organization_id = ${organizationId}
+          AND message.store_id = ${storeId}
+          AND message.whatsapp_account_id = ${accountId}
+        ORDER BY message.created_at ASC
         LIMIT 500
     `;
     return rows.map((row: Record<string, unknown>) => mapMessage(row));
@@ -953,12 +996,13 @@ export const createTextOutbox = async (
 ): Promise<InvoiceOutboxRecord> => {
     return pg.begin(async tx => {
         const [account] = await tx`
-            SELECT id
+            SELECT id, provider
             FROM whatsapp_accounts
             WHERE id = ${accountId}
             FOR UPDATE
         `;
         if (!account) throw new Error("WhatsApp account not found");
+        if (account.provider === "cloud_api") throw new CloudTemplateRouteRequiredError();
         const [queued] = await tx`
             SELECT COUNT(*) AS count
             FROM whatsapp_outbox
@@ -1024,9 +1068,10 @@ export const createCustomerTextOutbox = async (params: {
 }): Promise<InvoiceOutboxRecord> => {
     return pg.begin(async tx => {
         const [account] = await tx`
-            SELECT id FROM whatsapp_accounts WHERE id = ${params.accountId} FOR UPDATE
+            SELECT id, provider FROM whatsapp_accounts WHERE id = ${params.accountId} FOR UPDATE
         `;
         if (!account) throw new Error("WhatsApp account not found");
+        if (account.provider === "cloud_api") throw new CloudTemplateRouteRequiredError();
         const [queued] = await tx`
             SELECT COUNT(*) AS count FROM whatsapp_outbox
             WHERE whatsapp_account_id = ${params.accountId}
@@ -1106,6 +1151,7 @@ export const claimNextInvoiceOutbox = async (
             WHERE o.kind IN ('invoice', 'text', 'document', 'promotion')
               AND o.status IN ('pending', 'retryable')
               AND o.next_attempt_at <= NOW()
+              AND a.provider = 'baileys'
               AND a.status = 'connected'
               AND EXISTS (
                   SELECT 1
@@ -1215,7 +1261,7 @@ export const completeInvoiceOutbox = async (
 ): Promise<boolean> => {
     return pg.begin(async tx => {
         const [outbox] = await tx`
-            SELECT id, message_id, attempt_count, kind
+            SELECT id, message_id, attempt_count, kind, cloud_quota_reservation_id
             FROM whatsapp_outbox
             WHERE id = ${outboxId}
               AND status = 'processing'
@@ -1223,6 +1269,13 @@ export const completeInvoiceOutbox = async (
             FOR UPDATE
         `;
         if (!outbox) return false;
+        const [campaignLink] = await tx`
+            SELECT campaign_id
+            FROM whatsapp_campaign_recipients
+            WHERE outbox_id = ${outbox.id}
+            LIMIT 1
+        `;
+        const isCampaignOutbox = outbox.kind === "promotion" || Boolean(campaignLink);
 
         if (providerMessageId) {
             await tx`
@@ -1244,7 +1297,10 @@ export const completeInvoiceOutbox = async (
                     updated_at = NOW()
                 WHERE id = ${outbox.id}
             `;
-            if (outbox.kind === "promotion") {
+            if (outbox.cloud_quota_reservation_id) {
+                await settleCloudQuota(tx, String(outbox.cloud_quota_reservation_id));
+            }
+            if (isCampaignOutbox) {
                 await tx`
                     UPDATE whatsapp_campaign_recipients
                     SET status = 'sent', provider_message_id = ${providerMessageId}, updated_at = NOW()
@@ -1257,6 +1313,10 @@ export const completeInvoiceOutbox = async (
                             WHERE recipient.campaign_id = campaign.id AND recipient.status = 'sent'
                         ),
                         status = CASE
+                            WHEN EXISTS (
+                                SELECT 1 FROM whatsapp_campaign_recipients recipient
+                                WHERE recipient.campaign_id = campaign.id AND recipient.status IN ('dead_letter', 'cancelled')
+                            ) THEN 'failed'::whatsapp_campaign_status_enum
                             WHEN (
                                 SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
                                 WHERE recipient.campaign_id = campaign.id AND recipient.status IN ('pending', 'processing', 'retryable')
@@ -1291,7 +1351,10 @@ export const completeInvoiceOutbox = async (
                 updated_at = NOW()
             WHERE id = ${outbox.id}
         `;
-        if (outbox.kind === "promotion" && permanentlyFailed) {
+        if (permanentlyFailed && outbox.cloud_quota_reservation_id) {
+            await releaseCloudQuota(tx, String(outbox.cloud_quota_reservation_id));
+        }
+        if (isCampaignOutbox && permanentlyFailed) {
             await tx`
                 UPDATE whatsapp_campaign_recipients
                 SET status = 'dead_letter', failure_code = ${failureCode}, failure_message = ${failureMessage}, updated_at = NOW()
@@ -1312,6 +1375,12 @@ export const completeInvoiceOutbox = async (
                     END,
                     updated_at = NOW()
                 WHERE id = (SELECT campaign_id FROM whatsapp_campaign_recipients WHERE outbox_id = ${outbox.id} LIMIT 1)
+            `;
+        } else if (isCampaignOutbox) {
+            await tx`
+                UPDATE whatsapp_campaign_recipients
+                SET status = 'retryable', failure_code = ${failureCode}, failure_message = ${failureMessage}, updated_at = NOW()
+                WHERE outbox_id = ${outbox.id}
             `;
         }
         return true;
@@ -1410,7 +1479,7 @@ export const listPromotionCampaigns = async (
     ]);
     const statsRow = (statsRows[0] ?? {}) as Record<string, unknown>;
     return {
-        campaigns: campaignRows.map(row => mapPromotionCampaign(row as Record<string, unknown>)),
+        campaigns: campaignRows.map((row: Record<string, unknown>) => mapPromotionCampaign(row)),
         stats: {
             totalCampaigns: promotionNumber(statsRow, "total_campaigns"),
             totalRecipients: promotionNumber(statsRow, "total_recipients"),
@@ -1423,6 +1492,78 @@ export const listPromotionCampaigns = async (
             failedRecipients: promotionNumber(statsRow, "failed_recipients"),
         },
     };
+};
+
+export const listPromotionRecipients = async (
+    organizationId: string,
+    storeId: string,
+    campaignId: string,
+    status: "all" | "failed" | "retryable" = "all",
+): Promise<WhatsAppPromotionRecipientDTO[]> => {
+    const rows = await pg`
+        SELECT
+            recipient.id,
+            customer.name AS customer_name,
+            recipient.phone_number,
+            recipient.status,
+            message.status AS delivery_status,
+            recipient.failure_code,
+            recipient.failure_message,
+            recipient.updated_at,
+            recipient.outbox_id,
+            outbox.status AS outbox_status,
+            outbox.cloud_template_snapshot
+        FROM whatsapp_campaign_recipients recipient
+        INNER JOIN whatsapp_campaigns campaign
+          ON campaign.id = recipient.campaign_id
+         AND campaign.organization_id = recipient.organization_id
+         AND campaign.store_id = recipient.store_id
+        LEFT JOIN customers customer
+          ON customer.id = recipient.customer_id
+         AND customer.organization_id = recipient.organization_id
+        LEFT JOIN whatsapp_outbox outbox
+          ON outbox.id = recipient.outbox_id
+         AND outbox.organization_id = recipient.organization_id
+         AND outbox.store_id = recipient.store_id
+        LEFT JOIN whatsapp_messages message
+          ON message.id = recipient.message_id
+         AND message.organization_id = recipient.organization_id
+         AND message.store_id = recipient.store_id
+        WHERE recipient.organization_id = ${organizationId}
+          AND recipient.store_id = ${storeId}
+          AND recipient.campaign_id = ${campaignId}
+          AND (
+            ${status} = 'all'
+            OR
+            (${status} = 'failed' AND recipient.status IN ('retryable', 'dead_letter', 'cancelled'))
+            OR (${status} = 'retryable' AND recipient.status = 'retryable')
+          )
+        ORDER BY recipient.updated_at DESC, recipient.id
+    `;
+    return rows.map((row: Record<string, unknown>) => {
+        const recipientStatus = String(row.status) as WhatsAppPromotionRecipientDTO["status"];
+        const outboxStatus = row.outbox_status ? String(row.outbox_status) : null;
+        const failureCode = (row.failure_code as string | null | undefined) ?? null;
+        const failureMessage = (row.failure_message as string | null | undefined) ?? null;
+        const updatedAt = String(row.updated_at);
+        const resendAvailableAt = promotionRecipientResendAvailableAt(failureCode, updatedAt);
+        return {
+            id: String(row.id),
+            customerName: String(row.customer_name ?? "Unknown customer"),
+            phoneNumber: String(row.phone_number),
+            status: recipientStatus,
+            deliveryStatus: (row.delivery_status as WhatsAppPromotionRecipientDTO["deliveryStatus"] | undefined) ?? null,
+            failureCode,
+            failureMessage,
+            updatedAt,
+            resendAvailableAt,
+            canRetry: recipientStatus === "retryable" && outboxStatus === "retryable",
+            canResend: recipientStatus === "dead_letter"
+                && outboxStatus === "dead_letter"
+                && row.cloud_template_snapshot != null
+                && !promotionRecipientResendIsBlocked(failureCode, updatedAt),
+        } satisfies WhatsAppPromotionRecipientDTO;
+    });
 };
 
 export const getLatestPromotionCreatedAt = async (
@@ -1465,6 +1606,139 @@ export const updateInvoiceMessageStatus = async (
     return Boolean(row);
 };
 
+export const updateCloudMessageStatus = async (
+    accountId: string,
+    providerMessageId: string,
+    callbackData: string | null,
+    status: "sent" | "delivered" | "read" | "failed",
+    occurredAt: string,
+    failureCode: string | null,
+    failureMessage: string | null,
+): Promise<"updated" | "stale" | "missing"> => {
+    return pg.begin(async tx => {
+        const [existing] = await tx`
+            SELECT message.id, message.status AS message_status,
+                   outbox.id AS outbox_id, outbox.status AS outbox_status,
+                   outbox.cloud_quota_reservation_id
+            FROM whatsapp_messages message
+            LEFT JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+            WHERE message.whatsapp_account_id = ${accountId}
+              AND message.direction = 'outbound'
+              AND (
+                message.provider_message_id = ${providerMessageId}
+                OR (
+                  message.provider_message_id IS NULL
+                  AND ${callbackData}::text IS NOT NULL
+                  AND message.idempotency_key = ${callbackData}
+                )
+              )
+            ORDER BY CASE WHEN message.provider_message_id = ${providerMessageId} THEN 0 ELSE 1 END
+            LIMIT 1
+            FOR UPDATE OF message
+        `;
+        if (!existing) return "missing";
+        const [row] = await tx`
+        UPDATE whatsapp_messages
+        SET status = CASE
+                WHEN ${status} = 'read' THEN 'read'::whatsapp_message_status_enum
+                WHEN status IN ('read', 'delivered', 'failed') THEN status
+                WHEN ${status} = 'delivered' THEN 'delivered'::whatsapp_message_status_enum
+                WHEN ${status} = 'failed' THEN 'failed'::whatsapp_message_status_enum
+                ELSE 'sent'::whatsapp_message_status_enum
+            END,
+            cloud_status_at = ${occurredAt}::timestamptz,
+            sent_at = CASE
+                WHEN ${status} IN ('sent', 'delivered', 'read') THEN COALESCE(sent_at, ${occurredAt}::timestamptz)
+                ELSE sent_at
+            END,
+            delivered_at = CASE
+                WHEN ${status} IN ('delivered', 'read') THEN COALESCE(delivered_at, ${occurredAt}::timestamptz)
+                ELSE delivered_at
+            END,
+            read_at = CASE
+                WHEN ${status} = 'read' THEN COALESCE(read_at, ${occurredAt}::timestamptz)
+                ELSE read_at
+            END,
+            failure_code = CASE
+                WHEN ${status} = 'read' OR status IN ('delivered', 'read') THEN NULL
+                WHEN ${status} = 'failed' THEN ${failureCode}
+                ELSE failure_code
+            END,
+            failure_message = CASE
+                WHEN ${status} = 'read' OR status IN ('delivered', 'read') THEN NULL
+                WHEN ${status} = 'failed' THEN ${failureMessage}
+                ELSE failure_message
+            END,
+            provider_message_id = ${providerMessageId}
+        WHERE id = ${existing.id}
+          AND (cloud_status_at IS NULL OR cloud_status_at <= ${occurredAt}::timestamptz)
+        RETURNING id
+        `;
+        if (!row) return "stale";
+
+        const shouldApplyFailure = status === "failed"
+            && shouldApplyCloudFailureSideEffects(String(existing.message_status), existing.outbox_status as WhatsAppOutboxStatus | null);
+        if (existing.outbox_id && shouldApplyFailure) {
+            const [deadLettered] = await tx`
+                UPDATE whatsapp_outbox
+                SET status = 'dead_letter',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    last_error_code = LEFT(${failureCode ?? "cloud_delivery_failed"}, 100),
+                    last_error_message = LEFT(${failureMessage ?? "Cloud provider reported delivery failure"}, 1_000),
+                    updated_at = NOW()
+                WHERE id = ${existing.outbox_id}
+                  AND status IN ('pending', 'processing', 'retryable', 'reconciling')
+                RETURNING id
+            `;
+            if (deadLettered && existing.cloud_quota_reservation_id) {
+                await releaseCloudQuota(tx, String(existing.cloud_quota_reservation_id));
+            }
+            await tx`
+                UPDATE whatsapp_campaign_recipients
+                SET status = 'dead_letter',
+                    failure_code = LEFT(${failureCode ?? "cloud_delivery_failed"}, 100),
+                    failure_message = LEFT(${failureMessage ?? "Cloud provider reported delivery failure"}, 1_000),
+                    updated_at = NOW()
+                WHERE outbox_id = ${existing.outbox_id}
+            `;
+            await tx`
+                UPDATE whatsapp_campaigns campaign
+                SET failed_recipients = (
+                        SELECT COUNT(*) FROM whatsapp_campaign_recipients recipient
+                        WHERE recipient.campaign_id = campaign.id AND recipient.status IN ('dead_letter', 'cancelled')
+                    ),
+                    status = CASE
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM whatsapp_campaign_recipients recipient
+                            WHERE recipient.campaign_id = campaign.id
+                              AND recipient.status IN ('pending', 'processing', 'retryable')
+                        ) THEN 'failed'::whatsapp_campaign_status_enum
+                        ELSE campaign.status
+                    END,
+                    updated_at = NOW()
+                WHERE id = (SELECT campaign_id FROM whatsapp_campaign_recipients WHERE outbox_id = ${existing.outbox_id} LIMIT 1)
+            `;
+        } else if (status !== "failed" && existing.outbox_id && existing.outbox_status === "reconciling") {
+            await tx`
+                UPDATE whatsapp_outbox
+                SET status = 'sent',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    last_error_code = NULL,
+                    last_error_message = NULL,
+                    updated_at = NOW()
+                WHERE id = ${existing.outbox_id}
+                  AND status = 'reconciling'
+            `;
+            if (existing.cloud_quota_reservation_id) {
+                await settleCloudQuota(tx, String(existing.cloud_quota_reservation_id));
+            }
+        }
+        return "updated";
+    });
+};
+
 export const retryInvoiceOutbox = async (
     organizationId: string,
     storeId: string,
@@ -1485,7 +1759,13 @@ export const retryInvoiceOutbox = async (
               AND store_id = ${storeId}
               AND whatsapp_account_id = ${accountId}
               AND sale_id = ${saleId}
-              AND kind = 'invoice'
+              AND kind IN ('invoice', 'template')
+              AND EXISTS (
+                  SELECT 1
+                  FROM whatsapp_messages invoice_message
+                  WHERE invoice_message.id = whatsapp_outbox.message_id
+                    AND invoice_message.idempotency_key LIKE 'invoice:%'
+              )
               AND status IN ('retryable', 'dead_letter')
             RETURNING id, message_id, status
         `;
@@ -1502,7 +1782,8 @@ export const retryInvoiceOutbox = async (
                   AND o.store_id = ${storeId}
                   AND o.whatsapp_account_id = ${accountId}
                   AND o.sale_id = ${saleId}
-                  AND o.kind = 'invoice'
+                  AND o.kind IN ('invoice', 'template')
+                  AND m.idempotency_key LIKE 'invoice:%'
                 LIMIT 1
             `;
             return existing
@@ -1877,6 +2158,31 @@ export const updateAccountStatus = async (
             updated_at = NOW()
         WHERE id = ${accountId}
         RETURNING *
+    `;
+    return row ? getAccountById(accountId) : null;
+};
+
+export const updateCloudAccountStatus = async (
+    organizationId: string,
+    accountId: string,
+    status: "connected" | "disconnected" | "needs_action" | "revoked" | "failed",
+    userId: string,
+): Promise<WhatsAppAccountDTO | null> => {
+    const [row] = await pg`
+        UPDATE whatsapp_accounts
+        SET cloud_status = ${status},
+            status = CASE
+                WHEN ${status} = 'connected' THEN 'connected'::whatsapp_account_status_enum
+                WHEN ${status} = 'revoked' THEN 'revoked'::whatsapp_account_status_enum
+                WHEN ${status} = 'failed' THEN 'failed'::whatsapp_account_status_enum
+                ELSE 'disconnected'::whatsapp_account_status_enum
+            END,
+            updated_by = ${userId},
+            updated_at = NOW()
+        WHERE id = ${accountId}
+          AND organization_id = ${organizationId}
+          AND provider = 'cloud_api'
+        RETURNING id
     `;
     return row ? getAccountById(accountId) : null;
 };

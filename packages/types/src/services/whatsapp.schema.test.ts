@@ -9,6 +9,11 @@ import {
     WhatsAppWorkerMessageEventSchema,
     WhatsAppWorkerOutboundJobSchema,
     WhatsAppConversationListResponseSchema,
+    WhatsAppCloudAccountSnapshotSchema,
+    WhatsAppCloudProvisioningAttemptSchema,
+    WhatsAppCloudOutboxOperationSchema,
+    WhatsAppCreatePromotionSchema,
+    WhatsAppMessageDTOSchema,
 } from "./whatsapp.schema";
 
 const uuid = "11111111-1111-4111-8111-111111111111";
@@ -34,6 +39,115 @@ describe("WhatsApp schemas", () => {
         if (result.success) {
             expect("sessionReference" in result.data).toBe(false);
         }
+    });
+
+    test("validates Cloud API account and provisioning snapshots", () => {
+        expect(WhatsAppCloudAccountSnapshotSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            whatsappBusinessAccountId: uuid,
+            wabaId: "waba-1",
+            phoneNumberId: "phone-1",
+            verifiedName: "Ganatri",
+            status: "connected",
+            qualityRating: "GREEN",
+            messagingLimit: 1_000,
+            lastLimitSyncedAt: new Date(),
+            lastWebhookAt: null,
+            lastGraphApiAt: new Date(),
+            lastErrorCode: null,
+        }).success).toBe(true);
+
+        expect(WhatsAppCloudProvisioningAttemptSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            whatsappAccountId: uuid,
+            whatsappBusinessAccountId: null,
+            idempotencyKey: "signup-1",
+            status: "running",
+            currentStep: "authorization_received",
+            completedSteps: [],
+            safeErrorCode: null,
+            safeErrorMessage: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        }).success).toBe(true);
+
+        expect(WhatsAppCloudProvisioningAttemptSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            whatsappAccountId: uuid,
+            whatsappBusinessAccountId: null,
+            idempotencyKey: "signup-1",
+            status: "running",
+            currentStep: "authorization_received",
+            completedSteps: ["not-a-step"],
+            safeErrorCode: null,
+            safeErrorMessage: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        }).success).toBe(false);
+    });
+
+    test("accepts Cloud template messages in the shared DTO contract", () => {
+        expect(WhatsAppMessageDTOSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            storeId: uuid,
+            whatsappAccountId: uuid,
+            conversationId: uuid,
+            direction: "outbound",
+            messageType: "template",
+            body: null,
+            caption: "Your bill is ready",
+            templateName: "bill_ready",
+            attachmentFileName: null,
+            attachmentMimeType: null,
+            status: "sent",
+            providerMessageId: "wamid.template-1",
+            failureCode: null,
+            createdAt: new Date(),
+            sentAt: new Date(),
+            deliveredAt: null,
+            readAt: null,
+        }).success).toBe(true);
+    });
+
+    test("accepts a selected Cloud promotion template binding", () => {
+        expect(WhatsAppCreatePromotionSchema.safeParse({
+            title: "August coffee offer",
+            body: "Hello {{customer_name}} from {{store_name}}",
+            cloudTemplateBindingId: uuid,
+            imageBase64: "aW1hZ2U=",
+            imageFileName: "offer.jpg",
+            imageMimeType: "image/jpeg",
+        }).success).toBe(true);
+    });
+
+    test("keeps Cloud outbox operations bounded to safe internal metadata", () => {
+        expect(WhatsAppCloudOutboxOperationSchema.safeParse({
+            id: uuid,
+            storeName: "Main Store",
+            kind: "template",
+            status: "retryable",
+            attemptCount: 2,
+            lastErrorCode: "cloud_rate_limited",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            nextAttemptAt: new Date(),
+        }).success).toBe(true);
+        expect(WhatsAppCloudOutboxOperationSchema.safeParse({
+            id: uuid,
+            storeName: "Main Store",
+            kind: "template",
+            status: "retryable",
+            attemptCount: 2,
+            lastErrorCode: "cloud_rate_limited",
+            providerMessageId: "wamid-secret",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            nextAttemptAt: new Date(),
+        }).success).toBe(false);
     });
 
     test("rejects non-international customer phone numbers for WhatsApp sends", () => {

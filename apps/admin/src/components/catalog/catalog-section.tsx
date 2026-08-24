@@ -2,26 +2,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCategories, getProducts } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
-import { cn } from "@repo/ui/lib/utils";
 import { Boxes, Layers3, Link2, Package2, Pencil, PlusCircle, Puzzle, RefreshCw, Trash2, Search, X } from "lucide-react";
 
-import DeleteCategoryButton from "@/components/catalog/delete-category-button";
 import DeleteProductButton from "@/components/catalog/delete-product-button";
-import CategoryStatusBadge from "@/components/catalog/category-status-badge";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
-import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
 import UpsertComboProductDialog from "@/components/catalog/upsert-combo-product-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageAddOnsDialog from "@/components/catalog/manage-add-ons-dialog";
 import ManageCategoriesDialog from "@/components/catalog/manage-categories-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
-import { formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
 
 type CatalogSectionProps = {
@@ -46,6 +41,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
 
     const categories = categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? [] : [];
     const products = productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? [] : [];
+    const defaultCategoryIdForNewProduct = categories[0]?.id;
 
     const categoryMap = useMemo(
         () => new Map(categories.map((category) => [category.id, category])),

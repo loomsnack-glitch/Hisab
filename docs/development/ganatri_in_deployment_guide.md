@@ -1,14 +1,11 @@
-# Ganatri.in Deployment Guide
+﻿# Ganatri.in Deployment Guide
 
-Deploy **ganatri.in** on the same Ubuntu VPS as the current live site
-(`ganatri.loomsnack.com` at `216.158.228.89`).
+Deploy **ganatri.in** on the Ubuntu VPS at `216.158.228.89`. This is the live
+Ganatri stack. `ganatri.loomsnack.com` is retired: stop its backend and
+WhatsApp worker (see [Stop ganatri.loomsnack.com](#stop-ganatriloomsnackcom)).
 
-This is a **parallel** stack. Do not rsync into `/var/www/ganatri.loomsnack.com`,
-do not restart `ganatri-backend` or `ganatri-whatsapp-worker`, and do not edit
-the existing `ganatri.loomsnack.com` nginx site until this new host is verified
-and you are ready to cut over.
-
-The previous host guide stays in `docs/development/ganatri_deployment_guide.md`.
+The previous host guide stays in `docs/development/ganatri_deployment_guide.md`
+for history only. Do not rsync new builds into `/var/www/ganatri.loomsnack.com`.
 
 | Piece | Stack | Server path | Port |
 |-------|-------|-------------|------|
@@ -17,28 +14,17 @@ The previous host guide stays in `docs/development/ganatri_deployment_guide.md`.
 | Console web | Vite static (`apps/console`) | `/var/www/ganatri.in/console/` | — |
 | Backend | Bun + Hono (PM2 `ganatri-in-backend`) | `/var/www/ganatri.in/backend/` | **8181** |
 | Canonical API | nginx | `https://ganatri.in/api` → `127.0.0.1:8181` | — |
-| WhatsApp worker | **reuse the existing one** | `/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/` | **8100** |
+| WhatsApp worker | Node 20 + Baileys (PM2 `ganatri-in-whatsapp-worker`) | `/var/www/ganatri.in/backend/apps/whatsapp-worker/` | **8100** |
 
-**Why a new port:** `boxmap-backend` uses **8000**. Live Ganatri uses **8001**.
-Port **8002** is already taken on this VPS, so the new process uses **8181**.
+**Ports on this VPS:** `boxmap-backend` uses **8000**. The retired Ganatri
+process used **8001**. ganatri.in uses **8181**. The WhatsApp worker stays on
+**8100** (only one worker process).
 
-**Same database / Redis / MinIO.** Copy the live backend `.env` and only change
-`PORT=8181`. Do not create a second Postgres database.
+**Same database / Redis / MinIO.** Do not create a second Postgres database.
 
-**Do not start a second WhatsApp worker.** Two Baileys processes would fight
-over the same auth state. The new backend calls the existing worker on `8100`.
-
----
-
-## How the two sites stay independent
-
-| | `ganatri.loomsnack.com` (keep live) | `ganatri.in` (new) |
-|---|---|---|
-| Files | `/var/www/ganatri.loomsnack.com/` | `/var/www/ganatri.in/` |
-| nginx site | `ganatri.loomsnack.com` | `ganatri.in`, `admin.ganatri.in`, `pos.ganatri.in`, `console.ganatri.in` |
-| PM2 | `ganatri-backend`, `ganatri-whatsapp-worker` | `ganatri-in-backend` only |
-| API port | 8001 | 8181 |
-| Public webs | one SPA at the old host | Admin / POS / Console on subdomains |
+**Never run two WhatsApp workers.** Two Baileys processes fight over the same
+linked account. Stop `ganatri-whatsapp-worker` before starting
+`ganatri-in-whatsapp-worker`.
 
 Web apps keep `BASE_API_URL=/api`. Each subdomain proxies `/api` to port 8181,
 so cookies stay host-isolated (Admin cookies on `admin.ganatri.in`, POS on
@@ -193,13 +179,20 @@ mkdir -p /var/www/ganatri.in/backend
 Bun, Node 20, PM2, PostgreSQL, Redis, nginx, and certbot are already on this
 VPS from the current Ganatri deploy. Do not reinstall them.
 
-Confirm the new port is free:
+Also create the WhatsApp worker directories once:
+
+```bash
+mkdir -p /var/www/ganatri.in/backend/apps/whatsapp-worker/dist
+mkdir -p /var/www/ganatri.in/backend/apps/whatsapp-worker/data/whatsapp-auth
+```
+
+Confirm ports:
 
 ```bash
 ss -tlnp | grep -E '8001|8181|8100'
 ```
 
-You should see 8001 (old Ganatri) and 8100 (WhatsApp worker). 8181 must be empty.
+After cutover, 8181 (new API) and 8100 (new worker) should be listening. 8001 must be empty.
 
 ---
 
@@ -228,7 +221,7 @@ nginx -t
 systemctl reload nginx
 ```
 
-Leave `/etc/nginx/sites-enabled/ganatri.loomsnack.com` untouched.
+After cutover, disable the old site (see [Stop ganatri.loomsnack.com](#stop-ganatriloomsnackcom)). Do not overwrite the live ganatri.in nginx files with the HTTP-only copies in this repo — that drops TLS. Change only `proxy_pass` ports in the live files, or re-run certbot after a full HTTP copy.
 
 Issue **one** certificate covering every new name. DNS A records must already
 point here, and port 80 must be reachable:
@@ -295,9 +288,33 @@ ganatri.in backend upload, either:
 
 PM2 also forces `PORT=8181` in `ecosystem.config.ganatri-in.js`.
 
-Do **not** change `/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/.env`.
-That worker keeps `WHATSAPP_API_URL=http://127.0.0.1:8001/api` so callbacks
-continue to hit the live backend during dual-run.
+### WhatsApp worker `.env`
+
+Copy the live worker env onto the new path, then point callbacks at **8181**:
+
+```bash
+ssh loomsnack
+
+mkdir -p /var/www/ganatri.in/backend/apps/whatsapp-worker
+cp /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/.env \
+  /var/www/ganatri.in/backend/apps/whatsapp-worker/.env
+
+nano /var/www/ganatri.in/backend/apps/whatsapp-worker/.env
+```
+
+The only required change versus the old worker file:
+
+```env
+WHATSAPP_API_URL=http://127.0.0.1:8181/api
+```
+
+Keep `WHATSAPP_WORKER_PORT=8100`, `WHATSAPP_WORKER_TOKEN` (must match the
+backend), `WHATSAPP_AUTH_ENCRYPTION_KEY`, and
+`WHATSAPP_AUTH_STATE_DIRECTORY=./data/whatsapp-auth`.
+
+Never rsync `--delete` the worker `data/` directory. That encrypted auth
+state is not in git and is not in `out/`. Backend `out/` rsync must exclude
+`apps/whatsapp-worker` so `--delete` cannot wipe worker `data/` or `dist/`.
 
 ---
 
@@ -320,20 +337,20 @@ pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
-`pm2 list` must show **all four**:
+`pm2 list` must show **`ganatri-in-backend`** and
+**`ganatri-in-whatsapp-worker`**, plus whatever else already runs (boxmap,
+etc.). The worker entry runs `node dist/index.js` and loads
+`apps/whatsapp-worker/.env` through PM2. It does not run under Bun.
 
-- `ganatri-backend` (old, port 8001) — leave it
-- `ganatri-whatsapp-worker` — leave it
-- `ganatri-in-backend` (new, port 8181)
-- whatever else already runs (boxmap, etc.)
-
-Never `pm2 start` the old `ecosystem.config.ganatri.js` against the new path.
-Never `pm2 delete ganatri-backend`.
+Do not start the old `ecosystem.config.ganatri.js` against the new path. After
+cutover, `ganatri-backend` and `ganatri-whatsapp-worker` must be stopped and
+deleted.
 
 Later restarts:
 
 ```bash
 pm2 restart ganatri-in-backend
+pm2 restart ganatri-in-whatsapp-worker
 ```
 
 ---
@@ -358,10 +375,10 @@ bun install --ignore-scripts
 cd apps/backend
 bun run build
 cd ../../..
-```
 
-Do **not** rebuild or rsync the WhatsApp worker for this go-live. The live
-worker on 8100 stays as it is.
+# Node-targeted WhatsApp worker bundle (do not start this with Bun).
+bun run --cwd apps/whatsapp-worker build
+```
 
 Build outputs:
 
@@ -369,6 +386,7 @@ Build outputs:
 - POS: `apps/pos/dist/`
 - Console: `apps/console/dist/`
 - Backend: `out/` (pruned monorepo with compiled `out/apps/backend/dist/`)
+- WhatsApp worker: `apps/whatsapp-worker/dist/` (Node-targeted bundle)
 
 Production env files already bake same-origin `/api`:
 
@@ -441,9 +459,49 @@ scp docs/development/ecosystem.config.ganatri-in.js \
   loomsnack:/var/www/ganatri.in/backend/ecosystem.config.ganatri-in.cjs
 ```
 
-`--exclude=apps/whatsapp-worker` is still required. There is no worker under
-the new tree; `--delete` without that exclude is still dangerous if a leftover
-directory appears.
+`--exclude=apps/whatsapp-worker` is required. `turbo prune --scope=backend`
+does not include the worker. `--delete` without that exclude removes worker
+`dist/` and `data/`.
+
+## 8.1 Deploy WhatsApp worker
+
+The worker bundle is deployed separately from the pruned backend. Rsync the
+worker `.env` with the same production token as the backend. Exclude only
+encrypted auth state so a code deploy cannot log out the linked account.
+
+**First cutover only:** stop the old worker, then copy its auth state before
+starting the new process. Two workers must never run at the same time.
+
+```bash
+ssh loomsnack "mkdir -p /var/www/ganatri.in/backend/apps/whatsapp-worker/dist \
+  /var/www/ganatri.in/backend/apps/whatsapp-worker/data/whatsapp-auth"
+
+# Stop the retired worker first so it is not writing auth files during the copy.
+ssh loomsnack "pm2 stop ganatri-whatsapp-worker"
+
+ssh loomsnack "cp -a /var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/data/. \
+  /var/www/ganatri.in/backend/apps/whatsapp-worker/data/"
+```
+
+Then from the local machine:
+
+```bash
+rsync -avz --delete --progress \
+  --exclude=data/ \
+  /mnt/c/Users/smarty/Desktop/loomsnack/Hisab/apps/whatsapp-worker/dist/ \
+  loomsnack:/var/www/ganatri.in/backend/apps/whatsapp-worker/dist/
+
+scp /mnt/c/Users/smarty/Desktop/loomsnack/Hisab/apps/whatsapp-worker/.env \
+  loomsnack:/var/www/ganatri.in/backend/apps/whatsapp-worker/.env
+```
+
+On the server, confirm the copied `.env` has `WHATSAPP_API_URL=http://127.0.0.1:8181/api`
+(the local file still points at 8001). Then copy the updated ecosystem file:
+
+```bash
+scp docs/development/ecosystem.config.ganatri-in.js \
+  loomsnack:/var/www/ganatri.in/backend/ecosystem.config.ganatri-in.cjs
+```
 
 ---
 
@@ -455,32 +513,32 @@ ssh loomsnack
 cd /var/www/ganatri.in/backend/apps/backend
 bun install --ignore-scripts
 
-# Only run migrations if they are backward-compatible with the still-live
-# ganatri-backend on 8001. A breaking schema change will take the old site down
-# because both processes share the same database.
 # bunx dbmate -d db/migrations up
 
 cd /var/www/ganatri.in/backend
 cp ecosystem.config.ganatri-in.cjs ecosystem.config.cjs
-pm2 restart ganatri-in-backend
+pm2 startOrReload ecosystem.config.cjs
 pm2 save
 
 pm2 logs ganatri-in-backend --lines 50
+pm2 logs ganatri-in-whatsapp-worker --lines 50
 ```
+
+`pm2 startOrReload` starts `ganatri-in-whatsapp-worker` if it is missing, and
+reloads both apps from the ecosystem file. Confirm `ganatri-whatsapp-worker`
+is already stopped before this, or you will have two workers on port 8100.
 
 Health checks:
 
 ```bash
-curl -s http://127.0.0.1:8001/api/
 curl -s http://127.0.0.1:8181/api/
 curl -s https://ganatri.in/api/
 curl -s https://admin.ganatri.in/api/
-curl -s https://pos.ganatri.in/api/
-curl -s https://console.ganatri.in/api/
+curl -fsS http://127.0.0.1:8100/health
+curl -fsS http://127.0.0.1:8100/health/ready
+pm2 status ganatri-in-backend
+pm2 status ganatri-in-whatsapp-worker
 ```
-
-8001 must still return the old Hello World. 8181 and the new HTTPS URLs must
-return the new process.
 
 Open in the browser:
 
@@ -488,15 +546,6 @@ Open in the browser:
 - https://pos.ganatri.in
 - https://console.ganatri.in
 - https://ganatri.in  (should redirect to Admin)
-
-Confirm the old site is still up:
-
-```bash
-curl -fsS https://ganatri.loomsnack.com/version.json
-curl -s https://ganatri.loomsnack.com/api/
-pm2 status ganatri-backend
-pm2 status ganatri-whatsapp-worker
-```
 
 New frontend metadata:
 
@@ -526,19 +575,68 @@ bun run owner:create
 
 ---
 
+## Stop ganatri.loomsnack.com
+
+Do this after Admin, POS, Console, `https://ganatri.in/api`, and the new
+WhatsApp worker are verified. Stop the old worker **before** starting the
+new one (section 8.1). Then delete the retired PM2 apps so they cannot come
+back on reboot.
+
+```bash
+ssh loomsnack
+
+# Old WhatsApp worker (must already be stopped if the new worker is up)
+pm2 stop ganatri-whatsapp-worker
+pm2 delete ganatri-whatsapp-worker
+
+# Old API
+pm2 stop ganatri-backend
+pm2 delete ganatri-backend
+
+pm2 save
+pm2 list
+```
+
+`pm2 list` must show `ganatri-in-backend` and `ganatri-in-whatsapp-worker`.
+It must **not** show `ganatri-backend` or `ganatri-whatsapp-worker`.
+
+Confirm the old port is free and the new stack is healthy:
+
+```bash
+ss -tlnp | grep -E '8001|8181|8100'
+curl -s http://127.0.0.1:8181/api/
+curl -fsS http://127.0.0.1:8100/health
+curl -s http://127.0.0.1:8001/api/   # should fail
+```
+
+Optionally stop serving the old hostname:
+
+```bash
+rm -f /etc/nginx/sites-enabled/ganatri.loomsnack.com
+nginx -t && systemctl reload nginx
+```
+
+Leave `/etc/nginx/sites-available/ganatri.loomsnack.com` and
+`/var/www/ganatri.loomsnack.com` on disk until you are sure you do not need
+a rollback. Do not rsync `--delete` into the old tree.
+
+---
+
 ## Quick reference
 
 | Task | Command |
 |------|---------|
 | SSH | `ssh loomsnack` |
-| Full local build | `bun i && bun run build && bun turbo prune --scope=backend && cp apps/backend/.env out/apps/backend/.env && cd out && bun install --ignore-scripts && cd apps/backend && bun run build` |
+| Full local build | `bun i && bun run build && bun turbo prune --scope=backend && cp apps/backend/.env out/apps/backend/.env && cd out && bun install --ignore-scripts && cd apps/backend && bun run build && cd ../../.. && bun run --cwd apps/whatsapp-worker build` |
 | Sync Admin | rsync `--delete` `apps/admin/dist/` → `/var/www/ganatri.in/admin/` |
 | Sync POS | rsync `--delete` `apps/pos/dist/` → `/var/www/ganatri.in/pos/` |
 | Sync Console | rsync `--delete` `apps/console/dist/` → `/var/www/ganatri.in/console/` |
 | Sync backend | rsync `out/` → `/var/www/ganatri.in/backend/` (exclude `node_modules`, `apps/whatsapp-worker`) |
+| Sync worker | rsync `apps/whatsapp-worker/dist/` → `.../apps/whatsapp-worker/dist/` (exclude `data/`); scp worker `.env` |
 | Install on server | `cd /var/www/ganatri.in/backend/apps/backend && bun install --ignore-scripts` |
-| Restart new API | `pm2 restart ganatri-in-backend` |
-| Do not touch | `pm2 restart ganatri-backend`, WhatsApp worker, old nginx, old frontend path |
+| Restart API | `pm2 restart ganatri-in-backend` |
+| Restart worker | `pm2 restart ganatri-in-whatsapp-worker` |
+| Stop old stack | `pm2 delete ganatri-backend ganatri-whatsapp-worker && pm2 save` |
 | nginx test | `nginx -t && systemctl reload nginx` |
 
 ---
@@ -547,13 +645,13 @@ bun run owner:create
 
 | File | Why |
 |------|-----|
-| `apps/backend/src/app.ts` | Production CORS allows `ganatri.in`, `admin`, `pos`, `console`, and still allows `ganatri.loomsnack.com` |
+| `apps/backend/src/app.ts` | Production CORS allows `ganatri.in`, `admin`, `pos`, `console` |
 | `packages/services/src/api.ts` | Fallback API URL is now `https://ganatri.in/api` |
 | `apps/admin/.env.production` | Same-origin `/api`; POS link is `https://pos.ganatri.in` |
 | `apps/pos/.env.production` | Same-origin `/api`; Admin link is `https://admin.ganatri.in` |
 | `apps/console/.env.production` | Same-origin `/api` |
 | nginx files in this folder | New hosts proxy `/api` to **8181** |
-| `ecosystem.config.ganatri-in.js` | PM2 app `ganatri-in-backend` on 8181, no second WhatsApp worker |
+| `ecosystem.config.ganatri-in.js` | PM2 apps `ganatri-in-backend` (8181) and `ganatri-in-whatsapp-worker` (8100) |
 
 Cookies stay host-only (no `Domain=.ganatri.in`). That is intentional: Admin,
 POS, and Console sessions must not leak across subdomains.
@@ -562,7 +660,7 @@ POS, and Console sessions must not leak across subdomains.
 
 ## Troubleshooting
 
-**502 on new `/api/*`** — new backend not running or still on 8001:
+**502 on `/api/*`** — new backend not running:
 
 ```bash
 pm2 status ganatri-in-backend
@@ -570,15 +668,23 @@ curl http://127.0.0.1:8181/api/
 ss -tlnp | grep 8181
 ```
 
-**Old site 502 after this deploy** — something restarted or replaced the old
-process. Restore it without touching the new stack:
+**WhatsApp worker down / invoices not queued** — only one worker may listen on
+8100. Confirm the old process is gone:
 
 ```bash
-pm2 status ganatri-backend
-cd /var/www/ganatri.loomsnack.com/backend
-pm2 restart ganatri-backend
-curl http://127.0.0.1:8001/api/
+pm2 list
+curl -fsS http://127.0.0.1:8100/health
+curl -fsS http://127.0.0.1:8100/health/ready
+pm2 logs ganatri-in-whatsapp-worker --lines 50
+ss -tlnp | grep 8100
 ```
+
+**`EADDRINUSE` on 8100** — `ganatri-whatsapp-worker` is still running. Stop and
+delete it, then `pm2 restart ganatri-in-whatsapp-worker`.
+
+**Worker logged out after deploy** — `data/` was deleted or not copied. Restore
+`/var/www/ganatri.in/backend/apps/whatsapp-worker/data/` from the old path (or
+a backup) and restart the worker. Never rsync `--delete` without `--exclude=data/`.
 
 **Certbot fails** — DNS A records not pointing here yet, or Cloudflare proxy
 is on, or port 80 is closed. Fix DNS, wait for propagation, retry.
@@ -594,38 +700,9 @@ changes.
 **POS "Admin login" goes to localhost** — rebuild POS after
 `apps/pos/.env.production` has `VITE_ADMIN_ORIGIN=https://admin.ganatri.in`.
 
-**Migrations broke the old site** — both backends share Postgres. Roll back
-the migration or restore the DB dump, then keep `ganatri-backend` running.
-
 **SSH still asks for a password** — public key not in `authorized_keys`, or
 `IdentitiesOnly` is missing so ssh tries other keys first. Re-run the install
 command in section 0.
-
----
-
-## Cutover (only after ganatri.in is verified)
-
-Do not do this on the first go-live.
-
-1. Confirm Admin, POS, Console, and `https://ganatri.in/api` work.
-2. Confirm WhatsApp invoices still work (worker still on 8100).
-3. Point any remaining clients (mobile) at `https://ganatri.in/api`.
-4. Then, and only then, stop serving `ganatri.loomsnack.com`:
-
-```bash
-pm2 stop ganatri-backend
-# keep ganatri-whatsapp-worker running
-# optionally: rm /etc/nginx/sites-enabled/ganatri.loomsnack.com && nginx -t && systemctl reload nginx
-```
-
-Optionally later, point the WhatsApp worker callback at the new backend:
-
-```env
-WHATSAPP_API_URL=http://127.0.0.1:8181/api
-```
-
-then `pm2 restart ganatri-whatsapp-worker`. Do not do that until you are
-ready to stop using port 8001.
 
 ---
 
@@ -640,6 +717,7 @@ bun i && bun run build
 bun turbo prune --scope=backend
 cp apps/backend/.env out/apps/backend/.env
 cd out && bun install --ignore-scripts && cd apps/backend && bun run build && cd ../../..
+bun run --cwd apps/whatsapp-worker build
 
 rsync -avz --delete --progress apps/admin/dist/ loomsnack:/var/www/ganatri.in/admin/
 rsync -avz --delete --progress apps/pos/dist/ loomsnack:/var/www/ganatri.in/pos/
@@ -648,20 +726,29 @@ rsync -avz --delete --progress \
   --exclude=node_modules \
   --exclude=apps/whatsapp-worker \
   out/ loomsnack:/var/www/ganatri.in/backend/
+rsync -avz --delete --progress --exclude=data/ \
+  apps/whatsapp-worker/dist/ \
+  loomsnack:/var/www/ganatri.in/backend/apps/whatsapp-worker/dist/
+scp apps/whatsapp-worker/.env \
+  loomsnack:/var/www/ganatri.in/backend/apps/whatsapp-worker/.env
 ```
+
+After scp, on the server set `WHATSAPP_API_URL=http://127.0.0.1:8181/api` if
+the local worker `.env` still points at 8001.
 
 **Server:**
 
 ```bash
 ssh loomsnack
 cd /var/www/ganatri.in/backend/apps/backend && bun install --ignore-scripts
-# confirm PORT=8181 in .env if rsync overwrote it
-cd /var/www/ganatri.in/backend && pm2 restart ganatri-in-backend
+# confirm PORT=8181 in backend .env if rsync overwrote it
+cd /var/www/ganatri.in/backend
+cp ecosystem.config.ganatri-in.cjs ecosystem.config.cjs
+pm2 restart ganatri-in-backend
+pm2 restart ganatri-in-whatsapp-worker
 ```
 
-Then sanity-check the old site is still up:
-
 ```bash
-curl -s http://127.0.0.1:8001/api/
-curl -fsS https://ganatri.loomsnack.com/version.json
+curl -s http://127.0.0.1:8181/api/
+curl -fsS http://127.0.0.1:8100/health
 ```

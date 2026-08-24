@@ -118,7 +118,7 @@ const CustomerQuickCreateDialog = ({
                                     <PhoneInput
                                         className="h-11 rounded-2xl border"
                                         value={field.value || undefined}
-                                        onChange={(value) => field.onChange(value ?? "")}
+                                        onChange={(value: string | undefined) => field.onChange(value ?? "")}
                                         onBlur={field.onBlur}
                                         placeholder="Optional phone number"
                                     />

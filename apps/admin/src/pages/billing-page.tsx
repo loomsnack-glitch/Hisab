@@ -46,6 +46,7 @@ import type {
     CustomerDTO,
     SalesListQuery,
     SalesListSummary,
+    InactiveProductCode,
     SaleDetailDTO,
     SaleSummaryDTO,
     SaleServiceMode,
@@ -137,7 +138,6 @@ import {
     incrementPlainProductQuantity,
     resolveProductCodeScan,
     shouldCaptureDirectBarcodeScan,
-    type InactiveProductCode,
     type ScanDiagnostic,
 } from "@/lib/barcode-scanning";
 import { safeRandomUUID } from "@/lib/uuid";
@@ -3478,7 +3478,7 @@ const BillingPage = ({
                                                 className="h-12 rounded-xl bg-muted/40 text-base"
                                                 placeholder="Phone number"
                                                 value={newCustomerPhone || undefined}
-                                                onChange={(value) => setNewCustomerPhone(value ?? "")}
+                                                onChange={(value: string | undefined) => setNewCustomerPhone(value ?? "")}
                                                 aria-label="Customer phone"
                                             />
                                         </div>

@@ -58,13 +58,13 @@ const DEMO_DEVICES = [
     loginUsername: "billing-counter",
     deviceSecret: "DemoCounter456",
   },
-];
+] as const;
 
 const DEMO_CATEGORIES = [
   { id: "55555555-5555-5555-5555-555555555555", name: "Groceries" },
   { id: "66666666-6666-6666-6666-666666666666", name: "Beverages" },
   { id: "77777777-7777-7777-7777-777777777777", name: "Snacks" },
-];
+] as const;
 
 const DEMO_PRODUCTS = [
   { id: "88888888-8888-8888-8888-888888888888", name: "Basmati Rice 5kg", price: 650, categoryId: DEMO_CATEGORIES[0].id },

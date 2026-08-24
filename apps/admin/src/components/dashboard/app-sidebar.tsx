@@ -200,11 +200,11 @@ const AppSidebar = ({
         const button = (
             <button
                 type="button"
-                disabled={item.disabled}
+                disabled={"disabled" in item && item.disabled}
                 className={cn(
                     "group rounded-xl text-sm font-medium text-muted-foreground transition-all duration-200",
                     collapsed ? collapsedNavRowClass : expandedNavRowClassNoTrail,
-                    item.disabled
+                    "disabled" in item && item.disabled
                         ? "cursor-not-allowed opacity-45"
                         : "hover:bg-muted/70 hover:text-foreground",
                 )}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type SubmitHandler } from "react-hook-form";
+import { z } from "zod";
 import { updateStore } from "@repo/services";
 import { UpdateStoreSchema, type StoreDTO, type UpdateStoreJSON } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
@@ -27,6 +28,8 @@ type EditStoreDialogProps = {
     trigger?: React.ReactElement;
 };
 
+type EditStoreFormInput = z.input<typeof UpdateStoreSchema>;
+
 const getDefaultValues = (store: StoreDTO): UpdateStoreJSON => ({
     name: store.name,
     address: store.address ?? "",
@@ -40,7 +43,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
     const [open, setOpen] = useState(false);
     const queryClient = useQueryClient();
 
-    const form = useForm<UpdateStoreJSON>({
+    const form = useForm<EditStoreFormInput, unknown, UpdateStoreJSON>({
         resolver: zodResolver(UpdateStoreSchema),
         defaultValues: getDefaultValues(store),
     });

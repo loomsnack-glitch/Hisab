@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import {
     STATUS_CODES,
     normalizePhoneNumber,
     validateWhatsAppTemplate,
     type ServiceResponse,
+    type StatusCode,
     type WhatsAppAccountDTO,
     type WhatsAppAccountStatusResponseDTO,
     type WhatsAppChangeAccountNumberJSON,
@@ -18,12 +20,25 @@ import * as repository from "./whatsapp.repository";
 import * as workerClient from "./whatsapp.worker-client";
 import * as invoiceService from "./invoice";
 import * as conversationService from "./conversation";
-import { formatDueReminderText } from "./due-reminder";
+import * as storage from "@/services/storage";
+import { renderSalePdf } from "./invoice-pdf";
+import { renderDueReminderPdf } from "./due-reminder-pdf";
+import { formatDueReminderText, getDueReminderTemplateValues } from "./due-reminder";
+import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
+import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
+import { enqueueCloudTemplateSend, enqueueCloudTemplateSendForDevice } from "./cloud-api/cloud-template-send.service";
+import { buildDueReminderCloudComponents } from "./due-reminder-cloud-components";
+import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
+import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
 import * as promotionService from "./promotion";
 import * as messageTemplate from "./message-template";
 
 const QR_KEY_PREFIX = "whatsapp:account:qr:";
 const QR_TTL_SECONDS = 120;
+const MAX_DUE_REMINDER_PDF_BYTES = 10 * 1024 * 1024;
+const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
+const dueReminderObjectKey = (organizationId: string, storeId: string, accountId: string, customerId: string, saleId?: string) =>
+    `whatsapp-due-reminders/${organizationId}/${storeId}/${accountId}/${customerId}/${saleId ?? "statement"}.pdf`;
 type StoreScope =
     | { error: string; code: 404 }
     | { organization: Awaited<ReturnType<typeof organizationRepository.getOrganizationByIdForUser>>; store: Awaited<ReturnType<typeof organizationRepository.getStoreById>> };
@@ -34,6 +49,16 @@ const accountResponse = (
 ): WhatsAppAccountStatusResponseDTO => ({
     account,
     qrImageDataUrl,
+});
+
+const cloudAccountResponse = (
+    account: WhatsAppAccountDTO,
+    message = "WhatsApp Cloud account status fetched successfully",
+): ServiceResponse<WhatsAppAccountStatusResponseDTO> => ({
+    status: "success",
+    message,
+    data: accountResponse(account, null),
+    code: STATUS_CODES.SUCCESS,
 });
 
 const scopeStore = async (userId: string, organizationId: string, storeId: string): Promise<StoreScope> => {
@@ -96,6 +121,16 @@ const workerUnavailable = (account: WhatsAppAccountDTO): ServiceResponse<WhatsAp
     code: STATUS_CODES.SERVICE_UNAVAILABLE,
 });
 
+const baileysLinkingEnabled = (): boolean =>
+    process.env.WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
+
+const legacyProviderDisabled = (): ServiceResponse<WhatsAppAccountStatusResponseDTO | null> => ({
+    status: "error",
+    message: "Legacy WhatsApp linking is disabled. Use WhatsApp Cloud API.",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
 const markAccountWorkerUnavailable = async (accountId: string) => {
     try {
         await saveWorkerStatus(accountId, {
@@ -125,6 +160,8 @@ export const getAccount = async (
             code: STATUS_CODES.SUCCESS,
         };
     }
+
+    if (account.provider === "cloud_api") return cloudAccountResponse(account);
 
     try {
         const snapshot = await workerClient.getAccountStatus(account.id);
@@ -161,6 +198,7 @@ export const getOrganizationAccountStatus = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scoped = await getOrganizationAccount(userId, organizationId, accountId);
     if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    if (scoped.account.provider === "cloud_api") return cloudAccountResponse(scoped.account);
     try {
         const snapshot = await workerClient.getAccountStatus(scoped.account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -177,6 +215,7 @@ export const createOrganizationAccount = async (
     organizationId: string,
     data: WhatsAppCreateAccountJSON,
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
 
@@ -219,7 +258,15 @@ export const createOrganizationAccount = async (
     }
 };
 
-const getOrganizationAccount = async (userId: string, organizationId: string, accountId: string) => {
+type OrganizationAccountScope =
+    | { error: string; code: StatusCode }
+    | { account: WhatsAppAccountDTO };
+
+const getOrganizationAccount = async (
+    userId: string,
+    organizationId: string,
+    accountId: string,
+): Promise<OrganizationAccountScope> => {
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { error: "Organization not found" as const, code: STATUS_CODES.NOT_FOUND };
     const account = await repository.getAccountById(accountId);
@@ -236,6 +283,15 @@ export const connectOrganizationAccount = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scoped = await getOrganizationAccount(userId, organizationId, accountId);
     if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    if (scoped.account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "Use the WhatsApp Cloud connect flow to reconnect this account",
+            data: accountResponse(scoped.account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
     try {
         const snapshot = await workerClient.connectAccount(scoped.account.id, scoped.account.phoneNumber);
         const response = await saveWorkerSnapshot(snapshot);
@@ -252,6 +308,17 @@ export const disconnectOrganizationAccount = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scoped = await getOrganizationAccount(userId, organizationId, accountId);
     if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    if (scoped.account.provider === "cloud_api") {
+        const account = await repository.updateCloudAccountStatus(
+            organizationId,
+            accountId,
+            "disconnected",
+            userId,
+        );
+        return account
+            ? cloudAccountResponse(account, "WhatsApp Cloud account disconnected")
+            : { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
     try {
         const snapshot = await workerClient.disconnectAccount(scoped.account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -269,6 +336,15 @@ export const changeOrganizationAccountNumber = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scoped = await getOrganizationAccount(userId, organizationId, accountId);
     if ("error" in scoped) return { status: "error", message: scoped.error, data: null, code: scoped.code };
+    if (scoped.account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "Change the Cloud phone number through Meta Embedded Signup",
+            data: accountResponse(scoped.account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
 
     const phoneNumber = normalizePhoneNumber(data.phoneNumber);
     if (!phoneNumber) return { status: "error", message: "Enter a valid phone number with country code", data: null, code: STATUS_CODES.BAD_REQUEST };
@@ -358,6 +434,7 @@ export const createAccount = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
 
     if (await repository.getAccount(organizationId, storeId)) {
         return {
@@ -435,10 +512,20 @@ export const connectAccount = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
 
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) {
         return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+
+    if (account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "Use the WhatsApp Cloud connect flow to reconnect this account",
+            data: accountResponse(account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
     }
 
     try {
@@ -468,6 +555,18 @@ export const disconnectAccount = async (
         return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
     }
 
+    if (account.provider === "cloud_api") {
+        const updated = await repository.updateCloudAccountStatus(
+            organizationId,
+            account.id,
+            "disconnected",
+            userId,
+        );
+        return updated
+            ? cloudAccountResponse(updated, "WhatsApp Cloud account disconnected")
+            : { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+
     try {
         const snapshot = await workerClient.disconnectAccount(account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -490,10 +589,20 @@ export const changeAccountNumber = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    if (!baileysLinkingEnabled()) return legacyProviderDisabled();
 
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) {
         return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+
+    if (account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "Change the Cloud phone number through Meta Embedded Signup",
+            data: accountResponse(account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
     }
 
     const phoneNumber = normalizePhoneNumber(data.phoneNumber);
@@ -593,6 +702,9 @@ export const removeAccount = async (
 };
 
 const syncAccountForScope = async (account: WhatsAppAccountDTO): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO>> => {
+    if (account.provider === "cloud_api") {
+        return cloudAccountResponse(account, "WhatsApp Cloud account status is managed by Meta");
+    }
     try {
         const snapshot = await workerClient.syncAccount(account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -632,6 +744,8 @@ export const getAccountForDevice = async (
     const account = await repository.getAccount(session.organization.id, session.store.id);
     if (!account) return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
 
+    if (account.provider === "cloud_api") return cloudAccountResponse(account);
+
     try {
         const snapshot = await workerClient.getAccountStatus(account.id);
         const response = await saveWorkerSnapshot(snapshot);
@@ -648,6 +762,15 @@ export const connectAccountForDevice = async (
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
     const account = await repository.getAccount(session.organization.id, session.store.id);
     if (!account) return { status: "error", message: "WhatsApp account is not linked. Open the POS WhatsApp page to link it first.", data: null, code: STATUS_CODES.NOT_FOUND };
+
+    if (account.provider === "cloud_api") {
+        return {
+            status: "error",
+            message: "This Store uses WhatsApp Cloud API; reconnect it from the Admin Cloud account manager",
+            data: accountResponse(account, null),
+            code: STATUS_CODES.CONFLICT,
+        };
+    }
 
     try {
         const snapshot = await workerClient.connectAccount(account.id, account.phoneNumber);
@@ -749,11 +872,12 @@ export const deleteMessageTemplate = async (userId: string, organizationId: stri
 };
 
 const queueDueReminderForStore = async (
-    organizationId: string,
-    storeId: string,
-    customerId: string,
-    customMessage?: string,
-    saleId?: string,
+  organizationId: string,
+  storeId: string,
+  customerId: string,
+  customMessage?: string,
+  saleId?: string,
+  userId?: string,
 ): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
     const store = await organizationRepository.getStoreById(organizationId, storeId);
     const customer = await billingRepository.getCustomerById(organizationId, customerId);
@@ -768,6 +892,82 @@ const queueDueReminderForStore = async (
     if (!account) return { status: "error", message: "Link the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     const defaultTemplate = await messageTemplate.getDefaultTemplate(organizationId, storeId, "due_reminder");
+    if (account.provider === "cloud_api") {
+        if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
+        if (customMessage?.trim()) return { status: "error", message: "Cloud WhatsApp reminders must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
+        if (!defaultTemplate || !defaultTemplate.isActive) return { status: "error", message: "No active due-reminder template is available for this Store", data: null, code: STATUS_CODES.CONFLICT };
+        const scope = await getCloudAccountScope(organizationId, account.id);
+        if (!scope?.businessAccountId) return { status: "error", message: "Cloud WhatsApp account is not ready for template sends", data: null, code: STATUS_CODES.CONFLICT };
+        const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "due_reminder", defaultTemplate.id);
+        if (!binding) return { status: "error", message: "No approved Cloud due-reminder template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+        const values = getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks);
+        const hasDocumentHeader = binding.asset.components.some(component => {
+            if (!component || typeof component !== "object" || Array.isArray(component)) return false;
+            const value = component as Record<string, unknown>;
+            return String(value.type ?? "").toLowerCase() === "header" && String(value.format ?? "").toLowerCase() === "document";
+        });
+        let attachmentStorageKey: string | null = null;
+        let documentLink: string | null = null;
+        try {
+            if (hasDocumentHeader) {
+                const bucket = privateBucket();
+                if (!bucket) return { status: "error", message: "Private media storage is not configured for due reminder PDFs", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+                const organization = await organizationRepository.getOrganizationById(organizationId);
+                if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+                const sale = saleId ? await invoiceService.loadSaleDetail(organizationId, storeId, saleId) : null;
+                if (saleId && !sale) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
+                const pdf = sale
+                    ? await renderSalePdf(sale, {
+                        organizationName: organization.name,
+                        organizationTagline: organization.tagline,
+                        storeName: store.name,
+                        storeAddress: store.address,
+                    })
+                    : await renderDueReminderPdf(customer, reminderSales, {
+                        organizationName: organization.name,
+                        storeName: store.name,
+                        storeAddress: store.address,
+                    });
+                if (pdf.byteLength > MAX_DUE_REMINDER_PDF_BYTES) return { status: "error", message: "Due reminder PDF is too large to send", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
+                attachmentStorageKey = dueReminderObjectKey(organizationId, storeId, account.id, customerId, saleId);
+                await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
+                documentLink = await storage.generateSignedUrl(bucket, attachmentStorageKey, cloudMediaUrlTtlSeconds());
+            }
+            const componentParameters = buildDueReminderCloudComponents(binding.asset.components, defaultTemplate.body, values, binding.binding.variableMapping, documentLink);
+            const window = new Date().toISOString().slice(0, 10);
+            const fingerprint = createHash("sha256").update(JSON.stringify({
+                organizationId,
+                storeId,
+                customerId,
+                sales: reminderSales.map(sale => ({ id: sale.id, dueTotal: String(sale.dueTotal ?? "0") })).sort((a, b) => a.id.localeCompare(b.id)),
+                window,
+            })).digest("hex");
+            const idempotencyKey = saleId ? `due-reminder:${saleId}:${window}` : `due-reminder:${fingerprint}`;
+            const enqueue = userId
+                ? enqueueCloudTemplateSend(userId, organizationId, {
+                    storeId, accountId: account.id, customerId, saleId: saleId ?? null,
+                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
+                })
+                : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
+                    storeId, accountId: account.id, customerId, saleId: saleId ?? null,
+                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
+                });
+            const queued = await enqueue;
+            if (queued.status === "error" || !queued.data) {
+                if (attachmentStorageKey) await storage.deleteObject(privateBucket(), attachmentStorageKey).catch(() => undefined);
+                return queued as ServiceResponse<WhatsAppReminderQueueResponseDTO | null>;
+            }
+            return {
+                status: "success",
+                message: "Due reminder queued for WhatsApp",
+                data: { customerId, saleId: saleId ?? null, ...queued.data } as WhatsAppReminderQueueResponseDTO,
+                code: STATUS_CODES.CREATED,
+            };
+        } catch (error) {
+            if (attachmentStorageKey) await storage.deleteObject(privateBucket(), attachmentStorageKey).catch(() => undefined);
+            return { status: "error", message: error instanceof Error ? error.message : "Cloud due-reminder template variables are invalid", data: null, code: STATUS_CODES.BAD_REQUEST };
+        }
+    }
     try {
         const queued = await repository.createCustomerTextOutbox({
             organizationId,
@@ -794,7 +994,7 @@ const queueDueReminderForStore = async (
 export const queueDueReminder = async (userId: string, organizationId: string, storeId: string, customerId: string, customMessage?: string, saleId?: string) => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
-    return queueDueReminderForStore(organizationId, storeId, customerId, customMessage, saleId);
+    return queueDueReminderForStore(organizationId, storeId, customerId, customMessage, saleId, userId);
 };
 
 export const queueDueReminderForDevice = (session: DeviceSessionDTO, customerId: string, customMessage?: string, saleId?: string) =>
@@ -838,6 +1038,21 @@ export const getPromotionDashboard = async (userId: string, organizationId: stri
         data: await promotionService.getPromotionDashboard(organizationId, storeId, days, limit, page),
         code: STATUS_CODES.SUCCESS,
     };
+};
+export const getPromotionRecipients = async (userId: string, organizationId: string, storeId: string, campaignId: string, status: "all" | "failed" | "retryable" = "all") => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return { status: "success" as const, message: "Promotion recipients fetched successfully", data: await promotionService.getPromotionRecipients(organizationId, storeId, campaignId, status), code: STATUS_CODES.SUCCESS };
+};
+export const retryPromotionRecipient = async (userId: string, organizationId: string, storeId: string, campaignId: string, recipientId: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return promotionService.retryPromotionRecipient(userId, organizationId, storeId, campaignId, recipientId);
+};
+export const resendPromotionRecipient = async (userId: string, organizationId: string, storeId: string, campaignId: string, recipientId: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    return promotionService.resendPromotionRecipient(userId, organizationId, storeId, campaignId, recipientId);
 };
 export const getInvoiceStatusForDevice = invoiceService.getInvoiceStatusForDevice;
 export const retryInvoiceForDevice = invoiceService.retryInvoiceForDevice;

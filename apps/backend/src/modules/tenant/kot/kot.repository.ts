@@ -509,7 +509,7 @@ export const getKotNumbersBySaleId = async (
             created_at ASC,
             kot_sequence_number ASC
     `;
-    return results.map((row) => String(row.kot_number));
+    return results.map((row: Record<string, unknown>) => String(row.kot_number));
 };
 
 export const getKotsByTableOrderId = async (

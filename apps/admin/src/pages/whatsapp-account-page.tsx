@@ -22,6 +22,14 @@ const statusLabel: Record<string, string> = {
     failed: "Connection failed",
     revoked: "Session revoked",
 };
+const cloudStatusLabel: Record<string, string> = {
+    connected: "Connected",
+    disconnected: "Disconnected",
+    needs_action: "Needs attention",
+    revoked: "Access revoked",
+    suspended: "Suspended",
+    failed: "Connection failed",
+};
 
 type WhatsAppAccountQueryError = {
     message?: string;
@@ -49,7 +57,11 @@ const WhatsAppAccountPage = () => {
     const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
     const account = accountData?.account;
     const accounts = accountsQuery.data?.data?.accounts ?? [];
-    const availableAccounts = accounts.filter(candidate => !candidate.assignedStoreIds.includes(storeId));
+    const baileysLinkingEnabled = import.meta.env.VITE_WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
+    const availableAccounts = accounts.filter(candidate =>
+        (baileysLinkingEnabled || candidate.provider === "cloud_api")
+        && !candidate.assignedStoreIds.includes(storeId),
+    );
     const selectedAccount = availableAccounts.find(candidate => candidate.id === selectedAccountId);
     const assignMutation = useMutation({
         mutationFn: () => assignWhatsAppAccount(organizationId, storeId, { whatsappAccountId: selectedAccountId }),
@@ -117,7 +129,7 @@ const WhatsAppAccountPage = () => {
                             </CardTitle>
                             <CardDescription className="mt-2">Link an organization WhatsApp account to this Store. Add and manage accounts from the organization page.</CardDescription>
                         </div>
-                        {account ? <Badge variant="outline" className="rounded-full">{statusLabel[account.status] ?? account.status}</Badge> : null}
+                        {account ? <Badge variant="outline" className="rounded-full">{account.provider === "cloud_api" ? `${cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable"} · Cloud API` : statusLabel[account.status] ?? account.status}</Badge> : null}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-5">

@@ -17,6 +17,8 @@ import {
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as storage from "@/services/storage";
 import * as repository from "./whatsapp.repository";
+import * as consentRepository from "./cloud-api/customer-consent.repository";
+import { isWhatsAppOptOutKeyword } from "./opt-out";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
@@ -98,6 +100,7 @@ const sendTextForScope = async (
     conversationId: string,
     data: WhatsAppSendConversationTextJSON,
 ): Promise<ServiceResponse<WhatsAppConversationMessagesResponse["messages"][number] | null>> => {
+    if (scope.account.provider === "cloud_api") return error("Cloud WhatsApp messages require an approved Cloud template route", STATUS_CODES.CONFLICT);
     if (scope.account.status !== "connected") return error("Connect the Store WhatsApp account before sending messages", STATUS_CODES.CONFLICT);
     const conversation = await repository.getConversation(scope.organizationId, scope.storeId, scope.account.id, conversationId);
     if (!conversation) return error("WhatsApp conversation not found", STATUS_CODES.NOT_FOUND);
@@ -278,6 +281,15 @@ const processMessageEvent = async (
 
     try {
         const customer = await repository.getCustomerByPhone(account.organizationId, data.contactPhoneNumber);
+        const customerId = customer?.id ?? null;
+        if (account.provider === "cloud_api" && customerId && data.direction === "inbound" && data.messageType === "text" && isWhatsAppOptOutKeyword(data.body ?? "")) {
+            await consentRepository.setCustomerSuppression(account.organizationId, customerId, null, {
+                suppressed: true,
+                source: "customer_reply",
+                reason: "Customer sent a WhatsApp opt-out keyword",
+                evidenceReference: `provider:${data.providerMessageId}`,
+            });
+        }
         const result = await repository.createMessageEvent({
             organizationId: account.organizationId,
             storeId,
@@ -306,6 +318,15 @@ const processMessageEvent = async (
         throw error;
     }
 };
+
+/**
+ * Cloud receipts already have their own durable inbox. They must enter the
+ * shared Store-scoped writer without creating a legacy Baileys inbox row.
+ */
+export const ingestNormalizedMessageEvent = async (
+    accountId: string,
+    data: WhatsAppWorkerMessageEventJSON,
+): Promise<{ stored: boolean }> => processMessageEvent(accountId, data);
 
 export const ingestMessageEvent = async (
     accountId: string,
