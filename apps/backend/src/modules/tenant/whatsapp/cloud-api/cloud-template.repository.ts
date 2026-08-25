@@ -189,11 +189,13 @@ const mapBinding = (row: Record<string, unknown>): WhatsAppCloudTemplateBindingD
     localTemplateId: mapped.localTemplateId,
     cloudTemplateId: mapped.cloudTemplateId,
     whatsappBusinessAccountId: mapped.whatsappBusinessAccountId,
+    languageCode: typeof mapped.languageCode === "string" ? mapped.languageCode : "en_US",
     localTemplateBody: (mapped.localTemplateBody as string | null | undefined) ?? null,
     variableMapping: (mapped.variableMapping as CloudTemplateVariableMapping | undefined) ?? {},
     kind: mapped.kind,
     isDefault: Boolean(mapped.isDefault),
     isActive: Boolean(mapped.isActive),
+    archivedAt: mapped.archivedAt ?? null,
     createdAt: mapped.createdAt,
     updatedAt: mapped.updatedAt,
   });
@@ -281,7 +283,7 @@ export const createCloudTemplateBinding = async (input: {
   `;
   if (!localTemplate) throw new Error("Local WhatsApp template is unavailable");
   const [asset] = await tx`
-    SELECT id, status, category, components
+    SELECT id, status, category, language_code, components
     FROM whatsapp_cloud_templates
     WHERE id = ${input.cloudTemplateId}
       AND organization_id = ${input.organizationId}
@@ -316,18 +318,20 @@ export const createCloudTemplateBinding = async (input: {
       SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
       WHERE organization_id = ${input.organizationId}
         AND store_id = ${input.storeId}
+        AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
         AND kind = ${input.kind}
+        AND language_code = ${asset.language_code}
     `;
   }
   const [row] = await tx`
     INSERT INTO whatsapp_cloud_template_bindings (
       organization_id, store_id, local_template_id, cloud_template_id,
       whatsapp_business_account_id, local_template_body, variable_mapping,
-      kind, is_default, created_by, updated_by
+      kind, language_code, is_default, created_by, updated_by
     ) VALUES (
       ${input.organizationId}, ${input.storeId}, ${input.localTemplateId}, ${asset.id},
       ${input.whatsappBusinessAccountId}, ${localTemplate.body}, ${variableMapping}::jsonb,
-      ${input.kind}, ${input.isDefault}, ${input.createdBy}, ${input.createdBy}
+      ${input.kind}, ${asset.language_code}, ${input.isDefault}, ${input.createdBy}, ${input.createdBy}
     )
     ON CONFLICT (organization_id, store_id, local_template_id, cloud_template_id)
     DO UPDATE SET
@@ -335,8 +339,11 @@ export const createCloudTemplateBinding = async (input: {
       local_template_body = EXCLUDED.local_template_body,
       variable_mapping = EXCLUDED.variable_mapping,
       kind = EXCLUDED.kind,
+      language_code = EXCLUDED.language_code,
       is_default = EXCLUDED.is_default,
       is_active = TRUE,
+      archived_at = NULL,
+      archived_by = NULL,
       updated_by = EXCLUDED.updated_by,
       updated_at = NOW()
     RETURNING *
@@ -374,12 +381,13 @@ export const createCloudTemplateDefaultBinding = async (input: {
       AND store_id = ${input.storeId}
       AND cloud_template_id = ${input.cloudTemplateId}
       AND kind = ${input.kind}
+      AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
       AND is_active = TRUE
     LIMIT 1
   `;
   if (existing) {
     const [existingAsset] = await tx`
-      SELECT status, category
+      SELECT status, category, language_code
       FROM whatsapp_cloud_templates
       WHERE id = ${input.cloudTemplateId}
         AND organization_id = ${input.organizationId}
@@ -394,6 +402,8 @@ export const createCloudTemplateDefaultBinding = async (input: {
       WHERE organization_id = ${input.organizationId}
         AND store_id = ${input.storeId}
         AND kind = ${input.kind}
+        AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+        AND language_code = ${existing.language_code}
         AND is_default = TRUE
     `;
     await tx`
@@ -401,6 +411,7 @@ export const createCloudTemplateDefaultBinding = async (input: {
       SET is_default = TRUE, updated_by = ${input.createdBy}, updated_at = NOW()
       WHERE organization_id = ${input.organizationId}
         AND store_id = ${input.storeId}
+        AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
         AND id = ${existing.id}
     `;
     const [updated] = await tx`
@@ -411,7 +422,7 @@ export const createCloudTemplateDefaultBinding = async (input: {
     return mapBinding(updated as Record<string, unknown>);
   }
   const [asset] = await tx`
-    SELECT id, status, category, components
+    SELECT id, status, category, language_code, components
     FROM whatsapp_cloud_templates
     WHERE id = ${input.cloudTemplateId}
       AND organization_id = ${input.organizationId}
@@ -428,7 +439,11 @@ export const createCloudTemplateDefaultBinding = async (input: {
   await tx`
     UPDATE whatsapp_cloud_template_bindings
     SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
-    WHERE organization_id = ${input.organizationId} AND store_id = ${input.storeId} AND kind = ${input.kind}
+    WHERE organization_id = ${input.organizationId}
+      AND store_id = ${input.storeId}
+      AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+      AND kind = ${input.kind}
+      AND language_code = ${asset.language_code}
   `;
   await tx`
     UPDATE whatsapp_message_templates
@@ -449,11 +464,11 @@ export const createCloudTemplateDefaultBinding = async (input: {
     INSERT INTO whatsapp_cloud_template_bindings (
       organization_id, store_id, local_template_id, cloud_template_id,
       whatsapp_business_account_id, local_template_body, variable_mapping,
-      kind, is_default, created_by, updated_by
+      kind, language_code, is_default, created_by, updated_by
     ) VALUES (
       ${input.organizationId}, ${input.storeId}, ${localTemplate.id}, ${input.cloudTemplateId},
       ${input.whatsappBusinessAccountId}, ${input.localTemplateBody}, ${variableMapping}::jsonb,
-      ${input.kind}, TRUE, ${input.createdBy}, ${input.createdBy}
+      ${input.kind}, ${asset.language_code}, TRUE, ${input.createdBy}, ${input.createdBy}
     ) RETURNING *
   `;
   if (!row) throw new Error("Cloud WhatsApp template binding could not be created");
@@ -544,12 +559,96 @@ export const getCloudTemplateBindingSnapshotForStore = async (
       AND whatsapp_business_account_id = ${whatsappBusinessAccountId}
       AND kind = ${kind}
       AND is_active = TRUE
-      AND (${localTemplateId ?? null}::uuid IS NULL OR local_template_id = ${localTemplateId ?? null})
-    ORDER BY
-      CASE WHEN ${localTemplateId ?? null}::uuid IS NOT NULL AND local_template_id = ${localTemplateId ?? null} THEN 0 ELSE 1 END,
-      is_default DESC,
-      updated_at DESC
+      AND (
+        (${localTemplateId ?? null}::uuid IS NOT NULL AND local_template_id = ${localTemplateId ?? null})
+        OR (${localTemplateId ?? null}::uuid IS NULL AND is_default = TRUE)
+      )
+    ORDER BY updated_at DESC
     LIMIT 1
   `;
   return row ? getCloudTemplateBindingSnapshot(organizationId, String(row.id)) : null;
 };
+
+export const recordCloudTemplateAuditEvent = async (input: {
+  organizationId: string;
+  whatsappBusinessAccountId: string;
+  storeId?: string | null;
+  bindingId?: string | null;
+  submissionId?: string | null;
+  eventType: string;
+  actorId?: string | null;
+  details?: Record<string, unknown>;
+}): Promise<void> => {
+  await pg`
+    INSERT INTO whatsapp_cloud_template_audit_events (
+      organization_id, whatsapp_business_account_id, store_id, binding_id,
+      submission_id, event_type, actor_id, details
+    ) VALUES (
+      ${input.organizationId}, ${input.whatsappBusinessAccountId}, ${input.storeId ?? null},
+      ${input.bindingId ?? null}, ${input.submissionId ?? null}, ${input.eventType},
+      ${input.actorId ?? null}, ${input.details ?? {}}::jsonb
+    )
+  `;
+};
+
+export const archiveCloudTemplateBinding = async (
+  organizationId: string,
+  bindingId: string,
+  archivedBy: string,
+): Promise<WhatsAppCloudTemplateBindingDTO | null> => {
+  const [row] = await pg`
+    UPDATE whatsapp_cloud_template_bindings
+    SET is_active = FALSE,
+        is_default = FALSE,
+        archived_at = NOW(),
+        archived_by = ${archivedBy},
+        updated_by = ${archivedBy},
+        updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND id = ${bindingId}
+      AND is_active = TRUE
+    RETURNING *
+  `;
+  return row ? mapBinding(row as Record<string, unknown>) : null;
+};
+
+export const rollbackCloudTemplateBinding = async (
+  organizationId: string,
+  bindingId: string,
+  restoredBy: string,
+): Promise<WhatsAppCloudTemplateBindingDTO | null> => pg.begin(async tx => {
+  const [target] = await tx`
+    SELECT bindings.*, assets.status, assets.language_code
+    FROM whatsapp_cloud_template_bindings bindings
+    INNER JOIN whatsapp_cloud_templates assets
+      ON assets.id = bindings.cloud_template_id
+     AND assets.organization_id = bindings.organization_id
+    WHERE bindings.organization_id = ${organizationId}
+      AND bindings.id = ${bindingId}
+  `;
+  if (!target) return null;
+  if (target.status !== "approved") throw new Error("Only an approved Cloud template can be restored");
+  await tx`
+    UPDATE whatsapp_cloud_template_bindings
+    SET is_default = FALSE, updated_by = ${restoredBy}, updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND store_id = ${target.store_id}
+      AND whatsapp_business_account_id = ${target.whatsapp_business_account_id}
+      AND kind = ${target.kind}
+      AND language_code = ${target.language_code}
+      AND is_active = TRUE
+  `;
+  const [row] = await tx`
+    UPDATE whatsapp_cloud_template_bindings
+    SET is_active = TRUE,
+        is_default = TRUE,
+        archived_at = NULL,
+        archived_by = NULL,
+        updated_by = ${restoredBy},
+        updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND id = ${bindingId}
+    RETURNING *
+  `;
+  return row ? mapBinding(row as Record<string, unknown>) : null;
+});

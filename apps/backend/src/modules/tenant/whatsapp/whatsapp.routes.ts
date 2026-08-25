@@ -51,6 +51,8 @@ import {
     listCloudTemplateSubmissionsForAccount,
     setCloudTemplateDefaultForSubmission,
     setCloudTemplateAssetDefaultForStore,
+    archiveCloudTemplateBindingForStore,
+    rollbackCloudTemplateBindingForStore,
 } from "./cloud-api/cloud-template.service";
 import * as consentService from "./cloud-api/customer-consent.service";
 import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
@@ -257,6 +259,38 @@ userRouter.post(
         }
     },
 );
+
+userRouter.post("/:organizationId/whatsapp/cloud/template-bindings/:bindingId/archive", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const bindingId = c.req.param("bindingId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(bindingId, "Invalid binding id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await archiveCloudTemplateBindingForStore(
+            c.get("authUser").id,
+            organizationId,
+            bindingId,
+        ));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/template-bindings/:bindingId/rollback", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const bindingId = c.req.param("bindingId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(bindingId, "Invalid binding id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await rollbackCloudTemplateBindingForStore(
+            c.get("authUser").id,
+            organizationId,
+            bindingId,
+        ));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
 
 userRouter.post(
     "/:organizationId/whatsapp/cloud/accounts/:accountId/templates",

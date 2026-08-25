@@ -25,6 +25,9 @@ import {
   upsertCloudTemplateAssets,
   isCloudAccountAssignedToStore,
   createCloudTemplateDefaultBinding,
+  recordCloudTemplateAuditEvent,
+  archiveCloudTemplateBinding,
+  rollbackCloudTemplateBinding,
 } from "./cloud-template.repository";
 import {
   createCloudTemplateSubmission,
@@ -62,6 +65,9 @@ type CloudTemplateServiceDependencies = {
   updateSubmission: typeof updateCloudTemplateSubmission;
   listSubmissions: typeof listCloudTemplateSubmissions;
   isAccountAssignedToStore: typeof isCloudAccountAssignedToStore;
+  recordAudit: typeof recordCloudTemplateAuditEvent;
+  archiveBinding: typeof archiveCloudTemplateBinding;
+  rollbackBinding: typeof rollbackCloudTemplateBinding;
   organizationAccess: (organizationId: string, userId: string) => Promise<boolean>;
 };
 
@@ -99,6 +105,9 @@ const dependencies = (): CloudTemplateServiceDependencies => ({
   updateSubmission: updateCloudTemplateSubmission,
   listSubmissions: listCloudTemplateSubmissions,
   isAccountAssignedToStore: isCloudAccountAssignedToStore,
+  recordAudit: recordCloudTemplateAuditEvent,
+  archiveBinding: archiveCloudTemplateBinding,
+  rollbackBinding: rollbackCloudTemplateBinding,
   organizationAccess: async (organizationId, userId) => Boolean(await organizationRepository.getOrganizationByIdForUser(organizationId, userId)),
 });
 
@@ -585,6 +594,16 @@ export const setCloudTemplateDefaultForSubmission = async (
       localTemplateBody: localBodyFromProviderComponents(submission.requestedComponents, submission.kind),
       createdBy: userId,
     });
+    await deps.recordAudit({
+      organizationId,
+      whatsappBusinessAccountId: submission.whatsappBusinessAccountId,
+      storeId: submission.originatingStoreId,
+      bindingId: binding.id,
+      submissionId: submission.id,
+      eventType: "default_assigned",
+      actorId: userId,
+      details: { languageCode: submission.languageCode, kind: submission.kind },
+    });
     return { status: "success", message: "Approved Cloud template is now the Store default", data: binding, code: STATUS_CODES.SUCCESS };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Cloud template could not become the Store default", data: null, code: STATUS_CODES.CONFLICT };
@@ -617,9 +636,66 @@ export const setCloudTemplateAssetDefaultForStore = async (
       localTemplateBody: localBodyFromProviderComponents(asset.components, data.kind),
       createdBy: userId,
     });
+    await deps.recordAudit({
+      organizationId,
+      whatsappBusinessAccountId: data.whatsappBusinessAccountId,
+      storeId,
+      bindingId: binding.id,
+      eventType: "default_assigned",
+      actorId: userId,
+      details: { languageCode: asset.languageCode, kind: data.kind },
+    });
     return { status: "success", message: "Existing Cloud template is now the Store default", data: binding, code: STATUS_CODES.SUCCESS };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Cloud template could not become the Store default", data: null, code: STATUS_CODES.CONFLICT };
+  }
+};
+
+export const archiveCloudTemplateBindingForStore = async (
+  userId: string,
+  organizationId: string,
+  bindingId: string,
+  injected: Partial<CloudTemplateServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
+  const deps = { ...dependencies(), ...injected };
+  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const binding = await deps.archiveBinding(organizationId, bindingId, userId);
+  if (!binding) return { status: "error", message: "Cloud template binding not found or already archived", data: null, code: STATUS_CODES.NOT_FOUND };
+  await deps.recordAudit({
+    organizationId,
+    whatsappBusinessAccountId: binding.whatsappBusinessAccountId,
+    storeId: binding.storeId,
+    bindingId: binding.id,
+    eventType: "binding_archived",
+    actorId: userId,
+    details: { languageCode: binding.languageCode, kind: binding.kind },
+  });
+  return { status: "success", message: "Cloud template binding archived", data: binding, code: STATUS_CODES.SUCCESS };
+};
+
+export const rollbackCloudTemplateBindingForStore = async (
+  userId: string,
+  organizationId: string,
+  bindingId: string,
+  injected: Partial<CloudTemplateServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
+  const deps = { ...dependencies(), ...injected };
+  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  try {
+    const binding = await deps.rollbackBinding(organizationId, bindingId, userId);
+    if (!binding) return { status: "error", message: "Cloud template binding not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    await deps.recordAudit({
+      organizationId,
+      whatsappBusinessAccountId: binding.whatsappBusinessAccountId,
+      storeId: binding.storeId,
+      bindingId: binding.id,
+      eventType: "binding_rolled_back",
+      actorId: userId,
+      details: { languageCode: binding.languageCode, kind: binding.kind },
+    });
+    return { status: "success", message: "Approved Cloud template restored as the Store default", data: binding, code: STATUS_CODES.SUCCESS };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Cloud template binding could not be restored", data: null, code: STATUS_CODES.CONFLICT };
   }
 };
 

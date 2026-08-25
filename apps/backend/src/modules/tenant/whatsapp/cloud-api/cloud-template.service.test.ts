@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { listCloudTemplatesForAccount, setCloudTemplateDefaultForSubmission, submitCloudTemplateForAccount, syncCloudTemplatesForAccount } from "./cloud-template.service";
+import {
+  archiveCloudTemplateBindingForStore,
+  listCloudTemplatesForAccount,
+  rollbackCloudTemplateBindingForStore,
+  setCloudTemplateDefaultForSubmission,
+  submitCloudTemplateForAccount,
+  syncCloudTemplatesForAccount,
+} from "./cloud-template.service";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const userId = "33333333-3333-4333-8333-333333333333";
@@ -189,10 +196,67 @@ describe("Cloud template synchronization service", () => {
       }),
       list: async () => [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organizationId, whatsappBusinessAccountId: businessAccountId, metaTemplateId: "meta-2", name: "bill_ready", languageCode: "en_US", category: "utility" as const, status: "approved" as const, components: [{ type: "BODY", text: "Hello {{1}}." }], rejectionReason: null, providerUpdatedAt: null, lastSyncedAt: "2026-08-23T10:00:00.000Z", version: 1 }],
       createDefaultBinding: async value => { input = value; return {} as never; },
+      recordAudit: async () => {},
     });
     expect(response.status).toBe("success");
     expect(input?.storeId).toBe("99999999-9999-4999-8999-999999999999");
     expect(input?.localTemplateBody).toBe("Hello {{customer_name}}.");
+  });
+
+  test("archives an active binding and records the lifecycle event", async () => {
+    const events: string[] = [];
+    const binding = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      organizationId,
+      storeId: "99999999-9999-4999-8999-999999999999",
+      localTemplateId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      cloudTemplateId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      whatsappBusinessAccountId: businessAccountId,
+      languageCode: "en_US",
+      localTemplateBody: "Hello {{customer_name}}.",
+      variableMapping: { "1": "customer_name" },
+      kind: "bill" as const,
+      isDefault: false,
+      isActive: false,
+      archivedAt: "2026-08-26T10:00:00.000Z",
+      createdAt: "2026-08-25T10:00:00.000Z",
+      updatedAt: "2026-08-26T10:00:00.000Z",
+    };
+    const response = await archiveCloudTemplateBindingForStore(userId, organizationId, binding.id, {
+      organizationAccess: async () => true,
+      archiveBinding: async () => binding,
+      recordAudit: async input => { events.push(input.eventType); },
+    });
+    expect(response).toMatchObject({ status: "success", data: binding });
+    expect(events).toEqual(["binding_archived"]);
+  });
+
+  test("rolls back an approved binding and records the lifecycle event", async () => {
+    const events: string[] = [];
+    const binding = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      organizationId,
+      storeId: "99999999-9999-4999-8999-999999999999",
+      localTemplateId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      cloudTemplateId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      whatsappBusinessAccountId: businessAccountId,
+      languageCode: "en_US",
+      localTemplateBody: "Hello {{customer_name}}.",
+      variableMapping: { "1": "customer_name" },
+      kind: "bill" as const,
+      isDefault: true,
+      isActive: true,
+      archivedAt: null,
+      createdAt: "2026-08-25T10:00:00.000Z",
+      updatedAt: "2026-08-26T10:00:00.000Z",
+    };
+    const response = await rollbackCloudTemplateBindingForStore(userId, organizationId, binding.id, {
+      organizationAccess: async () => true,
+      rollbackBinding: async () => binding,
+      recordAudit: async input => { events.push(input.eventType); },
+    });
+    expect(response).toMatchObject({ status: "success", data: binding });
+    expect(events).toEqual(["binding_rolled_back"]);
   });
 
   test("does not call Meta when another request owns the submission claim", async () => {

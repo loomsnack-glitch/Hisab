@@ -79,6 +79,7 @@ export const WhatsAppCloudTemplateSubmissionStatusSchema = z.enum([
     "paused",
     "disabled",
     "failed",
+    "archived",
 ]);
 
 export const WhatsAppCloudTemplateAssetSchema = z.object({
@@ -104,11 +105,13 @@ export const WhatsAppCloudTemplateBindingSchema = z.object({
     localTemplateId: z.uuid("Invalid local template id"),
     cloudTemplateId: z.uuid("Invalid Cloud template id"),
     whatsappBusinessAccountId: z.uuid("Invalid WABA id"),
+    languageCode: z.string().trim().min(1).max(64).optional(),
     localTemplateBody: z.string().trim().min(1).max(4096).nullable(),
     variableMapping: z.record(z.string(), z.string()).default({}),
     kind: WhatsAppMessageTemplateKindSchema,
     isDefault: z.boolean(),
     isActive: z.boolean(),
+    archivedAt: dtoDateSchema.nullable().optional(),
     createdAt: dtoDateSchema,
     updatedAt: dtoDateSchema,
 });

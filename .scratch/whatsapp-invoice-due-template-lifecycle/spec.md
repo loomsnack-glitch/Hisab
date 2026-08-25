@@ -1,6 +1,6 @@
 # WhatsApp invoice and due template lifecycle
 
-Status: phase-0-complete
+Status: phase-1-complete
 
 ## Scope
 
@@ -197,7 +197,7 @@ Acceptance criteria:
 
 ### Phase 1 — Revision-safe Cloud template lifecycle
 
-Status: in-progress
+Status: complete
 
 Implement durable revision/submission state, revision-safe edit/duplicate
 behavior, status webhook handling, manual sync fallback, audit events, and
@@ -215,9 +215,41 @@ Acceptance criteria:
 - Rejection, pause, disable, and missing-approval states are actionable.
 - Focused backend and migration tests pass.
 
+#### Phase 1 implementation notes (2026-08-26)
+
+- Added `language_code` and archive metadata to Cloud bindings, backfilled from
+  the Cloud asset, and changed the active-default uniqueness scope to
+  organization, Store, Cloud account, kind, and language.
+- Cloud binding snapshot selection is now exact: a requested local template
+  must match that binding, and an omitted local template selects only the
+  scoped default. It never falls back to another active revision.
+- Added explicit archive and rollback service operations and routes. Rollback
+  requires an approved asset and clears archive metadata when restored.
+- Added audit events for provider status updates, default assignment, archive,
+  and rollback. Provider status updates record the safe status/reason and
+  submission or asset identity without credentials.
+- Re-activating a binding through explicit assignment clears its archive
+  metadata. The public binding mapper supplies `en_US` for legacy fixtures
+  while the migration backfills real rows.
+- The existing provider admission, outbox snapshot, manual sync, and webhook
+  status paths remain the send/runtime boundaries.
+
+#### Phase 1 verification
+
+- Focused lifecycle, submission mapping, and webhook tests: 20 passed, 0
+  failed.
+- Original Cloud/template/invoice/due focused suite: 42 passed, 0 failed.
+- Backend TypeScript output contained no errors in the changed Cloud-template,
+  WhatsApp route, or shared schema files; the repository still has unrelated
+  pre-existing type errors outside this phase.
+- `git diff --check` passed.
+- `dbmate status` showed the submission migration and this lifecycle migration
+  pending in the local database; migration execution remains a later rollout
+  gate, and pending migrations are applied in lexical order.
+
 ### Phase 2 — Template-management UI
 
-Status: pending
+Status: in-progress
 
 Update the Admin template workflow to show revisions, provider status, Meta
 reason, language, Store/account scope, mapping validation, preview, test-send,
