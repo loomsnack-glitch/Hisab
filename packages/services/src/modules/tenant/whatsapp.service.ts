@@ -229,6 +229,30 @@ export const getWhatsAppCloudTemplateBindings = async (
     }
 };
 
+export const archiveWhatsAppCloudTemplateBinding = async (
+    organizationId: string,
+    bindingId: string,
+): Promise<WhatsAppCloudBindingResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/template-bindings/${bindingId}/archive`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const rollbackWhatsAppCloudTemplateBinding = async (
+    organizationId: string,
+    bindingId: string,
+): Promise<WhatsAppCloudBindingResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/template-bindings/${bindingId}/rollback`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const getWhatsAppCloudSafety = async (organizationId: string): Promise<WhatsAppCloudSafetyResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/safety`);

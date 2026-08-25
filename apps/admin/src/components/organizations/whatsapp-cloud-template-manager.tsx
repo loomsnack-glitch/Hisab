@@ -4,7 +4,9 @@ import {
   getWhatsAppCloudTemplateSubmissions,
   getWhatsAppCloudTemplates,
   getWhatsAppCloudTemplateBindings,
+  archiveWhatsAppCloudTemplateBinding,
   importWhatsAppCloudTemplateForStore,
+  rollbackWhatsAppCloudTemplateBinding,
   submitWhatsAppCloudTemplate,
   syncWhatsAppCloudTemplates,
 } from "@repo/services";
@@ -15,6 +17,16 @@ import {
 } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@repo/ui/components/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +54,7 @@ import {
 } from "@repo/ui/components/table";
 import {
   AlertCircle,
+  Archive,
   CheckCircle2,
   Eye,
   ExternalLink,
@@ -49,8 +62,10 @@ import {
   FileType2,
   Image as ImageIcon,
   LoaderCircle,
+  Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Send,
   ShieldAlert,
 } from "lucide-react";
@@ -84,6 +99,7 @@ const statusLabels: Record<string, string> = {
   paused: "Paused",
   disabled: "Disabled",
   failed: "Failed",
+  archived: "Archived",
 };
 const statusClass: Record<string, string> = {
   approved: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -93,6 +109,7 @@ const statusClass: Record<string, string> = {
   submitting: "border-amber-200 bg-amber-50 text-amber-700",
   paused: "border-orange-200 bg-orange-50 text-orange-700",
   disabled: "border-slate-200 bg-slate-50 text-slate-600",
+  archived: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
 const mutationErrorMessage = (error: unknown, fallback: string): string => {
@@ -205,6 +222,7 @@ const WhatsAppCloudTemplateManager = ({
   const [headerFormat, setHeaderFormat] = useState<"none" | "image" | "document">("image");
   const [headerSample, setHeaderSample] = useState<{ base64: string; fileName: string; mimeType: string } | null>(null);
   const [previewCardId, setPreviewCardId] = useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<{ id: string; name: string } | null>(null);
   const [sampleValues, setSampleValues] = useState(defaultSampleValues.bill);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0];
@@ -276,6 +294,7 @@ const WhatsAppCloudTemplateManager = ({
       category: template.category,
       status: template.status,
       reason: template.rejectionReason,
+      errorCode: byProviderId.get(template.metaTemplateId)?.lastErrorCode ?? null,
       components: template.components,
       sampleValues: byProviderId.get(template.metaTemplateId)?.sampleValues ?? {},
     }));
@@ -320,6 +339,7 @@ const WhatsAppCloudTemplateManager = ({
         category: item.category,
         status: item.status,
         reason: item.rejectionReason ?? item.lastErrorMessage,
+        errorCode: item.lastErrorCode,
         components: item.requestedComponents,
         sampleValues: item.sampleValues,
       })),
@@ -451,6 +471,28 @@ const WhatsAppCloudTemplateManager = ({
       );
     },
   });
+  const archiveMutation = useMutation({
+    mutationFn: (bindingId: string) => archiveWhatsAppCloudTemplateBinding(organizationId, bindingId),
+    onSuccess: (response) => {
+      if (response.status !== "success") toast.error(response.message);
+      else {
+        invalidate();
+        toast.success("Cloud template revision archived");
+      }
+    },
+    onError: (error) => toast.error(mutationErrorMessage(error, "Cloud template revision could not be archived")),
+  });
+  const rollbackMutation = useMutation({
+    mutationFn: (bindingId: string) => rollbackWhatsAppCloudTemplateBinding(organizationId, bindingId),
+    onSuccess: (response) => {
+      if (response.status !== "success") toast.error(response.message);
+      else {
+        invalidate();
+        toast.success("Approved Cloud template restored as the Store default");
+      }
+    },
+    onError: (error) => toast.error(mutationErrorMessage(error, "Cloud template revision could not be restored")),
+  });
   const openCreate = () => {
     setSubmitError(null);
     setKind("bill");
@@ -528,17 +570,43 @@ const WhatsAppCloudTemplateManager = ({
   const approvedTemplates = cards.filter(
     (card) => card.status === "approved" && card.cloudTemplateId,
   );
-  const defaultBindingFor = (messageKind: WhatsAppMessageTemplateKind) =>
-    bindings.find(
-      (binding) =>
-        binding.kind === messageKind && binding.isActive && binding.isDefault,
-    );
+  const defaultKinds = kinds.filter((item) => item.value !== "promotion");
+  const bindingForCloudTemplate = (cloudTemplateId: string | null) =>
+    bindings
+      .filter((binding) => binding.cloudTemplateId === cloudTemplateId)
+      .sort(
+        (left, right) =>
+          Number(right.isActive) - Number(left.isActive) ||
+          Number(right.isDefault) - Number(left.isDefault) ||
+          String(right.updatedAt).localeCompare(String(left.updatedAt)),
+      )[0];
+  const defaultBindingFor = (
+    messageKind: WhatsAppMessageTemplateKind,
+    languageCode: string,
+  ) => bindings.find(
+    (binding) =>
+      binding.kind === messageKind &&
+      binding.isActive &&
+      binding.isDefault &&
+      (binding.languageCode ?? "en_US") === languageCode,
+  );
   const templateForBinding = (bindingId: string | undefined) =>
     approvedTemplates.find(
       (template) =>
         template.cloudTemplateId ===
         bindings.find((binding) => binding.id === bindingId)?.cloudTemplateId,
     );
+  const languagesForKind = (messageKind: WhatsAppMessageTemplateKind) =>
+    [...new Set(
+      [
+        ...approvedTemplates
+          .filter((template) => template.kind === messageKind || (template.kind === null && template.category === "utility"))
+          .map((template) => template.language),
+        ...bindings
+          .filter((binding) => binding.kind === messageKind)
+          .map((binding) => binding.languageCode ?? "en_US"),
+      ],
+    )].sort();
   const linkedKindsFor = (cloudTemplateId: string) =>
     bindings
       .filter(
@@ -552,6 +620,12 @@ const WhatsAppCloudTemplateManager = ({
           kinds.find((item) => item.value === binding.kind)?.label ??
           "Message type",
       );
+  const bindingSummary = (cloudTemplateId: string | null) => {
+    const binding = bindingForCloudTemplate(cloudTemplateId);
+    if (!binding) return "Not assigned";
+    const mappedVariableCount = Object.keys(binding.variableMapping ?? {}).length;
+    return `${binding.isActive ? "Active" : "Archived"} revision · ${mappedVariableCount} variables mapped`;
+  };
   const preview = body.replace(
     /\{\{(\d+)\}\}/g,
     (_, index: string) =>
@@ -675,6 +749,9 @@ const WhatsAppCloudTemplateManager = ({
               <TableRow key={card.id}>
                 <TableCell>
                   <p className="max-w-52 truncate font-medium">{card.name}</p>
+                  {card.errorCode ? (
+                    <p className="mt-1 text-[11px] text-destructive">Meta code: {card.errorCode}</p>
+                  ) : null}
                   {card.reason ? (
                     <p className="mt-1 flex max-w-64 gap-1 text-xs text-destructive">
                       <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -695,7 +772,7 @@ const WhatsAppCloudTemplateManager = ({
                   <span className="text-xs text-muted-foreground">
                     {card.cloudTemplateId && linkedKindsFor(card.cloudTemplateId).length > 0
                       ? linkedKindsFor(card.cloudTemplateId).join(", ")
-                      : "Not assigned"}
+                      : bindingSummary(card.cloudTemplateId)}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
@@ -710,7 +787,43 @@ const WhatsAppCloudTemplateManager = ({
                     ) : card.status === "pending" || card.status === "submitting" ? (
                       <span className="self-center text-xs text-muted-foreground">Awaiting Meta</span>
                     ) : card.status === "approved" ? (
-                      <span className="self-center text-xs text-emerald-700">Ready</span>
+                      <>
+                        {card.submissionId ? (
+                          <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-xs" onClick={() => duplicateSubmission(card.submissionId!)}>
+                            <Pencil className="size-3.5" /> Edit as new revision
+                          </Button>
+                        ) : null}
+                        {(() => {
+                          const binding = bindingForCloudTemplate(card.cloudTemplateId);
+                          if (!binding) return <span className="self-center text-xs text-emerald-700">Ready</span>;
+                          if (!binding.isActive) {
+                            return (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-lg text-xs"
+                                onClick={() => rollbackMutation.mutate(binding.id)}
+                                disabled={rollbackMutation.isPending}
+                              >
+                                <RotateCcw className="size-3.5" /> Restore default
+                              </Button>
+                            );
+                          }
+                          return (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 rounded-lg px-2 text-xs text-destructive hover:text-destructive"
+                              onClick={() => setArchiveTarget({ id: binding.id, name: card.name })}
+                              disabled={archiveMutation.isPending}
+                            >
+                              <Archive className="size-3.5" /> Archive
+                            </Button>
+                          );
+                        })()}
+                      </>
                     ) : null}
                   </div>
                 </TableCell>
@@ -727,60 +840,71 @@ const WhatsAppCloudTemplateManager = ({
           </p>
         </div>
         <div className="grid gap-2">
-          {kinds.map((messageKind) => {
-            const binding = defaultBindingFor(messageKind.value);
-            const selectedTemplate = templateForBinding(binding?.id);
-            const savingDefault =
-              importMutation.isPending &&
-              importMutation.variables?.kind === messageKind.value;
-            const compatibleTemplates = approvedTemplates.filter(
-              (template) =>
-                (messageKind.value === "promotion" ? "marketing" : "utility") ===
-                template.category,
-            );
-            return (
-              <div
-                key={messageKind.value}
-                className="grid gap-2 rounded-xl border border-border/60 bg-background/80 p-3 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(0,1.3fr)] sm:items-center"
-              >
-                <div>
-                  <p className="text-sm font-medium">{messageKind.label}</p>
-                  <p className="text-xs text-muted-foreground">{messageKind.category} message</p>
-                </div>
-                <Select
-                  value={selectedTemplate?.cloudTemplateId ?? ""}
-                  onValueChange={(value) => {
-                    if (!value) return;
-                    importMutation.mutate({
-                      cloudTemplateId: value,
-                      whatsappBusinessAccountId: businessAccountId,
-                      kind: messageKind.value,
-                    });
-                  }}
-                  disabled={importMutation.isPending || compatibleTemplates.length === 0}
+          {defaultKinds.flatMap((messageKind) => {
+            const languages = languagesForKind(messageKind.value);
+            return (languages.length > 0 ? languages : ["en_US"]).map((languageCode) => {
+              const binding = defaultBindingFor(messageKind.value, languageCode);
+              const selectedTemplate = templateForBinding(binding?.id);
+              const compatibleTemplates = approvedTemplates.filter(
+                (template) =>
+                  (template.kind === messageKind.value || template.kind === null) &&
+                  template.category === "utility" &&
+                  template.language === languageCode,
+              );
+              const savingDefault =
+                importMutation.isPending &&
+                importMutation.variables?.kind === messageKind.value &&
+                compatibleTemplates.some(
+                  (template) =>
+                    template.cloudTemplateId === importMutation.variables?.cloudTemplateId,
+                );
+              return (
+                <div
+                  key={`${messageKind.value}-${languageCode}`}
+                  className="grid gap-2 rounded-xl border border-border/60 bg-background/80 p-3 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(0,1.3fr)] sm:items-center"
                 >
-                  <SelectTrigger className="w-full rounded-xl bg-background">
-                    <SelectValue placeholder={compatibleTemplates.length === 0 ? "No approved template" : "Choose a template"}>
-                      {savingDefault ? (
-                        <span className="flex items-center gap-2">
-                          <LoaderCircle className="size-4 animate-spin" />
-                          Saving…
-                        </span>
-                      ) : (
-                        selectedTemplate?.name ?? "Choose a template"
-                      )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {compatibleTemplates.map((template) => (
-                      <SelectItem key={template.cloudTemplateId} value={template.cloudTemplateId!}>
-                        {template.name} · {template.language}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            );
+                  <div>
+                    <p className="text-sm font-medium">{messageKind.label} · {languageCode}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Utility message · {binding?.isDefault ? "Current default" : "No default selected"}
+                      {binding ? ` · ${Object.keys(binding.variableMapping ?? {}).length} variables mapped` : ""}
+                    </p>
+                  </div>
+                  <Select
+                    value={selectedTemplate?.cloudTemplateId ?? ""}
+                    onValueChange={(value) => {
+                      if (!value) return;
+                      importMutation.mutate({
+                        cloudTemplateId: value,
+                        whatsappBusinessAccountId: businessAccountId,
+                        kind: messageKind.value,
+                      });
+                    }}
+                    disabled={importMutation.isPending || compatibleTemplates.length === 0}
+                  >
+                    <SelectTrigger className="w-full rounded-xl bg-background">
+                      <SelectValue placeholder={compatibleTemplates.length === 0 ? "No approved template" : "Choose a template"}>
+                        {savingDefault ? (
+                          <span className="flex items-center gap-2">
+                            <LoaderCircle className="size-4 animate-spin" />
+                            Saving…
+                          </span>
+                        ) : (
+                          selectedTemplate?.name ?? "Choose a template"
+                        )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {compatibleTemplates.map((template) => (
+                        <SelectItem key={template.cloudTemplateId} value={template.cloudTemplateId!}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            });
           })}
         </div>
         {approvedTemplates.length === 0 ? (
@@ -821,6 +945,30 @@ const WhatsAppCloudTemplateManager = ({
           <DialogFooter><Button type="button" variant="outline" className="rounded-xl" onClick={() => setPreviewCardId(null)}>Close</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={Boolean(archiveTarget)} onOpenChange={(value) => { if (!value) setArchiveTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this Store revision?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {archiveTarget ? `${archiveTarget.name} will stop being active for this Store and Cloud account. The approved Meta template will remain available for a later rollback.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={archiveMutation.isPending}
+              onClick={() => {
+                if (!archiveTarget) return;
+                archiveMutation.mutate(archiveTarget.id);
+                setArchiveTarget(null);
+              }}
+            >
+              {archiveMutation.isPending ? "Archiving…" : "Archive revision"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (!value) setSubmitError(null); }}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>

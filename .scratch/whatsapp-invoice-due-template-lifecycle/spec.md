@@ -1,6 +1,6 @@
 # WhatsApp invoice and due template lifecycle
 
-Status: phase-1-complete
+Status: phase-2-complete
 
 ## Scope
 
@@ -249,7 +249,7 @@ Acceptance criteria:
 
 ### Phase 2 — Template-management UI
 
-Status: in-progress
+Status: complete
 
 Update the Admin template workflow to show revisions, provider status, Meta
 reason, language, Store/account scope, mapping validation, preview, test-send,
@@ -264,9 +264,39 @@ Acceptance criteria:
 - Sync is user-triggered unless a status webhook has already updated state.
 - Admin type checks and focused UI tests pass.
 
+#### Phase 2 implementation notes (2026-08-26)
+
+- Added explicit Admin actions to edit an approved submission as a new
+  revision, archive an active Store binding, and restore an archived approved
+  revision. Existing manual Sync behavior remains user-triggered.
+- The template table now exposes approval status, language, Meta error codes and
+  safe rejection/error reasons, plus preview and revision/default state.
+- Store defaults now list invoice/bill and due-reminder templates by language
+  and only offer approved utility Cloud assets. Promotional templates remain
+  outside the invoice/due default controls.
+- Default selection is account-scoped through the existing account query and
+  calls the server-side exact binding operation; pending/rejected assets are
+  not offered. The UI displays the saved variable-mapping count and archived
+  revision state without inventing a client-side fallback.
+- The edit action duplicates the existing submission payload so Meta receives a
+  new name/revision rather than mutating an approved asset in place.
+
+#### Phase 2 verification
+
+- `git diff --check` passed.
+- Admin TypeScript output contained no errors in the changed Cloud template
+  manager; the full Admin project still reports unrelated existing errors in
+  promotion dialog/dashboard and billing files.
+- Backend TypeScript output contained no errors in the changed service wrapper;
+  the package still reports the unrelated pre-existing unused
+  `WhatsAppCloudQuotaPolicy` import.
+- No component test harness exists for this Admin component in the current
+  package, so the UI phase was verified through the focused type check and
+  manual standards/spec diff review.
+
 ### Phase 3 — Public invoice page and invoice message
 
-Status: pending
+Status: in-progress
 
 Add the revocable public invoice token/page, branded invoice rendering, current
 payment state, on-demand PDF download, configured links, and the invoice Cloud
