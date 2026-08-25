@@ -83,6 +83,26 @@ _Avoid_: Revenue, collected payment total, cash received
 The number of Customer records an Organization has created, regardless of each Customer's current active status. In Ganatri Console it measures customer-data adoption, not the number of currently trading customers.
 _Avoid_: Active customer count, customer engagement rate, registered user count
 
+**Google Contacts Synchronization**:
+The optional Organization feature that exports an eligible Customer's name and phone number into one connected Google account's personal Contacts. Each Organization has at most one connection. New or changed Customers with a phone number synchronize automatically after an administrator runs the initial catch-up sync; customers without one are skipped and their existing Google Contacts are left unchanged. A linked Google Contact follows later Customer name and phone changes unless the new phone number collides with another Google Contact; only the matching phone entry changes and any additional Google phone numbers are preserved. Synchronization never deletes a Google Contact and never blocks Customer or billing work: failed writes retry in the background.
+_Avoid_: Contact import, two-way contact sync, Gmail sync
+
+**Google Contacts Connection**:
+An Organization's single authorized Google account and its protected authorization needed for Google Contacts Synchronization. The connection belongs to the Organization rather than to a Store or individual staff member; any authenticated Ganatri Admin user of that Organization may manage it, but Ganatri POS cannot. Disconnecting immediately stops synchronization and removes Ganatri's authorization without deleting existing Google Contacts; replacing it leaves the old account unchanged and makes the replacement a fresh sync destination.
+_Avoid_: Store Gmail account, cashier connection, multiple account sync
+
+**Google Contacts Sync Status**:
+The Organization-visible state of Google Contacts Synchronization in Ganatri Admin, including the connected account, initial catch-up action, last successful sync, and any conflicts or errors. It deliberately exposes no per-Customer sync rules or queue management in v1.
+_Avoid_: Per-customer sync settings, contact job console, POS sync controls
+
+**Google Contacts Sync Outbox**:
+The dedicated persistent queue and worker that runs Google Contacts Synchronization independently of Customer and billing writes. It owns retryable delivery state, conflict/error reporting, and recovery; it is separate from the WhatsApp outbox.
+_Avoid_: Synchronous Google write, WhatsApp outbox job, browser-side sync
+
+**Google Contact Match**:
+The one Google Contact with exactly the same normalized phone number as an eligible Customer. Hisab is authoritative for the matched Contact's name and matching phone entry, so synchronization updates those fields while preserving all other Google Contact data, including additional phone numbers; multiple exact matches are a conflict and none is changed automatically.
+_Avoid_: Name match, fuzzy person match, Google-authoritative contact
+
 **Billing**:
 The part of the system that records a sale, its line items, and the payments collected against it. In this project, Billing is modeled through Sales and Payments rather than a separate invoice domain.
 _Avoid_: Invoicing, bill book

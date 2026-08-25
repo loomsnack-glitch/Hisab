@@ -1,0 +1,3 @@
+# Google Contacts Synchronization has one connection per Organization
+
+Each Organization may connect one Google account for Google Contacts Synchronization, regardless of its Store count. Customer data is Organization-scoped, and one destination keeps contact ownership, sync status, authorization revocation, and staff offboarding understandable; supporting multiple accounts is deferred until a concrete shared-contact use case requires it. Any authenticated Ganatri Admin user of the Organization may manage the connection, while Ganatri POS has no access to it. Replacing the connection leaves the old account unchanged and starts an initial catch-up sync in the replacement account.
