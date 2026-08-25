@@ -57,6 +57,9 @@ const getOrganizationSwitchPath = (pathname: string, organizationId: string) => 
     if (pathname.includes("/customers")) {
         return `/organizations/${organizationId}/customers`;
     }
+    if (pathname.includes("/google-contacts") || /\/organizations\/[^/]+\/settings(\/|$)/.test(pathname)) {
+        return `/organizations/${organizationId}/settings`;
+    }
     if (pathname.includes("/purchases")) {
         return `/organizations/${organizationId}/purchases`;
     }

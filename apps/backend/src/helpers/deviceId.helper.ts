@@ -19,8 +19,8 @@ export const setDeviceId = (c: Context) => {
     const isProduction = process.env.NODE_ENV === 'production'
     const newDeviceId = crypto.randomUUID();
 
-    // Store deviceId in a cookie
     setCookie(c, 'deviceId', newDeviceId, {
+        path: '/',
         httpOnly: true,
         secure: isProduction,
         sameSite: isProduction ? 'None' : 'Lax',

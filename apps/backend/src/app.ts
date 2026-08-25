@@ -14,6 +14,7 @@ import purchaseRoutes from './modules/tenant/purchase/purchase.routes';
 import tableServiceRoutes from './modules/tenant/table-service/table-service.routes';
 import whatsappRoutes, { whatsappInternalRoutes } from './modules/tenant/whatsapp/whatsapp.routes';
 import { whatsappCloudWebhookRoutes } from './modules/tenant/whatsapp/cloud-api/cloud-webhook.routes';
+import googleContactsRoutes from './modules/tenant/google-contacts/google-contacts.routes';
 
 const BASE_PATH = process.env.BASE_PATH
 const app = BASE_PATH ? new Hono().basePath(BASE_PATH) : new Hono();
@@ -71,6 +72,7 @@ app.route('/organizations', billingRoutes);
 app.route('/organizations', purchaseRoutes);
 app.route('/organizations', tableServiceRoutes);
 app.route('/organizations', whatsappRoutes);
+app.route('/organizations', googleContactsRoutes);
 app.route('/internal/whatsapp', whatsappInternalRoutes);
 app.route('/webhooks/whatsapp', whatsappCloudWebhookRoutes);
 

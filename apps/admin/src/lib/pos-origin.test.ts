@@ -42,8 +42,12 @@ describe("Admin POS login handoff", () => {
 
     test("browser-visible Admin configuration exposes only the POS origin", () => {
         const envExample = readFileSync(join(appRoot, ".env.example"), "utf8");
+        const browserConfiguration = envExample
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith("VITE_"))
+            .join("\n");
 
         expect(envExample).toContain("VITE_POS_ORIGIN=http://localhost:5174");
-        expect(envExample.toLowerCase()).not.toContain("secret");
+        expect(browserConfiguration.toLowerCase()).not.toContain("secret");
     });
 });

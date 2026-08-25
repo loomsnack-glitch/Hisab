@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
             "process.env.EXPO_PUBLIC_BASE_API_URL": JSON.stringify(env.EXPO_PUBLIC_BASE_API_URL),
             "process.env.NEXT_PUBLIC_BASE_API_URL": JSON.stringify(env.NEXT_PUBLIC_BASE_API_URL),
             "process.env.API_BASE_URL": JSON.stringify(env.API_BASE_URL),
-            "process.env.BASE_API_URL": JSON.stringify(env.BASE_API_URL),
+            "process.env.BASE_API_URL": JSON.stringify(env.BASE_API_URL || "/api"),
         },
         plugins: [react(), tailwindcss()],
         optimizeDeps: {
@@ -65,7 +65,7 @@ export default defineConfig(({ mode }) => {
             host: true,
             port: 5175,
             proxy: {
-                "/api": { target: "http://localhost:8001", changeOrigin: true },
+                "/api": { target: "http://127.0.0.1:8001", changeOrigin: true },
             },
         },
     };
