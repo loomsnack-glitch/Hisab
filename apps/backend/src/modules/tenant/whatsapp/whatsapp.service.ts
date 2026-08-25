@@ -30,6 +30,7 @@ import { enqueueCloudTemplateSend, enqueueCloudTemplateSendForDevice } from "./c
 import { buildDueReminderCloudComponents } from "./due-reminder-cloud-components";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
+import * as publicInvoiceService from "./public-invoice.service";
 import * as promotionService from "./promotion";
 import * as messageTemplate from "./message-template";
 
@@ -900,7 +901,17 @@ const queueDueReminderForStore = async (
         if (!scope?.businessAccountId) return { status: "error", message: "Cloud WhatsApp account is not ready for template sends", data: null, code: STATUS_CODES.CONFLICT };
         const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "due_reminder", defaultTemplate.id);
         if (!binding) return { status: "error", message: "No approved Cloud due-reminder template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
-        const values = getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks);
+        const hasDynamicInvoiceButton = binding.asset.components.some(component => {
+            if (!component || typeof component !== "object" || Array.isArray(component)) return false;
+            const value = component as Record<string, unknown>;
+            const type = String(value.type ?? "").toLowerCase();
+            if (type !== "buttons" && type !== "button") return false;
+            const buttons = Array.isArray(value.buttons) ? value.buttons : [];
+            return buttons.some(button => button && typeof button === "object" && !Array.isArray(button) && /\{\{\d+\}\}/.test(String((button as Record<string, unknown>).url ?? "")));
+        });
+        if (hasDynamicInvoiceButton && !saleId) {
+            return { status: "error", message: "Select a bill to include its invoice link", data: null, code: STATUS_CODES.CONFLICT };
+        }
         const hasDocumentHeader = binding.asset.components.some(component => {
             if (!component || typeof component !== "object" || Array.isArray(component)) return false;
             const value = component as Record<string, unknown>;
@@ -908,7 +919,12 @@ const queueDueReminderForStore = async (
         });
         let attachmentStorageKey: string | null = null;
         let documentLink: string | null = null;
+        let values: ReturnType<typeof getDueReminderTemplateValues>;
         try {
+            const invoiceUrl = hasDynamicInvoiceButton && saleId
+                ? await publicInvoiceService.createPublicInvoiceUrl(organizationId, storeId, saleId)
+                : null;
+            values = getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks, invoiceUrl);
             if (hasDocumentHeader) {
                 const bucket = privateBucket();
                 if (!bucket) return { status: "error", message: "Private media storage is not configured for due reminder PDFs", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
@@ -999,6 +1015,18 @@ export const queueDueReminder = async (userId: string, organizationId: string, s
 
 export const queueDueReminderForDevice = (session: DeviceSessionDTO, customerId: string, customMessage?: string, saleId?: string) =>
     queueDueReminderForStore(session.organization.id, session.store.id, customerId, customMessage, saleId);
+
+export const revokePublicInvoiceLink = async (userId: string, organizationId: string, storeId: string, saleId: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    const revoked = await publicInvoiceService.revokePublicInvoiceLink(organizationId, storeId, saleId);
+    return {
+        status: "success" as const,
+        message: revoked ? "Public invoice link revoked" : "No public invoice link found for this bill",
+        data: { revoked },
+        code: STATUS_CODES.SUCCESS,
+    };
+};
 
 const getDueReminderStatusForStore = async (
     organizationId: string,

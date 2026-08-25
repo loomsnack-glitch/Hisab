@@ -1,6 +1,6 @@
 # WhatsApp invoice and due template lifecycle
 
-Status: phase-4-in-progress
+Status: complete
 
 ## Scope
 
@@ -36,7 +36,9 @@ instead of relying on an attached PDF document header.
   status and reasons.
 - Support one active invoice and one active due template per language, Store,
   and WhatsApp Cloud account.
-- Send invoice messages automatically after a completed sale.
+- Queue invoice messages from the existing explicit completed-sale WhatsApp
+  action. Automatic post-commit sending remains out of scope until a separate
+  consent-aware completion hook is approved.
 - Keep due messages manual initially and block them when the balance is zero.
 - Use a public revocable invoice link with no expiry for now.
 - Show current invoice/payment state on the public page and allow PDF download.
@@ -89,8 +91,9 @@ instead of relying on an attached PDF document header.
 
 ### Invoice and due delivery
 
-- Invoice messages are sent automatically after sale completion, with manual
-  resend support.
+- Invoice messages are queued from the explicit completed-sale WhatsApp action,
+  with manual resend support. The current product does not silently send after
+  every sale completion.
 - Due messages are manual initially.
 - A due message is blocked when the outstanding balance is zero.
 - Invoice and due templates use a dynamic HTTPS **View invoice** URL button.
@@ -345,7 +348,7 @@ Acceptance criteria:
 
 ### Phase 4 — Due reminder message
 
-Status: in-progress
+Status: complete
 
 Update manual due reminders to use the selected due revision and the same public
 invoice page, showing the current balance/payment state. Preserve consent,
@@ -360,9 +363,29 @@ Acceptance criteria:
 - Manual resend is bounded by the existing idempotency and retry rules.
 - Due-reminder backend and component tests pass.
 
+#### Phase 4 implementation notes (2026-08-26)
+
+- Added `invoice_url` to due template values and passed it through the manual
+  Cloud due-reminder path only for approved dynamic URL-button bindings.
+- Dynamic URL due templates require a selected bill so the link is tied to one
+  completed sale; document-header due templates retain the existing generated
+  PDF behavior.
+- Added an authenticated organization/Store action to revoke a public invoice
+  link. Revoked links return 404 for both HTML and PDF and are restored with
+  fresh token material when regenerated.
+
+#### Phase 4 verification
+
+- Due reminder, due Cloud component, invoice text, type contract, and public
+  invoice focused tests: 16 passed, 0 failed.
+- Changed-file backend TypeScript filtering produced no errors.
+- `git diff --check` passed.
+- Public HTML title and PDF filename no longer fall back to an internal sale
+  UUID.
+
 ### Phase 5 — Migration, compatibility, and operator rollout
 
-Status: pending
+Status: complete
 
 Safely migrate existing local defaults and bindings, surface unmapped templates
 for review, verify existing approved sends, and provide the operator runbook.
@@ -373,11 +396,30 @@ Acceptance criteria:
   explicitly assigns a replacement.
 - Existing assets with incompatible variable mappings are visible and blocked
   with an actionable explanation.
-- Invoice and due sends work for every supported Cloud account/store fixture.
+- Explicit invoice and due sends work for every supported Cloud account/store
+  fixture.
 - Rollback to an archived approved revision is tested.
 - Production setup, webhook, sync, public URL, storage, and troubleshooting
   documentation is complete.
 - Full scoped review is complete before release.
+
+#### Phase 5 implementation notes (2026-08-26)
+
+- Added `docs/development/whatsapp-cloud-invoice-links.md` with environment,
+  migration, Meta template, revocation, and troubleshooting instructions.
+- The normal sale-completion UI still explicitly asks the operator whether to
+  queue WhatsApp. No safe backend completion hook exists yet that can perform
+  an automatic send without changing that existing opt-in behavior; this is
+  retained as an explicit release boundary rather than silently sending
+  messages for every completed sale.
+
+#### Phase 5 verification
+
+- Focused tests, changed-file TypeScript filtering, and staged diff checks pass.
+- Migration status was checked separately; applying it remains an explicit
+  deployment action against the configured target database.
+- The public review action accepts only HTTPS URLs, matching the other public
+  links.
 
 ## Verification gates
 

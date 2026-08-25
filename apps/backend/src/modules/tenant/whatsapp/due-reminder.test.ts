@@ -21,4 +21,17 @@ describe("due reminder text", () => {
         expect(text).toContain("• Invoice #5: ₹125.00 due");
         expect(text).not.toContain(`• ${sale.id}`);
     });
+
+    it("includes the public invoice URL in template values", () => {
+        const text = formatDueReminderText(
+            customer,
+            [sale],
+            "Central Store",
+            "Hello {{customer_name}}: {{invoice_url}}",
+            [],
+            "https://example.test/invoices/token",
+        );
+
+        expect(text).toBe("Hello Asha: https://example.test/invoices/token");
+    });
 });

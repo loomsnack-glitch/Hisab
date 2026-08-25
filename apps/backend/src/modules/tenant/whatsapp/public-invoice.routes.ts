@@ -16,7 +16,7 @@ publicInvoiceRoutes.get("/invoices/:token.pdf", async c => {
   return new Response(pdf, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="invoice-${data.sale.saleNumber ?? data.sale.id}.pdf"`,
+      "Content-Disposition": `attachment; filename="invoice-${data.sale.saleNumber ?? "document"}.pdf"`,
       "Cache-Control": "private, no-store",
     },
   });

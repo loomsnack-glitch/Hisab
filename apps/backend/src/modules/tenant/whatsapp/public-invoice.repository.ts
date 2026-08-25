@@ -74,3 +74,20 @@ export const getPublicInvoiceLinkByTokenHash = async (
   `;
   return row ? mapLink(row) : null;
 };
+
+export const revokePublicInvoiceLink = async (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+): Promise<boolean> => {
+  const [row] = await pg`
+    UPDATE whatsapp_public_invoice_links
+    SET revoked_at = COALESCE(revoked_at, NOW()),
+        updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND sale_id = ${saleId}
+    RETURNING id
+  `;
+  return Boolean(row);
+};
