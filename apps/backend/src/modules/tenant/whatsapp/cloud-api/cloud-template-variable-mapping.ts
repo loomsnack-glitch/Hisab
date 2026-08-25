@@ -20,6 +20,12 @@ const localTokenNames = (body: string): string[] =>
       .filter(Boolean),
   );
 
+const requiredLocalTokenNames = (body: string, keys: string[]): string[] => {
+  const names = localTokenNames(body);
+  const hasDynamicButton = keys.some(key => key.startsWith("button:"));
+  return hasDynamicButton ? names : names.filter(name => name !== "invoice_url");
+};
+
 const placeholderIndexes = (value: unknown): string[] =>
   typeof value === "string"
     ? uniqueStrings([...value.matchAll(providerPlaceholderPattern)].map(match => match[1] ?? ""))
@@ -49,8 +55,8 @@ export const buildDefaultCloudTemplateVariableMapping = (
   localBody: string,
   definitions: unknown[],
 ): CloudTemplateVariableMapping => {
-  const names = localTokenNames(localBody);
   const keys = cloudTemplateVariableKeys(definitions);
+  const names = requiredLocalTokenNames(localBody, keys);
   if (names.length !== keys.length) {
     throw new Error("Local and Cloud template variable counts do not match");
   }
@@ -63,8 +69,8 @@ export const validateCloudTemplateVariableMapping = (
   definitions: unknown[],
 ): CloudTemplateVariableMapping => {
   if (!isRecord(mapping)) throw new Error("Cloud template variable mapping is invalid");
-  const localTokens = localTokenNames(localBody);
   const expectedKeys = cloudTemplateVariableKeys(definitions);
+  const localTokens = requiredLocalTokenNames(localBody, expectedKeys);
   const result: CloudTemplateVariableMapping = {};
   for (const key of expectedKeys) {
     const value = mapping[key];

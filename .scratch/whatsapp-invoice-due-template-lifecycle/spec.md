@@ -1,6 +1,6 @@
 # WhatsApp invoice and due template lifecycle
 
-Status: phase-2-complete
+Status: phase-4-in-progress
 
 ## Scope
 
@@ -296,7 +296,7 @@ Acceptance criteria:
 
 ### Phase 3 — Public invoice page and invoice message
 
-Status: in-progress
+Status: complete
 
 Add the revocable public invoice token/page, branded invoice rendering, current
 payment state, on-demand PDF download, configured links, and the invoice Cloud
@@ -310,13 +310,42 @@ Acceptance criteria:
   full phone number.
 - The page reflects current payment status and outstanding balance.
 - PDF download works on demand.
-- Invoice Cloud messages do not require a document-header PDF attachment.
+- New dynamic-URL-button invoice Cloud messages do not require a document-header
+  PDF attachment. Existing document-header templates remain compatible.
 - Link generation failure prevents queueing and returns a clear error.
 - Invoice sends use the selected immutable approved revision.
 
+#### Phase 3 implementation notes (2026-08-26)
+
+- Added `whatsapp_public_invoice_links`, keyed by organization, Store, and sale,
+  with a revocable no-expiry token hash/salt and composite ownership foreign
+  keys. Reusing a sale restores the link; changing the configured secret
+  rotates the stored token material.
+- Added unauthenticated HTML and on-demand PDF routes under
+  `/public/whatsapp/invoices/:token`. The page shows organization/store text
+  branding, sale/customer summary, masked phone, items, payment state, current
+  balance, PDF download, and configured review/social links. The current data
+  model has no organization/store logo URL, so no fake logo field was added.
+- Added `invoice_url` to bill/due template values and default bodies. Dynamic
+  URL-button templates map that token to the provider button; legacy templates
+  without a dynamic URL keep their existing mapping and document behavior.
+- Invoice Cloud orchestration creates the public URL before queueing only when
+  the selected approved revision contains a dynamic URL button, preserving old
+  document-header sends while blocking queueing if new-link creation fails.
+
+#### Phase 3 verification
+
+- Focused WhatsApp/template/public-page tests: 24 passed, 0 failed.
+- Changed backend files produced no filtered TypeScript errors; the full
+  backend project still has unrelated existing fixture/type failures.
+- `git diff --check` passed.
+- Migration remains pending until explicitly run against the target database.
+- Standards/spec review fixed revoked-link restoration, secret-rotation token
+  updates, legacy-template compatibility, and public-route parameter typing.
+
 ### Phase 4 — Due reminder message
 
-Status: pending
+Status: in-progress
 
 Update manual due reminders to use the selected due revision and the same public
 invoice page, showing the current balance/payment state. Preserve consent,

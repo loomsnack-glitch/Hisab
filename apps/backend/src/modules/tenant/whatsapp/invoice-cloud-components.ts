@@ -12,6 +12,17 @@ export const cloudInvoiceTemplateHasDocumentHeader = (definitions: unknown[]): b
       String(definition.format ?? "").toLowerCase() === "document";
   });
 
+export const cloudInvoiceTemplateHasDynamicUrlButton = (definitions: unknown[]): boolean =>
+  definitions.some(definition => {
+    if (!isRecord(definition)) return false;
+    const type = String(definition.type ?? "").toLowerCase();
+    if (type !== "buttons" && type !== "button") return false;
+    const buttons = Array.isArray(definition.buttons) ? definition.buttons : [];
+    return buttons.some(button =>
+      isRecord(button) && /\{\{\d+\}\}/.test(String(button.url ?? "")),
+    );
+  });
+
 const componentTextParameters = (
   text: unknown,
   componentKey: string,

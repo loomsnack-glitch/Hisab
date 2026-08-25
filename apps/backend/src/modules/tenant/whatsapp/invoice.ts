@@ -27,9 +27,11 @@ import {
 import {
   buildInvoiceCloudComponents,
   cloudInvoiceTemplateHasDocumentHeader,
+  cloudInvoiceTemplateHasDynamicUrlButton,
 } from "./invoice-cloud-components";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
+import { createPublicInvoiceUrl } from "./public-invoice.service";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
@@ -74,6 +76,9 @@ const queueCloudInvoiceForStore = async (
     : null;
   let uploadedInvoice = false;
   try {
+    const invoiceUrl = cloudInvoiceTemplateHasDynamicUrlButton(binding.asset.components)
+      ? await createPublicInvoiceUrl(organizationId, storeId, sale.id)
+      : null;
     let documentLink: string | null = null;
     if (requiresDocument && bucket && attachmentStorageKey) {
       const pdf = await renderSalePdf(sale, {
@@ -92,7 +97,12 @@ const queueCloudInvoiceForStore = async (
     const componentParameters = buildInvoiceCloudComponents(
       binding.asset.components,
       selectedTemplate.body,
-      getInvoiceTemplateValues(sale, { organizationName: organization.name, storeName: store.name, links: store.whatsappLinks }),
+      getInvoiceTemplateValues(sale, {
+        organizationName: organization.name,
+        storeName: store.name,
+        links: store.whatsappLinks,
+        invoiceUrl,
+      }),
       documentLink,
       binding.binding.variableMapping,
     );

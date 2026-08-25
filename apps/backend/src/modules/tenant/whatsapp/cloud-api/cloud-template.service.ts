@@ -387,11 +387,20 @@ const localBodyFromProviderComponents = (components: unknown[], kind: WhatsAppCr
       : ["customer_name", "store_name"];
   const body = components.find(component => component && typeof component === "object" && !Array.isArray(component) && String((component as Record<string, unknown>).type).toUpperCase() === "BODY") as Record<string, unknown> | undefined;
   if (!body || typeof body.text !== "string") throw new Error("Approved Cloud template does not contain a body");
-  return body.text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => {
+  const mappedBody = body.text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => {
     const name = names[Number(index) - 1];
     if (!name) throw new Error(`Cloud template placeholder {{${index}}} is not supported for ${kind}`);
     return `{{${name}}}`;
   });
+  const hasDynamicUrlButton = components.some(component => {
+    if (!component || typeof component !== "object" || Array.isArray(component)) return false;
+    const value = component as Record<string, unknown>;
+    const type = String(value.type ?? "").toLowerCase();
+    if (type !== "buttons" && type !== "button") return false;
+    const buttons = Array.isArray(value.buttons) ? value.buttons : [];
+    return buttons.some(button => button && typeof button === "object" && !Array.isArray(button) && /\{\{\d+\}\}/.test(String((button as Record<string, unknown>).url ?? "")));
+  });
+  return hasDynamicUrlButton ? `${mappedBody}\n\nView your invoice online: {{invoice_url}}` : mappedBody;
 };
 
 export const submitCloudTemplateForAccount = async (

@@ -51,4 +51,24 @@ describe("Cloud template variable mapping", () => {
       "6",
     ]);
   });
+
+  test("keeps invoice links optional for legacy templates and maps them for URL buttons", () => {
+    const legacyBody = "Hello {{customer_name}}";
+    const legacyDefinitions = [{ type: "BODY", text: "Hello {{1}}" }];
+    expect(buildDefaultCloudTemplateVariableMapping(legacyBody, legacyDefinitions)).toEqual({
+      "body:1": "customer_name",
+    });
+
+    const urlDefinitions = [
+      { type: "BODY", text: "Hello {{1}}" },
+      { type: "BUTTONS", buttons: [{ type: "URL", text: "View invoice", url: "https://example.com/{{1}}" }] },
+    ];
+    expect(buildDefaultCloudTemplateVariableMapping(
+      "Hello {{customer_name}}\n\nView your invoice online: {{invoice_url}}",
+      urlDefinitions,
+    )).toEqual({
+      "body:1": "customer_name",
+      "button:0:1": "invoice_url",
+    });
+  });
 });

@@ -47,7 +47,7 @@ describe("invoice text", () => {
         expect(text).toContain("Total amount: ₹90.00");
         expect(text).toContain("Paid: ₹50.00");
         expect(text).toContain("Balance due: ₹40.00");
-        expect(text).toContain("Regards,\nDev VadaPav");
+        expect(text).toContain("Regards from Dev VadaPav.");
     });
 
     it("falls back to the product name when no organization name is provided", () => {
