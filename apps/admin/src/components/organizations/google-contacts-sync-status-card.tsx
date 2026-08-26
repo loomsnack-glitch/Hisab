@@ -77,6 +77,11 @@ export const GoogleContactsSyncStatusCardView = ({
     const email = status?.googleAccountEmail;
     const connected = connectionStatus === "connected";
     const lastSuccessfulSyncAt = status ? formatSyncTime(status.lastSuccessfulSyncAt) : null;
+    const showSummary =
+        Boolean(status) && (connected || connectionStatus === "reconnect_required");
+    const retrying = Boolean(
+        status && status.pendingCount > 0 && status.initialSyncStatus === "completed",
+    );
     const canStartInitialSync =
         connected && status?.initialSyncStatus === "not_started" && Boolean(onStartInitialSync);
 
@@ -112,9 +117,9 @@ export const GoogleContactsSyncStatusCardView = ({
                                 No Google account is connected yet.
                             </p>
                         )}
-                        {connected && status ? (
+                        {showSummary && status ? (
                             <div className="space-y-1 text-sm text-muted-foreground">
-                                <p>{initialSyncLabel(status)}</p>
+                                {connected ? <p>{initialSyncLabel(status)}</p> : null}
                                 <p>
                                     Last successful sync:{" "}
                                     {lastSuccessfulSyncAt ?? "None yet"}
@@ -122,6 +127,7 @@ export const GoogleContactsSyncStatusCardView = ({
                                 <p>
                                     Pending {status.pendingCount}, errors {status.errorCount}, conflicts {status.conflictCount}
                                 </p>
+                                {retrying ? <p>Retrying failed Google writes in the background.</p> : null}
                             </div>
                         ) : null}
                         {errorMessage ? (

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { GooglePeopleClient } from "./google-contacts.people";
+import { GooglePeopleApiError } from "./google-contacts.people-client";
 import { processGoogleContactsSyncJob } from "./google-contacts.worker";
 
 const job = {
@@ -75,6 +76,7 @@ describe("Google Contacts worker", () => {
     };
     const people = createPeople({
       searchContacts: mock(async () => [matched]),
+      getContact: mock(async () => matched),
       updateContact: mock(async (person) => person),
     });
 
@@ -85,6 +87,7 @@ describe("Google Contacts worker", () => {
       googleResourceName: "people/dev",
     });
     expect(people.createContact).not.toHaveBeenCalled();
+    expect(people.getContact).toHaveBeenCalledWith("people/dev");
     expect(people.updateContact).toHaveBeenCalledWith({
       resourceName: "people/dev",
       etag: "etag-1",
@@ -128,7 +131,6 @@ describe("Google Contacts worker", () => {
       googleResourceName: "people/dev",
     });
     expect(people.getContact).toHaveBeenCalledWith("people/dev");
-    expect(people.searchContacts).not.toHaveBeenCalled();
     expect(people.createContact).not.toHaveBeenCalled();
     expect(people.updateContact).toHaveBeenCalledWith({
       resourceName: "people/dev",
@@ -191,5 +193,212 @@ describe("Google Contacts worker", () => {
     expect(outcome).toEqual({ status: "skipped", reason: "connection_inactive" });
     expect(people.searchContacts).not.toHaveBeenCalled();
     expect(people.deleteContact).not.toHaveBeenCalled();
+  });
+
+  test("records a phone collision after a Customer phone change and modifies no Google Contact", async () => {
+    const linked = {
+      resourceName: "people/dev",
+      etag: "etag-linked",
+      names: [{ unstructuredName: "Dev Jariwala", givenName: "Dev Jariwala" }],
+      phoneNumbers: [{ value: "+919876543210" }],
+    };
+    const people = createPeople({
+      getContact: mock(async () => linked),
+      searchContacts: mock(async () => [
+        {
+          resourceName: "people/other",
+          phoneNumbers: [{ value: "+918888888888" }],
+        },
+      ]),
+    });
+
+    const outcome = await processGoogleContactsSyncJob(
+      {
+        ...job,
+        customerPhone: "+918888888888",
+        linkedGoogleResourceName: "people/dev",
+        matchedPhone: "+919876543210",
+      },
+      people,
+    );
+
+    expect(outcome).toEqual({ status: "conflict", reason: "phone_collision" });
+    expect(people.searchContacts).toHaveBeenCalled();
+    expect(people.updateContact).not.toHaveBeenCalled();
+    expect(people.createContact).not.toHaveBeenCalled();
+    expect(people.deleteContact).not.toHaveBeenCalled();
+  });
+
+  test("recreates a linked Google Contact that was deleted in Google", async () => {
+    const people = createPeople({
+      getContact: mock(async () => {
+        throw new GooglePeopleApiError(404, "Google Contact was not found");
+      }),
+      searchContacts: mock(async () => []),
+    });
+
+    const outcome = await processGoogleContactsSyncJob(
+      {
+        ...job,
+        linkedGoogleResourceName: "people/deleted",
+        matchedPhone: "+919876543210",
+      },
+      people,
+    );
+
+    expect(outcome).toEqual({
+      status: "created",
+      googleResourceName: "people/created",
+    });
+    expect(people.getContact).toHaveBeenCalledWith("people/deleted");
+    expect(people.createContact).toHaveBeenCalledWith({
+      name: "Dev Jariwala",
+      phone: "+919876543210",
+    });
+    expect(people.updateContact).not.toHaveBeenCalled();
+    expect(people.deleteContact).not.toHaveBeenCalled();
+  });
+
+  test("repairs Google-side name and linked-phone edits from Ganatri without importing Google data", async () => {
+    const linked = {
+      resourceName: "people/dev",
+      etag: "etag-google-edit",
+      names: [{ unstructuredName: "Google Edited Name", givenName: "Google" }],
+      phoneNumbers: [
+        { value: "+14155552671", type: "home" },
+        { value: "09876 543210", canonicalForm: "+919876543210" },
+      ],
+      emailAddresses: [{ value: "kept@example.com" }],
+      biographies: [{ value: "Client notes" }],
+    };
+    const people = createPeople({
+      getContact: mock(async () => linked),
+      updateContact: mock(async (person) => person),
+    });
+
+    const outcome = await processGoogleContactsSyncJob(
+      {
+        ...job,
+        customerName: "Dev Jariwala",
+        customerPhone: "+919876543210",
+        linkedGoogleResourceName: "people/dev",
+        matchedPhone: "+919876543210",
+      },
+      people,
+    );
+
+    expect(outcome).toEqual({
+      status: "updated",
+      googleResourceName: "people/dev",
+    });
+    expect(people.updateContact).toHaveBeenCalledWith({
+      resourceName: "people/dev",
+      etag: "etag-google-edit",
+      names: [{ unstructuredName: "Dev Jariwala", givenName: "Dev Jariwala" }],
+      phoneNumbers: [
+        { value: "+14155552671", type: "home" },
+        { value: "+919876543210", canonicalForm: "+919876543210" },
+      ],
+      emailAddresses: [{ value: "kept@example.com" }],
+      biographies: [{ value: "Client notes" }],
+    });
+    expect(JSON.stringify(outcome)).not.toContain("Google Edited Name");
+    expect(JSON.stringify(outcome)).not.toContain("kept@example.com");
+    expect(people.deleteContact).not.toHaveBeenCalled();
+  });
+
+  test("reloads current Google metadata after a concurrent edit and retries the Ganatri-owned merge", async () => {
+    const stale = {
+      resourceName: "people/dev",
+      etag: "etag-stale",
+      names: [{ unstructuredName: "Dev", givenName: "Dev" }],
+      phoneNumbers: [{ value: "+919876543210" }],
+      emailAddresses: [{ value: "old@example.com" }],
+    };
+    const current = {
+      resourceName: "people/dev",
+      etag: "etag-current",
+      names: [{ unstructuredName: "Google race", givenName: "Google" }],
+      phoneNumbers: [
+        { value: "+919876543210" },
+        { value: "+14155552671", type: "home" },
+      ],
+      emailAddresses: [{ value: "fresh@example.com" }],
+    };
+    const people = createPeople({
+      getContact: mock(async () => stale),
+      updateContact: mock(async (person) => {
+        if (person.etag === "etag-stale") {
+          people.getContact = mock(async () => current);
+          throw new GooglePeopleApiError(409, "Google Contact was modified");
+        }
+        return person;
+      }),
+    });
+
+    const outcome = await processGoogleContactsSyncJob(
+      {
+        ...job,
+        linkedGoogleResourceName: "people/dev",
+        matchedPhone: "+919876543210",
+      },
+      people,
+    );
+
+    expect(outcome).toEqual({
+      status: "updated",
+      googleResourceName: "people/dev",
+    });
+    expect(people.updateContact).toHaveBeenCalledTimes(2);
+    expect(people.updateContact).toHaveBeenLastCalledWith({
+      resourceName: "people/dev",
+      etag: "etag-current",
+      names: [{ unstructuredName: "Dev Jariwala", givenName: "Dev Jariwala" }],
+      phoneNumbers: [
+        { value: "+919876543210" },
+        { value: "+14155552671", type: "home" },
+      ],
+      emailAddresses: [{ value: "fresh@example.com" }],
+    });
+    expect(people.deleteContact).not.toHaveBeenCalled();
+  });
+
+  test("classifies rate-limit failures as retryable and authorization loss as reconnect-required", async () => {
+    const rateLimited = createPeople({
+      searchContacts: mock(async () => {
+        throw new GooglePeopleApiError(429, "Google Contacts is temporarily unavailable");
+      }),
+    });
+    const unauthorized = createPeople({
+      searchContacts: mock(async () => {
+        throw new GooglePeopleApiError(401, "Google Contacts authorization is no longer valid");
+      }),
+    });
+    const permanent = createPeople({
+      searchContacts: mock(async () => {
+        throw new GooglePeopleApiError(400, "Google Contacts could not be updated");
+      }),
+    });
+
+    expect(await processGoogleContactsSyncJob(job, rateLimited)).toEqual({
+      status: "retryable",
+      code: "google_unavailable",
+      message: "Google Contacts is temporarily unavailable",
+    });
+    expect(await processGoogleContactsSyncJob(job, unauthorized)).toEqual({
+      status: "reconnect_required",
+      code: "google_reconnect_required",
+      message: "Google Contacts authorization is no longer valid",
+    });
+    expect(await processGoogleContactsSyncJob(job, permanent)).toEqual({
+      status: "failed",
+      code: "google_write_failed",
+      message: "Google Contacts could not be updated",
+    });
+    expect(rateLimited.deleteContact).not.toHaveBeenCalled();
+    expect(unauthorized.deleteContact).not.toHaveBeenCalled();
+    expect(permanent.createContact).not.toHaveBeenCalled();
+    expect(permanent.updateContact).not.toHaveBeenCalled();
+    expect(permanent.deleteContact).not.toHaveBeenCalled();
   });
 });

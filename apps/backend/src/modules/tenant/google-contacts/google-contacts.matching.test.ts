@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   exactGoogleContactMatches,
   googleContactHasExactPhone,
+  otherExactGoogleContactMatches,
   withGanatriNameAndMatchingPhone,
 } from "./google-contacts.matching";
 import type { GoogleContactPerson } from "./google-contacts.people";
@@ -97,5 +98,61 @@ describe("Google Contact Match", () => {
       { value: "+14155552671", type: "work" },
       { value: "+918888888888", canonicalForm: "+918888888888" },
     ]);
+  });
+
+  test("preserves extra phone numbers and every unrelated Google field", () => {
+    const contact: GoogleContactPerson = {
+      ...person(
+        "people/rich",
+        [
+          { value: "+14155552671", type: "work" },
+          { value: "+919876543210", canonicalForm: "+919876543210" },
+          { value: "+442079460958", type: "mobile" },
+        ],
+        "Dev",
+      ),
+      emailAddresses: [{ value: "dev@example.com", type: "home" }],
+      addresses: [{ formattedValue: "1 Market St", type: "work" }],
+      biographies: [{ value: "Staff-maintained notes", contentType: "TEXT_PLAIN" }],
+      photos: [{ url: "https://example.com/photo.jpg", default: false }],
+      memberships: [{ contactGroupMembership: { contactGroupResourceName: "contactGroups/friends" } }],
+      organizations: [{ name: "Loomsnack", title: "Owner" }],
+      metadata: { sources: [{ etag: "people/rich-etag", type: "CONTACT" }] },
+    };
+
+    const updated = withGanatriNameAndMatchingPhone(contact, "Dev Jariwala", "+919876543210");
+
+    expect(updated.names).toEqual([
+      { unstructuredName: "Dev Jariwala", givenName: "Dev Jariwala" },
+    ]);
+    expect(updated.phoneNumbers).toEqual([
+      { value: "+14155552671", type: "work" },
+      { value: "+919876543210", canonicalForm: "+919876543210" },
+      { value: "+442079460958", type: "mobile" },
+    ]);
+    expect(updated.emailAddresses).toEqual([{ value: "dev@example.com", type: "home" }]);
+    expect(updated.addresses).toEqual([{ formattedValue: "1 Market St", type: "work" }]);
+    expect(updated.biographies).toEqual([
+      { value: "Staff-maintained notes", contentType: "TEXT_PLAIN" },
+    ]);
+    expect(updated.photos).toEqual([{ url: "https://example.com/photo.jpg", default: false }]);
+    expect(updated.memberships).toEqual([
+      { contactGroupMembership: { contactGroupResourceName: "contactGroups/friends" } },
+    ]);
+    expect(updated.organizations).toEqual([{ name: "Loomsnack", title: "Owner" }]);
+    expect(updated.metadata).toEqual({ sources: [{ etag: "people/rich-etag", type: "CONTACT" }] });
+    expect(updated.etag).toBe("people/rich-etag");
+  });
+
+  test("treats another exact phone match as a collision with the linked Google Contact", () => {
+    const linked = person("people/linked", [{ value: "+919876543210" }]);
+    const other = person("people/other", [{ canonicalForm: "+918888888888" }]);
+
+    expect(
+      otherExactGoogleContactMatches([linked, other], "+918888888888", "people/linked"),
+    ).toEqual([other]);
+    expect(
+      otherExactGoogleContactMatches([linked], "+918888888888", "people/linked"),
+    ).toEqual([]);
   });
 });

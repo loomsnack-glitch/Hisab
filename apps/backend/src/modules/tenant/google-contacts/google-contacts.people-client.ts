@@ -5,6 +5,8 @@ import type {
 
 const PEOPLE_API_BASE = "https://people.googleapis.com/v1";
 const SEARCH_READ_MASK = "names,phoneNumbers,metadata";
+const CONTACT_READ_MASK =
+  "names,phoneNumbers,emailAddresses,addresses,biographies,photos,memberships,organizations,urls,metadata";
 const UPDATE_PERSON_FIELDS = "names,phoneNumbers";
 
 export class GooglePeopleApiError extends Error {
@@ -15,9 +17,20 @@ export class GooglePeopleApiError extends Error {
     super(message);
     this.name = "GooglePeopleApiError";
     this.status = status;
-    this.retryable = status === 429 || status >= 500;
+    this.retryable = status === 409 || status === 429 || status >= 500;
   }
 }
+
+const extraPersonFields = [
+  "emailAddresses",
+  "addresses",
+  "biographies",
+  "photos",
+  "memberships",
+  "organizations",
+  "urls",
+  "metadata",
+] as const;
 
 const asPerson = (value: unknown): GoogleContactPerson | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -25,7 +38,7 @@ const asPerson = (value: unknown): GoogleContactPerson | null => {
   const resourceName =
     typeof record.resourceName === "string" ? record.resourceName.trim() : "";
   if (!resourceName) return null;
-  return {
+  const person: GoogleContactPerson = {
     resourceName,
     etag: typeof record.etag === "string" ? record.etag : undefined,
     names: Array.isArray(record.names) ? record.names as GoogleContactPerson["names"] : undefined,
@@ -33,6 +46,24 @@ const asPerson = (value: unknown): GoogleContactPerson | null => {
       ? record.phoneNumbers as GoogleContactPerson["phoneNumbers"]
       : undefined,
   };
+  for (const field of extraPersonFields) {
+    if (field in record) {
+      person[field] = record[field];
+    }
+  }
+  return person;
+};
+
+const messageForStatus = (status: number): string => {
+  if (status === 401 || status === 403) {
+    return "Google Contacts authorization is no longer valid";
+  }
+  if (status === 404) return "Google Contact was not found";
+  if (status === 409) return "Google Contact was modified";
+  if (status === 429 || status >= 500) {
+    return "Google Contacts is temporarily unavailable";
+  }
+  return "Google Contacts could not be updated";
 };
 
 const requestJson = async (
@@ -55,12 +86,7 @@ const requestJson = async (
   }
   if (response.status === 204) return null;
   if (!response.ok) {
-    throw new GooglePeopleApiError(
-      response.status,
-      response.status === 429 || response.status >= 500
-        ? "Google Contacts is temporarily unavailable"
-        : "Google Contacts could not be updated",
-    );
+    throw new GooglePeopleApiError(response.status, messageForStatus(response.status));
   }
   try {
     return await response.json();
@@ -119,7 +145,7 @@ export const createGooglePeopleClient = (accessToken: string): GooglePeopleClien
   },
   getContact: async (resourceName) => {
     const url = new URL(`${PEOPLE_API_BASE}/${resourceName}`);
-    url.searchParams.set("personFields", SEARCH_READ_MASK);
+    url.searchParams.set("personFields", CONTACT_READ_MASK);
     const payload = await requestJson(accessToken, url.toString());
     const person = asPerson(payload);
     if (!person) {

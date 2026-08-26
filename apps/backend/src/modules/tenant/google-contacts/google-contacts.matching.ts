@@ -28,6 +28,15 @@ export const exactGoogleContactMatches = (
   return matches;
 };
 
+export const otherExactGoogleContactMatches = (
+  candidates: GoogleContactPerson[],
+  normalizedPhone: string,
+  linkedResourceName: string,
+): GoogleContactPerson[] =>
+  exactGoogleContactMatches(candidates, normalizedPhone).filter(
+    (match) => match.resourceName !== linkedResourceName,
+  );
+
 export const withGanatriNameAndMatchingPhone = (
   person: GoogleContactPerson,
   name: string,

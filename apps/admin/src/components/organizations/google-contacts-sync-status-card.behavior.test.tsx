@@ -106,6 +106,49 @@ describe("Google Contacts Sync Status card", () => {
         expect(completed).not.toContain("Disconnect");
     });
 
+    test("distinguishes retryable, permanent, reconnect-required, and conflict outcomes", () => {
+        const retrying = renderCard({
+            ...connectedStatus,
+            initialSyncStatus: "completed",
+            lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
+            pendingCount: 3,
+            errorCount: 0,
+            conflictCount: 0,
+        });
+        const permanent = renderCard({
+            ...connectedStatus,
+            initialSyncStatus: "completed",
+            pendingCount: 0,
+            errorCount: 2,
+            conflictCount: 0,
+        });
+        const conflict = renderCard({
+            ...connectedStatus,
+            initialSyncStatus: "completed",
+            pendingCount: 0,
+            errorCount: 0,
+            conflictCount: 4,
+        });
+        const reconnectRequired = renderCard({
+            ...connectedStatus,
+            connectionStatus: "reconnect_required",
+            pendingCount: 1,
+            errorCount: 2,
+            conflictCount: 3,
+        });
+
+        expect(retrying).toContain("Pending 3, errors 0, conflicts 0");
+        expect(retrying).toContain("Retrying");
+        expect(retrying).not.toContain("Reconnect required");
+        expect(permanent).toContain("Pending 0, errors 2, conflicts 0");
+        expect(permanent).not.toContain("Retrying");
+        expect(conflict).toContain("Pending 0, errors 0, conflicts 4");
+        expect(reconnectRequired).toContain("Reconnect required");
+        expect(reconnectRequired).toContain("Reconnect Google");
+        expect(reconnectRequired).toContain("Pending 1, errors 2, conflicts 3");
+        expect(reconnectRequired).not.toContain("refresh_token");
+    });
+
     test("does not render Google credentials in any status", () => {
         const markup = renderCard(connectedStatus);
 

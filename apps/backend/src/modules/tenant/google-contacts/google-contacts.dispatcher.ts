@@ -1,5 +1,9 @@
 import type { GoogleContactsCredentialVault } from "./google-contacts.credentials";
-import type { GoogleOAuthProvider } from "./google-contacts.oauth";
+import { GoogleContactsCredentialError } from "./google-contacts.credentials";
+import {
+  GoogleContactsOAuthError,
+  type GoogleOAuthProvider,
+} from "./google-contacts.oauth";
 import type { GooglePeopleClient } from "./google-contacts.people";
 import {
   completeGoogleContactsOutbox,
@@ -17,6 +21,24 @@ export type GoogleContactsDispatcherDependencies = {
   now?: () => number;
 };
 
+const authorizationFailureOutcome = (error: unknown): GoogleContactsSyncOutcome => {
+  if (
+    (error instanceof GoogleContactsOAuthError && error.code === "authorization_revoked") ||
+    (error instanceof GoogleContactsCredentialError && error.code === "credential_not_found")
+  ) {
+    return {
+      status: "reconnect_required",
+      code: "google_reconnect_required",
+      message: "Google Contacts authorization is no longer valid",
+    };
+  }
+  return {
+    status: "retryable",
+    code: "google_credential_unavailable",
+    message: "Google Contacts authorization could not be used",
+  };
+};
+
 export const dispatchGoogleContactsOutboxJob = async (
   claim: GoogleContactsOutboxClaim,
   dependencies: GoogleContactsDispatcherDependencies,
@@ -30,12 +52,8 @@ export const dispatchGoogleContactsOutboxJob = async (
         ? await dependencies.oauth.refreshAccessToken(credentials.refreshToken)
         : credentials;
     people = dependencies.createPeople(fresh.accessToken);
-  } catch {
-    const outcome: GoogleContactsSyncOutcome = {
-      status: "retryable",
-      code: "google_credential_unavailable",
-      message: "Google Contacts authorization could not be used",
-    };
+  } catch (error) {
+    const outcome = authorizationFailureOutcome(error);
     await dependencies.complete({
       outboxId: claim.job.outboxId,
       leaseOwner: claim.leaseOwner,

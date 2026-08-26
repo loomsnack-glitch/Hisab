@@ -15,6 +15,14 @@ export type GoogleContactPerson = {
   etag?: string;
   names?: GoogleContactName[];
   phoneNumbers?: GoogleContactPhone[];
+  emailAddresses?: unknown;
+  addresses?: unknown;
+  biographies?: unknown;
+  photos?: unknown;
+  memberships?: unknown;
+  organizations?: unknown;
+  urls?: unknown;
+  metadata?: unknown;
 };
 
 export type GooglePeopleClient = {

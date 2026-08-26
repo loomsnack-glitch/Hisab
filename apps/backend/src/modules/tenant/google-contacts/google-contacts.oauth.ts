@@ -33,6 +33,7 @@ export class GoogleContactsOAuthError extends Error {
     | "invalid_configuration"
     | "exchange_failed"
     | "authorization_denied"
+    | "authorization_revoked"
     | "invalid_provider_token"
     | "identity_unavailable";
 
@@ -167,7 +168,11 @@ const parseIdentity = (value: unknown): GoogleAccountIdentity => {
   return { subject, email };
 };
 
-const postForm = async (url: string, body: URLSearchParams): Promise<unknown> => {
+const postForm = async (
+  url: string,
+  body: URLSearchParams,
+  clientError: "exchange_failed" | "authorization_revoked" = "exchange_failed",
+): Promise<unknown> => {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -182,6 +187,15 @@ const postForm = async (url: string, body: URLSearchParams): Promise<unknown> =>
     );
   }
   if (!response.ok) {
+    if (
+      clientError === "authorization_revoked" &&
+      (response.status === 400 || response.status === 401)
+    ) {
+      throw new GoogleContactsOAuthError(
+        "authorization_revoked",
+        "Google Contacts authorization is no longer valid",
+      );
+    }
     throw new GoogleContactsOAuthError(
       "exchange_failed",
       "Google Contacts authorization exchange failed",
@@ -250,7 +264,7 @@ export const createGoogleOAuthProvider = (
       client_secret: config.clientSecret,
       grant_type: "refresh_token",
     });
-    return parseTokenResponse(await postForm(GOOGLE_TOKEN_ENDPOINT, body), fetchNow(), token);
+    return parseTokenResponse(await postForm(GOOGLE_TOKEN_ENDPOINT, body, "authorization_revoked"), fetchNow(), token);
   },
   getAccountIdentity: async (accessToken) =>
     parseIdentity(await getJson(GOOGLE_USERINFO_ENDPOINT, requireToken(accessToken, "access token"))),

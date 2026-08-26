@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { dispatchGoogleContactsOutboxJob } from "./google-contacts.dispatcher";
 import type { GoogleContactsOutboxClaim } from "./google-contacts.outbox";
-import { GOOGLE_CONTACTS_WRITE_SCOPE } from "./google-contacts.oauth";
+import { GoogleContactsCredentialError } from "./google-contacts.credentials";
+import { GOOGLE_CONTACTS_WRITE_SCOPE, GoogleContactsOAuthError } from "./google-contacts.oauth";
+import { GooglePeopleApiError } from "./google-contacts.people-client";
 
 const claim: GoogleContactsOutboxClaim = {
   leaseOwner: "google-contacts-worker-test",
@@ -86,5 +88,126 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
     ]);
     expect(JSON.stringify(outcome)).not.toContain("access-token");
     expect(JSON.stringify(outcome)).not.toContain("refresh-token");
+  });
+
+  test("treats revoked Google authorization as reconnect-required without deleting Contacts", async () => {
+    const completed: unknown[] = [];
+    const outcome = await dispatchGoogleContactsOutboxJob(
+      { ...claim, attemptCount: 2 },
+      {
+        vault: {
+          store: async () => claim.credential,
+          resolve: async () => ({
+            ...credentials,
+            expiresAt: Date.UTC(2026, 7, 26, 6, 0, 0),
+          }),
+          rotate: async () => claim.credential,
+          revoke: async () => {},
+        },
+        oauth: {
+          refreshAccessToken: async () => {
+            throw new GoogleContactsOAuthError(
+              "authorization_revoked",
+              "Google Contacts authorization is no longer valid",
+            );
+          },
+        },
+        createPeople: () => {
+          throw new Error("must not call Google People after authorization is revoked");
+        },
+        complete: async (...args) => {
+          completed.push(args[0]);
+          return true;
+        },
+        now: () => Date.UTC(2026, 7, 26, 7, 0, 0),
+      },
+    );
+
+    expect(outcome).toEqual({
+      status: "reconnect_required",
+      code: "google_reconnect_required",
+      message: "Google Contacts authorization is no longer valid",
+    });
+    expect(completed).toEqual([
+      {
+        outboxId: claim.job.outboxId,
+        leaseOwner: claim.leaseOwner,
+        attemptCount: 2,
+        claimedCustomerUpdatedAt: claim.job.customerUpdatedAt,
+        outcome,
+      },
+    ]);
+    expect(JSON.stringify(outcome)).not.toContain("refresh-token");
+  });
+
+  test("retries transient credential failures and permanent People failures stay distinct", async () => {
+    const retryable = await dispatchGoogleContactsOutboxJob(claim, {
+      vault: {
+        store: async () => claim.credential,
+        resolve: async () => {
+          throw new GoogleContactsCredentialError(
+            "vault_unavailable",
+            "Google Contacts credential vault is unavailable",
+          );
+        },
+        rotate: async () => claim.credential,
+        revoke: async () => {},
+      },
+      oauth: {
+        refreshAccessToken: async () => {
+          throw new Error("must not refresh when the vault is unavailable");
+        },
+      },
+      createPeople: () => {
+        throw new Error("must not call Google People when credentials are unavailable");
+      },
+      complete: async () => true,
+      now: () => Date.UTC(2026, 7, 26, 6, 0, 0),
+    });
+    expect(retryable).toEqual({
+      status: "retryable",
+      code: "google_credential_unavailable",
+      message: "Google Contacts authorization could not be used",
+    });
+
+    const completed: unknown[] = [];
+    const permanent = await dispatchGoogleContactsOutboxJob(claim, {
+      vault: {
+        store: async () => claim.credential,
+        resolve: async () => credentials,
+        rotate: async () => claim.credential,
+        revoke: async () => {},
+      },
+      oauth: {
+        refreshAccessToken: async () => {
+          throw new Error("must not refresh a still-valid access token");
+        },
+      },
+      createPeople: () => ({
+        searchContacts: mock(async () => {
+          throw new GooglePeopleApiError(400, "Google Contacts could not be updated");
+        }),
+        getContact: mock(async () => {
+          throw new Error("getContact should not be used without a linked Google Contact");
+        }),
+        createContact: mock(async () => {
+          throw new Error("must not create after a permanent Google failure");
+        }),
+        updateContact: mock(async () => {
+          throw new Error("must not update after a permanent Google failure");
+        }),
+      }),
+      complete: async (...args) => {
+        completed.push(args[0]);
+        return true;
+      },
+      now: () => Date.UTC(2026, 7, 26, 6, 0, 0),
+    });
+    expect(permanent).toEqual({
+      status: "failed",
+      code: "google_write_failed",
+      message: "Google Contacts could not be updated",
+    });
+    expect(completed).toHaveLength(1);
   });
 });

@@ -8,6 +8,9 @@ import {
   googleContactsCustomerIsEligible,
   type GoogleContactsOutboxStatus,
 } from "./google-contacts.customer-sync";
+import {
+  decideGoogleContactsDelivery,
+} from "./google-contacts.delivery";
 import { getGoogleContactsConnectionStatus } from "./google-contacts.repository";
 import type { GoogleContactsSyncJob, GoogleContactsSyncOutcome } from "./google-contacts.worker";
 
@@ -18,9 +21,9 @@ export type GoogleContactsOutboxClaim = {
   attemptCount: number;
 };
 
-const MAX_ATTEMPTS = 8;
 const MIN_LEASE_SECONDS = 30;
 const MAX_LEASE_SECONDS = 300;
+
 
 type CustomerRow = {
   id: string;
@@ -335,9 +338,6 @@ export const claimNextGoogleContactsOutbox = async (
   });
 };
 
-const backoffSeconds = (attemptCount: number): number =>
-  Math.min(30 * 2 ** Math.max(attemptCount - 1, 0), 900);
-
 export const completeGoogleContactsOutbox = async (input: {
   outboxId: string;
   leaseOwner: string;
@@ -419,42 +419,54 @@ export const completeGoogleContactsOutbox = async (input: {
       return true;
     }
 
-    if (input.outcome.status === "retryable" && input.attemptCount < MAX_ATTEMPTS) {
+    const delivery = decideGoogleContactsDelivery({
+      outcome: input.outcome,
+      attemptCount: input.attemptCount,
+    });
+
+    if (delivery.kind === "retry") {
       await tx`
         UPDATE google_contacts_sync_outbox
         SET
           status = 'pending',
           lease_owner = NULL,
           lease_expires_at = NULL,
-          last_error_code = ${input.outcome.code},
-          last_error_message = ${input.outcome.message},
-          next_attempt_at = NOW() + make_interval(secs => ${backoffSeconds(input.attemptCount)}),
+          last_error_code = ${delivery.errorCode},
+          last_error_message = ${delivery.errorMessage},
+          next_attempt_at = NOW() + make_interval(secs => ${delivery.delaySeconds}),
           updated_at = NOW()
         WHERE id = ${input.outboxId}
       `;
       return true;
     }
 
-    const nextStatus =
-      input.outcome.status === "created" || input.outcome.status === "updated"
-        ? "completed"
-        : input.outcome.status === "skipped"
-          ? "skipped"
-          : input.outcome.status === "conflict"
-            ? "conflict"
-            : "failed";
-    const errorCode =
-      input.outcome.status === "retryable" || input.outcome.status === "failed"
-        ? input.outcome.code
-        : input.outcome.status === "conflict"
-          ? "multiple_matches"
-          : null;
-    const errorMessage =
-      input.outcome.status === "retryable" || input.outcome.status === "failed"
-        ? input.outcome.message
-        : input.outcome.status === "conflict"
-          ? "More than one Google Contact has this phone number"
-          : null;
+    if (delivery.kind === "reconnect_required") {
+      await tx`
+        UPDATE google_contacts_connections
+        SET
+          status = 'reconnect_required',
+          updated_at = NOW()
+        WHERE id = ${existing.connection_id}
+          AND status = 'connected'
+      `;
+      await tx`
+        UPDATE google_contacts_sync_outbox
+        SET
+          status = 'pending',
+          lease_owner = NULL,
+          lease_expires_at = NULL,
+          last_error_code = ${delivery.errorCode},
+          last_error_message = ${delivery.errorMessage},
+          next_attempt_at = NOW(),
+          updated_at = NOW()
+        WHERE id = ${input.outboxId}
+      `;
+      return true;
+    }
+
+    const nextStatus = delivery.outboxStatus;
+    const errorCode = delivery.errorCode;
+    const errorMessage = delivery.errorMessage;
 
     await tx`
       UPDATE google_contacts_sync_outbox
