@@ -316,6 +316,15 @@ Never rsync `--delete` the worker `data/` directory. That encrypted auth
 state is not in git and is not in `out/`. Backend `out/` rsync must exclude
 `apps/whatsapp-worker` so `--delete` cannot wipe worker `data/` or `dist/`.
 
+### Google Contacts OAuth
+
+Production Google Contacts Synchronization needs a verified OAuth client, the
+Admin redirect URI `https://admin.ganatri.in/google-contacts/oauth/callback`,
+consent-screen identity, privacy/support URLs, and Contacts scope verification.
+Set `GOOGLE_CONTACTS_OAUTH_REDIRECT_URI` to that production callback and keep
+the client secret, state secret, and credential keyring in backend `.env` only.
+See [Google Contacts OAuth production readiness](./google-contacts-oauth-production.md).
+
 ---
 
 ## 5. PM2 (first time only)

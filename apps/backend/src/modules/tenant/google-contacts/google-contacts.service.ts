@@ -34,8 +34,9 @@ import {
 import {
   beginGoogleContactsConnectionAttempt,
   completeGoogleContactsConnection,
+  disconnectGoogleContactsConnection,
+  getGoogleContactsConnectionLifecycle,
   getGoogleContactsConnectionStatus,
-  getGoogleContactsCredentialBinding,
   revertConnectingGoogleContactsConnection,
 } from "./google-contacts.repository";
 import { scheduleGoogleContactsInitialCatchUp } from "./google-contacts.outbox";
@@ -48,10 +49,11 @@ export type GoogleContactsServiceDependencies = {
   createOAuthStateRecord: typeof createGoogleContactsOAuthStateRecord;
   replayStore: GoogleContactsOAuthReplayStore;
   getStatus: typeof getGoogleContactsConnectionStatus;
-  getBinding: typeof getGoogleContactsCredentialBinding;
+  getLifecycle: typeof getGoogleContactsConnectionLifecycle;
   beginAttempt: typeof beginGoogleContactsConnectionAttempt;
   completeConnection: typeof completeGoogleContactsConnection;
   revertConnecting: typeof revertConnectingGoogleContactsConnection;
+  disconnectConnection: typeof disconnectGoogleContactsConnection;
   scheduleInitialCatchUp: typeof scheduleGoogleContactsInitialCatchUp;
   vault: GoogleContactsCredentialVault;
   oauth: GoogleOAuthProvider;
@@ -62,10 +64,11 @@ const defaultDependencies = (): GoogleContactsServiceDependencies => ({
   createOAuthStateRecord: createGoogleContactsOAuthStateRecord,
   replayStore: googleContactsOAuthReplayStore,
   getStatus: getGoogleContactsConnectionStatus,
-  getBinding: getGoogleContactsCredentialBinding,
+  getLifecycle: getGoogleContactsConnectionLifecycle,
   beginAttempt: beginGoogleContactsConnectionAttempt,
   completeConnection: completeGoogleContactsConnection,
   revertConnecting: revertConnectingGoogleContactsConnection,
+  disconnectConnection: disconnectGoogleContactsConnection,
   scheduleInitialCatchUp: scheduleGoogleContactsInitialCatchUp,
   vault: databaseGoogleContactsCredentialVault,
   oauth: createGoogleOAuthProvider(),
@@ -101,6 +104,18 @@ const configurationError = (): ServiceResponse<null> => ({
   code: STATUS_CODES.SERVICE_UNAVAILABLE,
 });
 
+const revokeLocalAndGoogleAuthorization = async (
+  deps: GoogleContactsServiceDependencies,
+  binding: { reference: string; keyVersion: string } | null,
+): Promise<void> => {
+  if (!binding) return;
+  const payload = await deps.vault.resolve(binding).catch(() => null);
+  await deps.vault.revoke(binding).catch(() => undefined);
+  if (payload?.refreshToken) {
+    await deps.oauth.revokeAuthorization(payload.refreshToken).catch(() => undefined);
+  }
+};
+
 export const getGoogleContactsSyncStatusForOrganization = async (
   userId: string,
   organizationId: string,
@@ -122,16 +137,39 @@ export const startGoogleContactsOAuth = async (
   userId: string,
   organizationId: string,
   injected: Partial<GoogleContactsServiceDependencies> = {},
+): Promise<ServiceResponse<GoogleContactsOAuthStartResponse | null>> =>
+  startGoogleContactsOAuthWithIntent(userId, organizationId, "connect", injected);
+
+export const startGoogleContactsAccountReplacement = async (
+  userId: string,
+  organizationId: string,
+  injected: Partial<GoogleContactsServiceDependencies> = {},
+): Promise<ServiceResponse<GoogleContactsOAuthStartResponse | null>> =>
+  startGoogleContactsOAuthWithIntent(userId, organizationId, "replace", injected);
+
+const startGoogleContactsOAuthWithIntent = async (
+  userId: string,
+  organizationId: string,
+  intent: "connect" | "replace",
+  injected: Partial<GoogleContactsServiceDependencies> = {},
 ): Promise<ServiceResponse<GoogleContactsOAuthStartResponse | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
   const organization = await requireOrganization(deps, userId, organizationId);
   if (!organization) return organizationNotFound();
 
   const current = await deps.getStatus(organizationId);
-  if (current.connectionStatus === "connected") {
+  if (intent === "connect" && current.connectionStatus === "connected") {
     return {
       status: "error",
       message: "Google Contacts is already connected",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+  if (intent === "replace" && current.connectionStatus === "disconnected") {
+    return {
+      status: "error",
+      message: "Google Contacts is not connected",
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
@@ -150,16 +188,29 @@ export const startGoogleContactsOAuth = async (
       userId,
       secret,
     });
-    const authorizationUrl = deps.oauth.buildAuthorizationUrl(state.token);
+    const authorizationUrl = deps.oauth.buildAuthorizationUrl(
+      state.token,
+      intent === "replace" ? { prompt: "select_account consent" } : undefined,
+    );
+    const attemptIntent =
+      intent === "replace"
+        ? "replace"
+        : current.connectionStatus === "reconnect_required"
+          ? "reconnect"
+          : "connect";
     const attempt = await deps.beginAttempt({
       organizationId,
       createdBy: userId,
       oauthAttemptNonceHash: hashGoogleContactsOAuthNonce(claims.nonce),
+      intent: attemptIntent,
     });
     if (!attempt.started) {
       return {
         status: "error",
-        message: "Google Contacts is already connected",
+        message:
+          intent === "replace"
+            ? "Google Contacts replacement could not be started"
+            : "Google Contacts is already connected",
         data: null,
         code: STATUS_CODES.CONFLICT,
       };
@@ -180,7 +231,10 @@ export const startGoogleContactsOAuth = async (
     }
     return {
       status: "success",
-      message: "Google Contacts authorization started",
+      message:
+        intent === "replace"
+          ? "Google Contacts replacement started"
+          : "Google Contacts authorization started",
       data: {
         authorizationUrl,
         expiresAt: state.expiresAt,
@@ -240,7 +294,12 @@ export const completeGoogleContactsOAuth = async (
       oauth: deps.oauth,
       replayStore: deps.replayStore,
     });
-    const existingBinding = await deps.getBinding(organizationId);
+    const lifecycle = await deps.getLifecycle(organizationId);
+    const existingBinding = lifecycle?.credential ?? null;
+    const previousSubject = lifecycle?.googleAccountSubject ?? null;
+    const resetDestination = Boolean(
+      previousSubject && previousSubject !== exchanged.identity.subject,
+    );
     const credential = await deps.vault.store({
       organizationId,
       ownerKey: `google:${exchanged.identity.subject}`,
@@ -253,6 +312,7 @@ export const completeGoogleContactsOAuth = async (
         googleAccountSubject: exchanged.identity.subject,
         credential,
         oauthAttemptNonceHash: verifiedAttemptNonceHash,
+        resetDestination,
       });
       if (!status) {
         await deps.vault.revoke(credential).catch(() => undefined);
@@ -264,7 +324,11 @@ export const completeGoogleContactsOAuth = async (
         };
       }
       if (existingBinding) {
-        await deps.vault.revoke(existingBinding).catch(() => undefined);
+        if (resetDestination) {
+          await revokeLocalAndGoogleAuthorization(deps, existingBinding);
+        } else {
+          await deps.vault.revoke(existingBinding).catch(() => undefined);
+        }
       }
       return {
         status: "success",
@@ -339,5 +403,39 @@ export const startGoogleContactsInitialSync = async (
     data: status,
     code: 202,
   };
+};
+
+export const disconnectGoogleContactsForOrganization = async (
+  userId: string,
+  organizationId: string,
+  injected: Partial<GoogleContactsServiceDependencies> = {},
+): Promise<ServiceResponse<GoogleContactsSyncStatus | null>> => {
+  const deps = { ...defaultDependencies(), ...injected };
+  const organization = await requireOrganization(deps, userId, organizationId);
+  if (!organization) return organizationNotFound();
+
+  const lifecycle = await deps.getLifecycle(organizationId);
+  if (!lifecycle) {
+    return {
+      status: "success",
+      message: "Google Contacts disconnected",
+      data: await deps.getStatus(organizationId),
+      code: STATUS_CODES.SUCCESS,
+    };
+  }
+
+  try {
+    await deps.disconnectConnection(organizationId);
+    await revokeLocalAndGoogleAuthorization(deps, lifecycle.credential);
+    return {
+      status: "success",
+      message: "Google Contacts disconnected",
+      data: await deps.getStatus(organizationId),
+      code: STATUS_CODES.SUCCESS,
+    };
+  } catch (error) {
+    if (configurationUnavailable(error)) return configurationError();
+    throw error;
+  }
 };
 

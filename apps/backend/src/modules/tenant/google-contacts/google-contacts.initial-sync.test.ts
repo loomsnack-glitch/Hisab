@@ -41,13 +41,23 @@ const createDeps = (
   createOAuthStateRecord: mock(async () => {}),
   replayStore: { consume: mock(async () => true) },
   getStatus: mock(async () => connected),
-  getBinding: mock(async () => null),
+  getLifecycle: mock(async () => ({
+    connectionId: "33333333-3333-4333-8333-333333333333",
+    status: "connected",
+    googleAccountSubject: "google-subject-1",
+    credential: null,
+    oauthAttemptIntent: null,
+  })),
   beginAttempt: mock(async () => ({
     started: true,
     status: disconnected,
   })),
   completeConnection: mock(async () => connected),
   revertConnecting: mock(async () => disconnected),
+  disconnectConnection: mock(async () => ({
+    disconnected: false,
+    credential: null,
+  })),
   scheduleInitialCatchUp: mock(async () => pending),
   vault: {
     store: mock(async () => ({
@@ -77,6 +87,9 @@ const createDeps = (
     }),
     getAccountIdentity: mock(async () => {
       throw new Error("must not read Google identity during initial sync");
+    }),
+    revokeAuthorization: mock(async () => {
+      throw new Error("must not revoke Google authorization during initial sync");
     }),
   },
   ...overrides,

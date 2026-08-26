@@ -56,3 +56,25 @@ export const startGoogleContactsInitialSync = async (
         return handleApiError(error);
     }
 };
+
+export const replaceGoogleContactsOAuth = async (
+    organizationId: string,
+): Promise<GoogleContactsOAuthStartApiResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/google-contacts/oauth/replace`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const disconnectGoogleContacts = async (
+    organizationId: string,
+): Promise<GoogleContactsStatusResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/google-contacts/disconnect`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};

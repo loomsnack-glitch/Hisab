@@ -11,6 +11,7 @@ export const GOOGLE_CONTACTS_OAUTH_SCOPES = [
 export const GOOGLE_AUTHORIZATION_ENDPOINT =
   "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 export const GOOGLE_USERINFO_ENDPOINT =
   "https://www.googleapis.com/oauth2/v3/userinfo";
 
@@ -19,13 +20,21 @@ export type GoogleAccountIdentity = {
   email: string;
 };
 
+export type GoogleContactsAuthorizationPrompt = {
+  prompt?: string;
+};
+
 export type GoogleOAuthProvider = {
-  buildAuthorizationUrl: (state: string) => string;
+  buildAuthorizationUrl: (
+    state: string,
+    options?: GoogleContactsAuthorizationPrompt,
+  ) => string;
   exchangeAuthorizationCode: (code: string) => Promise<GoogleContactsCredentialPayload>;
   refreshAccessToken: (
     refreshToken: string,
   ) => Promise<GoogleContactsCredentialPayload>;
   getAccountIdentity: (accessToken: string) => Promise<GoogleAccountIdentity>;
+  revokeAuthorization: (token: string) => Promise<void>;
 };
 
 export class GoogleContactsOAuthError extends Error {
@@ -97,6 +106,7 @@ export const buildGoogleContactsAuthorizationUrl = (
     clientId: requiredConfig("GOOGLE_CONTACTS_CLIENT_ID"),
     redirectUri: requiredConfig("GOOGLE_CONTACTS_OAUTH_REDIRECT_URI"),
   },
+  options?: GoogleContactsAuthorizationPrompt,
 ): string => {
   const normalizedState = state.trim();
   if (!normalizedState || normalizedState.length > 4_096) {
@@ -105,13 +115,20 @@ export const buildGoogleContactsAuthorizationUrl = (
       "Google Contacts OAuth state is invalid",
     );
   }
+  const prompt = options?.prompt?.trim() || "consent";
+  if (prompt.length > 128 || /[\r\n]/.test(prompt)) {
+    throw new GoogleContactsOAuthError(
+      "invalid_provider_token",
+      "Google Contacts OAuth prompt is invalid",
+    );
+  }
   const url = new URL(GOOGLE_AUTHORIZATION_ENDPOINT);
   url.searchParams.set("client_id", config.clientId);
   url.searchParams.set("redirect_uri", config.redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", GOOGLE_CONTACTS_OAUTH_SCOPES.join(" "));
   url.searchParams.set("access_type", "offline");
-  url.searchParams.set("prompt", "consent");
+  url.searchParams.set("prompt", prompt);
   url.searchParams.set("include_granted_scopes", "false");
   url.searchParams.set("state", normalizedState);
   return url.toString();
@@ -242,7 +259,14 @@ const getJson = async (url: string, accessToken: string): Promise<unknown> => {
 export const createGoogleOAuthProvider = (
   fetchNow: () => number = Date.now,
 ): GoogleOAuthProvider => ({
-  buildAuthorizationUrl: (state) => buildGoogleContactsAuthorizationUrl(state),
+  buildAuthorizationUrl: (state, options) => {
+    const config = googleContactsOAuthConfig();
+    return buildGoogleContactsAuthorizationUrl(
+      state,
+      { clientId: config.clientId, redirectUri: config.redirectUri },
+      options,
+    );
+  },
   exchangeAuthorizationCode: async (code) => {
     const config = googleContactsOAuthConfig();
     const authorizationCode = requireToken(code, "authorization code");
@@ -268,6 +292,18 @@ export const createGoogleOAuthProvider = (
   },
   getAccountIdentity: async (accessToken) =>
     parseIdentity(await getJson(GOOGLE_USERINFO_ENDPOINT, requireToken(accessToken, "access token"))),
+  revokeAuthorization: async (token) => {
+    const value = requireToken(token, "refresh token");
+    try {
+      await fetch(GOOGLE_REVOKE_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: value }),
+      });
+    } catch {
+      // Local disconnect and replacement must succeed even if Google is unreachable.
+    }
+  },
 });
 
 export const parseGoogleContactsTokenResponseForTest = parseTokenResponse;

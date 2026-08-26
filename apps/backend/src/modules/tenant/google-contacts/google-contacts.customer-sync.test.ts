@@ -71,6 +71,14 @@ describe("Google Contacts Customer change scheduling", () => {
         connectionStatus: "reconnect_required",
       }),
     ).toEqual({ action: "noop" });
+    expect(
+      decideGoogleContactsCustomerSchedule({
+        existing: null,
+        eligible: true,
+        customerUpdatedAt: T1,
+        connectionStatus: "disconnected",
+      }),
+    ).toEqual({ action: "noop" });
   });
 
   test("rapid eligible changes coalesce onto one pending job with the latest Customer state", () => {

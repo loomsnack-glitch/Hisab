@@ -210,4 +210,45 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
     });
     expect(completed).toHaveLength(1);
   });
+
+  test("skips obsolete work for a disconnected or replaced connection without calling Google", async () => {
+    const createPeople = mock(() => {
+      throw new Error("must not call Google People after disconnect or replacement");
+    });
+    const completed: unknown[] = [];
+    const outcome = await dispatchGoogleContactsOutboxJob(claim, {
+      vault: {
+        store: async () => claim.credential,
+        resolve: async () => {
+          throw new Error("must not resolve credentials for obsolete work");
+        },
+        rotate: async () => claim.credential,
+        revoke: async () => {},
+      },
+      oauth: {
+        refreshAccessToken: async () => {
+          throw new Error("must not refresh credentials for obsolete work");
+        },
+      },
+      createPeople,
+      isConnectionUsable: async () => false,
+      complete: async (...args) => {
+        completed.push(args[0]);
+        return true;
+      },
+      now: () => Date.UTC(2026, 7, 26, 6, 0, 0),
+    });
+
+    expect(outcome).toEqual({ status: "skipped", reason: "connection_inactive" });
+    expect(createPeople).not.toHaveBeenCalled();
+    expect(completed).toEqual([
+      {
+        outboxId: claim.job.outboxId,
+        leaseOwner: claim.leaseOwner,
+        attemptCount: 1,
+        claimedCustomerUpdatedAt: claim.job.customerUpdatedAt,
+        outcome: { status: "skipped", reason: "connection_inactive" },
+      },
+    ]);
+  });
 });

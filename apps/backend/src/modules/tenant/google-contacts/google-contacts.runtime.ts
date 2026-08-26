@@ -3,6 +3,7 @@ import { dispatchGoogleContactsOutboxJob } from "./google-contacts.dispatcher";
 import { databaseGoogleContactsCredentialVault } from "./google-contacts.database-credentials";
 import { createGoogleOAuthProvider } from "./google-contacts.oauth";
 import { createGooglePeopleClient } from "./google-contacts.people-client";
+import { isGoogleContactsConnectionUsable } from "./google-contacts.repository";
 
 const googleContactsOutboxEnabled = (): boolean =>
   process.env.GOOGLE_CONTACTS_OUTBOX_ENABLED?.trim().toLowerCase() === "true";
@@ -23,6 +24,7 @@ const dispatchNextGoogleContactsOutbox = async (): Promise<boolean> => {
       oauth: createGoogleOAuthProvider(),
       createPeople: (accessToken) => createGooglePeopleClient(accessToken),
       complete: completeGoogleContactsOutbox,
+      isConnectionUsable: isGoogleContactsConnectionUsable,
     });
     return true;
   } finally {
@@ -42,6 +44,7 @@ export const processNextGoogleContactsOutboxForWorker = async (
     oauth: createGoogleOAuthProvider(),
     createPeople: (accessToken) => createGooglePeopleClient(accessToken),
     complete: completeGoogleContactsOutbox,
+    isConnectionUsable: isGoogleContactsConnectionUsable,
   });
   return { processed: true };
 };

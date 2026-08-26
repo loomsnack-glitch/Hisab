@@ -16,9 +16,24 @@ const asCount = (value: unknown): number => {
   return Number.isFinite(count) && count >= 0 ? Math.trunc(count) : 0;
 };
 
+export type GoogleContactsOAuthAttemptIntent = "connect" | "reconnect" | "replace";
+
 export type GoogleContactsConnectionAttempt = {
   started: boolean;
   status: GoogleContactsSyncStatus;
+};
+
+export type GoogleContactsConnectionLifecycle = {
+  connectionId: string;
+  status: string;
+  googleAccountSubject: string | null;
+  credential: GoogleContactsCredentialBinding | null;
+  oauthAttemptIntent: GoogleContactsOAuthAttemptIntent | null;
+};
+
+export type GoogleContactsDisconnectResult = {
+  disconnected: boolean;
+  credential: GoogleContactsCredentialBinding | null;
 };
 
 const requireOAuthAttemptNonceHash = (value: string): string => {
@@ -88,24 +103,66 @@ export const getGoogleContactsConnectionStatus = async (
 export const getGoogleContactsCredentialBinding = async (
   organizationId: string,
 ): Promise<GoogleContactsCredentialBinding | null> => {
+  const lifecycle = await getGoogleContactsConnectionLifecycle(organizationId);
+  return lifecycle?.credential ?? null;
+};
+
+export const getGoogleContactsConnectionLifecycle = async (
+  organizationId: string,
+): Promise<GoogleContactsConnectionLifecycle | null> => {
   const [row] = await pg`
-    SELECT credential_reference, credential_key_version
+    SELECT
+      id,
+      status,
+      google_account_subject,
+      credential_reference,
+      credential_key_version,
+      oauth_attempt_intent
     FROM google_contacts_connections
     WHERE organization_id = ${organizationId}
-      AND credential_reference IS NOT NULL
-      AND credential_key_version IS NOT NULL
   `;
   if (!row) return null;
-  return normalizeGoogleContactsCredentialBinding({
-    reference: String(row.credential_reference),
-    keyVersion: String(row.credential_key_version),
-  });
+  const intent = row.oauth_attempt_intent;
+  return {
+    connectionId: String(row.id),
+    status: String(row.status),
+    googleAccountSubject:
+      row.google_account_subject == null ? null : String(row.google_account_subject),
+    credential:
+      row.credential_reference && row.credential_key_version
+        ? normalizeGoogleContactsCredentialBinding({
+            reference: String(row.credential_reference),
+            keyVersion: String(row.credential_key_version),
+          })
+        : null,
+    oauthAttemptIntent:
+      intent === "connect" || intent === "reconnect" || intent === "replace"
+        ? intent
+        : null,
+  };
+};
+
+export const isGoogleContactsConnectionUsable = async (
+  connectionId: string,
+  credential: GoogleContactsCredentialBinding,
+): Promise<boolean> => {
+  const binding = normalizeGoogleContactsCredentialBinding(credential);
+  const [row] = await pg`
+    SELECT 1
+    FROM google_contacts_connections
+    WHERE id = ${connectionId}
+      AND status = 'connected'
+      AND credential_reference = ${binding.reference}
+      AND credential_key_version = ${binding.keyVersion}
+  `;
+  return Boolean(row);
 };
 
 export const beginGoogleContactsConnectionAttempt = async (input: {
   organizationId: string;
   createdBy: string;
   oauthAttemptNonceHash: string;
+  intent: GoogleContactsOAuthAttemptIntent;
 }): Promise<GoogleContactsConnectionAttempt> => {
   const oauthAttemptNonceHash = requireOAuthAttemptNonceHash(input.oauthAttemptNonceHash);
   const [row] = await pg`
@@ -113,20 +170,24 @@ export const beginGoogleContactsConnectionAttempt = async (input: {
       organization_id,
       status,
       created_by,
-      oauth_attempt_nonce_hash
+      oauth_attempt_nonce_hash,
+      oauth_attempt_intent
     ) VALUES (
       ${input.organizationId},
       'connecting',
       ${input.createdBy},
-      ${oauthAttemptNonceHash}
+      ${oauthAttemptNonceHash},
+      ${input.intent}
     )
     ON CONFLICT (organization_id) DO UPDATE
     SET
       status = 'connecting',
       oauth_attempt_nonce_hash = EXCLUDED.oauth_attempt_nonce_hash,
+      oauth_attempt_intent = EXCLUDED.oauth_attempt_intent,
       updated_at = NOW()
     WHERE google_contacts_connections.status <> 'connected'
-    RETURNING status, google_account_email, connected_at
+      OR EXCLUDED.oauth_attempt_intent = 'replace'
+    RETURNING status, google_account_email, connected_at, initial_sync_status, last_successful_sync_at
   `;
   if (!row) {
     return {
@@ -146,26 +207,67 @@ export const completeGoogleContactsConnection = async (input: {
   googleAccountSubject: string;
   credential: GoogleContactsCredentialBinding;
   oauthAttemptNonceHash: string;
+  resetDestination?: boolean;
 }): Promise<GoogleContactsSyncStatus | null> => {
   const binding = normalizeGoogleContactsCredentialBinding(input.credential);
   const oauthAttemptNonceHash = requireOAuthAttemptNonceHash(input.oauthAttemptNonceHash);
-  const [row] = await pg`
-    UPDATE google_contacts_connections
-    SET
-      status = 'connected',
-      google_account_email = ${input.googleAccountEmail},
-      google_account_subject = ${input.googleAccountSubject},
-      credential_reference = ${binding.reference},
-      credential_key_version = ${binding.keyVersion},
-      oauth_attempt_nonce_hash = NULL,
-      connected_at = COALESCE(connected_at, NOW()),
-      updated_at = NOW()
-    WHERE organization_id = ${input.organizationId}
-      AND status = 'connecting'
-      AND oauth_attempt_nonce_hash = ${oauthAttemptNonceHash}
-    RETURNING status, google_account_email, connected_at
-  `;
-  return row ? mapGoogleContactsSyncStatus(row as ConnectionRow) : null;
+  const resetDestination = input.resetDestination === true;
+  return pg.begin(async (tx) => {
+    if (resetDestination) {
+      const [connection] = await tx`
+        SELECT id
+        FROM google_contacts_connections
+        WHERE organization_id = ${input.organizationId}
+          AND status = 'connecting'
+          AND oauth_attempt_nonce_hash = ${oauthAttemptNonceHash}
+        FOR UPDATE
+      `;
+      if (!connection) return null;
+      await tx`
+        DELETE FROM google_contacts_sync_outbox
+        WHERE connection_id = ${connection.id}
+      `;
+      await tx`
+        DELETE FROM google_contacts_customer_links
+        WHERE connection_id = ${connection.id}
+      `;
+    }
+
+    const [row] = await tx`
+      UPDATE google_contacts_connections
+      SET
+        status = 'connected',
+        google_account_email = ${input.googleAccountEmail},
+        google_account_subject = ${input.googleAccountSubject},
+        credential_reference = ${binding.reference},
+        credential_key_version = ${binding.keyVersion},
+        oauth_attempt_nonce_hash = NULL,
+        oauth_attempt_intent = NULL,
+        connected_at = CASE
+          WHEN ${resetDestination} THEN NOW()
+          ELSE COALESCE(connected_at, NOW())
+        END,
+        initial_sync_status = CASE
+          WHEN ${resetDestination} THEN 'not_started'
+          ELSE initial_sync_status
+        END,
+        last_successful_sync_at = CASE
+          WHEN ${resetDestination} THEN NULL
+          ELSE last_successful_sync_at
+        END,
+        updated_at = NOW()
+      WHERE organization_id = ${input.organizationId}
+        AND status = 'connecting'
+        AND oauth_attempt_nonce_hash = ${oauthAttemptNonceHash}
+      RETURNING
+        status,
+        google_account_email,
+        connected_at,
+        initial_sync_status,
+        last_successful_sync_at
+    `;
+    return row ? mapGoogleContactsSyncStatus(row as ConnectionRow) : null;
+  });
 };
 
 export const revertConnectingGoogleContactsConnection = async (input: {
@@ -183,8 +285,22 @@ export const revertConnectingGoogleContactsConnection = async (input: {
   await pg`
     UPDATE google_contacts_connections
     SET
+      status = 'connected',
+      oauth_attempt_nonce_hash = NULL,
+      oauth_attempt_intent = NULL,
+      updated_at = NOW()
+    WHERE organization_id = ${input.organizationId}
+      AND status = 'connecting'
+      AND credential_reference IS NOT NULL
+      AND oauth_attempt_intent = 'replace'
+      AND oauth_attempt_nonce_hash = ${oauthAttemptNonceHash}
+  `;
+  await pg`
+    UPDATE google_contacts_connections
+    SET
       status = 'reconnect_required',
       oauth_attempt_nonce_hash = NULL,
+      oauth_attempt_intent = NULL,
       updated_at = NOW()
     WHERE organization_id = ${input.organizationId}
       AND status = 'connecting'
@@ -192,4 +308,34 @@ export const revertConnectingGoogleContactsConnection = async (input: {
       AND oauth_attempt_nonce_hash = ${oauthAttemptNonceHash}
   `;
   return getGoogleContactsConnectionStatus(input.organizationId);
+};
+
+export const disconnectGoogleContactsConnection = async (
+  organizationId: string,
+): Promise<GoogleContactsDisconnectResult> => {
+  return pg.begin(async (tx) => {
+    const [row] = await tx`
+      SELECT id, credential_reference, credential_key_version
+      FROM google_contacts_connections
+      WHERE organization_id = ${organizationId}
+      FOR UPDATE
+    `;
+    if (!row) {
+      return { disconnected: false, credential: null };
+    }
+    await tx`
+      DELETE FROM google_contacts_connections
+      WHERE id = ${row.id}
+    `;
+    return {
+      disconnected: true,
+      credential:
+        row.credential_reference && row.credential_key_version
+          ? normalizeGoogleContactsCredentialBinding({
+              reference: String(row.credential_reference),
+              keyVersion: String(row.credential_key_version),
+            })
+          : null,
+    };
+  });
 };

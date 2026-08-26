@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildGoogleContactsAuthorizationUrl,
   GOOGLE_CONTACTS_WRITE_SCOPE,
+  GOOGLE_REVOKE_ENDPOINT,
   GOOGLE_USERINFO_EMAIL_SCOPE,
   GoogleContactsOAuthError,
   parseGoogleAccountIdentityForTest,
@@ -32,6 +33,32 @@ describe("Google Contacts OAuth provider", () => {
     expect(url.searchParams.get("scope")).toContain(GOOGLE_USERINFO_EMAIL_SCOPE);
     expect(url.search).not.toContain("client_secret");
     expect(url.search).not.toContain("refresh_token");
+  });
+
+  test("asks Google for account selection during replacement without changing the Contacts write scope", () => {
+    const url = new URL(
+      buildGoogleContactsAuthorizationUrl(
+        "signed-state",
+        {
+          clientId: "google-client-id",
+          redirectUri: "https://admin.ganatri.in/google-contacts/oauth/callback",
+        },
+        { prompt: "select_account consent" },
+      ),
+    );
+
+    expect(url.searchParams.get("prompt")).toBe("select_account consent");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://admin.ganatri.in/google-contacts/oauth/callback",
+    );
+    expect(url.searchParams.get("scope")).toContain(GOOGLE_CONTACTS_WRITE_SCOPE);
+    expect(url.search).not.toContain("client_secret");
+  });
+
+  test("revokes Google authorization at the token endpoint rather than deleting Contacts", () => {
+    expect(GOOGLE_REVOKE_ENDPOINT).toBe("https://oauth2.googleapis.com/revoke");
+    expect(GOOGLE_REVOKE_ENDPOINT).not.toContain("people");
+    expect(GOOGLE_REVOKE_ENDPOINT).not.toContain("deleteContact");
   });
 
   test("parses a token response without exposing it through thrown errors", () => {

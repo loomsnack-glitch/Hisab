@@ -1,5 +1,8 @@
-import type { GoogleContactsCredentialVault } from "./google-contacts.credentials";
-import { GoogleContactsCredentialError } from "./google-contacts.credentials";
+import {
+  GoogleContactsCredentialError,
+  type GoogleContactsCredentialBinding,
+  type GoogleContactsCredentialVault,
+} from "./google-contacts.credentials";
 import {
   GoogleContactsOAuthError,
   type GoogleOAuthProvider,
@@ -18,6 +21,10 @@ export type GoogleContactsDispatcherDependencies = {
   oauth: Pick<GoogleOAuthProvider, "refreshAccessToken">;
   createPeople: (accessToken: string) => GooglePeopleClient;
   complete: typeof completeGoogleContactsOutbox;
+  isConnectionUsable?: (
+    connectionId: string,
+    credential: GoogleContactsCredentialBinding,
+  ) => Promise<boolean>;
   now?: () => number;
 };
 
@@ -43,6 +50,29 @@ export const dispatchGoogleContactsOutboxJob = async (
   claim: GoogleContactsOutboxClaim,
   dependencies: GoogleContactsDispatcherDependencies,
 ): Promise<GoogleContactsSyncOutcome> => {
+  const skipInactive = async (): Promise<GoogleContactsSyncOutcome> => {
+    const outcome: GoogleContactsSyncOutcome = {
+      status: "skipped",
+      reason: "connection_inactive",
+    };
+    await dependencies.complete({
+      outboxId: claim.job.outboxId,
+      leaseOwner: claim.leaseOwner,
+      attemptCount: claim.attemptCount,
+      claimedCustomerUpdatedAt: claim.job.customerUpdatedAt,
+      outcome,
+    });
+    return outcome;
+  };
+
+  if (dependencies.isConnectionUsable) {
+    const usable = await dependencies.isConnectionUsable(
+      claim.job.connectionId,
+      claim.credential,
+    );
+    if (!usable) return skipInactive();
+  }
+
   let people: GooglePeopleClient;
   try {
     const credentials = await dependencies.vault.resolve(claim.credential);
@@ -51,6 +81,13 @@ export const dispatchGoogleContactsOutboxJob = async (
       credentials.expiresAt - TOKEN_REFRESH_SKEW_MS <= now
         ? await dependencies.oauth.refreshAccessToken(credentials.refreshToken)
         : credentials;
+    if (dependencies.isConnectionUsable) {
+      const usable = await dependencies.isConnectionUsable(
+        claim.job.connectionId,
+        claim.credential,
+      );
+      if (!usable) return skipInactive();
+    }
     people = dependencies.createPeople(fresh.accessToken);
   } catch (error) {
     const outcome = authorizationFailureOutcome(error);

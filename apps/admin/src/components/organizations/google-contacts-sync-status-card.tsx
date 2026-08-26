@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Contact } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+    disconnectGoogleContacts,
     getGoogleContactsSyncStatus,
+    replaceGoogleContactsOAuth,
     startGoogleContactsInitialSync,
     startGoogleContactsOAuth,
 } from "@repo/services";
@@ -11,6 +13,16 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Spinner } from "@repo/ui/components/spinner";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@repo/ui/components/alert-dialog";
 import { toast } from "sonner";
 
 import { rememberGoogleContactsOAuthOrganization } from "@/lib/google-contacts-oauth";
@@ -21,9 +33,13 @@ type GoogleContactsSyncStatusCardViewProps = {
     isPending?: boolean;
     isSubmitting?: boolean;
     isSyncing?: boolean;
+    isDisconnecting?: boolean;
+    isReplacing?: boolean;
     errorMessage?: string | null;
     onConnect?: () => void;
     onStartInitialSync?: () => void;
+    onDisconnect?: () => void;
+    onReplace?: () => void;
 };
 
 const statusLabel = (connectionStatus: GoogleContactsSyncStatus["connectionStatus"]) => {
@@ -68,9 +84,13 @@ export const GoogleContactsSyncStatusCardView = ({
     isPending = false,
     isSubmitting = false,
     isSyncing = false,
+    isDisconnecting = false,
+    isReplacing = false,
     errorMessage,
     onConnect,
     onStartInitialSync,
+    onDisconnect,
+    onReplace,
 }: GoogleContactsSyncStatusCardViewProps) => {
     const connectionStatus = status?.connectionStatus ?? "disconnected";
     const canConnect = connectionStatus !== "connected";
@@ -84,6 +104,10 @@ export const GoogleContactsSyncStatusCardView = ({
     );
     const canStartInitialSync =
         connected && status?.initialSyncStatus === "not_started" && Boolean(onStartInitialSync);
+    const canDisconnect =
+        (connected || connectionStatus === "reconnect_required") && Boolean(onDisconnect);
+    const canReplace = connected && Boolean(onReplace);
+    const lifecycleBusy = isSubmitting || isDisconnecting || isReplacing || isSyncing;
 
     return (
         <Card className="border-border/60 bg-card/80">
@@ -138,7 +162,7 @@ export const GoogleContactsSyncStatusCardView = ({
                                 type="button"
                                 className="rounded-xl"
                                 onClick={onConnect}
-                                disabled={isSubmitting}
+                                disabled={lifecycleBusy}
                             >
                                 {isSubmitting ? "Connecting…" : connectLabel(connectionStatus)}
                             </Button>
@@ -148,10 +172,37 @@ export const GoogleContactsSyncStatusCardView = ({
                                 type="button"
                                 className="rounded-xl"
                                 onClick={onStartInitialSync}
-                                disabled={isSyncing}
+                                disabled={lifecycleBusy}
                             >
                                 {isSyncing ? "Scheduling…" : "Run initial sync"}
                             </Button>
+                        ) : null}
+                        {canReplace ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={onReplace}
+                                disabled={lifecycleBusy}
+                            >
+                                {isReplacing ? "Replacing…" : "Replace Google account"}
+                            </Button>
+                        ) : null}
+                        {canDisconnect ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={onDisconnect}
+                                disabled={lifecycleBusy}
+                            >
+                                {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+                            </Button>
+                        ) : null}
+                        {canDisconnect || canReplace ? (
+                            <p className="text-sm text-muted-foreground">
+                                Disconnecting or replacing this account does not delete Google Contacts.
+                            </p>
                         ) : null}
                     </>
                 )}
@@ -175,6 +226,8 @@ const GoogleContactsSyncStatusCard = ({
 }: GoogleContactsSyncStatusCardProps) => {
     const queryClient = useQueryClient();
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+    const [confirmReplace, setConfirmReplace] = useState(false);
     const query = useQuery({
         queryKey: googleContactsKeys.status(organizationId),
         queryFn: () => getGoogleContactsSyncStatus(organizationId),
@@ -218,13 +271,55 @@ const GoogleContactsSyncStatusCard = ({
             toast.error(message);
         },
     });
+    const disconnectMutation = useMutation({
+        mutationFn: async () => {
+            const disconnected = await disconnectGoogleContacts(organizationId);
+            if (disconnected.status !== "success" || !disconnected.data) {
+                throw { message: disconnected.message || "Google Contacts could not be disconnected" };
+            }
+            return disconnected.data;
+        },
+        onSuccess: () => {
+            setConfirmDisconnect(false);
+            setErrorMessage(null);
+            toast.success("Google Contacts disconnected");
+            void queryClient.invalidateQueries({ queryKey: googleContactsKeys.status(organizationId) });
+        },
+        onError: (error: { message?: string }) => {
+            const message = error.message || "Google Contacts could not be disconnected";
+            setErrorMessage(message);
+            toast.error(message);
+        },
+    });
+    const replaceMutation = useMutation({
+        mutationFn: async () => {
+            const started = await replaceGoogleContactsOAuth(organizationId);
+            if (started.status !== "success" || !started.data) {
+                throw { message: started.message || "Google Contacts replacement could not be started" };
+            }
+            return started.data;
+        },
+        onSuccess: (data) => {
+            setConfirmReplace(false);
+            rememberGoogleContactsOAuthOrganization(organizationId);
+            redirectTo(data.authorizationUrl);
+        },
+        onError: (error: { message?: string }) => {
+            const message = error.message || "Google Contacts replacement could not be started";
+            setErrorMessage(message);
+            toast.error(message);
+        },
+    });
 
     return (
+        <>
         <GoogleContactsSyncStatusCardView
             status={status}
             isPending={query.isPending}
             isSubmitting={connectMutation.isPending}
             isSyncing={syncMutation.isPending}
+            isDisconnecting={disconnectMutation.isPending}
+            isReplacing={replaceMutation.isPending}
             errorMessage={errorMessage ?? (query.data?.status === "error" ? query.data.message : null)}
             onConnect={() => {
                 setErrorMessage(null);
@@ -234,7 +329,60 @@ const GoogleContactsSyncStatusCard = ({
                 setErrorMessage(null);
                 syncMutation.mutate();
             }}
+            onDisconnect={() => {
+                setErrorMessage(null);
+                setConfirmDisconnect(true);
+            }}
+            onReplace={() => {
+                setErrorMessage(null);
+                setConfirmReplace(true);
+            }}
         />
+        <AlertDialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Disconnect Google Contacts?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Future synchronization will stop immediately and Ganatri will no longer hold
+                        usable authorization for this account. Existing Google Contacts are left unchanged.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        className="rounded-xl"
+                        isLoading={disconnectMutation.isPending}
+                        loadingText="Disconnecting..."
+                        onClick={() => disconnectMutation.mutate()}
+                    >
+                        Disconnect
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog open={confirmReplace} onOpenChange={setConfirmReplace}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Replace the connected Google account?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        The current Google account is left unchanged and its Contacts are not deleted.
+                        The replacement account starts as a fresh destination and needs an initial catch-up sync.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        className="rounded-xl"
+                        isLoading={replaceMutation.isPending}
+                        loadingText="Replacing..."
+                        onClick={() => replaceMutation.mutate()}
+                    >
+                        Continue with Google
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+        </>
     );
 };
 

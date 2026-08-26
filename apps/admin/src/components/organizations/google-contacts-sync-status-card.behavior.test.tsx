@@ -32,13 +32,19 @@ const connectedStatus: GoogleContactsSyncStatus = {
 
 const renderCard = (
     status: GoogleContactsSyncStatus | null,
-    extras: { onStartInitialSync?: () => void } = {},
+    extras: {
+        onStartInitialSync?: () => void;
+        onDisconnect?: () => void;
+        onReplace?: () => void;
+    } = {},
 ) =>
     renderToStaticMarkup(
         <GoogleContactsSyncStatusCardView
             status={status}
             onConnect={() => undefined}
             onStartInitialSync={extras.onStartInitialSync}
+            onDisconnect={extras.onDisconnect}
+            onReplace={extras.onReplace}
         />,
     );
 
@@ -59,28 +65,43 @@ describe("Google Contacts Sync Status card", () => {
             ...disconnectedStatus,
             connectionStatus: "connecting",
         });
-        const connected = renderCard(connectedStatus);
+        const connected = renderCard(connectedStatus, {
+            onDisconnect: () => undefined,
+            onReplace: () => undefined,
+        });
         const reconnectRequired = renderCard({
             ...connectedStatus,
             connectionStatus: "reconnect_required",
-        });
+        }, { onDisconnect: () => undefined });
 
         expect(connecting).toContain("Connecting");
         expect(connecting).toContain("Continue with Google");
         expect(connected).toContain("Connected");
         expect(connected).toContain("owner@example.com");
         expect(connected).not.toContain("Connect Google");
-        expect(connected).not.toContain("Disconnect");
+        expect(connected).toContain("Disconnect");
+        expect(connected).toContain("Replace Google account");
+        expect(connected).toContain("does not delete Google Contacts");
         expect(reconnectRequired).toContain("Reconnect required");
         expect(reconnectRequired).toContain("Reconnect Google");
         expect(reconnectRequired).toContain("owner@example.com");
+        expect(reconnectRequired).toContain("Disconnect");
+        expect(reconnectRequired).not.toContain("Replace Google account");
     });
 
     test("lets a connected Organization run and observe initial catch-up", () => {
-        const ready = renderCard(connectedStatus, { onStartInitialSync: () => undefined });
+        const ready = renderCard(connectedStatus, {
+            onStartInitialSync: () => undefined,
+            onDisconnect: () => undefined,
+            onReplace: () => undefined,
+        });
         const pending = renderCard(
             { ...connectedStatus, initialSyncStatus: "pending", pendingCount: 4 },
-            { onStartInitialSync: () => undefined },
+            {
+                onStartInitialSync: () => undefined,
+                onDisconnect: () => undefined,
+                onReplace: () => undefined,
+            },
         );
         const completed = renderCard(
             {
@@ -91,7 +112,11 @@ describe("Google Contacts Sync Status card", () => {
                 errorCount: 1,
                 conflictCount: 2,
             },
-            { onStartInitialSync: () => undefined },
+            {
+                onStartInitialSync: () => undefined,
+                onDisconnect: () => undefined,
+                onReplace: () => undefined,
+            },
         );
 
         expect(ready).toContain("Run initial sync");
@@ -103,7 +128,9 @@ describe("Google Contacts Sync Status card", () => {
         expect(completed).toContain("2026-08-26T07:15:00.000Z");
         expect(completed).toContain("Pending 0, errors 1, conflicts 2");
         expect(completed).not.toContain("Run initial sync");
-        expect(completed).not.toContain("Disconnect");
+        expect(completed).toContain("Disconnect");
+        expect(completed).toContain("Replace Google account");
+        expect(completed).toContain("does not delete Google Contacts");
     });
 
     test("distinguishes retryable, permanent, reconnect-required, and conflict outcomes", () => {
@@ -156,6 +183,19 @@ describe("Google Contacts Sync Status card", () => {
         expect(markup).not.toContain("access_token");
         expect(markup).not.toContain("client_secret");
         expect(markup).not.toContain("db-secret");
+    });
+
+    test("offers disconnect and replacement without any Google Contact deletion action", () => {
+        const markup = renderCard(connectedStatus, {
+            onDisconnect: () => undefined,
+            onReplace: () => undefined,
+        });
+
+        expect(markup).toContain("Disconnect");
+        expect(markup).toContain("Replace Google account");
+        expect(markup).toContain("does not delete Google Contacts");
+        expect(markup.toLowerCase()).not.toContain("delete contact");
+        expect(markup).not.toContain("refresh_token");
     });
 });
 

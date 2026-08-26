@@ -64,13 +64,39 @@ const startInitialSync = mock(async () => ({
   code: 202 as const,
 }));
 
+const replace = mock(async () => ({
+  status: "success" as const,
+  message: "Google Contacts replacement started",
+  data: {
+    authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?prompt=select_account+consent&state=signed-state",
+    expiresAt: "2026-08-26T06:10:00.000Z",
+  },
+  code: 201 as const,
+}));
+
+const disconnect = mock(async () => ({
+  status: "success" as const,
+  message: "Google Contacts disconnected",
+  data: {
+    connectionStatus: "disconnected" as const,
+    googleAccountEmail: null,
+    connectedAt: null,
+    initialSyncStatus: "not_started" as const,
+    lastSuccessfulSyncAt: null,
+    pendingCount: 0,
+    errorCount: 0,
+    conflictCount: 0,
+  },
+  code: 200 as const,
+}));
+
 const authenticatedUser: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
   context.set("authUser", { id: USER_ID } as AppVariables["authUser"]);
   await next();
 };
 
 const router = createGoogleContactsRoutes(
-  { getStatus, start, complete, startInitialSync },
+  { getStatus, start, complete, startInitialSync, replace, disconnect },
   authenticatedUser,
 );
 const app = new Hono<{ Variables: AppVariables }>();
@@ -82,6 +108,8 @@ describe("Google Contacts connection routes", () => {
     start.mockClear();
     complete.mockClear();
     startInitialSync.mockClear();
+    replace.mockClear();
+    disconnect.mockClear();
   });
 
   test("reads status for an authorized Organization", async () => {
@@ -170,6 +198,37 @@ describe("Google Contacts connection routes", () => {
     expect(body).toMatchObject({
       status: "success",
       data: { initialSyncStatus: "pending", pendingCount: 3 },
+    });
+    expect(JSON.stringify(body)).not.toContain("refresh_token");
+    expect(JSON.stringify(body)).not.toContain("access_token");
+  });
+
+  test("starts account replacement for an authorized Organization without exposing credentials", async () => {
+    const response = await app.request(
+      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/replace`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(201);
+    expect(replace).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toContain("accounts.google.com");
+    expect(JSON.stringify(body)).not.toContain("refresh_token");
+    expect(JSON.stringify(body)).not.toContain("client_secret");
+  });
+
+  test("disconnects Google Contacts for an authorized Organization without exposing credentials", async () => {
+    const response = await app.request(
+      `/organizations/${ORGANIZATION_ID}/google-contacts/disconnect`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(disconnect).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      status: "success",
+      data: { connectionStatus: "disconnected" },
     });
     expect(JSON.stringify(body)).not.toContain("refresh_token");
     expect(JSON.stringify(body)).not.toContain("access_token");

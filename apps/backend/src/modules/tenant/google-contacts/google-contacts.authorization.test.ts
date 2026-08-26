@@ -66,6 +66,32 @@ const startInitialSync = mock(async () => ({
   code: 202 as const,
 }));
 
+const replace = mock(async () => ({
+  status: "success" as const,
+  message: "Google Contacts replacement started",
+  data: {
+    authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=signed-state",
+    expiresAt: "2026-08-26T06:10:00.000Z",
+  },
+  code: 201 as const,
+}));
+
+const disconnect = mock(async () => ({
+  status: "success" as const,
+  message: "Google Contacts disconnected",
+  data: {
+    connectionStatus: "disconnected" as const,
+    googleAccountEmail: null,
+    connectedAt: null,
+    initialSyncStatus: "not_started" as const,
+    lastSuccessfulSyncAt: null,
+    pendingCount: 0,
+    errorCount: 0,
+    conflictCount: 0,
+  },
+  code: 200 as const,
+}));
+
 const rejectUnauthenticatedUser: MiddlewareHandler<{ Variables: AppVariables }> = async (context) =>
   context.json({ status: "error", message: "Unauthorized" }, 401);
 
@@ -73,7 +99,7 @@ const app = new Hono<{ Variables: AppVariables }>();
 app.route(
   "/organizations",
   createGoogleContactsRoutes(
-    { getStatus, start, complete, startInitialSync },
+    { getStatus, start, complete, startInitialSync, replace, disconnect },
     rejectUnauthenticatedUser,
   ),
 );
@@ -99,15 +125,27 @@ describe("Google Contacts connection authorization", () => {
       `/organizations/${ORGANIZATION_ID}/google-contacts/sync`,
       { method: "POST" },
     );
+    const replaceResponse = await app.request(
+      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/replace`,
+      { method: "POST" },
+    );
+    const disconnectResponse = await app.request(
+      `/organizations/${ORGANIZATION_ID}/google-contacts/disconnect`,
+      { method: "POST" },
+    );
 
     expect(statusResponse.status).toBe(401);
     expect(startResponse.status).toBe(401);
     expect(completeResponse.status).toBe(401);
     expect(syncResponse.status).toBe(401);
+    expect(replaceResponse.status).toBe(401);
+    expect(disconnectResponse.status).toBe(401);
     expect(getStatus).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
     expect(complete).not.toHaveBeenCalled();
     expect(startInitialSync).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(disconnect).not.toHaveBeenCalled();
   });
 
   test("does not register Google Contacts management on Store Device POS routes", () => {
@@ -116,5 +154,7 @@ describe("Google Contacts connection authorization", () => {
     expect(posRoutes).not.toContain("google-contacts");
     expect(posRoutes).not.toContain("Google Contacts");
     expect(posRoutes).not.toContain("google-contacts/sync");
+    expect(posRoutes).not.toContain("google-contacts/disconnect");
+    expect(posRoutes).not.toContain("google-contacts/oauth/replace");
   });
 });

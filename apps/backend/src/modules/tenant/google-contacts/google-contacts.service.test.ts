@@ -72,13 +72,17 @@ const createDeps = (
   createOAuthStateRecord: mock(async () => {}),
   replayStore: { consume: mock(async () => true) },
   getStatus: mock(async () => disconnected),
-  getBinding: mock(async () => null),
+  getLifecycle: mock(async () => null),
   beginAttempt: mock(async () => ({
     started: true,
     status: connecting,
   })),
   completeConnection: mock(async () => connected),
   revertConnecting: mock(async () => disconnected),
+  disconnectConnection: mock(async () => ({
+    disconnected: false,
+    credential: null,
+  })),
   scheduleInitialCatchUp: mock(async () => connected),
   vault: {
     store: mock(async () => ({
@@ -101,6 +105,7 @@ const createDeps = (
       subject: "google-subject-1",
       email: "owner@example.com",
     })),
+    revokeAuthorization: mock(async () => {}),
   },
   ...overrides,
 });
@@ -267,6 +272,7 @@ describe("Google Contacts connection service", () => {
           subject: "google-subject-1",
           email: "owner@example.com",
         })),
+        revokeAuthorization: mock(async () => {}),
       },
     });
 
@@ -383,7 +389,13 @@ describe("Google Contacts connection service", () => {
     };
     const deps = createDeps({
       getStatus: mock(async () => connecting),
-      getBinding: mock(async () => activeBinding),
+      getLifecycle: mock(async () => ({
+        connectionId: "33333333-3333-4333-8333-333333333333",
+        status: "connecting",
+        googleAccountSubject: "google-subject-1",
+        credential: activeBinding,
+        oauthAttemptIntent: "reconnect" as const,
+      })),
       completeConnection: mock(async () => null),
       vault: {
         store: mock(async () => candidateBinding),

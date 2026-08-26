@@ -14,7 +14,9 @@ import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import {
   completeGoogleContactsOAuth,
+  disconnectGoogleContactsForOrganization,
   getGoogleContactsSyncStatusForOrganization,
+  startGoogleContactsAccountReplacement,
   startGoogleContactsInitialSync,
   startGoogleContactsOAuth,
 } from "./google-contacts.service";
@@ -61,6 +63,14 @@ type GoogleContactsOperations = {
     userId: string,
     organizationId: string,
   ) => Promise<ServiceResponse<GoogleContactsSyncStatus | null>>;
+  replace: (
+    userId: string,
+    organizationId: string,
+  ) => Promise<ServiceResponse<GoogleContactsOAuthStartResponse | null>>;
+  disconnect: (
+    userId: string,
+    organizationId: string,
+  ) => Promise<ServiceResponse<GoogleContactsSyncStatus | null>>;
 };
 
 export const createGoogleContactsRoutes = (
@@ -69,6 +79,8 @@ export const createGoogleContactsRoutes = (
     start: startGoogleContactsOAuth,
     complete: completeGoogleContactsOAuth,
     startInitialSync: startGoogleContactsInitialSync,
+    replace: startGoogleContactsAccountReplacement,
+    disconnect: disconnectGoogleContactsForOrganization,
   },
   authenticate: MiddlewareHandler<{ Variables: AppVariables }> = authMiddleware,
 ) => {
@@ -137,6 +149,36 @@ export const createGoogleContactsRoutes = (
       return handleServiceResponse(
         c,
         await operations.startInitialSync(c.get("authUser").id, organizationId),
+      );
+    } catch (error) {
+      return unexpectedError(c, error);
+    }
+  });
+
+  router.post("/:organizationId/google-contacts/oauth/replace", async (c) => {
+    try {
+      const organizationId = c.req.param("organizationId");
+      if (!uuidSchema.safeParse(organizationId).success) {
+        return c.json(invalidOrganizationId(), STATUS_CODES.BAD_REQUEST);
+      }
+      return handleServiceResponse(
+        c,
+        await operations.replace(c.get("authUser").id, organizationId),
+      );
+    } catch (error) {
+      return unexpectedError(c, error);
+    }
+  });
+
+  router.post("/:organizationId/google-contacts/disconnect", async (c) => {
+    try {
+      const organizationId = c.req.param("organizationId");
+      if (!uuidSchema.safeParse(organizationId).success) {
+        return c.json(invalidOrganizationId(), STATUS_CODES.BAD_REQUEST);
+      }
+      return handleServiceResponse(
+        c,
+        await operations.disconnect(c.get("authUser").id, organizationId),
       );
     } catch (error) {
       return unexpectedError(c, error);

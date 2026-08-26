@@ -185,12 +185,17 @@ describe("Google Contacts worker", () => {
   test("skips work when the Google Contacts Connection is no longer connected", async () => {
     const people = createPeople();
 
-    const outcome = await processGoogleContactsSyncJob(
+    const reconnectRequired = await processGoogleContactsSyncJob(
       { ...job, connectionStatus: "reconnect_required" },
       people,
     );
+    const disconnected = await processGoogleContactsSyncJob(
+      { ...job, connectionStatus: "disconnected" },
+      people,
+    );
 
-    expect(outcome).toEqual({ status: "skipped", reason: "connection_inactive" });
+    expect(reconnectRequired).toEqual({ status: "skipped", reason: "connection_inactive" });
+    expect(disconnected).toEqual({ status: "skipped", reason: "connection_inactive" });
     expect(people.searchContacts).not.toHaveBeenCalled();
     expect(people.deleteContact).not.toHaveBeenCalled();
   });
