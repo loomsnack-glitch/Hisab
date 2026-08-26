@@ -896,11 +896,12 @@ const queueDueReminderForStore = async (
     if (account.provider === "cloud_api") {
         if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
         if (customMessage?.trim()) return { status: "error", message: "Cloud WhatsApp reminders must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
-        if (!defaultTemplate || !defaultTemplate.isActive) return { status: "error", message: "No active due-reminder template is available for this Store", data: null, code: STATUS_CODES.CONFLICT };
         const scope = await getCloudAccountScope(organizationId, account.id);
         if (!scope?.businessAccountId) return { status: "error", message: "Cloud WhatsApp account is not ready for template sends", data: null, code: STATUS_CODES.CONFLICT };
-        const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "due_reminder", defaultTemplate.id);
+        const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "due_reminder");
         if (!binding) return { status: "error", message: "No approved Cloud due-reminder template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+        const localTemplateBody = binding.binding.localTemplateBody ?? defaultTemplate?.body;
+        if (!localTemplateBody) return { status: "error", message: "The approved Cloud due-reminder template has no local variable mapping", data: null, code: STATUS_CODES.CONFLICT };
         const hasDynamicInvoiceButton = binding.asset.components.some(component => {
             if (!component || typeof component !== "object" || Array.isArray(component)) return false;
             const value = component as Record<string, unknown>;
@@ -949,7 +950,7 @@ const queueDueReminderForStore = async (
                 await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
                 documentLink = await storage.generateSignedUrl(bucket, attachmentStorageKey, cloudMediaUrlTtlSeconds());
             }
-            const componentParameters = buildDueReminderCloudComponents(binding.asset.components, defaultTemplate.body, values, binding.binding.variableMapping, documentLink);
+            const componentParameters = buildDueReminderCloudComponents(binding.asset.components, localTemplateBody, values, binding.binding.variableMapping, documentLink);
             const window = new Date().toISOString().slice(0, 10);
             const fingerprint = createHash("sha256").update(JSON.stringify({
                 organizationId,

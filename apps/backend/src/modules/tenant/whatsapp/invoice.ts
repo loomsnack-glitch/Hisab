@@ -47,7 +47,8 @@ const queueCloudInvoiceForStore = async (
   organization: { name: string; tagline: string | null },
   accountId: string,
   customMessage: string | undefined,
-  selectedTemplate: WhatsAppMessageTemplateDTO,
+  selectedTemplate: WhatsAppMessageTemplateDTO | null,
+  templateId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   if (customMessage?.trim()) {
     return { status: "error", message: "Cloud WhatsApp bills must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
@@ -61,10 +62,14 @@ const queueCloudInvoiceForStore = async (
     storeId,
     scope.businessAccountId,
     "bill",
-    selectedTemplate.id,
+    templateId ? selectedTemplate?.id : undefined,
   );
   if (!binding) {
     return { status: "error", message: "No approved Cloud bill template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  const localTemplateBody = binding.binding.localTemplateBody ?? selectedTemplate?.body;
+  if (!localTemplateBody) {
+    return { status: "error", message: "The approved Cloud bill template has no local variable mapping", data: null, code: STATUS_CODES.CONFLICT };
   }
   const requiresDocument = cloudInvoiceTemplateHasDocumentHeader(binding.asset.components);
   const bucket = requiresDocument ? privateBucket() : "";
@@ -96,7 +101,7 @@ const queueCloudInvoiceForStore = async (
     }
     const componentParameters = buildInvoiceCloudComponents(
       binding.asset.components,
-      selectedTemplate.body,
+      localTemplateBody,
       getInvoiceTemplateValues(sale, {
         organizationName: organization.name,
         storeName: store.name,
@@ -276,7 +281,7 @@ export const queueInvoiceForStore = async (
     }
     if (account.provider === "cloud_api") {
       if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
-      if (!selectedTemplate || !selectedTemplate.isActive) {
+      if (templateId && (!selectedTemplate || !selectedTemplate.isActive)) {
         return {
           status: "error",
           message: "No active bill template is available for this Store",
@@ -293,7 +298,8 @@ export const queueInvoiceForStore = async (
         { name: organization.name, tagline: organization.tagline ?? null },
         account.id,
         customMessage,
-        selectedTemplate!,
+        selectedTemplate,
+        templateId,
       );
     }
     if (!bucket) {

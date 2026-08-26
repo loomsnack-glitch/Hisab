@@ -84,8 +84,14 @@ import {
   Search,
   Send,
   ShieldAlert,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@repo/ui/components/tooltip";
 
 export type WhatsAppCloudAccountOption = {
   id: string;
@@ -815,6 +821,47 @@ const WhatsAppCloudTemplateManager = ({
     ).length;
     return `${binding.isActive ? "Active" : "Archived"} revision · ${mappedVariableCount} variables mapped`;
   };
+  const templateName = (card: (typeof cards)[number], className: string) => {
+    const binding = card.kind
+      ? bindingForCloudTemplate(card.cloudTemplateId, card.kind, card.language)
+      : undefined;
+    const kindLabel = card.kind
+      ? (kinds.find((item) => item.value === card.kind)?.label ?? "message")
+      : card.category === "marketing"
+        ? "marketing"
+        : "utility";
+
+    return (
+      <div className="flex min-w-0 items-center gap-1.5">
+        {binding?.isActive && binding.isDefault ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  className="inline-flex shrink-0"
+                  aria-label={`Default ${kindLabel} template for this Store`}
+                />
+              }
+            >
+              <Star
+                className="size-3.5 fill-amber-400 text-amber-500"
+                aria-hidden="true"
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              This is the default {kindLabel} template for this Store.
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger render={<span className={className} />}>
+            {card.name}
+          </TooltipTrigger>
+          <TooltipContent>{card.name}</TooltipContent>
+        </Tooltip>
+      </div>
+    );
+  };
   const templateActions = (card: (typeof cards)[number]) => {
     const binding = card.kind
       ? bindingForCloudTemplate(card.cloudTemplateId, card.kind, card.language)
@@ -826,14 +873,6 @@ const WhatsAppCloudTemplateManager = ({
 
     return (
       <div className="flex items-center justify-end gap-2">
-        {binding?.isActive && binding.isDefault ? (
-          <Badge
-            variant="secondary"
-            className="hidden rounded-full text-[10px] sm:inline-flex"
-          >
-            Current default
-          </Badge>
-        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -1245,9 +1284,10 @@ const WhatsAppCloudTemplateManager = ({
                   {filteredCards.map((card) => (
                     <TableRow key={card.id}>
                       <TableCell>
-                        <p className="max-w-52 truncate font-medium">
-                          {card.name}
-                        </p>
+                        {templateName(
+                          card,
+                          "block max-w-52 truncate font-medium",
+                        )}
                         {card.errorCode ? (
                           <p className="mt-1 text-[11px] text-destructive">
                             Meta code: {card.errorCode}
@@ -1302,7 +1342,7 @@ const WhatsAppCloudTemplateManager = ({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{card.name}</p>
+                      {templateName(card, "block truncate font-medium")}
                       <p className="mt-1 text-xs text-muted-foreground">
                         {card.kind
                           ? kinds.find((item) => item.value === card.kind)

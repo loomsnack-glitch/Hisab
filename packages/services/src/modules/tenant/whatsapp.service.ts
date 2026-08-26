@@ -35,7 +35,6 @@ import type {
     WhatsAppCustomerConsentEventDTO,
     WhatsAppRecordCustomerConsentJSON,
     WhatsAppSetCustomerSuppressionJSON,
-    WhatsAppCloudQuotaPolicy,
     WhatsAppCloudSafety,
     WhatsAppCloudOutboxOperationsResponseDTO,
     WhatsAppCloudOutboxActionResponseDTO,
