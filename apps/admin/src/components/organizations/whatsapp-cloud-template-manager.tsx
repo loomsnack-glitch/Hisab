@@ -924,7 +924,7 @@ const WhatsAppCloudTemplateManager = ({
     );
   return (
     <div className="w-full space-y-5">
-      <div className="flex flex-col gap-3 border-b border-border/60 pb-5 sm:flex-row sm:items-end sm:justify-end">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-end">
         {accounts.length > 1 ? (
           <div className="w-full space-y-1.5 sm:w-64 lg:w-72">
             <span className="text-xs font-medium text-muted-foreground">
@@ -937,7 +937,7 @@ const WhatsAppCloudTemplateManager = ({
               }}
             >
               <SelectTrigger
-                className="w-full rounded-xl"
+                className="h-9 w-full rounded-xl"
                 aria-label="Cloud account"
               >
                 <SelectValue>{account?.phoneNumber}</SelectValue>
@@ -1133,17 +1133,20 @@ const WhatsAppCloudTemplateManager = ({
               </p>
             </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_10rem_10rem_10rem]">
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search templates"
-                  aria-label="Search templates"
-                  className="rounded-xl pl-9"
-                />
-              </div>
-              <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              <label className="space-y-2 text-xs font-medium text-muted-foreground">
+                <span>Search</span>
+                <div className="relative min-w-0">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search templates"
+                    aria-label="Search templates"
+                    className="rounded-xl pl-9"
+                  />
+                </div>
+              </label>
+              <label className="space-y-2 text-xs font-medium text-muted-foreground">
                 <span>Message type</span>
                 <Select
                   value={kindFilter}
@@ -1152,7 +1155,7 @@ const WhatsAppCloudTemplateManager = ({
                   }
                 >
                   <SelectTrigger
-                    className="w-full rounded-xl"
+                    className="h-9 w-full rounded-xl"
                     aria-label="Filter by message type"
                   >
                     <SelectValue>{kindFilterLabel}</SelectValue>
@@ -1167,14 +1170,14 @@ const WhatsAppCloudTemplateManager = ({
                   </SelectContent>
                 </Select>
               </label>
-              <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              <label className="space-y-2 text-xs font-medium text-muted-foreground">
                 <span>Language</span>
                 <Select
                   value={languageFilter}
                   onValueChange={(value) => setLanguageFilter(value ?? "all")}
                 >
                   <SelectTrigger
-                    className="w-full rounded-xl"
+                    className="h-9 w-full rounded-xl"
                     aria-label="Filter by language"
                   >
                     <SelectValue>{languageFilterLabel}</SelectValue>
@@ -1189,14 +1192,14 @@ const WhatsAppCloudTemplateManager = ({
                   </SelectContent>
                 </Select>
               </label>
-              <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              <label className="space-y-2 text-xs font-medium text-muted-foreground">
                 <span>Meta status</span>
                 <Select
                   value={statusFilter}
                   onValueChange={(value) => setStatusFilter(value ?? "all")}
                 >
                   <SelectTrigger
-                    className="w-full rounded-xl"
+                    className="h-9 w-full rounded-xl"
                     aria-label="Filter by Meta status"
                   >
                     <SelectValue>{statusFilterLabel}</SelectValue>
