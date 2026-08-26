@@ -20,6 +20,7 @@ const disconnected = {
   initialSyncStatus: "not_started" as const,
   lastSuccessfulSyncAt: null,
   pendingCount: 0,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -31,6 +32,7 @@ const connected = {
   initialSyncStatus: "completed" as const,
   lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
   pendingCount: 2,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -47,6 +49,7 @@ const connecting = {
   initialSyncStatus: "completed" as const,
   lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
   pendingCount: 2,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -58,6 +61,7 @@ const replacementConnected = {
   initialSyncStatus: "not_started" as const,
   lastSuccessfulSyncAt: null,
   pendingCount: 0,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -75,9 +79,7 @@ const activeBinding = {
   keyVersion: "v1",
 };
 
-const createDeps = (
-  overrides: Partial<GoogleContactsServiceDependencies> = {},
-): GoogleContactsServiceDependencies => ({
+const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}): GoogleContactsServiceDependencies => ({
   getOrganizationByIdForUser: mock(async () => ({ id: ORGANIZATION_ID })),
   createOAuthStateRecord: mock(async () => {}),
   replayStore: { consume: mock(async () => true) },
@@ -133,8 +135,7 @@ describe("Google Contacts connection lifecycle", () => {
     process.env.GOOGLE_CONTACTS_OAUTH_STATE_SECRET = SECRET;
     process.env.GOOGLE_CONTACTS_CLIENT_ID = "google-client-id";
     process.env.GOOGLE_CONTACTS_CLIENT_SECRET = "google-client-secret";
-    process.env.GOOGLE_CONTACTS_OAUTH_REDIRECT_URI =
-      "http://localhost:5173/google-contacts/oauth/callback";
+    process.env.GOOGLE_CONTACTS_OAUTH_REDIRECT_URI = "http://localhost:5173/google-contacts/oauth/callback";
   });
 
   test("reconnects a reconnect-required connection without resetting the destination", async () => {
@@ -143,9 +144,7 @@ describe("Google Contacts connection lifecycle", () => {
     });
     const started = await startGoogleContactsOAuth(USER_ID, ORGANIZATION_ID, startDeps);
     expect(started.status).toBe("success");
-    expect(startDeps.beginAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ intent: "reconnect" }),
-    );
+    expect(startDeps.beginAttempt).toHaveBeenCalledWith(expect.objectContaining({ intent: "reconnect" }));
 
     const state = createGoogleContactsOAuthState({
       organizationId: ORGANIZATION_ID,
@@ -190,11 +189,7 @@ describe("Google Contacts connection lifecycle", () => {
       getStatus: mock(async () => disconnected),
     });
 
-    const response = await disconnectGoogleContactsForOrganization(
-      USER_ID,
-      ORGANIZATION_ID,
-      deps,
-    );
+    const response = await disconnectGoogleContactsForOrganization(USER_ID, ORGANIZATION_ID, deps);
 
     expect(response).toMatchObject({
       status: "success",
@@ -203,9 +198,7 @@ describe("Google Contacts connection lifecycle", () => {
     });
     expect(deps.disconnectConnection).toHaveBeenCalledWith(ORGANIZATION_ID);
     expect(deps.vault.revoke).toHaveBeenCalledWith(activeBinding);
-    expect(deps.oauth.revokeAuthorization).toHaveBeenCalledWith(
-      "refresh-token-must-not-escape",
-    );
+    expect(deps.oauth.revokeAuthorization).toHaveBeenCalledWith("refresh-token-must-not-escape");
     expect(deps.scheduleInitialCatchUp).not.toHaveBeenCalled();
     expect(JSON.stringify(response)).not.toContain("refresh-token-must-not-escape");
     expect(JSON.stringify(response)).not.toContain("access-token-must-not-escape");
@@ -216,11 +209,7 @@ describe("Google Contacts connection lifecycle", () => {
       getOrganizationByIdForUser: mock(async () => null),
     });
 
-    const response = await disconnectGoogleContactsForOrganization(
-      USER_ID,
-      ORGANIZATION_ID,
-      deps,
-    );
+    const response = await disconnectGoogleContactsForOrganization(USER_ID, ORGANIZATION_ID, deps);
 
     expect(response).toMatchObject({ status: "error", code: 404, data: null });
     expect(deps.disconnectConnection).not.toHaveBeenCalled();
@@ -229,11 +218,7 @@ describe("Google Contacts connection lifecycle", () => {
 
   test("starts replacement OAuth for a connected account and asks Google for account selection", async () => {
     const deps = createDeps();
-    const response = await startGoogleContactsAccountReplacement(
-      USER_ID,
-      ORGANIZATION_ID,
-      deps,
-    );
+    const response = await startGoogleContactsAccountReplacement(USER_ID, ORGANIZATION_ID, deps);
 
     expect(response).toMatchObject({ status: "success", code: 201 });
     expect(response.data?.authorizationUrl).toContain("accounts.google.com");
@@ -253,11 +238,7 @@ describe("Google Contacts connection lifecycle", () => {
       getStatus: mock(async () => disconnected),
     });
 
-    const response = await startGoogleContactsAccountReplacement(
-      USER_ID,
-      ORGANIZATION_ID,
-      deps,
-    );
+    const response = await startGoogleContactsAccountReplacement(USER_ID, ORGANIZATION_ID, deps);
 
     expect(response).toMatchObject({
       status: "error",
@@ -328,9 +309,7 @@ describe("Google Contacts connection lifecycle", () => {
       }),
     );
     expect(deps.vault.revoke).toHaveBeenCalledWith(activeBinding);
-    expect(deps.oauth.revokeAuthorization).toHaveBeenCalledWith(
-      "refresh-token-must-not-escape",
-    );
+    expect(deps.oauth.revokeAuthorization).toHaveBeenCalledWith("refresh-token-must-not-escape");
     expect(response.data?.initialSyncStatus).toBe("not_started");
     expect(JSON.stringify(response)).not.toContain("refresh-token-must-not-escape");
     expect(JSON.stringify(response)).not.toContain("google-subject-replacement");

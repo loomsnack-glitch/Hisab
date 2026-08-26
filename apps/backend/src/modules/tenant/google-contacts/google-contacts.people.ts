@@ -31,3 +31,10 @@ export type GooglePeopleClient = {
   createContact: (input: { name: string; phone: string }) => Promise<GoogleContactPerson>;
   updateContact: (person: GoogleContactPerson) => Promise<GoogleContactPerson>;
 };
+
+export class GoogleContactsConnectionInactiveError extends Error {
+  constructor() {
+    super("Google Contacts Connection is no longer active");
+    this.name = "GoogleContactsConnectionInactiveError";
+  }
+}

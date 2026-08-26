@@ -3,10 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { GoogleContactsSyncStatus } from "@repo/types";
 
 import { GoogleContactsSyncStatusCardView } from "@/components/organizations/google-contacts-sync-status-card";
-import {
-    googleContactsOAuthResultFromSearch,
-    settleGoogleContactsOAuthCallback,
-} from "@/lib/google-contacts-oauth";
+import { googleContactsOAuthResultFromSearch, settleGoogleContactsOAuthCallback } from "@/lib/google-contacts-oauth";
 
 const disconnectedStatus: GoogleContactsSyncStatus = {
     connectionStatus: "disconnected",
@@ -15,6 +12,7 @@ const disconnectedStatus: GoogleContactsSyncStatus = {
     initialSyncStatus: "not_started",
     lastSuccessfulSyncAt: null,
     pendingCount: 0,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
 };
@@ -26,6 +24,7 @@ const connectedStatus: GoogleContactsSyncStatus = {
     initialSyncStatus: "not_started",
     lastSuccessfulSyncAt: null,
     pendingCount: 0,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
 };
@@ -69,10 +68,13 @@ describe("Google Contacts Sync Status card", () => {
             onDisconnect: () => undefined,
             onReplace: () => undefined,
         });
-        const reconnectRequired = renderCard({
-            ...connectedStatus,
-            connectionStatus: "reconnect_required",
-        }, { onDisconnect: () => undefined });
+        const reconnectRequired = renderCard(
+            {
+                ...connectedStatus,
+                connectionStatus: "reconnect_required",
+            },
+            { onDisconnect: () => undefined },
+        );
 
         expect(connecting).toContain("Connecting");
         expect(connecting).toContain("Continue with Google");
@@ -122,11 +124,11 @@ describe("Google Contacts Sync Status card", () => {
         expect(ready).toContain("Run initial sync");
         expect(ready).toContain("Last successful sync: None yet");
         expect(pending).toContain("Initial sync pending");
-        expect(pending).toContain("Pending 4, errors 0, conflicts 0");
+        expect(pending).toContain("Pending 4, retrying 0, errors 0, conflicts 0");
         expect(pending).not.toContain("Run initial sync");
         expect(completed).toContain("Initial sync completed");
         expect(completed).toContain("2026-08-26T07:15:00.000Z");
-        expect(completed).toContain("Pending 0, errors 1, conflicts 2");
+        expect(completed).toContain("Pending 0, retrying 0, errors 1, conflicts 2");
         expect(completed).not.toContain("Run initial sync");
         expect(completed).toContain("Disconnect");
         expect(completed).toContain("Replace Google account");
@@ -139,8 +141,15 @@ describe("Google Contacts Sync Status card", () => {
             initialSyncStatus: "completed",
             lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
             pendingCount: 3,
+            retryingCount: 2,
             errorCount: 0,
             conflictCount: 0,
+        });
+        const freshPending = renderCard({
+            ...connectedStatus,
+            initialSyncStatus: "completed",
+            pendingCount: 3,
+            retryingCount: 0,
         });
         const permanent = renderCard({
             ...connectedStatus,
@@ -164,15 +173,17 @@ describe("Google Contacts Sync Status card", () => {
             conflictCount: 3,
         });
 
-        expect(retrying).toContain("Pending 3, errors 0, conflicts 0");
+        expect(retrying).toContain("Pending 3, retrying 2, errors 0, conflicts 0");
         expect(retrying).toContain("Retrying");
         expect(retrying).not.toContain("Reconnect required");
-        expect(permanent).toContain("Pending 0, errors 2, conflicts 0");
+        expect(freshPending).toContain("Pending 3, retrying 0, errors 0, conflicts 0");
+        expect(freshPending).not.toContain("Retrying");
+        expect(permanent).toContain("Pending 0, retrying 0, errors 2, conflicts 0");
         expect(permanent).not.toContain("Retrying");
-        expect(conflict).toContain("Pending 0, errors 0, conflicts 4");
+        expect(conflict).toContain("Pending 0, retrying 0, errors 0, conflicts 4");
         expect(reconnectRequired).toContain("Reconnect required");
         expect(reconnectRequired).toContain("Reconnect Google");
-        expect(reconnectRequired).toContain("Pending 1, errors 2, conflicts 3");
+        expect(reconnectRequired).toContain("Pending 1, retrying 0, errors 2, conflicts 3");
         expect(reconnectRequired).not.toContain("refresh_token");
     });
 

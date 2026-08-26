@@ -12,6 +12,7 @@ export const GOOGLE_AUTHORIZATION_ENDPOINT =
   "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
+const GOOGLE_OAUTH_REQUEST_TIMEOUT_MS = 15_000;
 export const GOOGLE_USERINFO_ENDPOINT =
   "https://www.googleapis.com/oauth2/v3/userinfo";
 
@@ -194,6 +195,7 @@ const postForm = async (
   try {
     response = await fetch(url, {
       method: "POST",
+      signal: AbortSignal.timeout(GOOGLE_OAUTH_REQUEST_TIMEOUT_MS),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body,
     });
@@ -232,6 +234,7 @@ const getJson = async (url: string, accessToken: string): Promise<unknown> => {
   let response: Response;
   try {
     response = await fetch(url, {
+      signal: AbortSignal.timeout(GOOGLE_OAUTH_REQUEST_TIMEOUT_MS),
       headers: { authorization: `Bearer ${accessToken}` },
     });
   } catch {
@@ -297,6 +300,7 @@ export const createGoogleOAuthProvider = (
     try {
       await fetch(GOOGLE_REVOKE_ENDPOINT, {
         method: "POST",
+        signal: AbortSignal.timeout(GOOGLE_OAUTH_REQUEST_TIMEOUT_MS),
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ token: value }),
       });

@@ -16,6 +16,7 @@ const getStatus = mock(async () => ({
     initialSyncStatus: "not_started" as const,
     lastSuccessfulSyncAt: null,
     pendingCount: 0,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
   },
@@ -42,6 +43,7 @@ const complete = mock(async () => ({
     initialSyncStatus: "not_started" as const,
     lastSuccessfulSyncAt: null,
     pendingCount: 0,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
   },
@@ -58,6 +60,7 @@ const startInitialSync = mock(async () => ({
     initialSyncStatus: "pending" as const,
     lastSuccessfulSyncAt: null,
     pendingCount: 3,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
   },
@@ -84,13 +87,16 @@ const disconnect = mock(async () => ({
     initialSyncStatus: "not_started" as const,
     lastSuccessfulSyncAt: null,
     pendingCount: 0,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
   },
   code: 200 as const,
 }));
 
-const authenticatedUser: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
+const authenticatedUser: MiddlewareHandler<{
+  Variables: AppVariables;
+}> = async (context, next) => {
   context.set("authUser", { id: USER_ID } as AppVariables["authUser"]);
   await next();
 };
@@ -113,9 +119,7 @@ describe("Google Contacts connection routes", () => {
   });
 
   test("reads status for an authorized Organization", async () => {
-    const response = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts`,
-    );
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts`);
 
     expect(response.status).toBe(200);
     expect(getStatus).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID);
@@ -126,10 +130,9 @@ describe("Google Contacts connection routes", () => {
   });
 
   test("starts OAuth for an authorized Organization", async () => {
-    const response = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/start`,
-      { method: "POST" },
-    );
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/oauth/start`, {
+      method: "POST",
+    });
 
     expect(response.status).toBe(201);
     expect(start).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID);
@@ -142,14 +145,14 @@ describe("Google Contacts connection routes", () => {
   });
 
   test("completes OAuth for an authorized Organization", async () => {
-    const response = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/complete`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ state: "signed-state", code: "authorization-code" }),
-      },
-    );
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/oauth/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        state: "signed-state",
+        code: "authorization-code",
+      }),
+    });
 
     expect(response.status).toBe(200);
     expect(complete).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID, {
@@ -159,38 +162,29 @@ describe("Google Contacts connection routes", () => {
   });
 
   test("rejects credential material in the OAuth completion body", async () => {
-    const response = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/complete`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          state: "signed-state",
-          code: "authorization-code",
-          refreshToken: "must-not-be-accepted",
-        }),
-      },
-    );
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/oauth/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        state: "signed-state",
+        code: "authorization-code",
+        refreshToken: "must-not-be-accepted",
+      }),
+    });
 
     expect(response.status).toBe(400);
     expect(complete).not.toHaveBeenCalled();
   });
 
   test("rejects an invalid organization id before service access", async () => {
-    const response = await app.request(
-      "/organizations/not-an-id/google-contacts/oauth/start",
-      { method: "POST" },
-    );
+    const response = await app.request("/organizations/not-an-id/google-contacts/oauth/start", { method: "POST" });
 
     expect(response.status).toBe(400);
     expect(start).not.toHaveBeenCalled();
   });
 
   test("schedules initial catch-up for an authorized Organization without exposing credentials", async () => {
-    const response = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/sync`,
-      { method: "POST" },
-    );
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/sync`, { method: "POST" });
 
     expect(response.status).toBe(202);
     expect(startInitialSync).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID);
@@ -204,10 +198,9 @@ describe("Google Contacts connection routes", () => {
   });
 
   test("starts account replacement for an authorized Organization without exposing credentials", async () => {
-    const response = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/replace`,
-      { method: "POST" },
-    );
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/oauth/replace`, {
+      method: "POST",
+    });
 
     expect(response.status).toBe(201);
     expect(replace).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID);
@@ -218,10 +211,9 @@ describe("Google Contacts connection routes", () => {
   });
 
   test("disconnects Google Contacts for an authorized Organization without exposing credentials", async () => {
-    const response = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/disconnect`,
-      { method: "POST" },
-    );
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/disconnect`, {
+      method: "POST",
+    });
 
     expect(response.status).toBe(200);
     expect(disconnect).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID);

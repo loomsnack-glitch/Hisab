@@ -12,15 +12,21 @@ delete or modify Contacts in the old Google account. A replacement account is a
 fresh destination: it starts without previous Customer linkages and needs a new
 initial catch-up sync. V1 supports one Google account per Organization.
 
+The worker revalidates the active connection and credential immediately before
+every Google Contact create or update, and Google provider requests have a
+15-second timeout. A request Google already accepted before lifecycle
+invalidation may finish, but no new Contact mutation starts after the worker
+observes disconnect or replacement.
+
 ## Redirect URIs
 
 The redirect URI in Google Cloud Console must match
 `GOOGLE_CONTACTS_OAUTH_REDIRECT_URI` exactly, including scheme, host, port, and
 path. The Admin callback route is `/google-contacts/oauth/callback`.
 
-| Environment | Authorized redirect URI | Backend env value |
-|-------------|-------------------------|-------------------|
-| Local Admin | `http://localhost:5173/google-contacts/oauth/callback` | `GOOGLE_CONTACTS_OAUTH_REDIRECT_URI="http://localhost:5173/google-contacts/oauth/callback"` |
+| Environment      | Authorized redirect URI                                   | Backend env value                                                                              |
+| ---------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Local Admin      | `http://localhost:5173/google-contacts/oauth/callback`    | `GOOGLE_CONTACTS_OAUTH_REDIRECT_URI="http://localhost:5173/google-contacts/oauth/callback"`    |
 | Production Admin | `https://admin.ganatri.in/google-contacts/oauth/callback` | `GOOGLE_CONTACTS_OAUTH_REDIRECT_URI="https://admin.ganatri.in/google-contacts/oauth/callback"` |
 
 Add both URIs to the same OAuth client only if that client is used for both
@@ -99,7 +105,6 @@ GOOGLE_CONTACTS_OAUTH_REDIRECT_URI="https://admin.ganatri.in/google-contacts/oau
 GOOGLE_CONTACTS_OAUTH_STATE_SECRET="<long-random-state-secret>"
 GOOGLE_CONTACTS_CREDENTIAL_KEYS_JSON='{"v1":"<base64-32-byte-key>"}'
 GOOGLE_CONTACTS_CREDENTIAL_ACTIVE_KEY_VERSION=v1
-GOOGLE_CONTACTS_OUTBOX_ENABLED=true
 GOOGLE_CONTACTS_WORKER_TOKEN="<same token as the Google Contacts worker>"
 GOOGLE_CONTACTS_WORKER_ID=google-contacts-worker-0
 ```

@@ -20,6 +20,7 @@ const disconnected = {
   initialSyncStatus: "not_started" as const,
   lastSuccessfulSyncAt: null,
   pendingCount: 0,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -31,6 +32,7 @@ const connected = {
   initialSyncStatus: "not_started" as const,
   lastSuccessfulSyncAt: null,
   pendingCount: 0,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -42,6 +44,7 @@ const reconnectRequired = {
   initialSyncStatus: "not_started" as const,
   lastSuccessfulSyncAt: null,
   pendingCount: 0,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -53,6 +56,7 @@ const connecting = {
   initialSyncStatus: "not_started" as const,
   lastSuccessfulSyncAt: null,
   pendingCount: 0,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -65,9 +69,7 @@ const credentials = {
   scope: GOOGLE_CONTACTS_WRITE_SCOPE,
 };
 
-const createDeps = (
-  overrides: Partial<GoogleContactsServiceDependencies> = {},
-): GoogleContactsServiceDependencies => ({
+const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}): GoogleContactsServiceDependencies => ({
   getOrganizationByIdForUser: mock(async () => ({ id: ORGANIZATION_ID })),
   createOAuthStateRecord: mock(async () => {}),
   replayStore: { consume: mock(async () => true) },
@@ -115,17 +117,12 @@ describe("Google Contacts connection service", () => {
     process.env.GOOGLE_CONTACTS_OAUTH_STATE_SECRET = SECRET;
     process.env.GOOGLE_CONTACTS_CLIENT_ID = "google-client-id";
     process.env.GOOGLE_CONTACTS_CLIENT_SECRET = "google-client-secret";
-    process.env.GOOGLE_CONTACTS_OAUTH_REDIRECT_URI =
-      "http://localhost:5173/google-contacts/oauth/callback";
+    process.env.GOOGLE_CONTACTS_OAUTH_REDIRECT_URI = "http://localhost:5173/google-contacts/oauth/callback";
   });
 
   test("returns disconnected status for an authorized Organization", async () => {
     const deps = createDeps();
-    const response = await getGoogleContactsSyncStatusForOrganization(
-      USER_ID,
-      ORGANIZATION_ID,
-      deps,
-    );
+    const response = await getGoogleContactsSyncStatusForOrganization(USER_ID, ORGANIZATION_ID, deps);
 
     expect(response).toMatchObject({
       status: "success",
@@ -141,11 +138,7 @@ describe("Google Contacts connection service", () => {
       getOrganizationByIdForUser: mock(async () => null),
     });
 
-    const response = await getGoogleContactsSyncStatusForOrganization(
-      USER_ID,
-      OTHER_ORGANIZATION_ID,
-      deps,
-    );
+    const response = await getGoogleContactsSyncStatusForOrganization(USER_ID, OTHER_ORGANIZATION_ID, deps);
 
     expect(response).toMatchObject({ status: "error", code: 404, data: null });
     expect(deps.getStatus).not.toHaveBeenCalled();
@@ -163,11 +156,13 @@ describe("Google Contacts connection service", () => {
     expect(response.data?.authorizationUrl).not.toContain("google-client-secret");
     expect(JSON.stringify(response)).not.toContain("google-client-secret");
     expect(deps.createOAuthStateRecord).toHaveBeenCalled();
-    expect(deps.beginAttempt).toHaveBeenCalledWith(expect.objectContaining({
-      organizationId: ORGANIZATION_ID,
-      createdBy: USER_ID,
-      oauthAttemptNonceHash: expect.stringMatching(/^[0-9a-f]{64}$/),
-    }));
+    expect(deps.beginAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: ORGANIZATION_ID,
+        createdBy: USER_ID,
+        oauthAttemptNonceHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }),
+    );
   });
 
   test("rejects OAuth start when Google Contacts is already connected", async () => {
@@ -330,7 +325,9 @@ describe("Google Contacts connection service", () => {
     });
     const deps = createDeps({
       getStatus: mock(async () => connecting),
-      getOrganizationByIdForUser: mock(async () => ({ id: OTHER_ORGANIZATION_ID })),
+      getOrganizationByIdForUser: mock(async () => ({
+        id: OTHER_ORGANIZATION_ID,
+      })),
     });
 
     const response = await completeGoogleContactsOAuth(

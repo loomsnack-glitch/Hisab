@@ -1,10 +1,14 @@
-import { normalizePhoneNumber } from "@repo/types";
+import { normalizePhoneNumber, type GoogleContactsConnectionStatus } from "@repo/types";
 import {
   exactGoogleContactMatches,
   otherExactGoogleContactMatches,
   withGanatriNameAndMatchingPhone,
 } from "./google-contacts.matching";
-import type { GoogleContactPerson, GooglePeopleClient } from "./google-contacts.people";
+import {
+  GoogleContactsConnectionInactiveError,
+  type GoogleContactPerson,
+  type GooglePeopleClient,
+} from "./google-contacts.people";
 import { GooglePeopleApiError } from "./google-contacts.people-client";
 
 export type GoogleContactsSyncJob = {
@@ -12,7 +16,7 @@ export type GoogleContactsSyncJob = {
   organizationId: string;
   connectionId: string;
   customerId: string;
-  connectionStatus: "connected" | "connecting" | "reconnect_required" | "disconnected";
+  connectionStatus: GoogleContactsConnectionStatus;
   customerName: string;
   customerPhone: string | null;
   customerUpdatedAt: string;
@@ -70,12 +74,7 @@ const updateFromCurrentGoogleMetadata = async (
     const current = await people.getContact(resourceName);
     try {
       return await people.updateContact(
-        withGanatriNameAndMatchingPhone(
-          current,
-          customerName,
-          normalizedPhone,
-          matchedPhone,
-        ),
+        withGanatriNameAndMatchingPhone(current, customerName, normalizedPhone, matchedPhone),
       );
     } catch (error) {
       lastError = error;
@@ -89,6 +88,9 @@ const updateFromCurrentGoogleMetadata = async (
 };
 
 const classifyGoogleFailure = (error: unknown): GoogleContactsSyncOutcome => {
+  if (error instanceof GoogleContactsConnectionInactiveError) {
+    return { status: "skipped", reason: "connection_inactive" };
+  }
   if (error instanceof GooglePeopleApiError) {
     if (error.status === 401 || error.status === 403) {
       return {
@@ -98,15 +100,31 @@ const classifyGoogleFailure = (error: unknown): GoogleContactsSyncOutcome => {
       };
     }
     if (error.retryable || error.status === 409) {
-      return { status: "retryable", code: "google_unavailable", message: error.message };
+      return {
+        status: "retryable",
+        code: "google_unavailable",
+        message: error.message,
+      };
     }
-    return { status: "failed", code: "google_write_failed", message: error.message };
+    return {
+      status: "failed",
+      code: "google_write_failed",
+      message: error.message,
+    };
   }
   const message = error instanceof Error ? error.message : "Google Contacts synchronization failed";
   const retryable = /temporar|timeout|rate|unavailable|network|429|5\d\d/i.test(message);
   return retryable
-    ? { status: "retryable", code: "google_unavailable", message: "Google Contacts is temporarily unavailable" }
-    : { status: "failed", code: "google_write_failed", message: "Google Contacts could not be updated" };
+    ? {
+        status: "retryable",
+        code: "google_unavailable",
+        message: "Google Contacts is temporarily unavailable",
+      }
+    : {
+        status: "failed",
+        code: "google_write_failed",
+        message: "Google Contacts could not be updated",
+      };
 };
 
 export const processGoogleContactsSyncJob = async (
@@ -124,8 +142,7 @@ export const processGoogleContactsSyncJob = async (
 
   const customerName = job.customerName.trim();
   const previousPhone = job.matchedPhone ?? null;
-  const phoneChanged =
-    Boolean(previousPhone) && normalizePhoneNumber(previousPhone) !== normalizedPhone;
+  const phoneChanged = Boolean(previousPhone) && normalizePhoneNumber(previousPhone) !== normalizedPhone;
 
   try {
     if (job.linkedGoogleResourceName && phoneChanged) {

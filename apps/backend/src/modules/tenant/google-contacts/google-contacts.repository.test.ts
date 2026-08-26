@@ -12,6 +12,7 @@ describe("Google Contacts connection persistence boundary", () => {
       initialSyncStatus: "not_started",
       lastSuccessfulSyncAt: null,
       pendingCount: 0,
+      retryingCount: 0,
       errorCount: 0,
       conflictCount: 0,
     });
@@ -38,6 +39,7 @@ describe("Google Contacts connection persistence boundary", () => {
       initialSyncStatus: "not_started",
       lastSuccessfulSyncAt: null,
       pendingCount: 0,
+      retryingCount: 0,
       errorCount: 0,
       conflictCount: 0,
     });
@@ -55,7 +57,10 @@ describe("Google Contacts connection persistence boundary", () => {
         google_account_email: null,
         connected_at: null,
       }),
-    ).toMatchObject({ connectionStatus: "connecting", googleAccountEmail: null });
+    ).toMatchObject({
+      connectionStatus: "connecting",
+      googleAccountEmail: null,
+    });
     expect(
       mapGoogleContactsSyncStatus({
         status: "reconnect_required",
@@ -68,7 +73,7 @@ describe("Google Contacts connection persistence boundary", () => {
     });
   });
 
-  test("maps initial-sync pending and completed summaries without credential material", () => {
+  test("maps pending, retrying, completed, and failed summaries without credential material", () => {
     const pending = mapGoogleContactsSyncStatus({
       status: "connected",
       google_account_email: "owner@example.com",
@@ -76,6 +81,7 @@ describe("Google Contacts connection persistence boundary", () => {
       initial_sync_status: "pending",
       last_successful_sync_at: null,
       pending_count: "4",
+      retrying_count: "2",
       error_count: "0",
       conflict_count: "0",
       credential_reference: "db-secret:must-not-escape",
@@ -84,6 +90,7 @@ describe("Google Contacts connection persistence boundary", () => {
       connectionStatus: "connected",
       initialSyncStatus: "pending",
       pendingCount: 4,
+      retryingCount: 2,
       errorCount: 0,
       conflictCount: 0,
     });
@@ -96,6 +103,7 @@ describe("Google Contacts connection persistence boundary", () => {
       initial_sync_status: "completed",
       last_successful_sync_at: "2026-08-26T07:15:00.000Z",
       pending_count: 0,
+      retrying_count: 0,
       error_count: 1,
       conflict_count: 2,
     });
@@ -103,6 +111,7 @@ describe("Google Contacts connection persistence boundary", () => {
       initialSyncStatus: "completed",
       lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
       pendingCount: 0,
+      retryingCount: 0,
       errorCount: 1,
       conflictCount: 2,
     });

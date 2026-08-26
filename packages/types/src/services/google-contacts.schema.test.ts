@@ -23,23 +23,29 @@ describe("Google Contacts Synchronization contracts", () => {
     });
 
     test("accepts connecting, connected, and reconnect-required statuses", () => {
-        expect(GoogleContactsSyncStatusSchema.safeParse({
-            connectionStatus: "connecting",
-            googleAccountEmail: null,
-            connectedAt: null,
-        }).success).toBe(true);
+        expect(
+            GoogleContactsSyncStatusSchema.safeParse({
+                connectionStatus: "connecting",
+                googleAccountEmail: null,
+                connectedAt: null,
+            }).success,
+        ).toBe(true);
 
-        expect(GoogleContactsSyncStatusSchema.safeParse({
-            connectionStatus: "connected",
-            googleAccountEmail: "owner@example.com",
-            connectedAt: "2026-08-26T06:00:00.000Z",
-        }).success).toBe(true);
+        expect(
+            GoogleContactsSyncStatusSchema.safeParse({
+                connectionStatus: "connected",
+                googleAccountEmail: "owner@example.com",
+                connectedAt: "2026-08-26T06:00:00.000Z",
+            }).success,
+        ).toBe(true);
 
-        expect(GoogleContactsSyncStatusSchema.safeParse({
-            connectionStatus: "reconnect_required",
-            googleAccountEmail: "owner@example.com",
-            connectedAt: "2026-08-26T06:00:00.000Z",
-        }).success).toBe(true);
+        expect(
+            GoogleContactsSyncStatusSchema.safeParse({
+                connectionStatus: "reconnect_required",
+                googleAccountEmail: "owner@example.com",
+                connectedAt: "2026-08-26T06:00:00.000Z",
+            }).success,
+        ).toBe(true);
     });
 
     test("defaults catch-up fields so a ticket-01 status payload remains valid", () => {
@@ -52,21 +58,25 @@ describe("Google Contacts Synchronization contracts", () => {
         expect(parsed.initialSyncStatus).toBe("not_started");
         expect(parsed.lastSuccessfulSyncAt).toBeNull();
         expect(parsed.pendingCount).toBe(0);
+        expect(parsed.retryingCount).toBe(0);
         expect(parsed.errorCount).toBe(0);
         expect(parsed.conflictCount).toBe(0);
     });
 
     test("accepts pending and completed initial-sync status with compact counts", () => {
-        expect(GoogleContactsSyncStatusSchema.safeParse({
-            connectionStatus: "connected",
-            googleAccountEmail: "owner@example.com",
-            connectedAt: "2026-08-26T06:00:00.000Z",
-            initialSyncStatus: "pending",
-            lastSuccessfulSyncAt: null,
-            pendingCount: 12,
-            errorCount: 0,
-            conflictCount: 0,
-        }).success).toBe(true);
+        expect(
+            GoogleContactsSyncStatusSchema.safeParse({
+                connectionStatus: "connected",
+                googleAccountEmail: "owner@example.com",
+                connectedAt: "2026-08-26T06:00:00.000Z",
+                initialSyncStatus: "pending",
+                lastSuccessfulSyncAt: null,
+                pendingCount: 12,
+                retryingCount: 3,
+                errorCount: 0,
+                conflictCount: 0,
+            }).success,
+        ).toBe(true);
 
         const completed = GoogleContactsSyncStatusSchema.parse({
             connectionStatus: "connected",
@@ -75,23 +85,27 @@ describe("Google Contacts Synchronization contracts", () => {
             initialSyncStatus: "completed",
             lastSuccessfulSyncAt: "2026-08-26T07:00:00.000Z",
             pendingCount: 0,
+            retryingCount: 0,
             errorCount: 1,
             conflictCount: 2,
         });
         expect(completed.initialSyncStatus).toBe("completed");
         expect(completed.lastSuccessfulSyncAt).toBe("2026-08-26T07:00:00.000Z");
         expect(completed.pendingCount).toBe(0);
+        expect(completed.retryingCount).toBe(0);
         expect(completed.errorCount).toBe(1);
         expect(completed.conflictCount).toBe(2);
     });
 
     test("rejects credential material on the public status contract", () => {
-        expect(GoogleContactsSyncStatusSchema.safeParse({
-            connectionStatus: "connected",
-            googleAccountEmail: "owner@example.com",
-            connectedAt: "2026-08-26T06:00:00.000Z",
-            refreshToken: "must-not-be-accepted",
-        }).success).toBe(true);
+        expect(
+            GoogleContactsSyncStatusSchema.safeParse({
+                connectionStatus: "connected",
+                googleAccountEmail: "owner@example.com",
+                connectedAt: "2026-08-26T06:00:00.000Z",
+                refreshToken: "must-not-be-accepted",
+            }).success,
+        ).toBe(true);
 
         const parsed = GoogleContactsSyncStatusSchema.parse({
             connectionStatus: "connected",
@@ -119,21 +133,29 @@ describe("Google Contacts Synchronization contracts", () => {
     });
 
     test("accepts a code or a denied-consent error, but not credential fields", () => {
-        expect(GoogleContactsOAuthCompleteSchema.safeParse({
-            state: "signed-state",
-            code: "authorization-code",
-        }).success).toBe(true);
-        expect(GoogleContactsOAuthCompleteSchema.safeParse({
-            state: "signed-state",
-            error: "access_denied",
-        }).success).toBe(true);
-        expect(GoogleContactsOAuthCompleteSchema.safeParse({
-            state: "signed-state",
-            code: "authorization-code",
-            refreshToken: "must-not-be-accepted",
-        }).success).toBe(false);
-        expect(GoogleContactsOAuthCompleteSchema.safeParse({
-            state: "signed-state",
-        }).success).toBe(false);
+        expect(
+            GoogleContactsOAuthCompleteSchema.safeParse({
+                state: "signed-state",
+                code: "authorization-code",
+            }).success,
+        ).toBe(true);
+        expect(
+            GoogleContactsOAuthCompleteSchema.safeParse({
+                state: "signed-state",
+                error: "access_denied",
+            }).success,
+        ).toBe(true);
+        expect(
+            GoogleContactsOAuthCompleteSchema.safeParse({
+                state: "signed-state",
+                code: "authorization-code",
+                refreshToken: "must-not-be-accepted",
+            }).success,
+        ).toBe(false);
+        expect(
+            GoogleContactsOAuthCompleteSchema.safeParse({
+                state: "signed-state",
+            }).success,
+        ).toBe(false);
     });
 });

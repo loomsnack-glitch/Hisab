@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { normalizePhoneNumber, type GoogleContactsSyncStatus } from "@repo/types";
+import {
+  GoogleContactsConnectionStatusSchema,
+  normalizePhoneNumber,
+  type GoogleContactsSyncStatus,
+} from "@repo/types";
 import { pg } from "@/config/db";
 import type { GoogleContactsCredentialBinding } from "./google-contacts.credentials";
 import {
@@ -150,6 +154,9 @@ export const scheduleGoogleContactsCustomerChange = async (
       AND customer_id = ${input.customerId}
     FOR UPDATE
   `;
+  const parsedConnectionStatus = GoogleContactsConnectionStatusSchema.safeParse(
+    connection.status,
+  );
   const decision = decideGoogleContactsCustomerSchedule({
     existing: existing
       ? {
@@ -159,7 +166,7 @@ export const scheduleGoogleContactsCustomerChange = async (
       : null,
     eligible,
     customerUpdatedAt,
-    connectionStatus: String(connection.status),
+    connectionStatus: parsedConnectionStatus.success ? parsedConnectionStatus.data : null,
   });
 
   if (decision.action === "noop") return;

@@ -62,7 +62,7 @@ describe("Google Contacts Customer change scheduling", () => {
     ).toEqual({ action: "insert", customerUpdatedAt: T1 });
   });
 
-  test("does not schedule when Google Contacts is not connected", () => {
+  test("preserves eligible Customer changes while Google Contacts needs reconnection", () => {
     expect(
       decideGoogleContactsCustomerSchedule({
         existing: null,
@@ -70,7 +70,10 @@ describe("Google Contacts Customer change scheduling", () => {
         customerUpdatedAt: T1,
         connectionStatus: "reconnect_required",
       }),
-    ).toEqual({ action: "noop" });
+    ).toEqual({ action: "insert", customerUpdatedAt: T1 });
+  });
+
+  test("does not schedule when Google Contacts is disconnected", () => {
     expect(
       decideGoogleContactsCustomerSchedule({
         existing: null,

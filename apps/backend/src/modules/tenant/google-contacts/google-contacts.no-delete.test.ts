@@ -14,7 +14,7 @@ describe("Google Contacts no-deletion regression", () => {
     expect(source).not.toContain("people.deleteContact");
     expect(source).not.toContain(":deleteContact");
     expect(source).not.toContain("deleteContact(");
-    expect(source.toLowerCase()).not.toContain("method: \"delete\"");
+    expect(source.toLowerCase()).not.toContain('method: "delete"');
     expect(source).not.toContain("whatsapp");
   });
 
@@ -51,7 +51,7 @@ describe("Google Contacts no-deletion regression", () => {
     expect(outbox).toContain("status = 'reconnect_required'");
     expect(outbox).toContain("lease_expires_at IS NULL OR lease_expires_at < NOW()");
     expect(peopleClient).toContain('updatePersonFields", UPDATE_PERSON_FIELDS');
-    expect(source.toLowerCase()).not.toContain("method: \"delete\"");
+    expect(source.toLowerCase()).not.toContain('method: "delete"');
     expect(source).not.toContain("deleteContact(");
   });
 });

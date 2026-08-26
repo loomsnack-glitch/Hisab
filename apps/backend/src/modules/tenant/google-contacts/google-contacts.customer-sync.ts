@@ -1,30 +1,21 @@
-import { normalizePhoneNumber } from "@repo/types";
+import { normalizePhoneNumber, type GoogleContactsConnectionStatus } from "@repo/types";
 
-export type GoogleContactsOutboxStatus =
-  | "pending"
-  | "processing"
-  | "completed"
-  | "skipped"
-  | "failed"
-  | "conflict";
+export type GoogleContactsOutboxStatus = "pending" | "processing" | "completed" | "skipped" | "failed" | "conflict";
 
 export type GoogleContactsOutboxSnapshot = {
   status: GoogleContactsOutboxStatus;
   customerUpdatedAt: number;
 };
 
-export const googleContactsCustomerIsEligible = (
-  phone: string | null | undefined,
-): boolean => Boolean(normalizePhoneNumber(phone));
+export const googleContactsCustomerIsEligible = (phone: string | null | undefined): boolean =>
+  Boolean(normalizePhoneNumber(phone));
 
 export const googleContactsChangeIsSyncRelevant = (input: {
   previousName: string;
   nextName: string;
   previousPhone: string | null;
   nextPhone: string | null;
-}): boolean =>
-  input.previousName !== input.nextName ||
-  (input.previousPhone ?? null) !== (input.nextPhone ?? null);
+}): boolean => input.previousName !== input.nextName || (input.previousPhone ?? null) !== (input.nextPhone ?? null);
 
 export type GoogleContactsScheduleDecision =
   | { action: "noop" }
@@ -41,7 +32,7 @@ export const decideGoogleContactsCustomerSchedule = (input: {
   existing: GoogleContactsOutboxSnapshot | null;
   eligible: boolean;
   customerUpdatedAt: number;
-  connectionStatus: string | null;
+  connectionStatus: GoogleContactsConnectionStatus | null;
 }): GoogleContactsScheduleDecision => {
   if (!input.eligible) {
     if (!input.existing) return { action: "noop" };
@@ -63,7 +54,9 @@ export const decideGoogleContactsCustomerSchedule = (input: {
     return { action: "noop" };
   }
 
-  if (input.connectionStatus !== "connected") return { action: "noop" };
+  if (input.connectionStatus !== "connected" && input.connectionStatus !== "reconnect_required") {
+    return { action: "noop" };
+  }
 
   if (!input.existing) {
     return { action: "insert", customerUpdatedAt: input.customerUpdatedAt };
@@ -78,10 +71,7 @@ export const decideGoogleContactsCustomerSchedule = (input: {
     };
   }
 
-  if (
-    input.existing.status === "pending" &&
-    input.customerUpdatedAt < input.existing.customerUpdatedAt
-  ) {
+  if (input.existing.status === "pending" && input.customerUpdatedAt < input.existing.customerUpdatedAt) {
     return { action: "noop" };
   }
 
@@ -93,10 +83,7 @@ export const decideGoogleContactsCustomerSchedule = (input: {
   };
 };
 
-export type GoogleContactsCompletionDecision =
-  | { action: "requeue" }
-  | { action: "skip" }
-  | { action: "apply" };
+export type GoogleContactsCompletionDecision = { action: "requeue" } | { action: "skip" } | { action: "apply" };
 
 export const decideGoogleContactsOutboxCompletion = (input: {
   claimedCustomerUpdatedAt: number;

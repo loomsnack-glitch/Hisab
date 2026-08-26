@@ -13,6 +13,7 @@ const disconnected = {
   initialSyncStatus: "not_started" as const,
   lastSuccessfulSyncAt: null,
   pendingCount: 0,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -24,6 +25,7 @@ const connected = {
   initialSyncStatus: "not_started" as const,
   lastSuccessfulSyncAt: null,
   pendingCount: 0,
+  retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
 };
@@ -32,11 +34,10 @@ const pending = {
   ...connected,
   initialSyncStatus: "pending" as const,
   pendingCount: 3,
+  retryingCount: 0,
 };
 
-const createDeps = (
-  overrides: Partial<GoogleContactsServiceDependencies> = {},
-): GoogleContactsServiceDependencies => ({
+const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}): GoogleContactsServiceDependencies => ({
   getOrganizationByIdForUser: mock(async () => ({ id: ORGANIZATION_ID })),
   createOAuthStateRecord: mock(async () => {}),
   replayStore: { consume: mock(async () => true) },

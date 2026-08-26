@@ -8,6 +8,7 @@ const SEARCH_READ_MASK = "names,phoneNumbers,metadata";
 const CONTACT_READ_MASK =
   "names,phoneNumbers,emailAddresses,addresses,biographies,photos,memberships,organizations,urls,metadata";
 const UPDATE_PERSON_FIELDS = "names,phoneNumbers";
+const GOOGLE_PEOPLE_REQUEST_TIMEOUT_MS = 15_000;
 
 export class GooglePeopleApiError extends Error {
   readonly status: number;
@@ -75,6 +76,7 @@ const requestJson = async (
   try {
     response = await fetch(url, {
       ...init,
+      signal: init.signal ?? AbortSignal.timeout(GOOGLE_PEOPLE_REQUEST_TIMEOUT_MS),
       headers: {
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",

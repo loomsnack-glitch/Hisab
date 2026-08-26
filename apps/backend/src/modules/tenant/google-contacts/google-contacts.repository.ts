@@ -1,7 +1,4 @@
-import {
-  GoogleContactsSyncStatusSchema,
-  type GoogleContactsSyncStatus,
-} from "@repo/types";
+import { GoogleContactsSyncStatusSchema, type GoogleContactsSyncStatus } from "@repo/types";
 import { pg } from "@/config/db";
 import {
   normalizeGoogleContactsCredentialBinding,
@@ -49,9 +46,7 @@ const requireOAuthAttemptNonceHash = (value: string): string => {
  * Google subject, and encrypted payloads are intentionally not selected or
  * returned by this repository boundary.
  */
-export const mapGoogleContactsSyncStatus = (
-  row: ConnectionRow | null | undefined,
-): GoogleContactsSyncStatus => {
+export const mapGoogleContactsSyncStatus = (row: ConnectionRow | null | undefined): GoogleContactsSyncStatus => {
   if (!row) {
     return GoogleContactsSyncStatusSchema.parse({
       connectionStatus: "disconnected",
@@ -67,14 +62,13 @@ export const mapGoogleContactsSyncStatus = (
     initialSyncStatus: row.initial_sync_status ?? "not_started",
     lastSuccessfulSyncAt: row.last_successful_sync_at ?? null,
     pendingCount: asCount(row.pending_count),
+    retryingCount: asCount(row.retrying_count),
     errorCount: asCount(row.error_count),
     conflictCount: asCount(row.conflict_count),
   });
 };
 
-export const getGoogleContactsConnectionStatus = async (
-  organizationId: string,
-): Promise<GoogleContactsSyncStatus> => {
+export const getGoogleContactsConnectionStatus = async (organizationId: string): Promise<GoogleContactsSyncStatus> => {
   const [row] = await pg`
     SELECT
       connection.status,
@@ -83,6 +77,10 @@ export const getGoogleContactsConnectionStatus = async (
       connection.initial_sync_status,
       connection.last_successful_sync_at,
       COUNT(*) FILTER (WHERE outbox.status IN ('pending', 'processing')) AS pending_count,
+      COUNT(*) FILTER (
+        WHERE outbox.status IN ('pending', 'processing')
+          AND outbox.last_error_code IN ('google_unavailable', 'google_credential_unavailable')
+      ) AS retrying_count,
       COUNT(*) FILTER (WHERE outbox.status = 'failed') AS error_count,
       COUNT(*) FILTER (WHERE outbox.status = 'conflict') AS conflict_count
     FROM google_contacts_connections connection
@@ -126,8 +124,7 @@ export const getGoogleContactsConnectionLifecycle = async (
   return {
     connectionId: String(row.id),
     status: String(row.status),
-    googleAccountSubject:
-      row.google_account_subject == null ? null : String(row.google_account_subject),
+    googleAccountSubject: row.google_account_subject == null ? null : String(row.google_account_subject),
     credential:
       row.credential_reference && row.credential_key_version
         ? normalizeGoogleContactsCredentialBinding({
@@ -135,10 +132,7 @@ export const getGoogleContactsConnectionLifecycle = async (
             keyVersion: String(row.credential_key_version),
           })
         : null,
-    oauthAttemptIntent:
-      intent === "connect" || intent === "reconnect" || intent === "replace"
-        ? intent
-        : null,
+    oauthAttemptIntent: intent === "connect" || intent === "reconnect" || intent === "replace" ? intent : null,
   };
 };
 

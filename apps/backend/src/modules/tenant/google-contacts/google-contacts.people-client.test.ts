@@ -29,6 +29,7 @@ describe("Google People client", () => {
       expect(url).toContain("people/dev:updateContact");
       expect(url).toContain("updatePersonFields=names%2CphoneNumbers");
       expect(init?.method).toBe("PATCH");
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
       expect(init?.method?.toLowerCase()).not.toBe("delete");
       const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
       expect(body).toEqual({

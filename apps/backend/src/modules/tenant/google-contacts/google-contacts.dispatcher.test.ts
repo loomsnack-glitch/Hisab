@@ -34,6 +34,8 @@ const credentials = {
   scope: GOOGLE_CONTACTS_WRITE_SCOPE,
 };
 
+const connectionIsUsable = async () => true;
+
 describe("Google Contacts Sync Outbox dispatcher", () => {
   test("creates a Google Contact for a no-match Customer without issuing a delete", async () => {
     const completed: unknown[] = [];
@@ -69,6 +71,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
           deleteContact,
         };
       },
+      isConnectionUsable: connectionIsUsable,
       complete: async (...args) => {
         completed.push(args[0]);
         return true;
@@ -76,7 +79,10 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
       now: () => Date.UTC(2026, 7, 26, 6, 0, 0),
     });
 
-    expect(outcome).toEqual({ status: "created", googleResourceName: "people/created" });
+    expect(outcome).toEqual({
+      status: "created",
+      googleResourceName: "people/created",
+    });
     expect(completed).toEqual([
       {
         outboxId: claim.job.outboxId,
@@ -115,6 +121,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
         createPeople: () => {
           throw new Error("must not call Google People after authorization is revoked");
         },
+        isConnectionUsable: connectionIsUsable,
         complete: async (...args) => {
           completed.push(args[0]);
           return true;
@@ -161,6 +168,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
       createPeople: () => {
         throw new Error("must not call Google People when credentials are unavailable");
       },
+      isConnectionUsable: connectionIsUsable,
       complete: async () => true,
       now: () => Date.UTC(2026, 7, 26, 6, 0, 0),
     });
@@ -197,6 +205,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
           throw new Error("must not update after a permanent Google failure");
         }),
       }),
+      isConnectionUsable: connectionIsUsable,
       complete: async (...args) => {
         completed.push(args[0]);
         return true;
@@ -219,9 +228,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
     const outcome = await dispatchGoogleContactsOutboxJob(claim, {
       vault: {
         store: async () => claim.credential,
-        resolve: async () => {
-          throw new Error("must not resolve credentials for obsolete work");
-        },
+        resolve: async () => credentials,
         rotate: async () => claim.credential,
         revoke: async () => {},
       },
@@ -239,7 +246,10 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
       now: () => Date.UTC(2026, 7, 26, 6, 0, 0),
     });
 
-    expect(outcome).toEqual({ status: "skipped", reason: "connection_inactive" });
+    expect(outcome).toEqual({
+      status: "skipped",
+      reason: "connection_inactive",
+    });
     expect(createPeople).not.toHaveBeenCalled();
     expect(completed).toEqual([
       {
@@ -250,5 +260,50 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
         outcome: { status: "skipped", reason: "connection_inactive" },
       },
     ]);
+  });
+
+  test("does not write after a connection becomes obsolete before the People mutation", async () => {
+    let usabilityChecks = 0;
+    const createContact = mock(async () => {
+      throw new Error("must not write after disconnect or replacement");
+    });
+    const createPeople = mock(() => ({
+      searchContacts: mock(async () => []),
+      getContact: mock(async () => {
+        throw new Error("must not load an unlinked Contact");
+      }),
+      createContact,
+      updateContact: mock(async (person) => person),
+    }));
+    const completed: unknown[] = [];
+
+    const outcome = await dispatchGoogleContactsOutboxJob(claim, {
+      vault: {
+        store: async () => claim.credential,
+        resolve: async () => credentials,
+        rotate: async () => claim.credential,
+        revoke: async () => {},
+      },
+      oauth: {
+        refreshAccessToken: async () => {
+          throw new Error("must not refresh a still-valid access token");
+        },
+      },
+      createPeople,
+      isConnectionUsable: async () => ++usabilityChecks === 1,
+      complete: async (...args) => {
+        completed.push(args[0]);
+        return true;
+      },
+      now: () => Date.UTC(2026, 7, 26, 6, 0, 0),
+    });
+
+    expect(outcome).toEqual({
+      status: "skipped",
+      reason: "connection_inactive",
+    });
+    expect(createPeople).toHaveBeenCalledTimes(1);
+    expect(createContact).not.toHaveBeenCalled();
+    expect(completed).toHaveLength(1);
   });
 });

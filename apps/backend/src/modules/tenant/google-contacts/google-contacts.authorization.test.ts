@@ -18,6 +18,7 @@ const getStatus = mock(async () => ({
     initialSyncStatus: "not_started" as const,
     lastSuccessfulSyncAt: null,
     pendingCount: 0,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
   },
@@ -44,6 +45,7 @@ const complete = mock(async () => ({
     initialSyncStatus: "not_started" as const,
     lastSuccessfulSyncAt: null,
     pendingCount: 0,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
   },
@@ -60,6 +62,7 @@ const startInitialSync = mock(async () => ({
     initialSyncStatus: "pending" as const,
     lastSuccessfulSyncAt: null,
     pendingCount: 3,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
   },
@@ -86,14 +89,16 @@ const disconnect = mock(async () => ({
     initialSyncStatus: "not_started" as const,
     lastSuccessfulSyncAt: null,
     pendingCount: 0,
+    retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
   },
   code: 200 as const,
 }));
 
-const rejectUnauthenticatedUser: MiddlewareHandler<{ Variables: AppVariables }> = async (context) =>
-  context.json({ status: "error", message: "Unauthorized" }, 401);
+const rejectUnauthenticatedUser: MiddlewareHandler<{
+  Variables: AppVariables;
+}> = async (context) => context.json({ status: "error", message: "Unauthorized" }, 401);
 
 const app = new Hono<{ Variables: AppVariables }>();
 app.route(
@@ -106,33 +111,27 @@ app.route(
 
 describe("Google Contacts connection authorization", () => {
   test("rejects unauthenticated status and OAuth requests", async () => {
-    const statusResponse = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts`,
-    );
-    const startResponse = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/start`,
-      { method: "POST" },
-    );
-    const completeResponse = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/complete`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ state: "signed-state", code: "authorization-code" }),
-      },
-    );
-    const syncResponse = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/sync`,
-      { method: "POST" },
-    );
-    const replaceResponse = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/oauth/replace`,
-      { method: "POST" },
-    );
-    const disconnectResponse = await app.request(
-      `/organizations/${ORGANIZATION_ID}/google-contacts/disconnect`,
-      { method: "POST" },
-    );
+    const statusResponse = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts`);
+    const startResponse = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/oauth/start`, {
+      method: "POST",
+    });
+    const completeResponse = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/oauth/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        state: "signed-state",
+        code: "authorization-code",
+      }),
+    });
+    const syncResponse = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/sync`, {
+      method: "POST",
+    });
+    const replaceResponse = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/oauth/replace`, {
+      method: "POST",
+    });
+    const disconnectResponse = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/disconnect`, {
+      method: "POST",
+    });
 
     expect(statusResponse.status).toBe(401);
     expect(startResponse.status).toBe(401);

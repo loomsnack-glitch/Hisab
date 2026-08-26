@@ -1,18 +1,9 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../common";
 
-export const GoogleContactsConnectionStatusSchema = z.enum([
-    "disconnected",
-    "connecting",
-    "connected",
-    "reconnect_required",
-]);
+export const GoogleContactsConnectionStatusSchema = z.enum(["disconnected", "connecting", "connected", "reconnect_required"]);
 
-export const GoogleContactsInitialSyncStatusSchema = z.enum([
-    "not_started",
-    "pending",
-    "completed",
-]);
+export const GoogleContactsInitialSyncStatusSchema = z.enum(["not_started", "pending", "completed"]);
 
 export const GoogleContactsSyncStatusSchema = z.object({
     connectionStatus: GoogleContactsConnectionStatusSchema,
@@ -21,6 +12,7 @@ export const GoogleContactsSyncStatusSchema = z.object({
     initialSyncStatus: GoogleContactsInitialSyncStatusSchema.default("not_started"),
     lastSuccessfulSyncAt: dtoDateSchema.nullable().default(null),
     pendingCount: z.number().int().nonnegative().default(0),
+    retryingCount: z.number().int().nonnegative().default(0),
     errorCount: z.number().int().nonnegative().default(0),
     conflictCount: z.number().int().nonnegative().default(0),
 });
@@ -33,12 +25,16 @@ export const GoogleContactsOAuthStartResponseSchema = z.object({
 const oauthStateSchema = z.string().trim().min(1).max(4_096);
 
 export const GoogleContactsOAuthCompleteSchema = z.union([
-    z.object({
-        state: oauthStateSchema,
-        code: z.string().trim().min(1).max(4_096),
-    }).strict(),
-    z.object({
-        state: oauthStateSchema,
-        error: z.string().trim().min(1).max(256),
-    }).strict(),
+    z
+        .object({
+            state: oauthStateSchema,
+            code: z.string().trim().min(1).max(4_096),
+        })
+        .strict(),
+    z
+        .object({
+            state: oauthStateSchema,
+            error: z.string().trim().min(1).max(256),
+        })
+        .strict(),
 ]);
