@@ -421,6 +421,111 @@ Acceptance criteria:
 - The public review action accepts only HTTPS URLs, matching the other public
   links.
 
+### Phase 6 — Templates-tab UI simplification and responsive layout
+
+Status: planned
+
+Refresh only the Admin WhatsApp Templates tab so operators can quickly choose a
+Bill or Due reminder default and review the available Cloud revisions. Keep the
+scope limited to invoice/bill and due-reminder templates; Promotions and the
+Promotions tab remain out of scope.
+
+#### Design direction
+
+- Keep `WhatsAppCloudTemplateManager` as the module boundary and preserve its
+  existing account, mapping, default-assignment, sync, preview, and revision
+  behavior.
+- Make the page full-width and task-oriented, removing nested card padding and
+  unnecessary visual chrome.
+- Put the two primary jobs in order: choose Store defaults first, then manage
+  and review the template library.
+- Use text labels, status badges, and clear action names so status is not
+  communicated by color alone.
+
+#### Target layout and behavior
+
+1. The top toolbar uses the available width: page title and context on the
+   left, a flexible Cloud-account selector in the middle, and Sync plus the
+   primary Create template action on the right. Preserve the account loading
+   state and keep Sync explicitly user-triggered.
+2. The defaults section appears before the library. It has one compact row per
+   supported kind/language, clearly marks the current default, and offers only
+   approved, enabled, correctly mapped Cloud templates. Promotional assets do
+   not appear in these controls.
+3. The library provides search plus compact filters for kind, language, and
+   provider status. The desktop view uses the available width for columns such
+   as name, kind, language, Meta status/reason, Store usage/default state, last
+   updated, and actions. The mobile view stacks each template into a readable
+   card instead of forcing a narrow horizontally scrolling table.
+4. Row actions are consolidated into a predictable action menu with Preview,
+   Set as default, Edit as new revision, Archive, and Restore where each action
+   is valid. The current default and immutable approved revision remain visible
+   without opening a second screen.
+5. Preview opens in a wide side drawer on desktop and a full-height sheet on
+   mobile. It shows the WhatsApp-style header/body/buttons, resolved sample
+   values, variable mapping, provider status/reason, and the invoice-link or
+   document behavior applicable to the selected revision.
+6. Create and edit-as-new-revision use a wider two-column dialog: fields and
+   validation on the left, a live preview on the right, and a sticky footer
+   with explicit Cancel and Submit actions. Existing submission and mapping
+   rules remain unchanged.
+
+#### Implementation sequence
+
+- 6.1 Capture the current component state/interaction map and define the
+  responsive breakpoints without changing data or API contracts.
+- 6.2 Restructure the manager shell and toolbar for full-width desktop use,
+  preserving account selection, loading, sync, and error states.
+- 6.3 Move and simplify the default controls, retaining exact Store/account,
+  kind, language, approval, enabled, mapping, and immutable-revision rules.
+- 6.4 Add library search/filter presentation and responsive table/card layouts;
+  keep provider status and safe rejection reasons visible.
+- 6.5 Widen and polish the preview drawer and create/revision dialog without
+  changing their submission or preview data flow.
+- 6.6 Review keyboard navigation, focus handling, empty/loading/error states,
+  small-screen overflow, and status readability.
+- 6.7 Run focused checks, perform standards/spec review, fix findings, and
+  commit this UI phase before starting unrelated work.
+
+#### Non-goals
+
+- No backend, database, migration, provider, webhook, or template-schema
+  changes.
+- No Promotions-tab or promotion-template UI changes.
+- No automatic sync, automatic default replacement, or client-side fallback
+  when a mapping/default operation fails.
+- No broad Admin design-system rewrite; reuse the existing components and
+  tokens unless a small local adjustment is required for the layout.
+
+#### Acceptance criteria
+
+- At desktop widths the Templates tab uses the available content width without
+  the current narrow account selector, cramped action area, or unnecessary
+  nested borders.
+- At mobile widths the tab remains usable without requiring horizontal table
+  scrolling; all essential template fields and actions remain accessible.
+- Approved Bill and Due reminder revisions can be searched, filtered, previewed,
+  and explicitly selected as defaults with the existing scope rules intact.
+- Pending, rejected, archived, unmapped, and current-default states are
+  distinguishable and include actionable text where applicable.
+- Preview accurately distinguishes dynamic invoice-link buttons from legacy
+  document-header/PDF behavior and does not expose internal identifiers.
+- Create and edit-as-new-revision still submit the same valid payloads and
+  retain the existing Meta error presentation.
+- Sync remains manual, promotional templates remain absent, and no existing
+  invoice/due send behavior changes.
+
+#### Verification plan
+
+- Focused Admin tests or component-level checks for filtering, default
+  eligibility, preview state, dialog state, and responsive action visibility.
+- Admin focused type check and lint output for the changed component, reported
+  separately from known baseline failures.
+- Manual checks at desktop, tablet, and mobile widths using multiple approved
+  Bill/Due templates plus pending/rejected/archived examples.
+- `git diff --check`, standards review, and spec/acceptance review before the
+  phase commit.
+
 ## Verification gates
 
 For each phase, report separately:
