@@ -22,6 +22,9 @@ export type GoogleAccountIdentity = {
 export type GoogleOAuthProvider = {
   buildAuthorizationUrl: (state: string) => string;
   exchangeAuthorizationCode: (code: string) => Promise<GoogleContactsCredentialPayload>;
+  refreshAccessToken: (
+    refreshToken: string,
+  ) => Promise<GoogleContactsCredentialPayload>;
   getAccountIdentity: (accessToken: string) => Promise<GoogleAccountIdentity>;
 };
 
@@ -116,6 +119,7 @@ export const buildGoogleContactsAuthorizationUrl = (
 const parseTokenResponse = (
   value: unknown,
   now: number,
+  previousRefreshToken?: string,
 ): GoogleContactsCredentialPayload => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new GoogleContactsOAuthError(
@@ -124,9 +128,15 @@ const parseTokenResponse = (
     );
   }
   const token = value as Record<string, unknown>;
+  const refreshToken =
+    typeof token.refresh_token === "string" && token.refresh_token.trim()
+      ? requireToken(token.refresh_token, "refresh token")
+      : previousRefreshToken
+        ? requireToken(previousRefreshToken, "refresh token")
+        : requireToken(token.refresh_token, "refresh token");
   return {
     accessToken: requireToken(token.access_token, "access token"),
-    refreshToken: requireToken(token.refresh_token, "refresh token"),
+    refreshToken,
     tokenType: requireToken(token.token_type ?? "Bearer", "token type"),
     scope: requireToken(
       token.scope ?? GOOGLE_CONTACTS_WRITE_SCOPE,
@@ -230,6 +240,17 @@ export const createGoogleOAuthProvider = (
       grant_type: "authorization_code",
     });
     return parseTokenResponse(await postForm(GOOGLE_TOKEN_ENDPOINT, body), fetchNow());
+  },
+  refreshAccessToken: async (refreshToken) => {
+    const config = googleContactsOAuthConfig();
+    const token = requireToken(refreshToken, "refresh token");
+    const body = new URLSearchParams({
+      refresh_token: token,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      grant_type: "refresh_token",
+    });
+    return parseTokenResponse(await postForm(GOOGLE_TOKEN_ENDPOINT, body), fetchNow(), token);
   },
   getAccountIdentity: async (accessToken) =>
     parseIdentity(await getJson(GOOGLE_USERINFO_ENDPOINT, requireToken(accessToken, "access token"))),

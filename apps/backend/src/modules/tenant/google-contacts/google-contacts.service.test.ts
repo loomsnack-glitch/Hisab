@@ -17,24 +17,44 @@ const disconnected = {
   connectionStatus: "disconnected" as const,
   googleAccountEmail: null,
   connectedAt: null,
+  initialSyncStatus: "not_started" as const,
+  lastSuccessfulSyncAt: null,
+  pendingCount: 0,
+  errorCount: 0,
+  conflictCount: 0,
 };
 
 const connected = {
   connectionStatus: "connected" as const,
   googleAccountEmail: "owner@example.com",
   connectedAt: "2026-08-26T06:00:00.000Z",
+  initialSyncStatus: "not_started" as const,
+  lastSuccessfulSyncAt: null,
+  pendingCount: 0,
+  errorCount: 0,
+  conflictCount: 0,
 };
 
 const reconnectRequired = {
   connectionStatus: "reconnect_required" as const,
   googleAccountEmail: "owner@example.com",
   connectedAt: "2026-08-26T06:00:00.000Z",
+  initialSyncStatus: "not_started" as const,
+  lastSuccessfulSyncAt: null,
+  pendingCount: 0,
+  errorCount: 0,
+  conflictCount: 0,
 };
 
 const connecting = {
   connectionStatus: "connecting" as const,
   googleAccountEmail: null,
   connectedAt: null,
+  initialSyncStatus: "not_started" as const,
+  lastSuccessfulSyncAt: null,
+  pendingCount: 0,
+  errorCount: 0,
+  conflictCount: 0,
 };
 
 const credentials = {
@@ -59,6 +79,7 @@ const createDeps = (
   })),
   completeConnection: mock(async () => connected),
   revertConnecting: mock(async () => disconnected),
+  scheduleInitialCatchUp: mock(async () => connected),
   vault: {
     store: mock(async () => ({
       reference: "db-secret:11111111-1111-4111-8111-111111111111",
@@ -75,6 +96,7 @@ const createDeps = (
     buildAuthorizationUrl: (state) =>
       `https://accounts.google.com/o/oauth2/v2/auth?state=${encodeURIComponent(state)}&client_id=public-id`,
     exchangeAuthorizationCode: mock(async () => credentials),
+    refreshAccessToken: mock(async () => credentials),
     getAccountIdentity: mock(async () => ({
       subject: "google-subject-1",
       email: "owner@example.com",
@@ -237,6 +259,9 @@ describe("Google Contacts connection service", () => {
         buildAuthorizationUrl: () => "https://accounts.google.com/o/oauth2/v2/auth",
         exchangeAuthorizationCode: mock(async () => {
           throw new Error("refresh-token-must-not-escape");
+        }),
+        refreshAccessToken: mock(async () => {
+          throw new Error("must not refresh during failed exchange");
         }),
         getAccountIdentity: mock(async () => ({
           subject: "google-subject-1",

@@ -13,6 +13,11 @@ const getStatus = mock(async () => ({
     connectionStatus: "disconnected" as const,
     googleAccountEmail: null,
     connectedAt: null,
+    initialSyncStatus: "not_started" as const,
+    lastSuccessfulSyncAt: null,
+    pendingCount: 0,
+    errorCount: 0,
+    conflictCount: 0,
   },
   code: 200 as const,
 }));
@@ -34,16 +39,40 @@ const complete = mock(async () => ({
     connectionStatus: "connected" as const,
     googleAccountEmail: "owner@example.com",
     connectedAt: "2026-08-26T06:00:00.000Z",
+    initialSyncStatus: "not_started" as const,
+    lastSuccessfulSyncAt: null,
+    pendingCount: 0,
+    errorCount: 0,
+    conflictCount: 0,
   },
   code: 200 as const,
 }));
 
+const startInitialSync = mock(async () => ({
+  status: "success" as const,
+  message: "Google Contacts initial sync scheduled",
+  data: {
+    connectionStatus: "connected" as const,
+    googleAccountEmail: "owner@example.com",
+    connectedAt: "2026-08-26T06:00:00.000Z",
+    initialSyncStatus: "pending" as const,
+    lastSuccessfulSyncAt: null,
+    pendingCount: 3,
+    errorCount: 0,
+    conflictCount: 0,
+  },
+  code: 202 as const,
+}));
+
 const authenticatedUser: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
-  context.set("authUser", { id: USER_ID });
+  context.set("authUser", { id: USER_ID } as AppVariables["authUser"]);
   await next();
 };
 
-const router = createGoogleContactsRoutes({ getStatus, start, complete }, authenticatedUser);
+const router = createGoogleContactsRoutes(
+  { getStatus, start, complete, startInitialSync },
+  authenticatedUser,
+);
 const app = new Hono<{ Variables: AppVariables }>();
 app.route("/organizations", router);
 
@@ -52,6 +81,7 @@ describe("Google Contacts connection routes", () => {
     getStatus.mockClear();
     start.mockClear();
     complete.mockClear();
+    startInitialSync.mockClear();
   });
 
   test("reads status for an authorized Organization", async () => {
@@ -126,5 +156,22 @@ describe("Google Contacts connection routes", () => {
 
     expect(response.status).toBe(400);
     expect(start).not.toHaveBeenCalled();
+  });
+
+  test("schedules initial catch-up for an authorized Organization without exposing credentials", async () => {
+    const response = await app.request(
+      `/organizations/${ORGANIZATION_ID}/google-contacts/sync`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(202);
+    expect(startInitialSync).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      status: "success",
+      data: { initialSyncStatus: "pending", pendingCount: 3 },
+    });
+    expect(JSON.stringify(body)).not.toContain("refresh_token");
+    expect(JSON.stringify(body)).not.toContain("access_token");
   });
 });

@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Contact } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { getGoogleContactsSyncStatus, startGoogleContactsOAuth } from "@repo/services";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+    getGoogleContactsSyncStatus,
+    startGoogleContactsInitialSync,
+    startGoogleContactsOAuth,
+} from "@repo/services";
 import type { GoogleContactsSyncStatus } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -16,8 +20,10 @@ type GoogleContactsSyncStatusCardViewProps = {
     status: GoogleContactsSyncStatus | null;
     isPending?: boolean;
     isSubmitting?: boolean;
+    isSyncing?: boolean;
     errorMessage?: string | null;
     onConnect?: () => void;
+    onStartInitialSync?: () => void;
 };
 
 const statusLabel = (connectionStatus: GoogleContactsSyncStatus["connectionStatus"]) => {
@@ -44,16 +50,35 @@ const connectLabel = (connectionStatus: GoogleContactsSyncStatus["connectionStat
     }
 };
 
+const initialSyncLabel = (status: GoogleContactsSyncStatus) => {
+    if (status.initialSyncStatus === "pending") return "Initial sync pending";
+    if (status.initialSyncStatus === "completed") return "Initial sync completed";
+    return "Run initial sync";
+};
+
+const formatSyncTime = (value: GoogleContactsSyncStatus["lastSuccessfulSyncAt"]): string | null => {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+};
+
 export const GoogleContactsSyncStatusCardView = ({
     status,
     isPending = false,
     isSubmitting = false,
+    isSyncing = false,
     errorMessage,
     onConnect,
+    onStartInitialSync,
 }: GoogleContactsSyncStatusCardViewProps) => {
     const connectionStatus = status?.connectionStatus ?? "disconnected";
     const canConnect = connectionStatus !== "connected";
     const email = status?.googleAccountEmail;
+    const connected = connectionStatus === "connected";
+    const lastSuccessfulSyncAt = status ? formatSyncTime(status.lastSuccessfulSyncAt) : null;
+    const canStartInitialSync =
+        connected && status?.initialSyncStatus === "not_started" && Boolean(onStartInitialSync);
 
     return (
         <Card className="border-border/60 bg-card/80">
@@ -67,7 +92,7 @@ export const GoogleContactsSyncStatusCardView = ({
                         Connect one Google account so this Organization can export Customer names and phone numbers.
                     </CardDescription>
                 </div>
-                <Badge variant={connectionStatus === "connected" ? "default" : "outline"} className="rounded-full">
+                <Badge variant={connected ? "default" : "outline"} className="rounded-full">
                     {isPending ? "Loading" : statusLabel(connectionStatus)}
                 </Badge>
             </CardHeader>
@@ -87,6 +112,18 @@ export const GoogleContactsSyncStatusCardView = ({
                                 No Google account is connected yet.
                             </p>
                         )}
+                        {connected && status ? (
+                            <div className="space-y-1 text-sm text-muted-foreground">
+                                <p>{initialSyncLabel(status)}</p>
+                                <p>
+                                    Last successful sync:{" "}
+                                    {lastSuccessfulSyncAt ?? "None yet"}
+                                </p>
+                                <p>
+                                    Pending {status.pendingCount}, errors {status.errorCount}, conflicts {status.conflictCount}
+                                </p>
+                            </div>
+                        ) : null}
                         {errorMessage ? (
                             <p className="text-sm text-destructive">{errorMessage}</p>
                         ) : null}
@@ -98,6 +135,16 @@ export const GoogleContactsSyncStatusCardView = ({
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? "Connecting…" : connectLabel(connectionStatus)}
+                            </Button>
+                        ) : null}
+                        {canStartInitialSync ? (
+                            <Button
+                                type="button"
+                                className="rounded-xl"
+                                onClick={onStartInitialSync}
+                                disabled={isSyncing}
+                            >
+                                {isSyncing ? "Scheduling…" : "Run initial sync"}
                             </Button>
                         ) : null}
                     </>
@@ -120,6 +167,7 @@ const GoogleContactsSyncStatusCard = ({
     organizationId,
     redirectTo = defaultRedirect,
 }: GoogleContactsSyncStatusCardProps) => {
+    const queryClient = useQueryClient();
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const query = useQuery({
         queryKey: googleContactsKeys.status(organizationId),
@@ -145,16 +193,40 @@ const GoogleContactsSyncStatusCard = ({
             toast.error(message);
         },
     });
+    const syncMutation = useMutation({
+        mutationFn: async () => {
+            const started = await startGoogleContactsInitialSync(organizationId);
+            if (started.status !== "success" || !started.data) {
+                throw { message: started.message || "Google Contacts initial sync could not be started" };
+            }
+            return started.data;
+        },
+        onSuccess: () => {
+            setErrorMessage(null);
+            toast.success("Google Contacts initial sync scheduled");
+            void queryClient.invalidateQueries({ queryKey: googleContactsKeys.status(organizationId) });
+        },
+        onError: (error: { message?: string }) => {
+            const message = error.message || "Google Contacts initial sync could not be started";
+            setErrorMessage(message);
+            toast.error(message);
+        },
+    });
 
     return (
         <GoogleContactsSyncStatusCardView
             status={status}
             isPending={query.isPending}
             isSubmitting={connectMutation.isPending}
+            isSyncing={syncMutation.isPending}
             errorMessage={errorMessage ?? (query.data?.status === "error" ? query.data.message : null)}
             onConnect={() => {
                 setErrorMessage(null);
                 connectMutation.mutate();
+            }}
+            onStartInitialSync={() => {
+                setErrorMessage(null);
+                syncMutation.mutate();
             }}
         />
     );

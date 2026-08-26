@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Context } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import {
   GoogleContactsOAuthCompleteSchema,
@@ -15,6 +15,7 @@ import type { AppVariables } from "@/types/hono";
 import {
   completeGoogleContactsOAuth,
   getGoogleContactsSyncStatusForOrganization,
+  startGoogleContactsInitialSync,
   startGoogleContactsOAuth,
 } from "./google-contacts.service";
 
@@ -56,6 +57,10 @@ type GoogleContactsOperations = {
     organizationId: string,
     result: unknown,
   ) => Promise<ServiceResponse<GoogleContactsSyncStatus | null>>;
+  startInitialSync: (
+    userId: string,
+    organizationId: string,
+  ) => Promise<ServiceResponse<GoogleContactsSyncStatus | null>>;
 };
 
 export const createGoogleContactsRoutes = (
@@ -63,8 +68,9 @@ export const createGoogleContactsRoutes = (
     getStatus: getGoogleContactsSyncStatusForOrganization,
     start: startGoogleContactsOAuth,
     complete: completeGoogleContactsOAuth,
+    startInitialSync: startGoogleContactsInitialSync,
   },
-  authenticate: typeof authMiddleware = authMiddleware,
+  authenticate: MiddlewareHandler<{ Variables: AppVariables }> = authMiddleware,
 ) => {
   const router = new Hono<{ Variables: AppVariables }>();
   router.use("*", authenticate);
@@ -121,6 +127,21 @@ export const createGoogleContactsRoutes = (
       }
     },
   );
+
+  router.post("/:organizationId/google-contacts/sync", async (c) => {
+    try {
+      const organizationId = c.req.param("organizationId");
+      if (!uuidSchema.safeParse(organizationId).success) {
+        return c.json(invalidOrganizationId(), STATUS_CODES.BAD_REQUEST);
+      }
+      return handleServiceResponse(
+        c,
+        await operations.startInitialSync(c.get("authUser").id, organizationId),
+      );
+    } catch (error) {
+      return unexpectedError(c, error);
+    }
+  });
 
   return router;
 };

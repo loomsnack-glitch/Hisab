@@ -11,6 +11,11 @@ import {
 type ConnectionRow = Record<string, unknown>;
 const nonceHashPattern = /^[0-9a-f]{64}$/;
 
+const asCount = (value: unknown): number => {
+  const count = Number(value ?? 0);
+  return Number.isFinite(count) && count >= 0 ? Math.trunc(count) : 0;
+};
+
 export type GoogleContactsConnectionAttempt = {
   started: boolean;
   status: GoogleContactsSyncStatus;
@@ -44,6 +49,11 @@ export const mapGoogleContactsSyncStatus = (
     connectionStatus: row.status,
     googleAccountEmail: row.google_account_email ?? null,
     connectedAt: row.connected_at ?? null,
+    initialSyncStatus: row.initial_sync_status ?? "not_started",
+    lastSuccessfulSyncAt: row.last_successful_sync_at ?? null,
+    pendingCount: asCount(row.pending_count),
+    errorCount: asCount(row.error_count),
+    conflictCount: asCount(row.conflict_count),
   });
 };
 
@@ -51,9 +61,26 @@ export const getGoogleContactsConnectionStatus = async (
   organizationId: string,
 ): Promise<GoogleContactsSyncStatus> => {
   const [row] = await pg`
-    SELECT status, google_account_email, connected_at
-    FROM google_contacts_connections
-    WHERE organization_id = ${organizationId}
+    SELECT
+      connection.status,
+      connection.google_account_email,
+      connection.connected_at,
+      connection.initial_sync_status,
+      connection.last_successful_sync_at,
+      COUNT(*) FILTER (WHERE outbox.status IN ('pending', 'processing')) AS pending_count,
+      COUNT(*) FILTER (WHERE outbox.status = 'failed') AS error_count,
+      COUNT(*) FILTER (WHERE outbox.status = 'conflict') AS conflict_count
+    FROM google_contacts_connections connection
+    LEFT JOIN google_contacts_sync_outbox outbox
+      ON outbox.connection_id = connection.id
+    WHERE connection.organization_id = ${organizationId}
+    GROUP BY
+      connection.id,
+      connection.status,
+      connection.google_account_email,
+      connection.connected_at,
+      connection.initial_sync_status,
+      connection.last_successful_sync_at
   `;
   return mapGoogleContactsSyncStatus(row as ConnectionRow | undefined);
 };

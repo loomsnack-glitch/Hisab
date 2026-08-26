@@ -9,6 +9,11 @@ describe("Google Contacts connection persistence boundary", () => {
       connectionStatus: "disconnected",
       googleAccountEmail: null,
       connectedAt: null,
+      initialSyncStatus: "not_started",
+      lastSuccessfulSyncAt: null,
+      pendingCount: 0,
+      errorCount: 0,
+      conflictCount: 0,
     });
   });
 
@@ -30,6 +35,11 @@ describe("Google Contacts connection persistence boundary", () => {
       connectionStatus: "connected",
       googleAccountEmail: "owner@example.com",
       connectedAt: "2026-08-26T06:00:00.000Z",
+      initialSyncStatus: "not_started",
+      lastSuccessfulSyncAt: null,
+      pendingCount: 0,
+      errorCount: 0,
+      conflictCount: 0,
     });
     expect("credentialReference" in snapshot).toBe(false);
     expect("credentialKeyVersion" in snapshot).toBe(false);
@@ -55,6 +65,46 @@ describe("Google Contacts connection persistence boundary", () => {
     ).toMatchObject({
       connectionStatus: "reconnect_required",
       googleAccountEmail: "owner@example.com",
+    });
+  });
+
+  test("maps initial-sync pending and completed summaries without credential material", () => {
+    const pending = mapGoogleContactsSyncStatus({
+      status: "connected",
+      google_account_email: "owner@example.com",
+      connected_at: "2026-08-26T06:00:00.000Z",
+      initial_sync_status: "pending",
+      last_successful_sync_at: null,
+      pending_count: "4",
+      error_count: "0",
+      conflict_count: "0",
+      credential_reference: "db-secret:must-not-escape",
+    });
+    expect(pending).toMatchObject({
+      connectionStatus: "connected",
+      initialSyncStatus: "pending",
+      pendingCount: 4,
+      errorCount: 0,
+      conflictCount: 0,
+    });
+    expect("credentialReference" in pending).toBe(false);
+
+    const completed = mapGoogleContactsSyncStatus({
+      status: "connected",
+      google_account_email: "owner@example.com",
+      connected_at: "2026-08-26T06:00:00.000Z",
+      initial_sync_status: "completed",
+      last_successful_sync_at: "2026-08-26T07:15:00.000Z",
+      pending_count: 0,
+      error_count: 1,
+      conflict_count: 2,
+    });
+    expect(completed).toMatchObject({
+      initialSyncStatus: "completed",
+      lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
+      pendingCount: 0,
+      errorCount: 1,
+      conflictCount: 2,
     });
   });
 });

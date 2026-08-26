@@ -1,0 +1,18 @@
+{
+    "name": "google-contacts-worker",
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "scripts": {
+        "start": "bun --env-file=.env src/index.ts",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test src"
+    },
+    "devDependencies": {
+        "@types/bun": "latest",
+        "@types/node": "^24.10.1",
+        "typescript": "5.9.3"
+    }
+}

@@ -38,6 +38,7 @@ import {
   getGoogleContactsCredentialBinding,
   revertConnectingGoogleContactsConnection,
 } from "./google-contacts.repository";
+import { scheduleGoogleContactsInitialCatchUp } from "./google-contacts.outbox";
 
 export type GoogleContactsServiceDependencies = {
   getOrganizationByIdForUser: (
@@ -51,6 +52,7 @@ export type GoogleContactsServiceDependencies = {
   beginAttempt: typeof beginGoogleContactsConnectionAttempt;
   completeConnection: typeof completeGoogleContactsConnection;
   revertConnecting: typeof revertConnectingGoogleContactsConnection;
+  scheduleInitialCatchUp: typeof scheduleGoogleContactsInitialCatchUp;
   vault: GoogleContactsCredentialVault;
   oauth: GoogleOAuthProvider;
 };
@@ -64,6 +66,7 @@ const defaultDependencies = (): GoogleContactsServiceDependencies => ({
   beginAttempt: beginGoogleContactsConnectionAttempt,
   completeConnection: completeGoogleContactsConnection,
   revertConnecting: revertConnectingGoogleContactsConnection,
+  scheduleInitialCatchUp: scheduleGoogleContactsInitialCatchUp,
   vault: databaseGoogleContactsCredentialVault,
   oauth: createGoogleOAuthProvider(),
 });
@@ -309,3 +312,32 @@ export const completeGoogleContactsOAuth = async (
     throw error;
   }
 };
+
+export const startGoogleContactsInitialSync = async (
+  userId: string,
+  organizationId: string,
+  injected: Partial<GoogleContactsServiceDependencies> = {},
+): Promise<ServiceResponse<GoogleContactsSyncStatus | null>> => {
+  const deps = { ...defaultDependencies(), ...injected };
+  const organization = await requireOrganization(deps, userId, organizationId);
+  if (!organization) return organizationNotFound();
+
+  const current = await deps.getStatus(organizationId);
+  if (current.connectionStatus !== "connected") {
+    return {
+      status: "error",
+      message: "Google Contacts is not connected",
+      data: current,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  const status = await deps.scheduleInitialCatchUp(organizationId);
+  return {
+    status: "success",
+    message: "Google Contacts initial sync scheduled",
+    data: status,
+    code: 202,
+  };
+};
+

@@ -8,10 +8,21 @@ export const GoogleContactsConnectionStatusSchema = z.enum([
     "reconnect_required",
 ]);
 
+export const GoogleContactsInitialSyncStatusSchema = z.enum([
+    "not_started",
+    "pending",
+    "completed",
+]);
+
 export const GoogleContactsSyncStatusSchema = z.object({
     connectionStatus: GoogleContactsConnectionStatusSchema,
     googleAccountEmail: z.string().trim().email("Invalid Google account email").nullable(),
     connectedAt: dtoDateSchema.nullable(),
+    initialSyncStatus: GoogleContactsInitialSyncStatusSchema.default("not_started"),
+    lastSuccessfulSyncAt: dtoDateSchema.nullable().default(null),
+    pendingCount: z.number().int().nonnegative().default(0),
+    errorCount: z.number().int().nonnegative().default(0),
+    conflictCount: z.number().int().nonnegative().default(0),
 });
 
 export const GoogleContactsOAuthStartResponseSchema = z.object({

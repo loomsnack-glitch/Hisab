@@ -45,3 +45,14 @@ export const completeGoogleContactsOAuth = async (
         return handleApiError(error);
     }
 };
+
+export const startGoogleContactsInitialSync = async (
+    organizationId: string,
+): Promise<GoogleContactsStatusResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/google-contacts/sync`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};

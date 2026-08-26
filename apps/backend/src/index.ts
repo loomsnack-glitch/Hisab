@@ -7,6 +7,7 @@ import {
   replayPendingCloudWebhookEvents,
   reconcileStaleCloudOutbox,
 } from "./modules/tenant/whatsapp/cloud-api/cloud-runtime";
+import { dispatchGoogleContactsOutbox } from "./modules/tenant/google-contacts/google-contacts.runtime";
 
 const port = Number(process.env.PORT) || 8001;
 const hostname = process.env.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0";
@@ -78,3 +79,17 @@ const stopCloudOutboxReconciliation = () => clearInterval(cloudOutboxReconciliat
 process.once("SIGINT", stopCloudOutboxReconciliation);
 process.once("SIGTERM", stopCloudOutboxReconciliation);
 process.once("SIGQUIT", stopCloudOutboxReconciliation);
+
+const googleContactsOutboxDispatch = setInterval(() => {
+  void dispatchGoogleContactsOutbox().catch((error) => {
+    console.warn(
+      "[google-contacts] outbox dispatch failed",
+      error instanceof Error ? error.message : "unknown error",
+    );
+  });
+}, 5_000);
+googleContactsOutboxDispatch.unref();
+const stopGoogleContactsOutboxDispatch = () => clearInterval(googleContactsOutboxDispatch);
+process.once("SIGINT", stopGoogleContactsOutboxDispatch);
+process.once("SIGTERM", stopGoogleContactsOutboxDispatch);
+process.once("SIGQUIT", stopGoogleContactsOutboxDispatch);
