@@ -117,4 +117,14 @@ export const createGooglePeopleClient = (accessToken: string): GooglePeopleClien
     });
     return asPerson(payload) ?? person;
   },
+  getContact: async (resourceName) => {
+    const url = new URL(`${PEOPLE_API_BASE}/${resourceName}`);
+    url.searchParams.set("personFields", SEARCH_READ_MASK);
+    const payload = await requestJson(accessToken, url.toString());
+    const person = asPerson(payload);
+    if (!person) {
+      throw new GooglePeopleApiError(502, "Google Contacts could not be updated");
+    }
+    return person;
+  },
 });

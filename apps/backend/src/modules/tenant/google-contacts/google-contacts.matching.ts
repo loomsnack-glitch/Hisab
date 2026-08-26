@@ -32,11 +32,22 @@ export const withGanatriNameAndMatchingPhone = (
   person: GoogleContactPerson,
   name: string,
   normalizedPhone: string,
+  previousNormalizedPhone?: string | null,
 ): GoogleContactPerson => {
+  const replacePhones = Array.from(
+    new Set(
+      [previousNormalizedPhone, normalizedPhone].filter((value): value is string => Boolean(value?.trim())),
+    ),
+  );
   let replaced = false;
   const phoneNumbers = (person.phoneNumbers ?? []).map((entry) => {
     if (replaced) return entry;
-    if (!phoneValues(entry).some((value) => normalizePhoneNumber(value) === normalizedPhone)) {
+    if (
+      !phoneValues(entry).some((value) => {
+        const normalized = normalizePhoneNumber(value);
+        return normalized !== null && replacePhones.includes(normalized);
+      })
+    ) {
       return entry;
     }
     replaced = true;
@@ -50,6 +61,6 @@ export const withGanatriNameAndMatchingPhone = (
   return {
     ...person,
     names: [{ unstructuredName: name, givenName: name }],
-    phoneNumbers,
+    phoneNumbers: replaced ? phoneNumbers : [...phoneNumbers, { value: normalizedPhone }],
   };
 };

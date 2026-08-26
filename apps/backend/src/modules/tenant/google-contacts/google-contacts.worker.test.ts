@@ -10,7 +10,9 @@ const job = {
   connectionStatus: "connected" as const,
   customerName: "Dev Jariwala",
   customerPhone: "+919876543210",
+  customerUpdatedAt: "2026-08-26T12:00:00.000Z",
   linkedGoogleResourceName: null as string | null,
+  matchedPhone: null as string | null,
 };
 
 const createPeople = (
@@ -21,6 +23,9 @@ const createPeople = (
   });
   return {
     searchContacts: mock(async () => []),
+    getContact: mock(async () => {
+      throw new Error("getContact should not be used without a linked Google Contact");
+    }),
     createContact: mock(async () => ({
       resourceName: "people/created",
       etag: "created-etag",
@@ -92,6 +97,51 @@ describe("Google Contacts worker", () => {
     expect(people.deleteContact).not.toHaveBeenCalled();
   });
 
+  test("updates a linked Google Contact when the Customer name or phone changes", async () => {
+    const linked = {
+      resourceName: "people/dev",
+      etag: "etag-2",
+      names: [{ unstructuredName: "Dev", givenName: "Dev" }],
+      phoneNumbers: [
+        { value: "+14155552671", type: "home" },
+        { value: "+919876543210", canonicalForm: "+919876543210" },
+      ],
+    };
+    const people = createPeople({
+      getContact: mock(async () => linked),
+      updateContact: mock(async (person) => person),
+    });
+
+    const outcome = await processGoogleContactsSyncJob(
+      {
+        ...job,
+        customerName: "Dev Jariwala",
+        customerPhone: "+918888888888",
+        linkedGoogleResourceName: "people/dev",
+        matchedPhone: "+919876543210",
+      },
+      people,
+    );
+
+    expect(outcome).toEqual({
+      status: "updated",
+      googleResourceName: "people/dev",
+    });
+    expect(people.getContact).toHaveBeenCalledWith("people/dev");
+    expect(people.searchContacts).not.toHaveBeenCalled();
+    expect(people.createContact).not.toHaveBeenCalled();
+    expect(people.updateContact).toHaveBeenCalledWith({
+      resourceName: "people/dev",
+      etag: "etag-2",
+      names: [{ unstructuredName: "Dev Jariwala", givenName: "Dev Jariwala" }],
+      phoneNumbers: [
+        { value: "+14155552671", type: "home" },
+        { value: "+918888888888", canonicalForm: "+918888888888" },
+      ],
+    });
+    expect(people.deleteContact).not.toHaveBeenCalled();
+  });
+
   test("skips a Customer without a phone and never calls Google", async () => {
     const people = createPeople();
 
@@ -102,6 +152,7 @@ describe("Google Contacts worker", () => {
 
     expect(outcome).toEqual({ status: "skipped", reason: "ineligible" });
     expect(people.searchContacts).not.toHaveBeenCalled();
+    expect(people.getContact).not.toHaveBeenCalled();
     expect(people.createContact).not.toHaveBeenCalled();
     expect(people.updateContact).not.toHaveBeenCalled();
     expect(people.deleteContact).not.toHaveBeenCalled();

@@ -8,7 +8,8 @@ describe("Google Contacts no-deletion regression", () => {
     const peopleClient = readFileSync(join(dir, "google-contacts.people-client.ts"), "utf8");
     const worker = readFileSync(join(dir, "google-contacts.worker.ts"), "utf8");
     const dispatcher = readFileSync(join(dir, "google-contacts.dispatcher.ts"), "utf8");
-    const source = peopleClient + worker + dispatcher;
+    const outbox = readFileSync(join(dir, "google-contacts.outbox.ts"), "utf8");
+    const source = peopleClient + worker + dispatcher + outbox;
 
     expect(source).not.toContain("people.deleteContact");
     expect(source).not.toContain(":deleteContact");

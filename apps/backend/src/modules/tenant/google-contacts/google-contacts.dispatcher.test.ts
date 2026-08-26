@@ -18,7 +18,9 @@ const claim: GoogleContactsOutboxClaim = {
     connectionStatus: "connected",
     customerName: "Dev Jariwala",
     customerPhone: "+919876543210",
+    customerUpdatedAt: "2026-08-26T12:00:00.000Z",
     linkedGoogleResourceName: null,
+    matchedPhone: null,
   },
 };
 
@@ -52,6 +54,9 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
         expect(accessToken).toBe("access-token-must-not-escape");
         return {
           searchContacts: mock(async () => []),
+          getContact: mock(async () => {
+            throw new Error("getContact should not be used without a linked Google Contact");
+          }),
           createContact: mock(async () => ({
             resourceName: "people/created",
             etag: "etag",
@@ -75,6 +80,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
         outboxId: claim.job.outboxId,
         leaseOwner: claim.leaseOwner,
         attemptCount: 1,
+        claimedCustomerUpdatedAt: claim.job.customerUpdatedAt,
         outcome: { status: "created", googleResourceName: "people/created" },
       },
     ]);

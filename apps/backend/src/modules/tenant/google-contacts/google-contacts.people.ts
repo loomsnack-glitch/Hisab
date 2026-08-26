@@ -19,6 +19,7 @@ export type GoogleContactPerson = {
 
 export type GooglePeopleClient = {
   searchContacts: (query: string) => Promise<GoogleContactPerson[]>;
+  getContact: (resourceName: string) => Promise<GoogleContactPerson>;
   createContact: (input: { name: string; phone: string }) => Promise<GoogleContactPerson>;
   updateContact: (person: GoogleContactPerson) => Promise<GoogleContactPerson>;
 };

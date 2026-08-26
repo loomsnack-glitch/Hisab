@@ -176,8 +176,10 @@ export const createCustomer = async (
 
 export const updateCustomer = async (
   customerData: UpdateCustomerREPO,
+  tx?: Bun.TransactionSQL,
 ): Promise<CustomerDTO | null> => {
-    const [result] = await pg`
+    const db = tx || pg;
+    const [result] = await db`
         UPDATE customers
         SET name = ${customerData.name},
             phone = ${customerData.phone ?? null},

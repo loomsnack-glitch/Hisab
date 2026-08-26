@@ -14,7 +14,9 @@ export type GoogleContactsSyncJob = {
   connectionStatus: "connected" | "connecting" | "reconnect_required" | "disconnected";
   customerName: string;
   customerPhone: string | null;
+  customerUpdatedAt: string;
   linkedGoogleResourceName: string | null;
+  matchedPhone: string | null;
 };
 
 export type GoogleContactsSyncOutcome =
@@ -44,6 +46,25 @@ export const processGoogleContactsSyncJob = async (
   }
 
   try {
+    if (job.linkedGoogleResourceName) {
+      try {
+        const linked = await people.getContact(job.linkedGoogleResourceName);
+        const updated = await people.updateContact(
+          withGanatriNameAndMatchingPhone(
+            linked,
+            job.customerName.trim(),
+            normalizedPhone,
+            job.matchedPhone,
+          ),
+        );
+        return { status: "updated", googleResourceName: updated.resourceName };
+      } catch (error) {
+        if (!(error instanceof GooglePeopleApiError && error.status === 404)) {
+          throw error;
+        }
+      }
+    }
+
     const candidates: Awaited<ReturnType<GooglePeopleClient["searchContacts"]>> = [];
     const seen = new Set<string>();
     for (const query of searchQueries(normalizedPhone)) {
@@ -62,7 +83,12 @@ export const processGoogleContactsSyncJob = async (
     if (matches.length === 1) {
       const matched = matches[0]!;
       const updated = await people.updateContact(
-        withGanatriNameAndMatchingPhone(matched, job.customerName.trim(), normalizedPhone),
+        withGanatriNameAndMatchingPhone(
+          matched,
+          job.customerName.trim(),
+          normalizedPhone,
+          job.matchedPhone,
+        ),
       );
       return { status: "updated", googleResourceName: updated.resourceName };
     }

@@ -40,6 +40,7 @@ export const dispatchGoogleContactsOutboxJob = async (
       outboxId: claim.job.outboxId,
       leaseOwner: claim.leaseOwner,
       attemptCount: claim.attemptCount,
+      claimedCustomerUpdatedAt: claim.job.customerUpdatedAt,
       outcome,
     });
     return outcome;
@@ -50,6 +51,7 @@ export const dispatchGoogleContactsOutboxJob = async (
     outboxId: claim.job.outboxId,
     leaseOwner: claim.leaseOwner,
     attemptCount: claim.attemptCount,
+    claimedCustomerUpdatedAt: claim.job.customerUpdatedAt,
     outcome,
   });
   return outcome;

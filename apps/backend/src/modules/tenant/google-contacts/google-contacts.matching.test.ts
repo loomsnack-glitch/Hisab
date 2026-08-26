@@ -72,4 +72,30 @@ describe("Google Contact Match", () => {
     expect(updated.resourceName).toBe("people/multi");
     expect(updated.etag).toBe("people/multi-etag");
   });
+
+  test("replaces the previously matched phone when the Customer phone changes", () => {
+    const contact = person(
+      "people/changed",
+      [
+        { value: "+14155552671", type: "work" },
+        { value: "+919876543210", canonicalForm: "+919876543210" },
+      ],
+      "Dev",
+    );
+
+    const updated = withGanatriNameAndMatchingPhone(
+      contact,
+      "Dev Jariwala",
+      "+918888888888",
+      "+919876543210",
+    );
+
+    expect(updated.names).toEqual([
+      { unstructuredName: "Dev Jariwala", givenName: "Dev Jariwala" },
+    ]);
+    expect(updated.phoneNumbers).toEqual([
+      { value: "+14155552671", type: "work" },
+      { value: "+918888888888", canonicalForm: "+918888888888" },
+    ]);
+  });
 });

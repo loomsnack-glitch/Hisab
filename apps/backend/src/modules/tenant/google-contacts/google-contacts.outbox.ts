@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import { normalizePhoneNumber, type GoogleContactsSyncStatus } from "@repo/types";
 import { pg } from "@/config/db";
 import type { GoogleContactsCredentialBinding } from "./google-contacts.credentials";
+import {
+  decideGoogleContactsCustomerSchedule,
+  decideGoogleContactsOutboxCompletion,
+  googleContactsCustomerIsEligible,
+  type GoogleContactsOutboxStatus,
+} from "./google-contacts.customer-sync";
 import { getGoogleContactsConnectionStatus } from "./google-contacts.repository";
 import type { GoogleContactsSyncJob, GoogleContactsSyncOutcome } from "./google-contacts.worker";
 
@@ -21,6 +27,20 @@ type CustomerRow = {
   name: string;
   phone: string | null;
   updated_at: Date | string;
+};
+
+type GoogleContactsDatabase = typeof pg | Bun.TransactionSQL;
+
+const asTime = (value: unknown): number => {
+  if (value instanceof Date) return value.getTime();
+  const time = new Date(String(value ?? "")).getTime();
+  return Number.isFinite(time) ? time : 0;
+};
+
+const asIso = (value: unknown): string => {
+  if (value instanceof Date) return value.toISOString();
+  const date = new Date(String(value ?? ""));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : new Date(0).toISOString();
 };
 
 const eligibleCustomers = (
@@ -101,6 +121,115 @@ export const scheduleGoogleContactsInitialCatchUp = async (
   return getGoogleContactsConnectionStatus(organizationId);
 };
 
+export const scheduleGoogleContactsCustomerChange = async (
+  input: {
+    organizationId: string;
+    customerId: string;
+    customerUpdatedAt: Date | string;
+    phone: string | null | undefined;
+  },
+  db: GoogleContactsDatabase = pg,
+): Promise<void> => {
+  const customerUpdatedAt = asTime(input.customerUpdatedAt);
+  const eligible = googleContactsCustomerIsEligible(input.phone);
+  const [connection] = await db`
+    SELECT id, status
+    FROM google_contacts_connections
+    WHERE organization_id = ${input.organizationId}
+    FOR UPDATE
+  `;
+  if (!connection) return;
+
+  const [existing] = await db`
+    SELECT id, status, customer_updated_at
+    FROM google_contacts_sync_outbox
+    WHERE connection_id = ${connection.id}
+      AND customer_id = ${input.customerId}
+    FOR UPDATE
+  `;
+  const decision = decideGoogleContactsCustomerSchedule({
+    existing: existing
+      ? {
+          status: String(existing.status) as GoogleContactsOutboxStatus,
+          customerUpdatedAt: asTime(existing.customer_updated_at),
+        }
+      : null,
+    eligible,
+    customerUpdatedAt,
+    connectionStatus: String(connection.status),
+  });
+
+  if (decision.action === "noop") return;
+  if (!existing && decision.action !== "insert") return;
+
+  if (decision.action === "insert") {
+    await db`
+      INSERT INTO google_contacts_sync_outbox (
+        organization_id,
+        connection_id,
+        customer_id,
+        status,
+        customer_updated_at
+      ) VALUES (
+        ${input.organizationId},
+        ${connection.id},
+        ${input.customerId},
+        'pending',
+        ${new Date(decision.customerUpdatedAt)}
+      )
+      ON CONFLICT (connection_id, customer_id) DO NOTHING
+    `;
+    return;
+  }
+
+  if (decision.action === "skip") {
+    if (!existing) return;
+    await db`
+      UPDATE google_contacts_sync_outbox
+      SET
+        status = 'skipped',
+        lease_owner = NULL,
+        lease_expires_at = NULL,
+        last_error_code = NULL,
+        last_error_message = NULL,
+        customer_updated_at = ${new Date(decision.customerUpdatedAt)},
+        updated_at = NOW()
+      WHERE id = ${existing.id}
+        AND status IN ('pending', 'failed', 'conflict')
+    `;
+    return;
+  }
+
+  if (decision.resetForRetry) {
+    if (!existing) return;
+    await db`
+      UPDATE google_contacts_sync_outbox
+      SET
+        status = 'pending',
+        attempt_count = 0,
+        next_attempt_at = NOW(),
+        lease_owner = NULL,
+        lease_expires_at = NULL,
+        last_error_code = NULL,
+        last_error_message = NULL,
+        customer_updated_at = ${new Date(decision.customerUpdatedAt)},
+        updated_at = NOW()
+      WHERE id = ${existing.id}
+        AND status <> 'processing'
+    `;
+    return;
+  }
+
+  if (!existing) return;
+  await db`
+    UPDATE google_contacts_sync_outbox
+    SET
+      customer_updated_at = ${new Date(decision.customerUpdatedAt)},
+      updated_at = NOW()
+    WHERE id = ${existing.id}
+  `;
+};
+
 export const claimNextGoogleContactsOutbox = async (
   leaseSeconds: number,
   workerId = "google-contacts-worker",
@@ -166,7 +295,9 @@ export const claimNextGoogleContactsOutbox = async (
         connection.credential_key_version,
         customer.name AS customer_name,
         customer.phone AS customer_phone,
-        link.google_resource_name
+        customer.updated_at AS customer_updated_at,
+        link.google_resource_name,
+        link.matched_phone
       FROM google_contacts_sync_outbox outbox
       INNER JOIN google_contacts_connections connection
         ON connection.id = outbox.connection_id
@@ -195,8 +326,10 @@ export const claimNextGoogleContactsOutbox = async (
         connectionStatus: String(row.connection_status) as GoogleContactsSyncJob["connectionStatus"],
         customerName: String(row.customer_name ?? ""),
         customerPhone: row.customer_phone == null ? null : String(row.customer_phone),
+        customerUpdatedAt: asIso(row.customer_updated_at),
         linkedGoogleResourceName:
           row.google_resource_name == null ? null : String(row.google_resource_name),
+        matchedPhone: row.matched_phone == null ? null : String(row.matched_phone),
       },
     };
   });
@@ -210,10 +343,11 @@ export const completeGoogleContactsOutbox = async (input: {
   leaseOwner: string;
   outcome: GoogleContactsSyncOutcome;
   attemptCount: number;
+  claimedCustomerUpdatedAt?: Date | string;
 }): Promise<boolean> => {
   return pg.begin(async (tx) => {
     const [existing] = await tx`
-      SELECT id, organization_id, connection_id, customer_id, status, lease_owner
+      SELECT id, organization_id, connection_id, customer_id, status, lease_owner, customer_updated_at
       FROM google_contacts_sync_outbox
       WHERE id = ${input.outboxId}
         AND lease_owner = ${input.leaseOwner}
@@ -221,6 +355,69 @@ export const completeGoogleContactsOutbox = async (input: {
       FOR UPDATE
     `;
     if (!existing) return false;
+
+    const [customer] = await tx`
+      SELECT phone, updated_at FROM customers
+      WHERE id = ${existing.customer_id}
+        AND organization_id = ${existing.organization_id}
+    `;
+    const claimedCustomerUpdatedAt = asTime(
+      input.claimedCustomerUpdatedAt ?? existing.customer_updated_at,
+    );
+    const completion = decideGoogleContactsOutboxCompletion({
+      claimedCustomerUpdatedAt,
+      outboxCustomerUpdatedAt: asTime(existing.customer_updated_at),
+      currentCustomerUpdatedAt: asTime(customer?.updated_at ?? existing.customer_updated_at),
+      currentEligible: googleContactsCustomerIsEligible(
+        customer?.phone == null ? null : String(customer.phone),
+      ),
+    });
+
+    if (completion.action === "requeue") {
+      await tx`
+        UPDATE google_contacts_sync_outbox
+        SET
+          status = 'pending',
+          attempt_count = 0,
+          next_attempt_at = NOW(),
+          lease_owner = NULL,
+          lease_expires_at = NULL,
+          last_error_code = NULL,
+          last_error_message = NULL,
+          updated_at = NOW()
+        WHERE id = ${input.outboxId}
+      `;
+      return true;
+    }
+
+    if (completion.action === "skip") {
+      await tx`
+        UPDATE google_contacts_sync_outbox
+        SET
+          status = 'skipped',
+          lease_owner = NULL,
+          lease_expires_at = NULL,
+          last_error_code = NULL,
+          last_error_message = NULL,
+          updated_at = NOW()
+        WHERE id = ${input.outboxId}
+      `;
+      await tx`
+        UPDATE google_contacts_connections connection
+        SET
+          initial_sync_status = 'completed',
+          updated_at = NOW()
+        WHERE connection.id = ${existing.connection_id}
+          AND connection.initial_sync_status = 'pending'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM google_contacts_sync_outbox outbox
+            WHERE outbox.connection_id = connection.id
+              AND outbox.status IN ('pending', 'processing')
+          )
+      `;
+      return true;
+    }
 
     if (input.outcome.status === "retryable" && input.attemptCount < MAX_ATTEMPTS) {
       await tx`
