@@ -96,6 +96,7 @@ type Props = {
   organizationId: string;
   storeId: string;
   accounts: WhatsAppCloudAccountOption[];
+  storeName: string;
 };
 const kinds: Array<{
   value: WhatsAppMessageTemplateKind;
@@ -251,6 +252,7 @@ const WhatsAppCloudTemplateManager = ({
   organizationId,
   storeId,
   accounts,
+  storeName,
 }: Props) => {
   const queryClient = useQueryClient();
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
@@ -924,56 +926,66 @@ const WhatsAppCloudTemplateManager = ({
     );
   return (
     <div className="w-full space-y-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-end">
-        {accounts.length > 1 ? (
-          <div className="w-full space-y-1.5 sm:w-64 lg:w-72">
-            <span className="text-xs font-medium text-muted-foreground">
-              Cloud account
-            </span>
-            <Select
-              value={selectedAccountId}
-              onValueChange={(value) => {
-                if (value) setAccountId(value);
-              }}
-            >
-              <SelectTrigger
-                className="h-9 w-full rounded-xl"
-                aria-label="Cloud account"
+      <div className="flex flex-col gap-4 border-b border-border/60 pb-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h2 className="font-display text-xl font-semibold tracking-tight">
+            WhatsApp Cloud templates
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Create, submit, and assign approved templates for {storeName}.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          {accounts.length > 1 ? (
+            <div className="w-full space-y-2 sm:w-64 lg:w-72">
+              <span className="text-xs font-medium text-muted-foreground">
+                Cloud account
+              </span>
+              <Select
+                value={selectedAccountId}
+                onValueChange={(value) => {
+                  if (value) setAccountId(value);
+                }}
               >
-                <SelectValue>{account?.phoneNumber}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.phoneNumber}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <SelectTrigger
+                  className="h-9 w-full rounded-xl"
+                  aria-label="Cloud account"
+                >
+                  <SelectValue>{account?.phoneNumber}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.phoneNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full rounded-xl sm:w-auto"
+              disabled={syncMutation.isPending}
+              onClick={() => syncMutation.mutate()}
+            >
+              <RefreshCw
+                className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+              />{" "}
+              Refresh
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="w-full rounded-xl sm:w-auto"
+              onClick={openCreate}
+            >
+              <Plus className="size-4" /> Create template
+            </Button>
           </div>
-        ) : null}
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full rounded-xl sm:w-auto"
-            disabled={syncMutation.isPending}
-            onClick={() => syncMutation.mutate()}
-          >
-            <RefreshCw
-              className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
-            />{" "}
-            Refresh
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="w-full rounded-xl sm:w-auto"
-            onClick={openCreate}
-          >
-            <Plus className="size-4" /> Create template
-          </Button>
         </div>
       </div>
       {cloudQuery.data?.status === "error" ||
@@ -1133,7 +1145,7 @@ const WhatsAppCloudTemplateManager = ({
               </p>
             </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_10rem_10rem_10rem]">
-              <label className="space-y-2 text-xs font-medium text-muted-foreground">
+              <label className="space-y-2.5 text-xs font-medium text-muted-foreground">
                 <span>Search</span>
                 <div className="relative min-w-0">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1146,7 +1158,7 @@ const WhatsAppCloudTemplateManager = ({
                   />
                 </div>
               </label>
-              <label className="space-y-2 text-xs font-medium text-muted-foreground">
+              <label className="space-y-2.5 text-xs font-medium text-muted-foreground">
                 <span>Message type</span>
                 <Select
                   value={kindFilter}
@@ -1170,7 +1182,7 @@ const WhatsAppCloudTemplateManager = ({
                   </SelectContent>
                 </Select>
               </label>
-              <label className="space-y-2 text-xs font-medium text-muted-foreground">
+              <label className="space-y-2.5 text-xs font-medium text-muted-foreground">
                 <span>Language</span>
                 <Select
                   value={languageFilter}
@@ -1192,7 +1204,7 @@ const WhatsAppCloudTemplateManager = ({
                   </SelectContent>
                 </Select>
               </label>
-              <label className="space-y-2 text-xs font-medium text-muted-foreground">
+              <label className="space-y-2.5 text-xs font-medium text-muted-foreground">
                 <span>Meta status</span>
                 <Select
                   value={statusFilter}
@@ -1582,7 +1594,7 @@ const WhatsAppCloudTemplateManager = ({
           <div className="grid gap-6 py-2 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.72fr)]">
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label
                     className="text-xs font-medium"
                     htmlFor="cloud-template-kind"
@@ -1615,7 +1627,7 @@ const WhatsAppCloudTemplateManager = ({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label
                     className="text-xs font-medium"
                     htmlFor="cloud-template-language"
@@ -1631,7 +1643,7 @@ const WhatsAppCloudTemplateManager = ({
                   />
                 </div>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label
                   className="text-xs font-medium"
                   htmlFor="cloud-template-name"
@@ -1684,7 +1696,7 @@ const WhatsAppCloudTemplateManager = ({
                   </SelectContent>
                 </Select>
                 {headerFormat !== "none" ? (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label
                       className="text-xs font-medium"
                       htmlFor="cloud-template-header-sample"
@@ -1724,7 +1736,7 @@ const WhatsAppCloudTemplateManager = ({
                   </div>
                 ) : null}
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label
                   className="text-xs font-medium"
                   htmlFor="cloud-template-body"
@@ -1768,7 +1780,7 @@ const WhatsAppCloudTemplateManager = ({
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label
                     className="text-xs font-medium"
                     htmlFor="cloud-template-footer"
@@ -1786,7 +1798,7 @@ const WhatsAppCloudTemplateManager = ({
                     placeholder="Thank you for choosing us"
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label
                     className="text-xs font-medium"
                     htmlFor="cloud-template-button"
