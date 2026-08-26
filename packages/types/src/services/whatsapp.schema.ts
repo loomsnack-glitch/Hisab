@@ -98,6 +98,10 @@ export const WhatsAppCloudTemplateAssetSchema = z.object({
     version: z.number().int().min(1),
 });
 
+export const WhatsAppPublicInvoiceTemplateConfigSchema = z.object({
+    invoiceTemplateUrl: z.string().trim().min(1).max(2048),
+});
+
 export const WhatsAppCloudTemplateBindingSchema = z.object({
     id: z.uuid("Invalid template binding id"),
     organizationId: z.uuid("Invalid organization id"),

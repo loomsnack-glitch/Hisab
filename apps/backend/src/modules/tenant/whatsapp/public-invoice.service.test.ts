@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { renderPublicInvoiceHtml, type PublicInvoiceData } from "./public-invoice.service";
+import {
+  getPublicInvoiceTemplateUrl,
+  renderPublicInvoiceHtml,
+  type PublicInvoiceData,
+} from "./public-invoice.service";
 
 const data = {
   token: "safe-token",
@@ -33,6 +37,31 @@ const data = {
 } as unknown as PublicInvoiceData;
 
 describe("public invoice page", () => {
+  it("builds the Meta URL pattern from the configured public invoice base", () => {
+    const previousSecret = process.env.WHATSAPP_PUBLIC_INVOICE_LINK_SECRET;
+    const previousBaseUrl = process.env.WHATSAPP_PUBLIC_INVOICE_BASE_URL;
+    process.env.WHATSAPP_PUBLIC_INVOICE_LINK_SECRET = "a".repeat(32);
+    process.env.WHATSAPP_PUBLIC_INVOICE_BASE_URL =
+      "https://api.example.test/api/public/whatsapp/invoices";
+
+    try {
+      expect(getPublicInvoiceTemplateUrl()).toBe(
+        "https://api.example.test/api/public/whatsapp/invoices/{{1}}",
+      );
+    } finally {
+      if (previousSecret === undefined) {
+        delete process.env.WHATSAPP_PUBLIC_INVOICE_LINK_SECRET;
+      } else {
+        process.env.WHATSAPP_PUBLIC_INVOICE_LINK_SECRET = previousSecret;
+      }
+      if (previousBaseUrl === undefined) {
+        delete process.env.WHATSAPP_PUBLIC_INVOICE_BASE_URL;
+      } else {
+        process.env.WHATSAPP_PUBLIC_INVOICE_BASE_URL = previousBaseUrl;
+      }
+    }
+  });
+
   it("renders a branded, escaped page without exposing the full phone number", () => {
     const html = renderPublicInvoiceHtml(data);
 

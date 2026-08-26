@@ -337,11 +337,27 @@ const providerPlaceholderIndexes = (text: string): string[] => [...new Set(
   [...text.matchAll(/\{\{(\d+)\}\}/g)].map(match => match[1]!),
 )].sort((left, right) => Number(left) - Number(right));
 
+const providerExample = (text: string, sampleValues: Record<string, unknown>): string =>
+  text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => String(sampleValues[index]));
+
 const providerComponents = (components: Array<Record<string, unknown>>, sampleValues: Record<string, unknown>): Array<Record<string, unknown>> => components.map(component => {
   const type = String(component.type).toUpperCase();
   if (type === "BODY" && typeof component.text === "string" && /\{\{\d+\}\}/.test(component.text)) {
     const indexes = providerPlaceholderIndexes(component.text);
     return { ...component, example: { body_text: [indexes.map(index => String(sampleValues[index]))] } };
+  }
+  if (type === "BUTTONS" && Array.isArray(component.buttons)) {
+    return {
+      ...component,
+      buttons: component.buttons.map(button => {
+        if (!button || typeof button !== "object" || Array.isArray(button)) return button;
+        const value = button as Record<string, unknown>;
+        if (String(value.type).toUpperCase() !== "URL" || typeof value.url !== "string" || !/\{\{\d+\}\}/.test(value.url)) {
+          return button;
+        }
+        return { ...value, example: [providerExample(value.url, sampleValues)] };
+      }),
+    };
   }
   return component;
 });

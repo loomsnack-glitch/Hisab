@@ -29,6 +29,40 @@ describe("Cloud invoice template components", () => {
     )).toEqual([]);
   });
 
+  test("sends a dynamic invoice button without generating an invoice document", () => {
+    expect(buildInvoiceCloudComponents(
+      [
+        { type: "BODY", text: "Hello {{1}}" },
+        {
+          type: "BUTTONS",
+          buttons: [{
+            type: "URL",
+            text: "View invoice",
+            url: "https://api.example.test/invoices/{{1}}",
+          }],
+        },
+      ],
+      "Hello {{customer_name}}\n\nView your invoice online: {{invoice_url}}",
+      {
+        customer_name: "Asha",
+        invoice_url: "https://api.example.test/invoices/invoice-token",
+      },
+      null,
+      { "body:1": "customer_name", "button:0:1": "invoice_url" },
+    )).toEqual([
+      { type: "body", parameters: [{ type: "text", text: "Asha" }] },
+      {
+        type: "button",
+        subType: "url",
+        index: "0",
+        parameters: [{
+          type: "text",
+          text: "https://api.example.test/invoices/invoice-token",
+        }],
+      },
+    ]);
+  });
+
   test("requires an invoice PDF when the Cloud bill template has a document header", () => {
     expect(() => buildInvoiceCloudComponents(
       [{ type: "HEADER", format: "DOCUMENT" }, { type: "BODY", text: "Hello {{1}}" }],

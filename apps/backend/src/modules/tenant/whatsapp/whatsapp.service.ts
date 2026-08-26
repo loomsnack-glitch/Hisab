@@ -10,6 +10,7 @@ import {
     type WhatsAppChangeAccountNumberJSON,
     type WhatsAppCreateAccountJSON,
     type WhatsAppReminderQueueResponseDTO,
+    type WhatsAppPublicInvoiceTemplateConfigDTO,
     type WhatsAppWorkerStatusUpdateJSON,
     type DeviceSessionDTO,
 } from "@repo/types";
@@ -1025,6 +1026,27 @@ export const revokePublicInvoiceLink = async (userId: string, organizationId: st
         status: "success" as const,
         message: revoked ? "Public invoice link revoked" : "No public invoice link found for this bill",
         data: { revoked },
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getPublicInvoiceTemplateConfig = async (
+    userId: string,
+    organizationId: string,
+): Promise<ServiceResponse<WhatsAppPublicInvoiceTemplateConfigDTO | null>> => {
+    const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+    return {
+        status: "success",
+        message: "Public invoice template configuration fetched successfully",
+        data: { invoiceTemplateUrl: publicInvoiceService.getPublicInvoiceTemplateUrl() },
         code: STATUS_CODES.SUCCESS,
     };
 };

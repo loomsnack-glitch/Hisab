@@ -36,6 +36,9 @@ const requirePublicLinkConfig = (): { secret: string; baseUrl: string } => {
   return { secret, baseUrl };
 };
 
+export const getPublicInvoiceTemplateUrl = (): string =>
+  `${requirePublicLinkConfig().baseUrl}/{{1}}`;
+
 export const createPublicInvoiceUrl = async (
   organizationId: string,
   storeId: string,

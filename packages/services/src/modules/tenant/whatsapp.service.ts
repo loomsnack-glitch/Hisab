@@ -38,6 +38,7 @@ import type {
     WhatsAppCloudSafety,
     WhatsAppCloudOutboxOperationsResponseDTO,
     WhatsAppCloudOutboxActionResponseDTO,
+    WhatsAppPublicInvoiceTemplateConfigDTO,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -47,6 +48,7 @@ type WhatsAppCloudAccountsResponse = ServiceResponse<{ accounts: WhatsAppCloudAc
 type WhatsAppCloudAccountResponse = ServiceResponse<WhatsAppCloudAccountSnapshot | null>;
 type WhatsAppCloudOnboardingResponse = ServiceResponse<WhatsAppCloudOnboardingStateResponseDTO | null>;
 type WhatsAppCloudTemplatesResponse = ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>;
+type WhatsAppPublicInvoiceTemplateConfigResponse = ServiceResponse<WhatsAppPublicInvoiceTemplateConfigDTO | null>;
 type WhatsAppCloudBindingsResponse = ServiceResponse<{ bindings: WhatsAppCloudTemplateBindingDTO[] } | null>;
 type WhatsAppCloudBindingResponse = ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>;
 type WhatsAppCloudSubmissionResponse = ServiceResponse<{ submission: WhatsAppCloudTemplateSubmissionDTO; template: WhatsAppCloudTemplateAssetDTO | null } | null>;
@@ -145,6 +147,17 @@ export const syncWhatsAppCloudTemplates = async (organizationId: string, account
 export const getWhatsAppCloudTemplates = async (organizationId: string, accountId: string): Promise<WhatsAppCloudTemplatesResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/templates`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getWhatsAppPublicInvoiceTemplateConfig = async (
+    organizationId: string,
+): Promise<WhatsAppPublicInvoiceTemplateConfigResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/invoice-template-config`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

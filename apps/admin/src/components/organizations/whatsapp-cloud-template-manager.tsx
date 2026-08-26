@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getWhatsAppCloudTemplateSubmissions,
@@ -6,6 +6,7 @@ import {
   getWhatsAppCloudTemplateBindings,
   archiveWhatsAppCloudTemplateBinding,
   importWhatsAppCloudTemplateForStore,
+  getWhatsAppPublicInvoiceTemplateConfig,
   rollbackWhatsAppCloudTemplateBinding,
   submitWhatsAppCloudTemplate,
   syncWhatsAppCloudTemplates,
@@ -87,6 +88,7 @@ import {
   Star,
 } from "lucide-react";
 import { toast } from "sonner";
+import { whatsappKeys } from "@/lib/query-keys";
 import {
   Tooltip,
   TooltipContent,
@@ -234,6 +236,27 @@ const defaultBody = (kind: WhatsAppMessageTemplateKind): string => {
     return index >= 0 ? `{{${index + 1}}}` : match;
   });
 };
+
+const invoiceTemplateKinds = new Set<WhatsAppMessageTemplateKind>([
+  "bill",
+  "due_reminder",
+]);
+
+const isInvoiceTemplateKind = (kind: WhatsAppMessageTemplateKind): boolean =>
+  invoiceTemplateKinds.has(kind);
+
+const cloudAuthoringBody = (kind: WhatsAppMessageTemplateKind): string =>
+  defaultBody(kind)
+    .replace(
+      "Your bill is attached for your reference.",
+      "Your bill is ready for your reference.",
+    )
+    .replace(/\n*View your invoice online:\s*\{\{invoice_url\}\}\s*/i, "\n")
+    .trim();
+
+const invoiceButtonLabel = (kind: WhatsAppMessageTemplateKind): string =>
+  isInvoiceTemplateKind(kind) ? "View invoice" : "View details";
+
 const statusBadge = (status: string) => (
   <Badge
     variant="outline"
@@ -266,12 +289,12 @@ const WhatsAppCloudTemplateManager = ({
   const [kind, setKind] = useState<WhatsAppMessageTemplateKind>("bill");
   const [friendlyName, setFriendlyName] = useState("");
   const [languageCode, setLanguageCode] = useState("en_US");
-  const [body, setBody] = useState(defaultBody("bill"));
+  const [body, setBody] = useState(cloudAuthoringBody("bill"));
   const [footer, setFooter] = useState("");
   const [urlButton, setUrlButton] = useState("");
   const [headerFormat, setHeaderFormat] = useState<
     "none" | "image" | "document"
-  >("document");
+  >("none");
   const [headerSample, setHeaderSample] = useState<{
     base64: string;
     fileName: string;
@@ -296,6 +319,32 @@ const WhatsAppCloudTemplateManager = ({
   const account =
     accounts.find((item) => item.id === selectedAccountId) ?? accounts[0];
   const businessAccountId = account?.snapshot.whatsappBusinessAccountId ?? "";
+  const publicInvoiceTemplateConfigQuery = useQuery({
+    queryKey: whatsappKeys.publicInvoiceTemplateConfig(organizationId),
+    queryFn: () => getWhatsAppPublicInvoiceTemplateConfig(organizationId),
+    enabled: Boolean(organizationId),
+  });
+  const publicInvoiceTemplateUrl =
+    publicInvoiceTemplateConfigQuery.data?.status === "success"
+      ? publicInvoiceTemplateConfigQuery.data.data?.invoiceTemplateUrl ?? ""
+      : "";
+  const publicInvoiceConfigError =
+    publicInvoiceTemplateConfigQuery.data?.status === "error"
+      ? publicInvoiceTemplateConfigQuery.data.message
+      : publicInvoiceTemplateConfigQuery.isError
+        ? "Public invoice link configuration could not be loaded."
+        : null;
+  useEffect(() => {
+    if (
+      !open ||
+      !isInvoiceTemplateKind(kind) ||
+      headerFormat !== "none" ||
+      !publicInvoiceTemplateUrl
+    ) {
+      return;
+    }
+    setUrlButton((current) => current || publicInvoiceTemplateUrl);
+  }, [headerFormat, kind, open, publicInvoiceTemplateUrl]);
   const cloudQuery = useQuery({
     queryKey: [
       "whatsapp",
@@ -503,7 +552,7 @@ const WhatsAppCloudTemplateManager = ({
                   buttons: [
                     {
                       type: "URL",
-                      text: "View details",
+                      text: invoiceButtonLabel(kind),
                       url: urlButton.trim(),
                     },
                   ],
@@ -619,10 +668,10 @@ const WhatsAppCloudTemplateManager = ({
     setKind("bill");
     setFriendlyName("");
     setLanguageCode("en_US");
-    setBody(defaultBody("bill"));
+    setBody(cloudAuthoringBody("bill"));
     setFooter("");
-    setUrlButton("");
-    setHeaderFormat("document");
+    setUrlButton(publicInvoiceTemplateUrl);
+    setHeaderFormat("none");
     setHeaderSample(null);
     setSampleValues(defaultSampleValues.bill);
     setOpen(true);
@@ -654,19 +703,25 @@ const WhatsAppCloudTemplateManager = ({
         String((component as Record<string, unknown>).type).toUpperCase() ===
           "HEADER",
     ) as Record<string, unknown> | undefined;
+    const header = String(headerComponent?.format ?? "").toLowerCase();
+    const hasLegacyDocumentHeader = header === "document";
+    const duplicatedBody =
+      typeof bodyComponent?.text === "string"
+        ? bodyComponent.text
+        : cloudAuthoringBody(submission.kind);
     setKind(submission.kind);
     setFriendlyName(`${submission.friendlyName} copy`);
     setLanguageCode(submission.languageCode);
-    setBody(
-      typeof bodyComponent?.text === "string"
-        ? bodyComponent.text
-        : defaultBody(submission.kind),
-    );
+    setBody(duplicatedBody);
     setFooter(
       typeof footerComponent?.text === "string" ? footerComponent.text : "",
     );
-    setUrlButton("");
-    const header = String(headerComponent?.format ?? "").toLowerCase();
+    setUrlButton(
+      isInvoiceTemplateKind(submission.kind) &&
+        !hasLegacyDocumentHeader
+        ? publicInvoiceTemplateUrl
+        : "",
+    );
     setHeaderFormat(
       header === "image" || header === "document" ? header : "none",
     );
@@ -956,6 +1011,8 @@ const WhatsAppCloudTemplateManager = ({
     (_, index: string) =>
       sampleValues.split("|")[Number(index) - 1]?.trim() || `{{${index}}}`,
   );
+  const usesInvoiceUrlButton =
+    isInvoiceTemplateKind(kind) && headerFormat === "none";
   if (accounts.length === 0)
     return (
       <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
@@ -1646,10 +1703,15 @@ const WhatsAppCloudTemplateManager = ({
                     onValueChange={(value) => {
                       const next = value as WhatsAppMessageTemplateKind;
                       setKind(next);
-                      setBody(defaultBody(next));
+                      setBody(cloudAuthoringBody(next));
                       setSampleValues(defaultSampleValues[next]);
-                      setHeaderFormat("document");
+                      setHeaderFormat("none");
                       setHeaderSample(null);
+                      setUrlButton(
+                        isInvoiceTemplateKind(next)
+                          ? publicInvoiceTemplateUrl
+                          : "",
+                      );
                     }}
                   >
                     <SelectTrigger
@@ -1705,33 +1767,41 @@ const WhatsAppCloudTemplateManager = ({
                 <div>
                   <p className="text-xs font-semibold">Header media</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    Bill and Due reminder templates can use a PDF invoice header
-                    or no header.
+                    Bill and Due templates use a dynamic invoice link by default.
+                    PDF is available only for legacy document-header templates.
                   </p>
                 </div>
                 <Select
                   value={headerFormat}
                   onValueChange={(value) => {
-                    setHeaderFormat(value as "none" | "image" | "document");
+                    const next = value as "none" | "image" | "document";
+                    setHeaderFormat(next);
                     setHeaderSample(null);
+                    if (isInvoiceTemplateKind(kind)) {
+                      setUrlButton(
+                        next === "none" ? publicInvoiceTemplateUrl : "",
+                      );
+                    }
                   }}
                 >
                   <SelectTrigger className="rounded-xl">
                     <SelectValue>
                       {headerFormat === "none"
-                        ? "No header"
+                        ? "No header · View invoice button"
                         : headerFormat === "image"
                           ? "Image header"
-                          : "PDF document header"}
+                          : "PDF document header · Legacy"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No header</SelectItem>
+                    <SelectItem value="none">
+                      No header · Dynamic invoice link
+                    </SelectItem>
                     <SelectItem value="image" disabled>
                       Image header
                     </SelectItem>
                     <SelectItem value="document">
-                      PDF header · Bill or due reminder
+                      PDF header · Legacy
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -1843,18 +1913,45 @@ const WhatsAppCloudTemplateManager = ({
                     className="text-xs font-medium"
                     htmlFor="cloud-template-button"
                   >
-                    HTTPS button link{" "}
-                    <span className="font-normal text-muted-foreground">
-                      (optional)
-                    </span>
+                    {isInvoiceTemplateKind(kind)
+                      ? "Invoice link button"
+                      : "HTTPS button link"}{" "}
+                    {!isInvoiceTemplateKind(kind) ? (
+                      <span className="font-normal text-muted-foreground">
+                        (optional)
+                      </span>
+                    ) : null}
                   </label>
                   <Input
                     id="cloud-template-button"
                     className="rounded-xl"
                     value={urlButton}
                     onChange={(event) => setUrlButton(event.target.value)}
-                    placeholder="https://example.com/review"
+                    readOnly={
+                      usesInvoiceUrlButton
+                    }
+                    placeholder={
+                      isInvoiceTemplateKind(kind)
+                        ? "Configured by backend"
+                        : "https://example.com/review"
+                    }
                   />
+                  {usesInvoiceUrlButton ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Ganatri injects each customer&apos;s secure invoice link
+                      into this dynamic button when sending.
+                    </p>
+                  ) : null}
+                  {isInvoiceTemplateKind(kind) && headerFormat !== "none" ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Legacy PDF mode does not use an invoice link button.
+                    </p>
+                  ) : null}
+                  {publicInvoiceConfigError && isInvoiceTemplateKind(kind) ? (
+                    <p role="alert" className="text-[11px] text-destructive">
+                      {publicInvoiceConfigError}
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
@@ -1911,7 +2008,7 @@ const WhatsAppCloudTemplateManager = ({
                 {urlButton.trim() ? (
                   <span className="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-700">
                     <ExternalLink className="size-3.5" />
-                    View details
+                    {invoiceButtonLabel(kind)}
                   </span>
                 ) : null}
               </div>
@@ -1938,7 +2035,10 @@ const WhatsAppCloudTemplateManager = ({
                 hasEdgePlaceholder ||
                 (headerFormat !== "none" && !headerSample) ||
                 (Boolean(urlButton.trim()) &&
-                  !/^https:\/\//.test(urlButton.trim()))
+                  !/^https:\/\//i.test(urlButton.trim())) ||
+                (usesInvoiceUrlButton &&
+                  (!urlButton.trim() || !/\{\{1\}\}/.test(urlButton))) ||
+                (isInvoiceTemplateKind(kind) && body.includes("{{invoice_url}}"))
               }
               onClick={() => submitMutation.mutate()}
             >
