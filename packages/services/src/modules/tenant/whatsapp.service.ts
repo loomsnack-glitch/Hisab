@@ -598,6 +598,21 @@ export const retryWhatsAppInvoice = async (
     }
 };
 
+export const resendWhatsAppInvoice = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<WhatsAppInvoiceResponse> => {
+    try {
+        const response = await api.post(invoicePath(organizationId, storeId, saleId) + "/resend", {
+            requestId: crypto.randomUUID(),
+        });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const queueWhatsAppDueReminder = async (
     organizationId: string,
     storeId: string,

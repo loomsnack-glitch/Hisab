@@ -14,6 +14,8 @@ import {
     queueWhatsAppInvoice,
     queueWhatsAppDueReminder,
     retryPosWhatsAppInvoice,
+    resendPosWhatsAppInvoice,
+    resendWhatsAppInvoice,
     retryWhatsAppInvoice,
     voidPosSale,
     voidSale,
@@ -236,19 +238,28 @@ const SaleDetailDialog = ({
     const whatsappInvoiceMutation = useMutation({
         mutationFn: () => {
             const canRetry = whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter";
+            const isSending = ["queued", "sending"].includes(whatsappInvoice?.messageStatus ?? "")
+                || ["pending", "processing", "reconciling"].includes(whatsappInvoice?.outboxStatus ?? "");
+            const canResend = Boolean(whatsappInvoice?.messageStatus) && !canRetry && !isSending;
             if (mode === "device") {
-                return canRetry ? retryPosWhatsAppInvoice(saleId as string) : queuePosWhatsAppInvoice(saleId as string);
+                return canRetry
+                    ? retryPosWhatsAppInvoice(saleId as string)
+                    : canResend
+                      ? resendPosWhatsAppInvoice(saleId as string)
+                      : queuePosWhatsAppInvoice(saleId as string);
             }
             return canRetry
                 ? retryWhatsAppInvoice(organizationId, storeId, saleId as string)
-                : queueWhatsAppInvoice(organizationId, storeId, saleId as string);
+                : canResend
+                  ? resendWhatsAppInvoice(organizationId, storeId, saleId as string)
+                  : queueWhatsAppInvoice(organizationId, storeId, saleId as string);
         },
         onSuccess: response => {
             if (response.status !== "success") {
                 toast.error(response.message || "Invoice could not be queued for WhatsApp");
                 return;
             }
-            toast.success("Invoice queued for WhatsApp");
+            toast.success(whatsappInvoice?.messageStatus ? "Invoice sent again" : "Invoice queued for WhatsApp");
             void whatsappInvoiceQuery.refetch();
         },
         onError: (error: { message?: string }) => {
@@ -319,13 +330,17 @@ const SaleDetailDialog = ({
         URL.revokeObjectURL(url);
     };
 
+    const isInvoiceSending = ["queued", "sending"].includes(whatsappInvoice?.messageStatus ?? "")
+        || ["pending", "processing", "reconciling"].includes(whatsappInvoice?.outboxStatus ?? "");
     const whatsappInvoiceLabel = whatsappInvoiceMutation.isPending
         ? "Queueing..."
-        : whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter"
-          ? "Retry WhatsApp"
-          : whatsappInvoice?.messageStatus
-            ? "Send again"
-            : "WhatsApp";
+        : isInvoiceSending
+            ? "Sending..."
+            : whatsappInvoice?.outboxStatus === "retryable" || whatsappInvoice?.outboxStatus === "dead_letter"
+                ? "Retry WhatsApp"
+                : whatsappInvoice?.messageStatus
+                    ? "Send again"
+                    : "WhatsApp";
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
@@ -390,7 +405,7 @@ const SaleDetailDialog = ({
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            disabled={whatsappInvoiceMutation.isPending || whatsappInvoiceQuery.isPending}
+                                            disabled={whatsappInvoiceMutation.isPending || whatsappInvoiceQuery.isPending || isInvoiceSending}
                                             onClick={() => whatsappInvoiceMutation.mutate()}
                                             className="h-8 rounded-lg px-2.5"
                                         >

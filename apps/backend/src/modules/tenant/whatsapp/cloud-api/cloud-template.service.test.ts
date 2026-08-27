@@ -247,6 +247,33 @@ describe("Cloud template synchronization service", () => {
     ]);
   });
 
+  test("rejects a dynamic URL button without a matching sample value", async () => {
+    let providerCalled = false;
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill link missing URL sample",
+      metaTemplateName: "bill_link_missing_url_sample",
+      languageCode: "en_US",
+      components: [
+        { type: "BODY", text: "Hello {{2}}." },
+        { type: "BUTTONS", buttons: [{ type: "URL", text: "View invoice", url: "https://api.example.test/invoices/{{1}}" }] },
+      ],
+      sampleValues: { "2": "Customer" },
+      idempotencyKey: "idem-url-button-missing-sample",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      createClient: () => {
+        providerCalled = true;
+        return { async getTemplates() { return { data: [] }; } };
+      },
+    });
+
+    expect(response).toMatchObject({ status: "error", code: 400, message: "Missing sample value for {{1}}" });
+    expect(providerCalled).toBe(false);
+  });
+
   test("only assigns an approved submission and delegates to the transactional Store binding", async () => {
     let input: Record<string, unknown> | undefined;
     const response = await setCloudTemplateDefaultForSubmission(userId, organizationId, "88888888-8888-4888-8888-888888888888", {

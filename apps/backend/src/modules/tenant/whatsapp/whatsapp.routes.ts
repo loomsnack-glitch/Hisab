@@ -585,6 +585,23 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId/retry
     }
 });
 
+userRouter.post("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId/resend", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const saleId = c.req.param("saleId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id")
+            ?? invalidUuid(storeId, "Invalid store id")
+            ?? invalidUuid(saleId, "Invalid sale id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const payload = await c.req.json().catch(() => ({}));
+        const requestId = typeof payload?.requestId === "string" ? payload.requestId : undefined;
+        return handleServiceResponse(c, await service.resendInvoice(c.get("authUser").id, organizationId, storeId, saleId, requestId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
 userRouter.post("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId/public-link/revoke", async c => {
     try {
         const organizationId = c.req.param("organizationId");

@@ -487,6 +487,7 @@ export const getInvoiceOutbox = async (
           AND o.sale_id = ${saleId}
           AND o.kind IN ('invoice', 'template')
           AND m.idempotency_key LIKE 'invoice:%'
+        ORDER BY o.created_at DESC
         LIMIT 1
     `;
     if (!row) return null;

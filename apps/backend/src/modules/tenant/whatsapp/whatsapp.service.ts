@@ -797,6 +797,8 @@ export const receiveWorkerStatus = async (accountId: string, update: WhatsAppWor
 
 export const queueInvoice = invoiceService.queueInvoice;
 export const queueInvoiceForDevice = invoiceService.queueInvoiceForDevice;
+export const resendInvoice = invoiceService.resendInvoice;
+export const resendInvoiceForDevice = invoiceService.resendInvoiceForDevice;
 
 export const listMessageTemplatesForDevice = async (
     session: DeviceSessionDTO,

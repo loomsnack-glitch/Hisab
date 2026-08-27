@@ -57,7 +57,7 @@ describe("Cloud invoice template components", () => {
         index: "0",
         parameters: [{
           type: "text",
-          text: "https://api.example.test/invoices/invoice-token",
+          text: "invoice-token",
         }],
       },
     ]);

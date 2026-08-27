@@ -1,5 +1,6 @@
 import type { CloudTemplateParameter } from "./cloud-api/cloud-outbound";
 import type { CloudTemplateComponentInput } from "./cloud-api/cloud-template-components";
+import { getCloudUrlButtonParameter } from "./cloud-api/cloud-url-button";
 import { uniqueProviderPlaceholderIndexes, validateCloudTemplateVariableMapping, type CloudTemplateVariableMapping } from "./cloud-api/cloud-template-variable-mapping";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -51,7 +52,12 @@ export const buildDueReminderCloudComponents = (
       const buttons = Array.isArray(definition.buttons) ? definition.buttons : [];
       buttons.forEach((button, index) => {
         if (!isRecord(button)) return;
-        const parameters = textParameters(button.url, `button:${index}`, mapping, values);
+        const parameters = textParameters(button.url, `button:${index}`, mapping, values)
+          .map(parameter => ({
+            ...(parameter.type === "text"
+              ? { ...parameter, text: getCloudUrlButtonParameter(button.url, parameter.text) }
+              : parameter),
+          }));
         if (parameters.length > 0) inputs.push({ type: "button", subType: "url", index: String(index), parameters });
       });
     }

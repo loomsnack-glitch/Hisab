@@ -243,6 +243,7 @@ const safeSubmissionError = (error: unknown): { code: string; message: string } 
     "Cloud template component type is unsupported",
     "Cloud template body text is invalid",
     "Cloud template body placeholders cannot be at the start or end",
+    "Missing sample value for",
     "Cloud template placeholders must use positive numbers",
     "Cloud template footer text is invalid",
     "Cloud template buttons are invalid",
@@ -317,6 +318,10 @@ const validateSubmissionComponents = (components: unknown[], sampleValues: Recor
         if (!["URL", "QUICK_REPLY"].includes(buttonType) || typeof buttonValue.text !== "string" || !String(buttonValue.text).trim()) throw new Error("Cloud template button is invalid");
         if (buttonType === "URL") {
           if (typeof buttonValue.url !== "string") throw new Error("Cloud template button URL is invalid");
+          for (const match of buttonValue.url.matchAll(/\{\{([^{}]+)\}\}/g)) {
+            if (!/^\d+$/.test(match[1]!) || Number(match[1]) < 1) throw new Error("Cloud template placeholders must use positive numbers");
+            placeholders.add(match[1]!);
+          }
           try { if (new URL(buttonValue.url).protocol !== "https:") throw new Error(); } catch { throw new Error("Cloud template button URL must use HTTPS"); }
         }
       }

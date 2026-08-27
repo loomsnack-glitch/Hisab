@@ -1922,25 +1922,31 @@ const WhatsAppCloudTemplateManager = ({
                       </span>
                     ) : null}
                   </label>
-                  <Input
-                    id="cloud-template-button"
-                    className="rounded-xl"
-                    value={urlButton}
-                    onChange={(event) => setUrlButton(event.target.value)}
-                    readOnly={
-                      usesInvoiceUrlButton
-                    }
-                    placeholder={
-                      isInvoiceTemplateKind(kind)
-                        ? "Configured by backend"
-                        : "https://example.com/review"
-                    }
-                  />
                   {usesInvoiceUrlButton ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Ganatri injects each customer&apos;s secure invoice link
-                      into this dynamic button when sending.
-                    </p>
+                    <>
+                      <div
+                        className="break-all rounded-xl border border-border/60 bg-muted/20 px-3 py-2 font-mono text-xs text-muted-foreground"
+                        aria-live="polite"
+                      >
+                        {publicInvoiceTemplateUrl ||
+                          (publicInvoiceTemplateConfigQuery.isPending
+                            ? "Loading configured invoice link…"
+                            : "Invoice link configuration unavailable")}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        This secure URL is configured by the backend. Ganatri
+                        injects each customer&apos;s invoice link when sending.
+                      </p>
+                    </>
+                  ) : null}
+                  {!usesInvoiceUrlButton ? (
+                    <Input
+                      id="cloud-template-button"
+                      className="rounded-xl"
+                      value={urlButton}
+                      onChange={(event) => setUrlButton(event.target.value)}
+                      placeholder="https://example.com/review"
+                    />
                   ) : null}
                   {isInvoiceTemplateKind(kind) && headerFormat !== "none" ? (
                     <p className="text-[11px] text-muted-foreground">

@@ -20,7 +20,7 @@ describe("Cloud due-reminder template components", () => {
 
     expect(components).toEqual([
       { type: "body", parameters: [{ type: "text", text: "Asha" }, { type: "text", text: "2" }, { type: "text", text: "₹400.00" }] },
-      { type: "button", subType: "url", index: "0", parameters: [{ type: "text", text: "https://pay.example/customer" }] },
+      { type: "button", subType: "url", index: "0", parameters: [{ type: "text", text: "customer" }] },
     ]);
   });
 

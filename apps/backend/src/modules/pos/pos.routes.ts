@@ -638,6 +638,22 @@ router.post("/sales/:saleId/whatsapp/retry", async (c) => {
   }
 });
 
+router.post("/sales/:saleId/whatsapp/resend", async (c) => {
+  try {
+    const saleId = c.req.param("saleId");
+    const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+    if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
+    const payload = await c.req.json().catch(() => ({}));
+    const requestId = typeof payload?.requestId === "string" ? payload.requestId : undefined;
+    return handleServiceResponse(
+      c,
+      await whatsappService.resendInvoiceForDevice(c.get("authDevice"), saleId, requestId),
+    );
+  } catch (error) {
+    return handleError(FILE_NAME, "resendInvoiceForDevice", c, error);
+  }
+});
+
 router.post("/customers/:customerId/whatsapp/due-reminder", async (c) => {
   try {
     const customerId = c.req.param("customerId");
