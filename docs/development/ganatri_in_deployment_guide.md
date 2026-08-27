@@ -376,7 +376,7 @@ bun install
 bun run build
 
 bun turbo prune --scope=backend
-cp apps/backend/.env out/apps/backend/.env
+# cp apps/backend/.env out/apps/backend/.env
 # If this local .env still says PORT=8001, change the copy used for ganatri.in:
 #   (Get-Content out/apps/backend/.env) -replace 'PORT=8001','PORT=8181' | Set-Content out/apps/backend/.env
 cd out

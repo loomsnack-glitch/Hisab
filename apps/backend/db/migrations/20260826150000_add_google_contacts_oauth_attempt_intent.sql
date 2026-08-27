@@ -4,23 +4,41 @@
 -- Persist the attempt intent with the connecting nonce so a cancelled replace
 -- cannot be mistaken for reconnect-required.
 ALTER TABLE google_contacts_connections
-    ADD COLUMN oauth_attempt_intent VARCHAR(32);
+    ADD COLUMN IF NOT EXISTS oauth_attempt_intent VARCHAR(32);
 
 UPDATE google_contacts_connections
 SET oauth_attempt_intent = 'connect'
 WHERE status = 'connecting'
   AND oauth_attempt_intent IS NULL;
 
-ALTER TABLE google_contacts_connections
-    ADD CONSTRAINT google_contacts_connections_oauth_attempt_intent_check
-        CHECK (
-            oauth_attempt_intent IS NULL
-            OR oauth_attempt_intent IN ('connect', 'reconnect', 'replace')
-        );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'google_contacts_connections'::regclass
+          AND conname = 'google_contacts_connections_oauth_attempt_intent_check'
+    ) THEN
+        ALTER TABLE google_contacts_connections
+            ADD CONSTRAINT google_contacts_connections_oauth_attempt_intent_check
+                CHECK (
+                    oauth_attempt_intent IS NULL
+                    OR oauth_attempt_intent IN ('connect', 'reconnect', 'replace')
+                );
+    END IF;
 
-ALTER TABLE google_contacts_connections
-    ADD CONSTRAINT google_contacts_connections_oauth_attempt_intent_status_check
-        CHECK ((status = 'connecting') = (oauth_attempt_intent IS NOT NULL));
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'google_contacts_connections'::regclass
+          AND conname = 'google_contacts_connections_oauth_attempt_intent_status_check'
+    ) THEN
+        ALTER TABLE google_contacts_connections
+            ADD CONSTRAINT google_contacts_connections_oauth_attempt_intent_status_check
+                CHECK ((status = 'connecting') = (oauth_attempt_intent IS NOT NULL));
+    END IF;
+END
+$$;
 
 -- migrate:down
 

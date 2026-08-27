@@ -1,17 +1,36 @@
 -- migrate:up
 
--- Ticket 01's applied connection table predates the persisted OAuth attempt nonce.
--- Connecting work must be bound to that hash so a stale callback cannot complete.
+-- The published connection migration already contains these objects. Keep this
+-- follow-up migration reconciling so databases with either historical shape can
+-- record the migration without failing on duplicate objects.
 ALTER TABLE google_contacts_connections
-    ADD COLUMN oauth_attempt_nonce_hash VARCHAR(64);
+    ADD COLUMN IF NOT EXISTS oauth_attempt_nonce_hash VARCHAR(64);
 
-ALTER TABLE google_contacts_connections
-    ADD CONSTRAINT google_contacts_connections_oauth_attempt_nonce_hash_check
-        CHECK (oauth_attempt_nonce_hash IS NULL OR oauth_attempt_nonce_hash ~ '^[0-9a-f]{64}$');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'google_contacts_connections'::regclass
+          AND conname = 'google_contacts_connections_oauth_attempt_nonce_hash_check'
+    ) THEN
+        ALTER TABLE google_contacts_connections
+            ADD CONSTRAINT google_contacts_connections_oauth_attempt_nonce_hash_check
+                CHECK (oauth_attempt_nonce_hash IS NULL OR oauth_attempt_nonce_hash ~ '^[0-9a-f]{64}$');
+    END IF;
 
-ALTER TABLE google_contacts_connections
-    ADD CONSTRAINT google_contacts_connections_oauth_attempt_status_check
-        CHECK ((status = 'connecting') = (oauth_attempt_nonce_hash IS NOT NULL));
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'google_contacts_connections'::regclass
+          AND conname = 'google_contacts_connections_oauth_attempt_status_check'
+    ) THEN
+        ALTER TABLE google_contacts_connections
+            ADD CONSTRAINT google_contacts_connections_oauth_attempt_status_check
+                CHECK ((status = 'connecting') = (oauth_attempt_nonce_hash IS NOT NULL));
+    END IF;
+END
+$$;
 
 -- migrate:down
 
