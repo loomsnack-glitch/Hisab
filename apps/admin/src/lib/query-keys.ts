@@ -11,6 +11,8 @@ export const organizationKeys = {
     [...organizationKeys.all, "detail", organizationId] as const,
   catalogSettings: (organizationId: string) =>
     [...organizationKeys.all, "catalog-settings", organizationId] as const,
+  invoiceAppearance: (organizationId: string, storeId: string) =>
+    [...organizationKeys.all, "invoice-appearance", organizationId, storeId] as const,
 };
 
 export const serviceTableKeys = {

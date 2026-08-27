@@ -526,6 +526,193 @@ Promotions tab remain out of scope.
 - `git diff --check`, standards review, and spec/acceptance review before the
   phase commit.
 
+### Phase 7 — Public invoice appearance and PDF customization
+
+Status: implemented (2026-08-28)
+
+Improve the customer-facing public invoice page and generated PDF, then add a
+safe Store-level customization experience. The HTML page and PDF are driven
+by a shared `InvoiceDocument` model so branding, items, and totals stay
+consistent across both outputs.
+
+#### Implementation notes
+
+- **PDF renderer:** PDFKit (server-side). HTML and PDF share the same document
+  model but are not pixel-identical renderers.
+- **Primary action:** Public HTML exposes **Download PDF** only. Share/Copy
+  link actions were intentionally omitted to reduce token exposure surface.
+- **Admin PDF preview:** Returns an actual PDF binary (`pdfBase64`), not a
+  width-constrained HTML frame.
+- **Payments:** Trusted `sale.payments[]` rows render in HTML and PDF when
+  present; nothing is inferred beyond committed sale data.
+- **Logo storage:** Paths must stay under
+  `organizations/{organizationId}/invoice-appearance/`.
+- **Known follow-ups:** Dedicated rendering-error page (distinct from invalid
+  link), customer-facing loading skeleton, and Indic/emoji PDF font embedding.
+
+#### Current baseline
+
+- The public HTML invoice uses a fixed inline layout with a dark header, basic
+  organization and Store text, a three-column item table, payment summary,
+  PDF download, review action, and plain configured links.
+- The PDF renderer uses a fixed A4 layout, hardcoded colors and positions,
+  centered text branding, item columns, and a payment summary.
+- Existing Organization and Store data already supports tagline, address,
+  review link, social link, and Store message links.
+- No invoice logo or invoice-appearance settings are currently part of the
+  Organization/Store settings interface.
+- `WHATSAPP_PUBLIC_INVOICE_BASE_URL` and the link secret are security/runtime
+  configuration only. They must not become the place for per-Store visual
+  customization.
+
+#### Design decisions
+
+- Create one deep invoice-appearance module with a small interface containing
+  design tokens, layout preset, visibility options, safe footer content, and
+  approved Store branding. The public HTML and PDF renderers are adapters of
+  that interface.
+- Keep canonical invoice data separate from appearance settings. A theme must
+  not alter totals, customer identity, payment status, sale number, or the
+  generated public-link token.
+- Use Organization-level defaults with a Store-level override. A Store with
+  no override uses the Organization default, and missing settings fall back to
+  the current safe default appearance.
+- Store settings are the persistence boundary for visual customization; do
+  not add visual settings to the WhatsApp Cloud template form or environment
+  variables.
+- Offer controlled presets and fields instead of raw HTML, CSS, JavaScript,
+  or arbitrary provider JSON. Sanitize all user-authored text and validate
+  colors, image files, text lengths, and external HTTPS links.
+- The HTML page may provide richer interaction, but the PDF remains a
+  print-safe representation of the same content and theme. PDF limitations
+  must not force the HTML page into a poor mobile layout.
+- Keep the existing public token, revocation, no-expiry decision, and secure
+  link generation unchanged.
+
+#### Target public invoice experience
+
+- Branded header with optional logo, Organization name, Store name, tagline,
+  address, and phone.
+- Clear payment-state banner for Paid, Partially Paid, Due, or Cancelled.
+- Separate metadata groups for invoice number/date and customer/service mode.
+- Responsive item presentation with item name, quantity, rate, discounts/tax
+  where available, and line amount. Use readable mobile cards when a table
+  becomes cramped.
+- Prominent total, paid amount, and balance-due treatment. Balance due must be
+  visually obvious without relying on color alone.
+- Primary actions for Download PDF and Share/Copy link, followed by optional
+  review, social, website, contact, and Store message links.
+- Notes, terms, and contact footer with clear empty-state behavior when those
+  values are not configured.
+- Dedicated invalid/revoked-link and rendering-error states that do not expose
+  internal identifiers or implementation details.
+- Accessible focus states, semantic headings, keyboard-operable actions,
+  sufficient contrast, responsive spacing, and loading/skeleton behavior.
+
+#### Target PDF experience
+
+- Use the same logo, accent color, typography preset, density, and visibility
+  decisions as the public page where PDF constraints permit.
+- Use a professional header with branding on one side and invoice title/status
+  on the other rather than a large centered text-only header.
+- Use structured bill/customer metadata, a readable item table, and a clearly
+  highlighted total and balance-due section.
+- Include payment method/transaction details only when trusted sale data
+  exists; never invent or infer payment details.
+- Repeat table headers across pages, keep rows together where practical, and
+  handle long names, add-ons, bundles, notes, and many-item invoices safely.
+- Include configured terms, review/social/contact links, and a compact footer
+  when they fit the page. The document must remain useful when optional data
+  is absent.
+- Use a consistent currency and date format across HTML and PDF, with a safe
+  font/fallback strategy for supported Indian-language text and emoji content.
+
+#### Customization experience
+
+Add an **Invoice Appearance** area under Store settings, separate from
+WhatsApp template management.
+
+- Show a live sample invoice with desktop, mobile, and PDF preview modes.
+- Provide three starting presets: Classic, Modern, and Minimal.
+- Allow logo upload/remove, accent color, header style, font preset, and
+  compact/comfortable density.
+- Allow safe show/hide controls for tagline, address, phone, customer phone,
+  service mode, notes, terms, review/social links, Store links, and PDF footer.
+- Allow custom footer and terms text with length limits and preview.
+- Provide explicit Save, Publish/Apply, Reset to default, and unsaved-change
+  handling. The preview must show whether it is using the Organization default
+  or a Store override.
+- Validate contrast and show a warning before saving an unreadable theme.
+- Preserve the existing review/social link validation and HTTPS-only public
+  link rules.
+
+#### Implementation sequence
+
+- 7.1 Inspect the current public invoice, PDF, Organization/Store settings,
+  asset-upload, and test seams. Record the exact data available for each
+  output and preserve unrelated worktree changes.
+- 7.2 Define the smallest shared invoice-appearance interface and fallback
+  theme. Keep canonical sale data and secure public-link generation outside
+  the appearance interface.
+- 7.3 Implement the public invoice redesign using the shared presentation
+  model, including responsive, loading, invalid-link, and optional-data
+  states.
+- 7.4 Implement PDF parity, page-break safety, long-content handling, and
+  supported-font fallback using the same appearance model.
+- 7.5 Add persisted Organization defaults and Store overrides with migration,
+  validation, authorization, and safe fallback behavior.
+- 7.6 Add the Admin Invoice Appearance editor and live previews. Keep the
+  WhatsApp template manager focused on Cloud template lifecycle only.
+- 7.7 Test representative paid, partial, due, cancelled, empty, long, and
+  multi-page invoices; review accessibility, security, responsive behavior,
+  and visual parity.
+- 7.8 Run focused verification, standards/spec review, fix findings, and
+  commit this phase only after explicit approval.
+
+#### Non-goals
+
+- No Promotions-tab or marketing-template work.
+- No changes to Meta approval, Cloud account, template submission, webhook,
+  consent, queue, or provider-delivery behavior.
+- No public-link expiry, token format change, or automatic link replacement.
+- No arbitrary HTML/CSS/JavaScript editor.
+- No payment collection, invoice editing, refund, tax-accounting, or inventory
+  behavior changes.
+- No broad Admin design-system rewrite.
+
+#### Acceptance criteria
+
+- A customer sees a polished, responsive, branded public invoice with clear
+  payment state, totals, balance due, and useful actions.
+- The PDF is readable, print-safe, multi-page safe, and visually consistent
+  with the public invoice.
+- Organization defaults and Store overrides work predictably, including reset
+  and fallback behavior.
+- A theme cannot change financial values, customer data, authorization, or the
+  secure public-link token.
+- Invalid links, missing optional branding, missing links, long text, many
+  items, add-ons, bundles, and unsupported image/font cases fail safely.
+- Existing configured review/social/Store links remain compatible.
+- WhatsApp template behavior and Promotions remain unchanged.
+- Focused tests, type checks, migration verification, `git diff --check`,
+  standards review, and spec/acceptance review pass before the phase is
+  committed.
+
+#### Verification plan
+
+- Contract tests for theme fallback, Organization default/Store override
+  precedence, validation, authorization, and safe text/link handling.
+- Public HTML tests for status, totals, optional fields, responsive markup,
+  invalid/revoked links, and absence of internal identifiers.
+- PDF tests for metadata, totals, status, optional sections, long content,
+  multi-page output, and consistent formatting.
+- Admin tests for preset selection, live preview, save/reset, override state,
+  validation warnings, loading, and unsaved changes.
+- Manual visual review at desktop, tablet, mobile, print, and multi-page sizes
+  using paid, partial, due, cancelled, empty, and heavily populated invoices.
+- Report local verification separately from provider/live-account delivery
+  verification, which cannot be proven by local tests.
+
 ## Verification gates
 
 For each phase, report separately:

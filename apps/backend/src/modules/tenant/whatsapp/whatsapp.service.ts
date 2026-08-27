@@ -22,7 +22,7 @@ import * as workerClient from "./whatsapp.worker-client";
 import * as invoiceService from "./invoice";
 import * as conversationService from "./conversation";
 import * as storage from "@/services/storage";
-import { renderSalePdf } from "./invoice-pdf";
+import { renderBrandedSalePdf } from "./public-invoice.service";
 import { renderDueReminderPdf } from "./due-reminder-pdf";
 import { formatDueReminderText, getDueReminderTemplateValues } from "./due-reminder";
 import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
@@ -935,12 +935,7 @@ const queueDueReminderForStore = async (
                 const sale = saleId ? await invoiceService.loadSaleDetail(organizationId, storeId, saleId) : null;
                 if (saleId && !sale) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
                 const pdf = sale
-                    ? await renderSalePdf(sale, {
-                        organizationName: organization.name,
-                        organizationTagline: organization.tagline,
-                        storeName: store.name,
-                        storeAddress: store.address,
-                    })
+                    ? await renderBrandedSalePdf(organizationId, storeId, sale)
                     : await renderDueReminderPdf(customer, reminderSales, {
                         organizationName: organization.name,
                         storeName: store.name,

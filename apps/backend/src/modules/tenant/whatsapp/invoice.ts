@@ -16,7 +16,6 @@ import * as billingRepository from "@/modules/tenant/billing/billing.repository"
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as repository from "./whatsapp.repository";
 import { formatInvoiceText, getInvoiceTemplateValues } from "./invoice-text";
-import { renderSalePdf } from "./invoice-pdf";
 import * as messageTemplate from "./message-template";
 import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
 import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
@@ -31,7 +30,7 @@ import {
 } from "./invoice-cloud-components";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
-import { createPublicInvoiceUrl } from "./public-invoice.service";
+import { createPublicInvoiceUrl, renderBrandedSalePdf } from "./public-invoice.service";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
@@ -86,12 +85,7 @@ const queueCloudInvoiceForStore = async (
       : null;
     let documentLink: string | null = null;
     if (requiresDocument && bucket && attachmentStorageKey) {
-      const pdf = await renderSalePdf(sale, {
-        organizationName: organization.name,
-        organizationTagline: organization.tagline,
-        storeName: store.name,
-        storeAddress: store.address,
-      });
+      const pdf = await renderBrandedSalePdf(organizationId, storeId, sale);
       if (pdf.byteLength > MAX_INVOICE_BYTES) {
         return { status: "error", message: "Generated invoice PDF is too large to send", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
       }
@@ -310,12 +304,7 @@ export const queueInvoiceForStore = async (
         code: STATUS_CODES.INTERNAL_SERVER_ERROR,
       };
     }
-    const pdf = await renderSalePdf(sale, {
-      organizationName: organization.name,
-      organizationTagline: organization.tagline,
-      storeName: store.name,
-      storeAddress: store.address,
-    });
+    const pdf = await renderBrandedSalePdf(organizationId, storeId, sale);
     if (pdf.byteLength > MAX_INVOICE_BYTES) {
       return {
         status: "error",
