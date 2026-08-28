@@ -21,6 +21,8 @@ const getStatus = mock(async () => ({
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
   },
   code: 200 as const,
 }));
@@ -48,6 +50,8 @@ const complete = mock(async () => ({
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
   },
   code: 200 as const,
 }));
@@ -65,6 +69,8 @@ const startInitialSync = mock(async () => ({
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
   },
   code: 202 as const,
 }));
@@ -92,6 +98,27 @@ const disconnect = mock(async () => ({
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
+  },
+  code: 200 as const,
+}));
+
+const updateNameAffix = mock(async () => ({
+  status: "success" as const,
+  message: "Google Contact Name Affix saved",
+  data: {
+    connectionStatus: "connected" as const,
+    googleAccountEmail: "owner@example.com",
+    connectedAt: "2026-08-26T06:00:00.000Z",
+    initialSyncStatus: "completed" as const,
+    lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
+    pendingCount: 0,
+    retryingCount: 0,
+    errorCount: 0,
+    conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "@ph",
   },
   code: 200 as const,
 }));
@@ -104,7 +131,7 @@ const app = new Hono<{ Variables: AppVariables }>();
 app.route(
   "/organizations",
   createGoogleContactsRoutes(
-    { getStatus, start, complete, startInitialSync, replace, disconnect },
+    { getStatus, start, complete, startInitialSync, replace, disconnect, updateNameAffix },
     rejectUnauthenticatedUser,
   ),
 );
@@ -132,6 +159,14 @@ describe("Google Contacts connection authorization", () => {
     const disconnectResponse = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/disconnect`, {
       method: "POST",
     });
+    const affixResponse = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/name-affix`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contactNamePrefix: "",
+        contactNamePostfix: "@ph",
+      }),
+    });
 
     expect(statusResponse.status).toBe(401);
     expect(startResponse.status).toBe(401);
@@ -139,12 +174,14 @@ describe("Google Contacts connection authorization", () => {
     expect(syncResponse.status).toBe(401);
     expect(replaceResponse.status).toBe(401);
     expect(disconnectResponse.status).toBe(401);
+    expect(affixResponse.status).toBe(401);
     expect(getStatus).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
     expect(complete).not.toHaveBeenCalled();
     expect(startInitialSync).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
     expect(disconnect).not.toHaveBeenCalled();
+    expect(updateNameAffix).not.toHaveBeenCalled();
   });
 
   test("does not register Google Contacts management on Store Device POS routes", () => {
@@ -155,5 +192,6 @@ describe("Google Contacts connection authorization", () => {
     expect(posRoutes).not.toContain("google-contacts/sync");
     expect(posRoutes).not.toContain("google-contacts/disconnect");
     expect(posRoutes).not.toContain("google-contacts/oauth/replace");
+    expect(posRoutes).not.toContain("google-contacts/name-affix");
   });
 });

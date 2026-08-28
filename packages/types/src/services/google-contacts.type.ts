@@ -2,6 +2,7 @@ import type z from "zod";
 import type {
     GoogleContactsConnectionStatusSchema,
     GoogleContactsInitialSyncStatusSchema,
+    GoogleContactsNameAffixSchema,
     GoogleContactsOAuthCompleteSchema,
     GoogleContactsOAuthStartResponseSchema,
     GoogleContactsSyncStatusSchema,
@@ -20,3 +21,4 @@ export type GoogleContactsOAuthStartResponse = z.infer<
 export type GoogleContactsOAuthCompleteJSON = z.infer<
     typeof GoogleContactsOAuthCompleteSchema
 >;
+export type GoogleContactsNameAffix = z.infer<typeof GoogleContactsNameAffixSchema>;

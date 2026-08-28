@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { startGoogleContactsInitialSync } from "./google-contacts.service";
-import type { GoogleContactsServiceDependencies } from "./google-contacts.service";
 import { GOOGLE_CONTACTS_WRITE_SCOPE } from "./google-contacts.oauth";
+import {
+  updateGoogleContactsNameAffixForOrganization,
+  type GoogleContactsServiceDependencies,
+} from "./google-contacts.service";
 
 const ORGANIZATION_ID = "aac5e7a9-7b0d-4842-ab6c-ab2f4e21b865";
+const OTHER_ORGANIZATION_ID = "651d3470-af47-47c6-9153-8f00ac45b12f";
 const USER_ID = "17268fe9-9f75-4ebe-9997-9d73b2a3e996";
 
 const disconnected = {
@@ -24,8 +27,8 @@ const connected = {
   connectionStatus: "connected" as const,
   googleAccountEmail: "owner@example.com",
   connectedAt: "2026-08-26T06:00:00.000Z",
-  initialSyncStatus: "not_started" as const,
-  lastSuccessfulSyncAt: null,
+  initialSyncStatus: "completed" as const,
+  lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
   pendingCount: 0,
   retryingCount: 0,
   errorCount: 0,
@@ -34,11 +37,10 @@ const connected = {
   contactNamePostfix: "",
 };
 
-const pending = {
+const saved = {
   ...connected,
-  initialSyncStatus: "pending" as const,
-  pendingCount: 3,
-  retryingCount: 0,
+  contactNamePostfix: "@ph",
+  pendingCount: 4,
 };
 
 const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}): GoogleContactsServiceDependencies => ({
@@ -63,9 +65,9 @@ const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}):
     disconnected: false,
     credential: null,
   })),
-  scheduleInitialCatchUp: mock(async () => pending),
-  updateNameAffix: mock(async () => ({ status: connected, changed: false })),
-  scheduleDisplayNameRefresh: mock(async () => connected),
+  scheduleInitialCatchUp: mock(async () => connected),
+  updateNameAffix: mock(async () => ({ status: saved, changed: true })),
+  scheduleDisplayNameRefresh: mock(async () => saved),
   vault: {
     store: mock(async () => ({
       reference: "db-secret:11111111-1111-4111-8111-111111111111",
@@ -87,67 +89,99 @@ const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}):
   oauth: {
     buildAuthorizationUrl: () => "https://accounts.google.com/o/oauth2/v2/auth",
     exchangeAuthorizationCode: mock(async () => {
-      throw new Error("must not exchange tokens during initial sync");
+      throw new Error("must not exchange tokens while saving a name affix");
     }),
     refreshAccessToken: mock(async () => {
-      throw new Error("must not refresh tokens during initial sync");
+      throw new Error("must not refresh tokens while saving a name affix");
     }),
     getAccountIdentity: mock(async () => {
-      throw new Error("must not read Google identity during initial sync");
+      throw new Error("must not read Google identity while saving a name affix");
     }),
     revokeAuthorization: mock(async () => {
-      throw new Error("must not revoke Google authorization during initial sync");
+      throw new Error("must not revoke Google authorization while saving a name affix");
     }),
   },
   ...overrides,
 });
 
-describe("Google Contacts initial catch-up scheduling", () => {
+describe("Google Contact Name Affix", () => {
   beforeEach(() => {
     process.env.GOOGLE_CONTACTS_OAUTH_STATE_SECRET = "local-test-secret-that-is-long-enough-32";
   });
 
-  test("schedules eligible Customers for a connected Organization without calling Google", async () => {
+  test("saves a postfix and refreshes already synchronized Contacts", async () => {
     const deps = createDeps();
-    const response = await startGoogleContactsInitialSync(USER_ID, ORGANIZATION_ID, deps);
+    const response = await updateGoogleContactsNameAffixForOrganization(
+      USER_ID,
+      ORGANIZATION_ID,
+      { contactNamePrefix: "", contactNamePostfix: "@ph" },
+      deps,
+    );
 
     expect(response).toMatchObject({
       status: "success",
-      code: 202,
-      data: pending,
+      code: 200,
+      data: saved,
     });
-    expect(deps.scheduleInitialCatchUp).toHaveBeenCalledWith(ORGANIZATION_ID);
-    expect(deps.oauth.exchangeAuthorizationCode).not.toHaveBeenCalled();
-    expect(deps.oauth.getAccountIdentity).not.toHaveBeenCalled();
+    expect(deps.updateNameAffix).toHaveBeenCalledWith({
+      organizationId: ORGANIZATION_ID,
+      contactNamePrefix: "",
+      contactNamePostfix: "@ph",
+    });
+    expect(deps.scheduleDisplayNameRefresh).toHaveBeenCalledWith(ORGANIZATION_ID);
     expect(JSON.stringify(response)).not.toContain("access-token");
     expect(JSON.stringify(response)).not.toContain("refresh-token");
   });
 
-  test("does not schedule catch-up when Google Contacts is not connected", async () => {
+  test("does not reschedule work when the affix is unchanged", async () => {
+    const deps = createDeps({
+      updateNameAffix: mock(async () => ({ status: connected, changed: false })),
+    });
+
+    const response = await updateGoogleContactsNameAffixForOrganization(
+      USER_ID,
+      ORGANIZATION_ID,
+      { contactNamePrefix: "", contactNamePostfix: "" },
+      deps,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      data: connected,
+    });
+    expect(deps.scheduleDisplayNameRefresh).not.toHaveBeenCalled();
+  });
+
+  test("does not save an affix when Google Contacts is disconnected", async () => {
     const deps = createDeps({
       getStatus: mock(async () => disconnected),
     });
 
-    const response = await startGoogleContactsInitialSync(USER_ID, ORGANIZATION_ID, deps);
+    const response = await updateGoogleContactsNameAffixForOrganization(
+      USER_ID,
+      ORGANIZATION_ID,
+      { contactNamePrefix: "", contactNamePostfix: "@ph" },
+      deps,
+    );
 
-    expect(response).toMatchObject({
-      status: "error",
-      code: 409,
-      message: "Google Contacts is not connected",
-      data: disconnected,
-    });
-    expect(deps.scheduleInitialCatchUp).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ status: "error", code: 409 });
+    expect(deps.updateNameAffix).not.toHaveBeenCalled();
+    expect(deps.scheduleDisplayNameRefresh).not.toHaveBeenCalled();
   });
 
-  test("does not expose status or schedule work for an Organization the user cannot access", async () => {
+  test("does not expose the affix for an Organization the user cannot access", async () => {
     const deps = createDeps({
       getOrganizationByIdForUser: mock(async () => null),
     });
 
-    const response = await startGoogleContactsInitialSync(USER_ID, ORGANIZATION_ID, deps);
+    const response = await updateGoogleContactsNameAffixForOrganization(
+      USER_ID,
+      OTHER_ORGANIZATION_ID,
+      { contactNamePrefix: "", contactNamePostfix: "@ph" },
+      deps,
+    );
 
     expect(response).toMatchObject({ status: "error", code: 404, data: null });
-    expect(deps.getStatus).not.toHaveBeenCalled();
-    expect(deps.scheduleInitialCatchUp).not.toHaveBeenCalled();
+    expect(deps.updateNameAffix).not.toHaveBeenCalled();
   });
 });

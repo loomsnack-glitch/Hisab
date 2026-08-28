@@ -64,6 +64,48 @@ describe("Google Contacts worker", () => {
     expect(people.deleteContact).not.toHaveBeenCalled();
   });
 
+  test("applies a Google Contact Name Affix when creating and updating Contacts", async () => {
+    const matched = {
+      resourceName: "people/dev",
+      etag: "etag-1",
+      names: [{ unstructuredName: "Dev Jariwala", givenName: "Dev Jariwala" }],
+      phoneNumbers: [{ value: "+919876543210", canonicalForm: "+919876543210" }],
+    };
+    const createPeopleWithAffix = createPeople({
+      searchContacts: mock(async () => []),
+    });
+    const updatePeople = createPeople({
+      getContact: mock(async () => matched),
+      updateContact: mock(async (person) => person),
+    });
+
+    await processGoogleContactsSyncJob(
+      { ...job, contactNamePrefix: "", contactNamePostfix: "@ph" },
+      createPeopleWithAffix,
+    );
+    await processGoogleContactsSyncJob(
+      {
+        ...job,
+        contactNamePrefix: "PH",
+        contactNamePostfix: "@ph",
+        linkedGoogleResourceName: "people/dev",
+        matchedPhone: "+919876543210",
+      },
+      updatePeople,
+    );
+
+    expect(createPeopleWithAffix.createContact).toHaveBeenCalledWith({
+      name: "Dev Jariwala @ph",
+      phone: "+919876543210",
+    });
+    expect(updatePeople.updateContact).toHaveBeenCalledWith({
+      resourceName: "people/dev",
+      etag: "etag-1",
+      names: [{ unstructuredName: "PH Dev Jariwala @ph", givenName: "PH Dev Jariwala @ph" }],
+      phoneNumbers: [{ value: "+919876543210", canonicalForm: "+919876543210" }],
+    });
+  });
+
   test("updates exactly one Google Contact Match from Ganatri and preserves extra numbers", async () => {
     const matched = {
       resourceName: "people/dev",

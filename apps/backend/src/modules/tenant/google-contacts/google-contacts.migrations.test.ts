@@ -27,4 +27,12 @@ describe("Google Contacts migration layering", () => {
     expect(intent).toContain("ADD COLUMN IF NOT EXISTS oauth_attempt_intent");
     expect(intent).toContain("IF NOT EXISTS (");
   });
+
+  test("adds Google Contact Name Affix columns without dropping the connection", () => {
+    const affix = migration("20260827120000_add_google_contacts_name_affix.sql");
+
+    expect(affix).toContain("ADD COLUMN IF NOT EXISTS contact_name_prefix");
+    expect(affix).toContain("ADD COLUMN IF NOT EXISTS contact_name_postfix");
+    expect(affix).not.toContain("DROP TABLE");
+  });
 });

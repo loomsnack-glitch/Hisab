@@ -1,4 +1,4 @@
-import { normalizePhoneNumber, type GoogleContactsConnectionStatus } from "@repo/types";
+import { googleContactDisplayName, normalizePhoneNumber, type GoogleContactsConnectionStatus } from "@repo/types";
 import {
   exactGoogleContactMatches,
   otherExactGoogleContactMatches,
@@ -22,6 +22,8 @@ export type GoogleContactsSyncJob = {
   customerUpdatedAt: string;
   linkedGoogleResourceName: string | null;
   matchedPhone: string | null;
+  contactNamePrefix?: string | null;
+  contactNamePostfix?: string | null;
 };
 
 export type GoogleContactsSyncOutcome =
@@ -140,7 +142,11 @@ export const processGoogleContactsSyncJob = async (
     return { status: "skipped", reason: "ineligible" };
   }
 
-  const customerName = job.customerName.trim();
+  const customerName = googleContactDisplayName({
+    customerName: job.customerName,
+    prefix: job.contactNamePrefix,
+    postfix: job.contactNamePostfix,
+  });
   const previousPhone = job.matchedPhone ?? null;
   const phoneChanged = Boolean(previousPhone) && normalizePhoneNumber(previousPhone) !== normalizedPhone;
 

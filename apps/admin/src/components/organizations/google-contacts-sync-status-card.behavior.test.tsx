@@ -15,6 +15,8 @@ const disconnectedStatus: GoogleContactsSyncStatus = {
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
 };
 
 const connectedStatus: GoogleContactsSyncStatus = {
@@ -27,6 +29,8 @@ const connectedStatus: GoogleContactsSyncStatus = {
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
 };
 
 const renderCard = (
@@ -35,6 +39,7 @@ const renderCard = (
         onStartInitialSync?: () => void;
         onDisconnect?: () => void;
         onReplace?: () => void;
+        onSaveNameAffix?: () => void;
     } = {},
 ) =>
     renderToStaticMarkup(
@@ -44,6 +49,7 @@ const renderCard = (
             onStartInitialSync={extras.onStartInitialSync}
             onDisconnect={extras.onDisconnect}
             onReplace={extras.onReplace}
+            onSaveNameAffix={extras.onSaveNameAffix}
         />,
     );
 
@@ -207,6 +213,27 @@ describe("Google Contacts Sync Status card", () => {
         expect(markup).toContain("does not delete Google Contacts");
         expect(markup.toLowerCase()).not.toContain("delete contact");
         expect(markup).not.toContain("refresh_token");
+    });
+
+    test("lets a connected Organization set a Google Contact Name Affix", () => {
+        const labeled = renderCard(
+            { ...connectedStatus, contactNamePostfix: "@ph" },
+            {
+                onDisconnect: () => undefined,
+                onReplace: () => undefined,
+                onSaveNameAffix: () => undefined,
+            },
+        );
+        const disconnected = renderCard(disconnectedStatus);
+
+        expect(labeled).toContain("Google contact label");
+        expect(labeled).toContain("Prefix");
+        expect(labeled).toContain("Postfix");
+        expect(labeled).toContain("Preview: Dev Jariwala @ph");
+        expect(labeled).toContain("Save contact label");
+        expect(labeled).toContain("Customer names in Ganatri stay unchanged");
+        expect(disconnected).not.toContain("Google contact label");
+        expect(disconnected).not.toContain("Save contact label");
     });
 });
 

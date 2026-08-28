@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import {
+  GoogleContactsNameAffixSchema,
   GoogleContactsOAuthCompleteSchema,
   STATUS_CODES,
   type GoogleContactsOAuthStartResponse,
@@ -19,6 +20,7 @@ import {
   startGoogleContactsAccountReplacement,
   startGoogleContactsInitialSync,
   startGoogleContactsOAuth,
+  updateGoogleContactsNameAffixForOrganization,
 } from "./google-contacts.service";
 
 const uuidSchema = z.uuid("Invalid id");
@@ -71,6 +73,11 @@ type GoogleContactsOperations = {
     userId: string,
     organizationId: string,
   ) => Promise<ServiceResponse<GoogleContactsSyncStatus | null>>;
+  updateNameAffix: (
+    userId: string,
+    organizationId: string,
+    affix: { contactNamePrefix: string; contactNamePostfix: string },
+  ) => Promise<ServiceResponse<GoogleContactsSyncStatus | null>>;
 };
 
 export const createGoogleContactsRoutes = (
@@ -81,6 +88,7 @@ export const createGoogleContactsRoutes = (
     startInitialSync: startGoogleContactsInitialSync,
     replace: startGoogleContactsAccountReplacement,
     disconnect: disconnectGoogleContactsForOrganization,
+    updateNameAffix: updateGoogleContactsNameAffixForOrganization,
   },
   authenticate: MiddlewareHandler<{ Variables: AppVariables }> = authMiddleware,
 ) => {
@@ -184,6 +192,29 @@ export const createGoogleContactsRoutes = (
       return unexpectedError(c, error);
     }
   });
+
+  router.patch(
+    "/:organizationId/google-contacts/name-affix",
+    validateSchema("json", GoogleContactsNameAffixSchema),
+    async (c) => {
+      try {
+        const organizationId = c.req.param("organizationId");
+        if (!uuidSchema.safeParse(organizationId).success) {
+          return c.json(invalidOrganizationId(), STATUS_CODES.BAD_REQUEST);
+        }
+        return handleServiceResponse(
+          c,
+          await operations.updateNameAffix(
+            c.get("authUser").id,
+            organizationId,
+            c.req.valid("json"),
+          ),
+        );
+      } catch (error) {
+        return unexpectedError(c, error);
+      }
+    },
+  );
 
   return router;
 };

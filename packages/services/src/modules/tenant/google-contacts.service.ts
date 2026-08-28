@@ -78,3 +78,18 @@ export const disconnectGoogleContacts = async (
         return handleApiError(error);
     }
 };
+
+export const updateGoogleContactsNameAffix = async (
+    organizationId: string,
+    affix: { contactNamePrefix: string; contactNamePostfix: string },
+): Promise<GoogleContactsStatusResponse> => {
+    try {
+        const response = await api.patch(`/organizations/${organizationId}/google-contacts/name-affix`, {
+            contactNamePrefix: affix.contactNamePrefix ?? "",
+            contactNamePostfix: affix.contactNamePostfix ?? "",
+        });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};

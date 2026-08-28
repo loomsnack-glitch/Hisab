@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+    GoogleContactsNameAffixSchema,
     GoogleContactsOAuthCompleteSchema,
     GoogleContactsOAuthStartResponseSchema,
     GoogleContactsSyncStatusSchema,
@@ -61,6 +62,48 @@ describe("Google Contacts Synchronization contracts", () => {
         expect(parsed.retryingCount).toBe(0);
         expect(parsed.errorCount).toBe(0);
         expect(parsed.conflictCount).toBe(0);
+        expect(parsed.contactNamePrefix).toBe("");
+        expect(parsed.contactNamePostfix).toBe("");
+    });
+
+    test("accepts a Google Contact Name Affix on status and as a strict settings payload", () => {
+        const parsed = GoogleContactsSyncStatusSchema.parse({
+            connectionStatus: "connected",
+            googleAccountEmail: "owner@example.com",
+            connectedAt: "2026-08-26T06:00:00.000Z",
+            contactNamePrefix: "PH",
+            contactNamePostfix: "@ph",
+        });
+        expect(parsed.contactNamePrefix).toBe("PH");
+        expect(parsed.contactNamePostfix).toBe("@ph");
+
+        expect(
+            GoogleContactsNameAffixSchema.parse({
+                contactNamePostfix: "@ph",
+            }),
+        ).toEqual({
+            contactNamePrefix: "",
+            contactNamePostfix: "@ph",
+        });
+        expect(
+            GoogleContactsNameAffixSchema.safeParse({
+                contactNamePrefix: " PH ",
+                contactNamePostfix: " @ph ",
+            }).success,
+        ).toBe(true);
+        expect(
+            GoogleContactsNameAffixSchema.safeParse({
+                contactNamePrefix: "x".repeat(33),
+                contactNamePostfix: "",
+            }).success,
+        ).toBe(false);
+        expect(
+            GoogleContactsNameAffixSchema.safeParse({
+                contactNamePrefix: "",
+                contactNamePostfix: "@ph",
+                refreshToken: "must-not-be-accepted",
+            }).success,
+        ).toBe(false);
     });
 
     test("accepts pending and completed initial-sync status with compact counts", () => {

@@ -23,6 +23,8 @@ const disconnected = {
   retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
+  contactNamePrefix: "",
+  contactNamePostfix: "",
 };
 
 const connected = {
@@ -35,6 +37,8 @@ const connected = {
   retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
+  contactNamePrefix: "",
+  contactNamePostfix: "",
 };
 
 const reconnectRequired = {
@@ -52,6 +56,8 @@ const connecting = {
   retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
+  contactNamePrefix: "",
+  contactNamePostfix: "",
 };
 
 const replacementConnected = {
@@ -64,6 +70,8 @@ const replacementConnected = {
   retryingCount: 0,
   errorCount: 0,
   conflictCount: 0,
+  contactNamePrefix: "",
+  contactNamePostfix: "",
 };
 
 const credentials = {
@@ -102,6 +110,8 @@ const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}):
     credential: activeBinding,
   })),
   scheduleInitialCatchUp: mock(async () => connected),
+  updateNameAffix: mock(async () => ({ status: connected, changed: false })),
+  scheduleDisplayNameRefresh: mock(async () => connected),
   vault: {
     store: mock(async () => ({
       reference: "db-secret:11111111-1111-4111-8111-111111111111",

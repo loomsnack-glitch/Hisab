@@ -84,7 +84,7 @@ The number of Customer records an Organization has created, regardless of each C
 _Avoid_: Active customer count, customer engagement rate, registered user count
 
 **Google Contacts Synchronization**:
-The optional Organization feature that exports an eligible Customer's name and phone number into one connected Google account's personal Contacts. Each Organization has at most one connection. New or changed Customers with a phone number synchronize automatically after an administrator runs the initial catch-up sync; customers without one are skipped and their existing Google Contacts are left unchanged. A linked Google Contact follows later Customer name and phone changes unless the new phone number collides with another Google Contact; only the matching phone entry changes and any additional Google phone numbers are preserved. Synchronization never deletes a Google Contact and never blocks Customer or billing work: failed writes retry in the background.
+The optional Organization feature that exports an eligible Customer's name and phone number into one connected Google account's personal Contacts. Each Organization has at most one connection. The exported Google Contact name may include a Google Contact Name Affix; the Customer name in Ganatri is unchanged. New or changed Customers with a phone number synchronize automatically after an administrator runs the initial catch-up sync; customers without one are skipped and their existing Google Contacts are left unchanged. A linked Google Contact follows later Customer name and phone changes unless the new phone number collides with another Google Contact; only the matching phone entry changes and any additional Google phone numbers are preserved. Synchronization never deletes a Google Contact and never blocks Customer or billing work: failed writes retry in the background.
 _Avoid_: Contact import, two-way contact sync, Gmail sync
 
 **Google Contacts Connection**:
@@ -92,8 +92,12 @@ An Organization's single authorized Google account and its protected authorizati
 _Avoid_: Store Gmail account, cashier connection, multiple account sync
 
 **Google Contacts Sync Status**:
-The Organization-visible state of Google Contacts Synchronization in Ganatri Admin, including the connected account, initial catch-up action, last successful sync, and any conflicts or errors. It deliberately exposes no per-Customer sync rules or queue management in v1.
+The Organization-visible state of Google Contacts Synchronization in Ganatri Admin, including the connected account, initial catch-up action, last successful sync, Google Contact Name Affix, and any conflicts or errors. It deliberately exposes no per-Customer sync rules or queue management in v1.
 _Avoid_: Per-customer sync settings, contact job console, POS sync controls
+
+**Google Contact Name Affix**:
+An Organization-owned optional prefix and/or postfix applied only to the Google Contact display name during Google Contacts Synchronization so staff can recognize Contacts that came from Ganatri. It does not rename the Customer in Ganatri.
+_Avoid_: Contact nickname, Google label, contact group, customer rename
 
 **Google Contacts Sync Outbox**:
 The dedicated persistent queue and worker that runs Google Contacts Synchronization independently of Customer and billing writes. It owns retryable delivery state, conflict/error reporting, and recovery; it is separate from the WhatsApp outbox.

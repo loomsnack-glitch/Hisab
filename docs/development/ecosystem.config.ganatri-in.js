@@ -30,6 +30,11 @@ const parseEnvFile = (filePath) => {
 
 const workerDirectory = "/var/www/ganatri.in/backend/apps/whatsapp-worker";
 const workerEnv = parseEnvFile(path.join(workerDirectory, ".env"));
+const googleContactsWorkerDirectory =
+  "/var/www/ganatri.in/backend/apps/google-contacts-worker";
+const googleContactsWorkerEnv = parseEnvFile(
+  path.join(googleContactsWorkerDirectory, ".env"),
+);
 
 module.exports = {
   apps: [
@@ -52,6 +57,17 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         ...workerEnv,
+      },
+    },
+    {
+      name: "ganatri-in-google-contacts-worker",
+      script: "bun",
+      cwd: googleContactsWorkerDirectory,
+      args: ["--env-file=.env", "src/index.ts"],
+      interpreter: "none",
+      env: {
+        NODE_ENV: "production",
+        ...googleContactsWorkerEnv,
       },
     },
   ],

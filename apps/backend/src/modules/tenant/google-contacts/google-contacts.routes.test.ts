@@ -19,6 +19,8 @@ const getStatus = mock(async () => ({
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
   },
   code: 200 as const,
 }));
@@ -46,6 +48,8 @@ const complete = mock(async () => ({
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
   },
   code: 200 as const,
 }));
@@ -63,6 +67,8 @@ const startInitialSync = mock(async () => ({
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
   },
   code: 202 as const,
 }));
@@ -90,6 +96,27 @@ const disconnect = mock(async () => ({
     retryingCount: 0,
     errorCount: 0,
     conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "",
+  },
+  code: 200 as const,
+}));
+
+const updateNameAffix = mock(async () => ({
+  status: "success" as const,
+  message: "Google Contact Name Affix saved",
+  data: {
+    connectionStatus: "connected" as const,
+    googleAccountEmail: "owner@example.com",
+    connectedAt: "2026-08-26T06:00:00.000Z",
+    initialSyncStatus: "completed" as const,
+    lastSuccessfulSyncAt: "2026-08-26T07:15:00.000Z",
+    pendingCount: 3,
+    retryingCount: 0,
+    errorCount: 0,
+    conflictCount: 0,
+    contactNamePrefix: "",
+    contactNamePostfix: "@ph",
   },
   code: 200 as const,
 }));
@@ -102,7 +129,7 @@ const authenticatedUser: MiddlewareHandler<{
 };
 
 const router = createGoogleContactsRoutes(
-  { getStatus, start, complete, startInitialSync, replace, disconnect },
+  { getStatus, start, complete, startInitialSync, replace, disconnect, updateNameAffix },
   authenticatedUser,
 );
 const app = new Hono<{ Variables: AppVariables }>();
@@ -116,6 +143,7 @@ describe("Google Contacts connection routes", () => {
     startInitialSync.mockClear();
     replace.mockClear();
     disconnect.mockClear();
+    updateNameAffix.mockClear();
   });
 
   test("reads status for an authorized Organization", async () => {
@@ -224,5 +252,59 @@ describe("Google Contacts connection routes", () => {
     });
     expect(JSON.stringify(body)).not.toContain("refresh_token");
     expect(JSON.stringify(body)).not.toContain("access_token");
+  });
+
+  test("saves a Google Contact Name Affix for an authorized Organization without exposing credentials", async () => {
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/name-affix`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contactNamePrefix: "",
+        contactNamePostfix: "@ph",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(updateNameAffix).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID, {
+      contactNamePrefix: "",
+      contactNamePostfix: "@ph",
+    });
+    const body = await response.json();
+    expect(body).toMatchObject({
+      status: "success",
+      data: { contactNamePostfix: "@ph" },
+    });
+    expect(JSON.stringify(body)).not.toContain("refresh_token");
+  });
+
+  test("saves a postfix-only Google Contact Name Affix when prefix is omitted", async () => {
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/name-affix`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contactNamePostfix: "@ph",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(updateNameAffix).toHaveBeenCalledWith(USER_ID, ORGANIZATION_ID, {
+      contactNamePrefix: "",
+      contactNamePostfix: "@ph",
+    });
+  });
+
+  test("rejects credential material in the Google Contact Name Affix body", async () => {
+    const response = await app.request(`/organizations/${ORGANIZATION_ID}/google-contacts/name-affix`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contactNamePrefix: "",
+        contactNamePostfix: "@ph",
+        refreshToken: "must-not-be-accepted",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(updateNameAffix).not.toHaveBeenCalled();
   });
 });

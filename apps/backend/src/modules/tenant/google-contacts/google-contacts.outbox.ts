@@ -128,6 +128,80 @@ export const scheduleGoogleContactsInitialCatchUp = async (
   return getGoogleContactsConnectionStatus(organizationId);
 };
 
+export const scheduleGoogleContactsDisplayNameRefresh = async (
+  organizationId: string,
+): Promise<GoogleContactsSyncStatus> => {
+  await pg.begin(async (tx) => {
+    const [connection] = await tx`
+      SELECT id, status
+      FROM google_contacts_connections
+      WHERE organization_id = ${organizationId}
+      FOR UPDATE
+    `;
+    if (
+      !connection ||
+      (String(connection.status) !== "connected" && String(connection.status) !== "reconnect_required")
+    ) {
+      return;
+    }
+
+    const customers = (await tx`
+      SELECT id, name, phone, updated_at
+      FROM customers
+      WHERE organization_id = ${organizationId}
+    `) as CustomerRow[];
+    const scheduled = eligibleCustomers(customers);
+
+    for (const customer of scheduled) {
+      const [existing] = await tx`
+        SELECT id, status
+        FROM google_contacts_sync_outbox
+        WHERE connection_id = ${connection.id}
+          AND customer_id = ${customer.id}
+        FOR UPDATE
+      `;
+      if (!existing) {
+        await tx`
+          INSERT INTO google_contacts_sync_outbox (
+            organization_id,
+            connection_id,
+            customer_id,
+            status,
+            customer_updated_at
+          ) VALUES (
+            ${organizationId},
+            ${connection.id},
+            ${customer.id},
+            'pending',
+            ${customer.updatedAt}
+          )
+          ON CONFLICT (connection_id, customer_id) DO NOTHING
+        `;
+        continue;
+      }
+      if (String(existing.status) !== "completed" && String(existing.status) !== "failed") {
+        continue;
+      }
+      await tx`
+        UPDATE google_contacts_sync_outbox
+        SET
+          status = 'pending',
+          attempt_count = 0,
+          next_attempt_at = NOW(),
+          lease_owner = NULL,
+          lease_expires_at = NULL,
+          last_error_code = NULL,
+          last_error_message = NULL,
+          updated_at = NOW()
+        WHERE id = ${existing.id}
+          AND status IN ('completed', 'failed')
+      `;
+    }
+  });
+
+  return getGoogleContactsConnectionStatus(organizationId);
+};
+
 export const scheduleGoogleContactsCustomerChange = async (
   input: {
     organizationId: string;
@@ -303,6 +377,8 @@ export const claimNextGoogleContactsOutbox = async (
         connection.status AS connection_status,
         connection.credential_reference,
         connection.credential_key_version,
+        connection.contact_name_prefix,
+        connection.contact_name_postfix,
         customer.name AS customer_name,
         customer.phone AS customer_phone,
         customer.updated_at AS customer_updated_at,
@@ -340,6 +416,8 @@ export const claimNextGoogleContactsOutbox = async (
         linkedGoogleResourceName:
           row.google_resource_name == null ? null : String(row.google_resource_name),
         matchedPhone: row.matched_phone == null ? null : String(row.matched_phone),
+        contactNamePrefix: row.contact_name_prefix == null ? "" : String(row.contact_name_prefix),
+        contactNamePostfix: row.contact_name_postfix == null ? "" : String(row.contact_name_postfix),
       },
     };
   });

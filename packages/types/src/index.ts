@@ -23,3 +23,4 @@ export * from "./services/whatsapp.schema";
 export * from "./services/whatsapp-content";
 export * from "./services/google-contacts.type";
 export * from "./services/google-contacts.schema";
+export * from "./services/google-contacts.display-name";

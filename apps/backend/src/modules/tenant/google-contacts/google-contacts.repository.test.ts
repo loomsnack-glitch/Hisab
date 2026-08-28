@@ -15,6 +15,8 @@ describe("Google Contacts connection persistence boundary", () => {
       retryingCount: 0,
       errorCount: 0,
       conflictCount: 0,
+      contactNamePrefix: "",
+      contactNamePostfix: "",
     });
   });
 
@@ -42,6 +44,8 @@ describe("Google Contacts connection persistence boundary", () => {
       retryingCount: 0,
       errorCount: 0,
       conflictCount: 0,
+      contactNamePrefix: "",
+      contactNamePostfix: "",
     });
     expect("credentialReference" in snapshot).toBe(false);
     expect("credentialKeyVersion" in snapshot).toBe(false);
@@ -115,5 +119,20 @@ describe("Google Contacts connection persistence boundary", () => {
       errorCount: 1,
       conflictCount: 2,
     });
+  });
+
+  test("maps a Google Contact Name Affix without exposing credential material", () => {
+    const snapshot = mapGoogleContactsSyncStatus({
+      status: "connected",
+      google_account_email: "owner@example.com",
+      connected_at: "2026-08-26T06:00:00.000Z",
+      contact_name_prefix: "PH",
+      contact_name_postfix: "@ph",
+      credential_reference: "db-secret:must-not-escape",
+    });
+
+    expect(snapshot.contactNamePrefix).toBe("PH");
+    expect(snapshot.contactNamePostfix).toBe("@ph");
+    expect("credentialReference" in snapshot).toBe(false);
   });
 });

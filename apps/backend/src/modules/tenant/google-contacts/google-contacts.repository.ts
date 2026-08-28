@@ -65,6 +65,8 @@ export const mapGoogleContactsSyncStatus = (row: ConnectionRow | null | undefine
     retryingCount: asCount(row.retrying_count),
     errorCount: asCount(row.error_count),
     conflictCount: asCount(row.conflict_count),
+    contactNamePrefix: typeof row.contact_name_prefix === "string" ? row.contact_name_prefix : "",
+    contactNamePostfix: typeof row.contact_name_postfix === "string" ? row.contact_name_postfix : "",
   });
 };
 
@@ -76,6 +78,8 @@ export const getGoogleContactsConnectionStatus = async (organizationId: string):
       connection.connected_at,
       connection.initial_sync_status,
       connection.last_successful_sync_at,
+      connection.contact_name_prefix,
+      connection.contact_name_postfix,
       COUNT(*) FILTER (WHERE outbox.status IN ('pending', 'processing')) AS pending_count,
       COUNT(*) FILTER (
         WHERE outbox.status IN ('pending', 'processing')
@@ -93,7 +97,9 @@ export const getGoogleContactsConnectionStatus = async (organizationId: string):
       connection.google_account_email,
       connection.connected_at,
       connection.initial_sync_status,
-      connection.last_successful_sync_at
+      connection.last_successful_sync_at,
+      connection.contact_name_prefix,
+      connection.contact_name_postfix
   `;
   return mapGoogleContactsSyncStatus(row as ConnectionRow | undefined);
 };
@@ -181,7 +187,7 @@ export const beginGoogleContactsConnectionAttempt = async (input: {
       updated_at = NOW()
     WHERE google_contacts_connections.status <> 'connected'
       OR EXCLUDED.oauth_attempt_intent = 'replace'
-    RETURNING status, google_account_email, connected_at, initial_sync_status, last_successful_sync_at
+    RETURNING status, google_account_email, connected_at, initial_sync_status, last_successful_sync_at, contact_name_prefix, contact_name_postfix
   `;
   if (!row) {
     return {
@@ -258,7 +264,9 @@ export const completeGoogleContactsConnection = async (input: {
         google_account_email,
         connected_at,
         initial_sync_status,
-        last_successful_sync_at
+        last_successful_sync_at,
+        contact_name_prefix,
+        contact_name_postfix
     `;
     return row ? mapGoogleContactsSyncStatus(row as ConnectionRow) : null;
   });
@@ -332,4 +340,50 @@ export const disconnectGoogleContactsConnection = async (
           : null,
     };
   });
+};
+
+export type GoogleContactsNameAffixUpdateResult = {
+  status: GoogleContactsSyncStatus;
+  changed: boolean;
+};
+
+export const updateGoogleContactsNameAffix = async (input: {
+  organizationId: string;
+  contactNamePrefix: string;
+  contactNamePostfix: string;
+}): Promise<GoogleContactsNameAffixUpdateResult | null> => {
+  const contactNamePrefix = input.contactNamePrefix.trim();
+  const contactNamePostfix = input.contactNamePostfix.trim();
+  const updated = await pg.begin(async (tx) => {
+    const [current] = await tx`
+      SELECT id, status, contact_name_prefix, contact_name_postfix
+      FROM google_contacts_connections
+      WHERE organization_id = ${input.organizationId}
+      FOR UPDATE
+    `;
+    if (!current) return null;
+    const status = String(current.status);
+    if (status !== "connected" && status !== "reconnect_required") {
+      return null;
+    }
+    const previousPrefix = String(current.contact_name_prefix ?? "");
+    const previousPostfix = String(current.contact_name_postfix ?? "");
+    const changed = previousPrefix !== contactNamePrefix || previousPostfix !== contactNamePostfix;
+    if (changed) {
+      await tx`
+        UPDATE google_contacts_connections
+        SET
+          contact_name_prefix = ${contactNamePrefix},
+          contact_name_postfix = ${contactNamePostfix},
+          updated_at = NOW()
+        WHERE id = ${current.id}
+      `;
+    }
+    return { changed };
+  });
+  if (!updated) return null;
+  return {
+    status: await getGoogleContactsConnectionStatus(input.organizationId),
+    changed: updated.changed,
+  };
 };

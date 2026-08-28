@@ -5,6 +5,19 @@ export const GoogleContactsConnectionStatusSchema = z.enum(["disconnected", "con
 
 export const GoogleContactsInitialSyncStatusSchema = z.enum(["not_started", "pending", "completed"]);
 
+const googleContactNameAffixPartSchema = z
+    .string()
+    .trim()
+    .max(32, "Must be 32 characters or fewer")
+    .refine((value) => !/[\r\n]/.test(value), "Must be a single line");
+
+export const GoogleContactsNameAffixSchema = z
+    .object({
+        contactNamePrefix: googleContactNameAffixPartSchema.default(""),
+        contactNamePostfix: googleContactNameAffixPartSchema.default(""),
+    })
+    .strict();
+
 export const GoogleContactsSyncStatusSchema = z.object({
     connectionStatus: GoogleContactsConnectionStatusSchema,
     googleAccountEmail: z.string().trim().email("Invalid Google account email").nullable(),
@@ -15,6 +28,8 @@ export const GoogleContactsSyncStatusSchema = z.object({
     retryingCount: z.number().int().nonnegative().default(0),
     errorCount: z.number().int().nonnegative().default(0),
     conflictCount: z.number().int().nonnegative().default(0),
+    contactNamePrefix: googleContactNameAffixPartSchema.default(""),
+    contactNamePostfix: googleContactNameAffixPartSchema.default(""),
 });
 
 export const GoogleContactsOAuthStartResponseSchema = z.object({

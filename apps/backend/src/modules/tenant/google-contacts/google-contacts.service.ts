@@ -1,5 +1,6 @@
 import {
   STATUS_CODES,
+  type GoogleContactsNameAffix,
   type GoogleContactsOAuthStartResponse,
   type GoogleContactsSyncStatus,
   type ServiceResponse,
@@ -38,8 +39,9 @@ import {
   getGoogleContactsConnectionLifecycle,
   getGoogleContactsConnectionStatus,
   revertConnectingGoogleContactsConnection,
+  updateGoogleContactsNameAffix,
 } from "./google-contacts.repository";
-import { scheduleGoogleContactsInitialCatchUp } from "./google-contacts.outbox";
+import { scheduleGoogleContactsDisplayNameRefresh, scheduleGoogleContactsInitialCatchUp } from "./google-contacts.outbox";
 
 export type GoogleContactsServiceDependencies = {
   getOrganizationByIdForUser: (
@@ -55,6 +57,8 @@ export type GoogleContactsServiceDependencies = {
   revertConnecting: typeof revertConnectingGoogleContactsConnection;
   disconnectConnection: typeof disconnectGoogleContactsConnection;
   scheduleInitialCatchUp: typeof scheduleGoogleContactsInitialCatchUp;
+  updateNameAffix: typeof updateGoogleContactsNameAffix;
+  scheduleDisplayNameRefresh: typeof scheduleGoogleContactsDisplayNameRefresh;
   vault: GoogleContactsCredentialVault;
   oauth: GoogleOAuthProvider;
 };
@@ -70,6 +74,8 @@ const defaultDependencies = (): GoogleContactsServiceDependencies => ({
   revertConnecting: revertConnectingGoogleContactsConnection,
   disconnectConnection: disconnectGoogleContactsConnection,
   scheduleInitialCatchUp: scheduleGoogleContactsInitialCatchUp,
+  updateNameAffix: updateGoogleContactsNameAffix,
+  scheduleDisplayNameRefresh: scheduleGoogleContactsDisplayNameRefresh,
   vault: databaseGoogleContactsCredentialVault,
   oauth: createGoogleOAuthProvider(),
 });
@@ -402,6 +408,53 @@ export const startGoogleContactsInitialSync = async (
     message: "Google Contacts initial sync scheduled",
     data: status,
     code: 202,
+  };
+};
+
+export const updateGoogleContactsNameAffixForOrganization = async (
+  userId: string,
+  organizationId: string,
+  affix: GoogleContactsNameAffix,
+  injected: Partial<GoogleContactsServiceDependencies> = {},
+): Promise<ServiceResponse<GoogleContactsSyncStatus | null>> => {
+  const deps = { ...defaultDependencies(), ...injected };
+  const organization = await requireOrganization(deps, userId, organizationId);
+  if (!organization) return organizationNotFound();
+
+  const current = await deps.getStatus(organizationId);
+  if (current.connectionStatus !== "connected" && current.connectionStatus !== "reconnect_required") {
+    return {
+      status: "error",
+      message: "Google Contacts is not connected",
+      data: current,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  const updated = await deps.updateNameAffix({
+    organizationId,
+    contactNamePrefix: affix.contactNamePrefix,
+    contactNamePostfix: affix.contactNamePostfix,
+  });
+  if (!updated) {
+    return {
+      status: "error",
+      message: "Google Contacts is not connected",
+      data: current,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  const status = updated.changed
+    ? await deps.scheduleDisplayNameRefresh(organizationId)
+    : updated.status;
+  return {
+    status: "success",
+    message: updated.changed
+      ? "Google Contact Name Affix saved"
+      : "Google Contact Name Affix unchanged",
+    data: status,
+    code: STATUS_CODES.SUCCESS,
   };
 };
 

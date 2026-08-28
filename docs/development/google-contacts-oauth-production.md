@@ -113,5 +113,20 @@ The dedicated Google Contacts worker uses `GOOGLE_CONTACTS_API_URL`,
 `GOOGLE_CONTACTS_WORKER_TOKEN`, and `GOOGLE_CONTACTS_WORKER_ID`. It must not
 share the WhatsApp worker process or token.
 
+Production worker `.env` on ganatri.in
+(`/var/www/ganatri.in/backend/apps/google-contacts-worker/.env`):
+
+```env
+GOOGLE_CONTACTS_API_URL=http://127.0.0.1:8181/api
+GOOGLE_CONTACTS_WORKER_TOKEN="<same token as the backend>"
+GOOGLE_CONTACTS_WORKER_ID=google-contacts-worker-0
+GOOGLE_CONTACTS_WORKER_POLL_INTERVAL_MS=5000
+```
+
+Copy `apps/google-contacts-worker/.env.example` to `.env` locally, then point
+the production copy at port 8181. PM2 app name is
+`ganatri-in-google-contacts-worker`. See
+[Ganatri.in deployment guide](./ganatri_in_deployment_guide.md).
+
 After changing redirect URIs or consent-screen details, restart the backend so
 it signs new OAuth state against the production callback.

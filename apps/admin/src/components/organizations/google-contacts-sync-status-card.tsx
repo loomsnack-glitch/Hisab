@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Contact } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -7,11 +7,14 @@ import {
     replaceGoogleContactsOAuth,
     startGoogleContactsInitialSync,
     startGoogleContactsOAuth,
+    updateGoogleContactsNameAffix,
 } from "@repo/services";
-import type { GoogleContactsSyncStatus } from "@repo/types";
+import { googleContactDisplayName, type GoogleContactsSyncStatus } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Input } from "@repo/ui/components/input";
+import { Label } from "@repo/ui/components/label";
 import { Spinner } from "@repo/ui/components/spinner";
 import {
     AlertDialog,
@@ -40,6 +43,12 @@ type GoogleContactsSyncStatusCardViewProps = {
     onStartInitialSync?: () => void;
     onDisconnect?: () => void;
     onReplace?: () => void;
+    contactNamePrefix?: string;
+    contactNamePostfix?: string;
+    onContactNamePrefixChange?: (value: string) => void;
+    onContactNamePostfixChange?: (value: string) => void;
+    onSaveNameAffix?: () => void;
+    isSavingNameAffix?: boolean;
 };
 
 const statusLabel = (connectionStatus: GoogleContactsSyncStatus["connectionStatus"]) => {
@@ -91,6 +100,12 @@ export const GoogleContactsSyncStatusCardView = ({
     onStartInitialSync,
     onDisconnect,
     onReplace,
+    contactNamePrefix,
+    contactNamePostfix,
+    onContactNamePrefixChange,
+    onContactNamePostfixChange,
+    onSaveNameAffix,
+    isSavingNameAffix = false,
 }: GoogleContactsSyncStatusCardViewProps) => {
     const connectionStatus = status?.connectionStatus ?? "disconnected";
     const canConnect = connectionStatus !== "connected";
@@ -102,7 +117,17 @@ export const GoogleContactsSyncStatusCardView = ({
     const canStartInitialSync = connected && status?.initialSyncStatus === "not_started" && Boolean(onStartInitialSync);
     const canDisconnect = (connected || connectionStatus === "reconnect_required") && Boolean(onDisconnect);
     const canReplace = connected && Boolean(onReplace);
-    const lifecycleBusy = isSubmitting || isDisconnecting || isReplacing || isSyncing;
+    const lifecycleBusy = isSubmitting || isDisconnecting || isReplacing || isSyncing || isSavingNameAffix;
+    const prefix = contactNamePrefix ?? status?.contactNamePrefix ?? "";
+    const postfix = contactNamePostfix ?? status?.contactNamePostfix ?? "";
+    const canEditNameAffix = connected || connectionStatus === "reconnect_required";
+    const namePreview = googleContactDisplayName({
+        customerName: "Dev Jariwala",
+        prefix,
+        postfix,
+    });
+    const nameAffixDirty =
+        prefix !== (status?.contactNamePrefix ?? "") || postfix !== (status?.contactNamePostfix ?? "");
 
     return (
         <Card className="border-border/60 bg-card/80">
@@ -146,6 +171,51 @@ export const GoogleContactsSyncStatusCardView = ({
                             </div>
                         ) : null}
                         {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+                        {canEditNameAffix ? (
+                            <div className="space-y-3 rounded-xl border border-border/60 bg-background/60 p-3">
+                                <div className="space-y-1">
+                                    <p className="text-sm font-medium text-foreground">Google contact label</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Add a prefix or postfix so Google Contacts from Ganatri are easy to recognize. Customer names in
+                                        Ganatri stay unchanged.
+                                    </p>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="google-contact-name-prefix">Prefix</Label>
+                                        <Input
+                                            id="google-contact-name-prefix"
+                                            value={prefix}
+                                            maxLength={32}
+                                            placeholder="e.g. PH"
+                                            disabled={lifecycleBusy}
+                                            onChange={(event) => onContactNamePrefixChange?.(event.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="google-contact-name-postfix">Postfix</Label>
+                                        <Input
+                                            id="google-contact-name-postfix"
+                                            value={postfix}
+                                            maxLength={32}
+                                            placeholder="e.g. @ph"
+                                            disabled={lifecycleBusy}
+                                            onChange={(event) => onContactNamePostfixChange?.(event.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <p className="text-sm text-muted-foreground">Preview: {namePreview}</p>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-xl"
+                                    onClick={onSaveNameAffix}
+                                    disabled={lifecycleBusy || !nameAffixDirty || !onSaveNameAffix}
+                                >
+                                    {isSavingNameAffix ? "Saving…" : "Save contact label"}
+                                </Button>
+                            </div>
+                        ) : null}
                         {canConnect && onConnect ? (
                             <Button type="button" className="rounded-xl" onClick={onConnect} disabled={lifecycleBusy}>
                                 {isSubmitting ? "Connecting…" : connectLabel(connectionStatus)}
@@ -192,12 +262,19 @@ const GoogleContactsSyncStatusCard = ({ organizationId, redirectTo = defaultRedi
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [confirmDisconnect, setConfirmDisconnect] = useState(false);
     const [confirmReplace, setConfirmReplace] = useState(false);
+    const [contactNamePrefix, setContactNamePrefix] = useState("");
+    const [contactNamePostfix, setContactNamePostfix] = useState("");
     const query = useQuery({
         queryKey: googleContactsKeys.status(organizationId),
         queryFn: () => getGoogleContactsSyncStatus(organizationId),
         enabled: Boolean(organizationId),
     });
     const status = query.data?.status === "success" ? (query.data.data ?? null) : null;
+    useEffect(() => {
+        if (!status) return;
+        setContactNamePrefix(status.contactNamePrefix ?? "");
+        setContactNamePostfix(status.contactNamePostfix ?? "");
+    }, [status?.contactNamePrefix, status?.contactNamePostfix]);
     const connectMutation = useMutation({
         mutationFn: async () => {
             const started = await startGoogleContactsOAuth(organizationId);
@@ -286,6 +363,32 @@ const GoogleContactsSyncStatusCard = ({ organizationId, redirectTo = defaultRedi
             toast.error(message);
         },
     });
+    const nameAffixMutation = useMutation({
+        mutationFn: async () => {
+            const saved = await updateGoogleContactsNameAffix(organizationId, {
+                contactNamePrefix: contactNamePrefix ?? "",
+                contactNamePostfix: contactNamePostfix ?? "",
+            });
+            if (saved.status !== "success" || !saved.data) {
+                throw {
+                    message: saved.message || "Google Contact Name Affix could not be saved",
+                };
+            }
+            return saved.data;
+        },
+        onSuccess: () => {
+            setErrorMessage(null);
+            toast.success("Google contact label saved");
+            void queryClient.invalidateQueries({
+                queryKey: googleContactsKeys.status(organizationId),
+            });
+        },
+        onError: (error: { message?: string }) => {
+            const message = error.message || "Google Contact Name Affix could not be saved";
+            setErrorMessage(message);
+            toast.error(message);
+        },
+    });
 
     return (
         <>
@@ -296,7 +399,16 @@ const GoogleContactsSyncStatusCard = ({ organizationId, redirectTo = defaultRedi
                 isSyncing={syncMutation.isPending}
                 isDisconnecting={disconnectMutation.isPending}
                 isReplacing={replaceMutation.isPending}
+                isSavingNameAffix={nameAffixMutation.isPending}
                 errorMessage={errorMessage ?? (query.data?.status === "error" ? query.data.message : null)}
+                contactNamePrefix={contactNamePrefix}
+                contactNamePostfix={contactNamePostfix}
+                onContactNamePrefixChange={setContactNamePrefix}
+                onContactNamePostfixChange={setContactNamePostfix}
+                onSaveNameAffix={() => {
+                    setErrorMessage(null);
+                    nameAffixMutation.mutate();
+                }}
                 onConnect={() => {
                     setErrorMessage(null);
                     connectMutation.mutate();
