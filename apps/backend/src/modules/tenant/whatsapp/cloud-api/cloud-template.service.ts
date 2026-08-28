@@ -25,6 +25,9 @@ import {
   upsertCloudTemplateAssets,
   isCloudAccountAssignedToStore,
   createCloudTemplateDefaultBinding,
+  recordCloudTemplateAuditEvent,
+  archiveCloudTemplateBinding,
+  rollbackCloudTemplateBinding,
 } from "./cloud-template.repository";
 import {
   createCloudTemplateSubmission,
@@ -62,6 +65,9 @@ type CloudTemplateServiceDependencies = {
   updateSubmission: typeof updateCloudTemplateSubmission;
   listSubmissions: typeof listCloudTemplateSubmissions;
   isAccountAssignedToStore: typeof isCloudAccountAssignedToStore;
+  recordAudit: typeof recordCloudTemplateAuditEvent;
+  archiveBinding: typeof archiveCloudTemplateBinding;
+  rollbackBinding: typeof rollbackCloudTemplateBinding;
   organizationAccess: (organizationId: string, userId: string) => Promise<boolean>;
 };
 
@@ -99,6 +105,9 @@ const dependencies = (): CloudTemplateServiceDependencies => ({
   updateSubmission: updateCloudTemplateSubmission,
   listSubmissions: listCloudTemplateSubmissions,
   isAccountAssignedToStore: isCloudAccountAssignedToStore,
+  recordAudit: recordCloudTemplateAuditEvent,
+  archiveBinding: archiveCloudTemplateBinding,
+  rollbackBinding: rollbackCloudTemplateBinding,
   organizationAccess: async (organizationId, userId) => Boolean(await organizationRepository.getOrganizationByIdForUser(organizationId, userId)),
 });
 
@@ -234,6 +243,7 @@ const safeSubmissionError = (error: unknown): { code: string; message: string } 
     "Cloud template component type is unsupported",
     "Cloud template body text is invalid",
     "Cloud template body placeholders cannot be at the start or end",
+    "Missing sample value for",
     "Cloud template placeholders must use positive numbers",
     "Cloud template footer text is invalid",
     "Cloud template buttons are invalid",
@@ -308,6 +318,10 @@ const validateSubmissionComponents = (components: unknown[], sampleValues: Recor
         if (!["URL", "QUICK_REPLY"].includes(buttonType) || typeof buttonValue.text !== "string" || !String(buttonValue.text).trim()) throw new Error("Cloud template button is invalid");
         if (buttonType === "URL") {
           if (typeof buttonValue.url !== "string") throw new Error("Cloud template button URL is invalid");
+          for (const match of buttonValue.url.matchAll(/\{\{([^{}]+)\}\}/g)) {
+            if (!/^\d+$/.test(match[1]!) || Number(match[1]) < 1) throw new Error("Cloud template placeholders must use positive numbers");
+            placeholders.add(match[1]!);
+          }
           try { if (new URL(buttonValue.url).protocol !== "https:") throw new Error(); } catch { throw new Error("Cloud template button URL must use HTTPS"); }
         }
       }
@@ -328,11 +342,27 @@ const providerPlaceholderIndexes = (text: string): string[] => [...new Set(
   [...text.matchAll(/\{\{(\d+)\}\}/g)].map(match => match[1]!),
 )].sort((left, right) => Number(left) - Number(right));
 
+const providerExample = (text: string, sampleValues: Record<string, unknown>): string =>
+  text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => String(sampleValues[index]));
+
 const providerComponents = (components: Array<Record<string, unknown>>, sampleValues: Record<string, unknown>): Array<Record<string, unknown>> => components.map(component => {
   const type = String(component.type).toUpperCase();
   if (type === "BODY" && typeof component.text === "string" && /\{\{\d+\}\}/.test(component.text)) {
     const indexes = providerPlaceholderIndexes(component.text);
     return { ...component, example: { body_text: [indexes.map(index => String(sampleValues[index]))] } };
+  }
+  if (type === "BUTTONS" && Array.isArray(component.buttons)) {
+    return {
+      ...component,
+      buttons: component.buttons.map(button => {
+        if (!button || typeof button !== "object" || Array.isArray(button)) return button;
+        const value = button as Record<string, unknown>;
+        if (String(value.type).toUpperCase() !== "URL" || typeof value.url !== "string" || !/\{\{\d+\}\}/.test(value.url)) {
+          return button;
+        }
+        return { ...value, example: [providerExample(value.url, sampleValues)] };
+      }),
+    };
   }
   return component;
 });
@@ -378,11 +408,20 @@ const localBodyFromProviderComponents = (components: unknown[], kind: WhatsAppCr
       : ["customer_name", "store_name"];
   const body = components.find(component => component && typeof component === "object" && !Array.isArray(component) && String((component as Record<string, unknown>).type).toUpperCase() === "BODY") as Record<string, unknown> | undefined;
   if (!body || typeof body.text !== "string") throw new Error("Approved Cloud template does not contain a body");
-  return body.text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => {
+  const mappedBody = body.text.replace(/\{\{(\d+)\}\}/g, (_, index: string) => {
     const name = names[Number(index) - 1];
     if (!name) throw new Error(`Cloud template placeholder {{${index}}} is not supported for ${kind}`);
     return `{{${name}}}`;
   });
+  const hasDynamicUrlButton = components.some(component => {
+    if (!component || typeof component !== "object" || Array.isArray(component)) return false;
+    const value = component as Record<string, unknown>;
+    const type = String(value.type ?? "").toLowerCase();
+    if (type !== "buttons" && type !== "button") return false;
+    const buttons = Array.isArray(value.buttons) ? value.buttons : [];
+    return buttons.some(button => button && typeof button === "object" && !Array.isArray(button) && /\{\{\d+\}\}/.test(String((button as Record<string, unknown>).url ?? "")));
+  });
+  return hasDynamicUrlButton ? `${mappedBody}\n\nView your invoice online: {{invoice_url}}` : mappedBody;
 };
 
 export const submitCloudTemplateForAccount = async (
@@ -585,6 +624,16 @@ export const setCloudTemplateDefaultForSubmission = async (
       localTemplateBody: localBodyFromProviderComponents(submission.requestedComponents, submission.kind),
       createdBy: userId,
     });
+    await deps.recordAudit({
+      organizationId,
+      whatsappBusinessAccountId: submission.whatsappBusinessAccountId,
+      storeId: submission.originatingStoreId,
+      bindingId: binding.id,
+      submissionId: submission.id,
+      eventType: "default_assigned",
+      actorId: userId,
+      details: { languageCode: submission.languageCode, kind: submission.kind },
+    });
     return { status: "success", message: "Approved Cloud template is now the Store default", data: binding, code: STATUS_CODES.SUCCESS };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Cloud template could not become the Store default", data: null, code: STATUS_CODES.CONFLICT };
@@ -617,9 +666,66 @@ export const setCloudTemplateAssetDefaultForStore = async (
       localTemplateBody: localBodyFromProviderComponents(asset.components, data.kind),
       createdBy: userId,
     });
+    await deps.recordAudit({
+      organizationId,
+      whatsappBusinessAccountId: data.whatsappBusinessAccountId,
+      storeId,
+      bindingId: binding.id,
+      eventType: "default_assigned",
+      actorId: userId,
+      details: { languageCode: asset.languageCode, kind: data.kind },
+    });
     return { status: "success", message: "Existing Cloud template is now the Store default", data: binding, code: STATUS_CODES.SUCCESS };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Cloud template could not become the Store default", data: null, code: STATUS_CODES.CONFLICT };
+  }
+};
+
+export const archiveCloudTemplateBindingForStore = async (
+  userId: string,
+  organizationId: string,
+  bindingId: string,
+  injected: Partial<CloudTemplateServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
+  const deps = { ...dependencies(), ...injected };
+  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const binding = await deps.archiveBinding(organizationId, bindingId, userId);
+  if (!binding) return { status: "error", message: "Cloud template binding not found or already archived", data: null, code: STATUS_CODES.NOT_FOUND };
+  await deps.recordAudit({
+    organizationId,
+    whatsappBusinessAccountId: binding.whatsappBusinessAccountId,
+    storeId: binding.storeId,
+    bindingId: binding.id,
+    eventType: "binding_archived",
+    actorId: userId,
+    details: { languageCode: binding.languageCode, kind: binding.kind },
+  });
+  return { status: "success", message: "Cloud template binding archived", data: binding, code: STATUS_CODES.SUCCESS };
+};
+
+export const rollbackCloudTemplateBindingForStore = async (
+  userId: string,
+  organizationId: string,
+  bindingId: string,
+  injected: Partial<CloudTemplateServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
+  const deps = { ...dependencies(), ...injected };
+  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  try {
+    const binding = await deps.rollbackBinding(organizationId, bindingId, userId);
+    if (!binding) return { status: "error", message: "Cloud template binding not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    await deps.recordAudit({
+      organizationId,
+      whatsappBusinessAccountId: binding.whatsappBusinessAccountId,
+      storeId: binding.storeId,
+      bindingId: binding.id,
+      eventType: "binding_rolled_back",
+      actorId: userId,
+      details: { languageCode: binding.languageCode, kind: binding.kind },
+    });
+    return { status: "success", message: "Approved Cloud template restored as the Store default", data: binding, code: STATUS_CODES.SUCCESS };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Cloud template binding could not be restored", data: null, code: STATUS_CODES.CONFLICT };
   }
 };
 

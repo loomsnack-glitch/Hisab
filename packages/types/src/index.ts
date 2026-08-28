@@ -16,6 +16,7 @@ export * from "./modules/kot";
 export * from "./modules/auth";
 export * from "./modules/device-auth";
 export * from "./modules/organization";
+export * from "./modules/invoice-appearance";
 export * from "./modules/platform";
 export * from "./modules/user";
 export * from "./services/whatsapp.type";

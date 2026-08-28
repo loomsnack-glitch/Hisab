@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { listCloudTemplatesForAccount, setCloudTemplateDefaultForSubmission, submitCloudTemplateForAccount, syncCloudTemplatesForAccount } from "./cloud-template.service";
+import {
+  archiveCloudTemplateBindingForStore,
+  listCloudTemplatesForAccount,
+  rollbackCloudTemplateBindingForStore,
+  setCloudTemplateDefaultForSubmission,
+  submitCloudTemplateForAccount,
+  syncCloudTemplatesForAccount,
+} from "./cloud-template.service";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const userId = "33333333-3333-4333-8333-333333333333";
@@ -157,6 +164,116 @@ describe("Cloud template synchronization service", () => {
     }]);
   });
 
+  test("includes a concrete example for a dynamic URL button", async () => {
+    let providerDefinition: Record<string, unknown> | undefined;
+    const submission = {
+      id: "77777777-7777-4777-8777-777777777778",
+      organizationId,
+      whatsappBusinessAccountId: businessAccountId,
+      originatingStoreId: null,
+      localTemplateId: null,
+      kind: "bill" as const,
+      friendlyName: "Bill link",
+      metaTemplateName: "bill_link",
+      languageCode: "en_US",
+      category: "utility" as const,
+      requestedComponents: [
+        { type: "BODY", text: "Hello {{1}}." },
+        { type: "BUTTONS", buttons: [{ type: "URL", text: "View invoice", url: "https://api.example.test/invoices/{{1}}" }] },
+      ],
+      sampleValues: { "1": "Customer" },
+      idempotencyKey: "idem-url-button-example",
+      metaTemplateId: null,
+      status: "draft" as const,
+      rejectionReason: null,
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      submittedAt: null,
+      providerUpdatedAt: null,
+      createdBy: userId,
+      updatedBy: userId,
+      createdAt: "2026-08-23T10:00:00.000Z",
+      updatedAt: "2026-08-23T10:00:00.000Z",
+    };
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill link",
+      metaTemplateName: "bill_link",
+      languageCode: "en_US",
+      components: submission.requestedComponents,
+      sampleValues: { "1": "Customer" },
+      idempotencyKey: submission.idempotencyKey,
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      getCredential: async () => ({ businessAccountId, reference: "secret://cloud/1", keyVersion: "kms-v1" }),
+      isAccountAssignedToStore: async () => true,
+      vault: {
+        async store() { return { reference: "unused", keyVersion: "unused" }; },
+        async resolve() { return "token-in-memory"; },
+        async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+        async revoke() {},
+      },
+      createSubmission: async () => submission,
+      claimSubmission: async () => ({ ...submission, status: "submitting" as const }),
+      updateSubmission: async (_organizationId, _submissionId, values) => ({ ...submission, ...values, metaTemplateId: values.metaTemplateId ?? submission.metaTemplateId, status: values.status ?? submission.status } as typeof submission),
+      createClient: () => ({
+        async getTemplates() {
+          return providerDefinition
+            ? { data: [{ id: "meta-url-1", name: "bill_link", language: "en_US", category: "UTILITY", status: "PENDING", components: submission.requestedComponents }] }
+            : { data: [] };
+        },
+        async createMessageTemplate(_wabaId, definition) {
+          providerDefinition = definition;
+          return { id: "meta-url-1", status: "PENDING" };
+        },
+      }),
+      upsert: async assets => assets.map((asset, index) => ({ id: `66666666-6666-4666-8666-66666666666${index}`, ...asset, lastSyncedAt: "2026-08-23T10:00:00.000Z", version: 1 })),
+    });
+
+    expect(response.status).toBe("success");
+    expect(providerDefinition?.components).toEqual([
+      { type: "BODY", text: "Hello {{1}}.", example: { body_text: [["Customer"]] } },
+      {
+        type: "BUTTONS",
+        buttons: [{
+          type: "URL",
+          text: "View invoice",
+          url: "https://api.example.test/invoices/{{1}}",
+          example: ["https://api.example.test/invoices/Customer"],
+        }],
+      },
+    ]);
+  });
+
+  test("rejects a dynamic URL button without a matching sample value", async () => {
+    let providerCalled = false;
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill link missing URL sample",
+      metaTemplateName: "bill_link_missing_url_sample",
+      languageCode: "en_US",
+      components: [
+        { type: "BODY", text: "Hello {{2}}." },
+        { type: "BUTTONS", buttons: [{ type: "URL", text: "View invoice", url: "https://api.example.test/invoices/{{1}}" }] },
+      ],
+      sampleValues: { "2": "Customer" },
+      idempotencyKey: "idem-url-button-missing-sample",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      createClient: () => {
+        providerCalled = true;
+        return { async getTemplates() { return { data: [] }; } };
+      },
+    });
+
+    expect(response).toMatchObject({ status: "error", code: 400, message: "Missing sample value for {{1}}" });
+    expect(providerCalled).toBe(false);
+  });
+
   test("only assigns an approved submission and delegates to the transactional Store binding", async () => {
     let input: Record<string, unknown> | undefined;
     const response = await setCloudTemplateDefaultForSubmission(userId, organizationId, "88888888-8888-4888-8888-888888888888", {
@@ -189,10 +306,67 @@ describe("Cloud template synchronization service", () => {
       }),
       list: async () => [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organizationId, whatsappBusinessAccountId: businessAccountId, metaTemplateId: "meta-2", name: "bill_ready", languageCode: "en_US", category: "utility" as const, status: "approved" as const, components: [{ type: "BODY", text: "Hello {{1}}." }], rejectionReason: null, providerUpdatedAt: null, lastSyncedAt: "2026-08-23T10:00:00.000Z", version: 1 }],
       createDefaultBinding: async value => { input = value; return {} as never; },
+      recordAudit: async () => {},
     });
     expect(response.status).toBe("success");
     expect(input?.storeId).toBe("99999999-9999-4999-8999-999999999999");
     expect(input?.localTemplateBody).toBe("Hello {{customer_name}}.");
+  });
+
+  test("archives an active binding and records the lifecycle event", async () => {
+    const events: string[] = [];
+    const binding = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      organizationId,
+      storeId: "99999999-9999-4999-8999-999999999999",
+      localTemplateId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      cloudTemplateId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      whatsappBusinessAccountId: businessAccountId,
+      languageCode: "en_US",
+      localTemplateBody: "Hello {{customer_name}}.",
+      variableMapping: { "1": "customer_name" },
+      kind: "bill" as const,
+      isDefault: false,
+      isActive: false,
+      archivedAt: "2026-08-26T10:00:00.000Z",
+      createdAt: "2026-08-25T10:00:00.000Z",
+      updatedAt: "2026-08-26T10:00:00.000Z",
+    };
+    const response = await archiveCloudTemplateBindingForStore(userId, organizationId, binding.id, {
+      organizationAccess: async () => true,
+      archiveBinding: async () => binding,
+      recordAudit: async input => { events.push(input.eventType); },
+    });
+    expect(response).toMatchObject({ status: "success", data: binding });
+    expect(events).toEqual(["binding_archived"]);
+  });
+
+  test("rolls back an approved binding and records the lifecycle event", async () => {
+    const events: string[] = [];
+    const binding = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      organizationId,
+      storeId: "99999999-9999-4999-8999-999999999999",
+      localTemplateId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      cloudTemplateId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      whatsappBusinessAccountId: businessAccountId,
+      languageCode: "en_US",
+      localTemplateBody: "Hello {{customer_name}}.",
+      variableMapping: { "1": "customer_name" },
+      kind: "bill" as const,
+      isDefault: true,
+      isActive: true,
+      archivedAt: null,
+      createdAt: "2026-08-25T10:00:00.000Z",
+      updatedAt: "2026-08-26T10:00:00.000Z",
+    };
+    const response = await rollbackCloudTemplateBindingForStore(userId, organizationId, binding.id, {
+      organizationAccess: async () => true,
+      rollbackBinding: async () => binding,
+      recordAudit: async input => { events.push(input.eventType); },
+    });
+    expect(response).toMatchObject({ status: "success", data: binding });
+    expect(events).toEqual(["binding_rolled_back"]);
   });
 
   test("does not call Meta when another request owns the submission claim", async () => {

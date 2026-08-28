@@ -11,6 +11,8 @@ export const organizationKeys = {
     [...organizationKeys.all, "detail", organizationId] as const,
   catalogSettings: (organizationId: string) =>
     [...organizationKeys.all, "catalog-settings", organizationId] as const,
+  invoiceAppearance: (organizationId: string, storeId: string) =>
+    [...organizationKeys.all, "invoice-appearance", organizationId, storeId] as const,
 };
 
 export const serviceTableKeys = {
@@ -134,6 +136,8 @@ export const whatsappKeys = {
     [...whatsappKeys.all, "cloud-accounts", organizationId] as const,
   cloudTemplates: (organizationId: string, accountId: string) =>
     [...whatsappKeys.all, "cloud-templates", organizationId, accountId] as const,
+  publicInvoiceTemplateConfig: (organizationId: string) =>
+    [...whatsappKeys.all, "public-invoice-template-config", organizationId] as const,
   cloudSafety: (organizationId: string) =>
     [...whatsappKeys.all, "cloud-safety", organizationId] as const,
   cloudOutbox: (organizationId: string) =>

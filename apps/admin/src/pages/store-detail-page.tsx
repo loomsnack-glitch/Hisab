@@ -12,6 +12,7 @@ import EditStoreDialog from "@/components/organizations/edit-store-dialog";
 import StoreWhatsAppDialog from "@/components/organizations/store-whatsapp-dialog";
 import SaleNumberSettingsForm from "@/components/organizations/sale-number-settings-form";
 import StoreFeatureSettingsForm from "@/components/organizations/store-feature-settings-form";
+import InvoiceAppearanceSettingsForm from "@/components/organizations/invoice-appearance-settings-form";
 import StoreDevicesSection from "@/components/organizations/store-devices-section";
 import { formatDateTime } from "@/lib/format";
 import { organizationKeys } from "@/lib/query-keys";
@@ -215,9 +216,12 @@ const StoreSettingsPage = () => {
     }
 
     return (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-            <StoreFeatureSettingsForm organizationId={organizationId} store={store} />
-            <SaleNumberSettingsForm organizationId={organizationId} store={store} />
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+                <StoreFeatureSettingsForm organizationId={organizationId} store={store} />
+                <SaleNumberSettingsForm organizationId={organizationId} store={store} />
+            </div>
+            <InvoiceAppearanceSettingsForm organizationId={organizationId} store={store} />
         </div>
     );
 };

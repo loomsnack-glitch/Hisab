@@ -10,6 +10,7 @@ import {
     type WhatsAppChangeAccountNumberJSON,
     type WhatsAppCreateAccountJSON,
     type WhatsAppReminderQueueResponseDTO,
+    type WhatsAppPublicInvoiceTemplateConfigDTO,
     type WhatsAppWorkerStatusUpdateJSON,
     type DeviceSessionDTO,
 } from "@repo/types";
@@ -21,7 +22,7 @@ import * as workerClient from "./whatsapp.worker-client";
 import * as invoiceService from "./invoice";
 import * as conversationService from "./conversation";
 import * as storage from "@/services/storage";
-import { renderSalePdf } from "./invoice-pdf";
+import { renderBrandedSalePdf } from "./public-invoice.service";
 import { renderDueReminderPdf } from "./due-reminder-pdf";
 import { formatDueReminderText, getDueReminderTemplateValues } from "./due-reminder";
 import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
@@ -30,6 +31,7 @@ import { enqueueCloudTemplateSend, enqueueCloudTemplateSendForDevice } from "./c
 import { buildDueReminderCloudComponents } from "./due-reminder-cloud-components";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
+import * as publicInvoiceService from "./public-invoice.service";
 import * as promotionService from "./promotion";
 import * as messageTemplate from "./message-template";
 
@@ -795,6 +797,8 @@ export const receiveWorkerStatus = async (accountId: string, update: WhatsAppWor
 
 export const queueInvoice = invoiceService.queueInvoice;
 export const queueInvoiceForDevice = invoiceService.queueInvoiceForDevice;
+export const resendInvoice = invoiceService.resendInvoice;
+export const resendInvoiceForDevice = invoiceService.resendInvoiceForDevice;
 
 export const listMessageTemplatesForDevice = async (
     session: DeviceSessionDTO,
@@ -895,12 +899,23 @@ const queueDueReminderForStore = async (
     if (account.provider === "cloud_api") {
         if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
         if (customMessage?.trim()) return { status: "error", message: "Cloud WhatsApp reminders must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
-        if (!defaultTemplate || !defaultTemplate.isActive) return { status: "error", message: "No active due-reminder template is available for this Store", data: null, code: STATUS_CODES.CONFLICT };
         const scope = await getCloudAccountScope(organizationId, account.id);
         if (!scope?.businessAccountId) return { status: "error", message: "Cloud WhatsApp account is not ready for template sends", data: null, code: STATUS_CODES.CONFLICT };
-        const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "due_reminder", defaultTemplate.id);
+        const binding = await getCloudTemplateBindingSnapshotForStore(organizationId, storeId, scope.businessAccountId, "due_reminder");
         if (!binding) return { status: "error", message: "No approved Cloud due-reminder template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
-        const values = getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks);
+        const localTemplateBody = binding.binding.localTemplateBody ?? defaultTemplate?.body;
+        if (!localTemplateBody) return { status: "error", message: "The approved Cloud due-reminder template has no local variable mapping", data: null, code: STATUS_CODES.CONFLICT };
+        const hasDynamicInvoiceButton = binding.asset.components.some(component => {
+            if (!component || typeof component !== "object" || Array.isArray(component)) return false;
+            const value = component as Record<string, unknown>;
+            const type = String(value.type ?? "").toLowerCase();
+            if (type !== "buttons" && type !== "button") return false;
+            const buttons = Array.isArray(value.buttons) ? value.buttons : [];
+            return buttons.some(button => button && typeof button === "object" && !Array.isArray(button) && /\{\{\d+\}\}/.test(String((button as Record<string, unknown>).url ?? "")));
+        });
+        if (hasDynamicInvoiceButton && !saleId) {
+            return { status: "error", message: "Select a bill to include its invoice link", data: null, code: STATUS_CODES.CONFLICT };
+        }
         const hasDocumentHeader = binding.asset.components.some(component => {
             if (!component || typeof component !== "object" || Array.isArray(component)) return false;
             const value = component as Record<string, unknown>;
@@ -908,7 +923,12 @@ const queueDueReminderForStore = async (
         });
         let attachmentStorageKey: string | null = null;
         let documentLink: string | null = null;
+        let values: ReturnType<typeof getDueReminderTemplateValues>;
         try {
+            const invoiceUrl = hasDynamicInvoiceButton && saleId
+                ? await publicInvoiceService.createPublicInvoiceUrl(organizationId, storeId, saleId)
+                : null;
+            values = getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks, invoiceUrl);
             if (hasDocumentHeader) {
                 const bucket = privateBucket();
                 if (!bucket) return { status: "error", message: "Private media storage is not configured for due reminder PDFs", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
@@ -917,12 +937,7 @@ const queueDueReminderForStore = async (
                 const sale = saleId ? await invoiceService.loadSaleDetail(organizationId, storeId, saleId) : null;
                 if (saleId && !sale) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
                 const pdf = sale
-                    ? await renderSalePdf(sale, {
-                        organizationName: organization.name,
-                        organizationTagline: organization.tagline,
-                        storeName: store.name,
-                        storeAddress: store.address,
-                    })
+                    ? await renderBrandedSalePdf(organizationId, storeId, sale)
                     : await renderDueReminderPdf(customer, reminderSales, {
                         organizationName: organization.name,
                         storeName: store.name,
@@ -933,7 +948,7 @@ const queueDueReminderForStore = async (
                 await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
                 documentLink = await storage.generateSignedUrl(bucket, attachmentStorageKey, cloudMediaUrlTtlSeconds());
             }
-            const componentParameters = buildDueReminderCloudComponents(binding.asset.components, defaultTemplate.body, values, binding.binding.variableMapping, documentLink);
+            const componentParameters = buildDueReminderCloudComponents(binding.asset.components, localTemplateBody, values, binding.binding.variableMapping, documentLink);
             const window = new Date().toISOString().slice(0, 10);
             const fingerprint = createHash("sha256").update(JSON.stringify({
                 organizationId,
@@ -999,6 +1014,39 @@ export const queueDueReminder = async (userId: string, organizationId: string, s
 
 export const queueDueReminderForDevice = (session: DeviceSessionDTO, customerId: string, customMessage?: string, saleId?: string) =>
     queueDueReminderForStore(session.organization.id, session.store.id, customerId, customMessage, saleId);
+
+export const revokePublicInvoiceLink = async (userId: string, organizationId: string, storeId: string, saleId: string) => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    const revoked = await publicInvoiceService.revokePublicInvoiceLink(organizationId, storeId, saleId);
+    return {
+        status: "success" as const,
+        message: revoked ? "Public invoice link revoked" : "No public invoice link found for this bill",
+        data: { revoked },
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getPublicInvoiceTemplateConfig = async (
+    userId: string,
+    organizationId: string,
+): Promise<ServiceResponse<WhatsAppPublicInvoiceTemplateConfigDTO | null>> => {
+    const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
+    if (!organization) {
+        return {
+            status: "error",
+            message: "Organization not found",
+            data: null,
+            code: STATUS_CODES.NOT_FOUND,
+        };
+    }
+    return {
+        status: "success",
+        message: "Public invoice template configuration fetched successfully",
+        data: { invoiceTemplateUrl: publicInvoiceService.getPublicInvoiceTemplateUrl() },
+        code: STATUS_CODES.SUCCESS,
+    };
+};
 
 const getDueReminderStatusForStore = async (
     organizationId: string,

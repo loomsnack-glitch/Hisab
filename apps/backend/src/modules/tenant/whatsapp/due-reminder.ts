@@ -13,11 +13,13 @@ export const getDueReminderTemplateValues = (
   sales: SaleSummaryDTO[],
   storeName: string,
   links: StoreMessageLink[] = [],
+  invoiceUrl?: string | null,
 ): Record<string, string> => ({
   customer_name: customer.name,
   total_due: amount(sales.reduce((sum, sale) => sum + Number(sale.dueTotal ?? 0), 0)),
   bill_count: String(sales.length),
   store_name: storeName,
+  invoice_url: invoiceUrl?.trim() ?? "",
   ...Object.fromEntries(
     links.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url]),
   ),
@@ -29,6 +31,7 @@ export const formatDueReminderText = (
   storeName: string,
   template?: string | null,
   links: StoreMessageLink[] = [],
+  invoiceUrl?: string | null,
 ) => {
   const totalDue = sales.reduce(
     (sum, sale) => sum + Number(sale.dueTotal ?? 0),
@@ -38,7 +41,7 @@ export const formatDueReminderText = (
     return renderWhatsAppMessage({
       kind: "due_reminder",
       template,
-      values: getDueReminderTemplateValues(customer, sales, storeName, links),
+      values: getDueReminderTemplateValues(customer, sales, storeName, links, invoiceUrl),
       links,
     });
   }

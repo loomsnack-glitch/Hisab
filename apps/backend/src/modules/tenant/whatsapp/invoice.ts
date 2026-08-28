@@ -16,7 +16,6 @@ import * as billingRepository from "@/modules/tenant/billing/billing.repository"
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as repository from "./whatsapp.repository";
 import { formatInvoiceText, getInvoiceTemplateValues } from "./invoice-text";
-import { renderSalePdf } from "./invoice-pdf";
 import * as messageTemplate from "./message-template";
 import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
 import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
@@ -27,14 +26,27 @@ import {
 import {
   buildInvoiceCloudComponents,
   cloudInvoiceTemplateHasDocumentHeader,
+  cloudInvoiceTemplateHasDynamicUrlButton,
 } from "./invoice-cloud-components";
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
+import { createPublicInvoiceUrl, renderBrandedSalePdf } from "./public-invoice.service";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
 const invoiceObjectKey = (organizationId: string, storeId: string, accountId: string, saleId: string) =>
   `whatsapp-invoices/${organizationId}/${storeId}/${accountId}/${saleId}.pdf`;
+
+export type InvoiceQueueOptions = {
+  resend?: boolean;
+  requestId?: string;
+};
+
+export const invoiceIdempotencyKey = (saleId: string, options: InvoiceQueueOptions): string => {
+  if (!options.resend) return `invoice:${saleId}`;
+  const requestId = options.requestId?.trim() || crypto.randomUUID();
+  return `invoice:${saleId}:resend:${requestId}`;
+};
 
 const queueCloudInvoiceForStore = async (
   userId: string | null,
@@ -45,7 +57,9 @@ const queueCloudInvoiceForStore = async (
   organization: { name: string; tagline: string | null },
   accountId: string,
   customMessage: string | undefined,
-  selectedTemplate: WhatsAppMessageTemplateDTO,
+  selectedTemplate: WhatsAppMessageTemplateDTO | null,
+  templateId?: string,
+  idempotencyKey = `invoice:${sale.id}`,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   if (customMessage?.trim()) {
     return { status: "error", message: "Cloud WhatsApp bills must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
@@ -59,10 +73,14 @@ const queueCloudInvoiceForStore = async (
     storeId,
     scope.businessAccountId,
     "bill",
-    selectedTemplate.id,
+    templateId ? selectedTemplate?.id : undefined,
   );
   if (!binding) {
     return { status: "error", message: "No approved Cloud bill template is linked to this Store", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  const localTemplateBody = binding.binding.localTemplateBody ?? selectedTemplate?.body;
+  if (!localTemplateBody) {
+    return { status: "error", message: "The approved Cloud bill template has no local variable mapping", data: null, code: STATUS_CODES.CONFLICT };
   }
   const requiresDocument = cloudInvoiceTemplateHasDocumentHeader(binding.asset.components);
   const bucket = requiresDocument ? privateBucket() : "";
@@ -74,14 +92,12 @@ const queueCloudInvoiceForStore = async (
     : null;
   let uploadedInvoice = false;
   try {
+    const invoiceUrl = cloudInvoiceTemplateHasDynamicUrlButton(binding.asset.components)
+      ? await createPublicInvoiceUrl(organizationId, storeId, sale.id)
+      : null;
     let documentLink: string | null = null;
     if (requiresDocument && bucket && attachmentStorageKey) {
-      const pdf = await renderSalePdf(sale, {
-        organizationName: organization.name,
-        organizationTagline: organization.tagline,
-        storeName: store.name,
-        storeAddress: store.address,
-      });
+      const pdf = await renderBrandedSalePdf(organizationId, storeId, sale);
       if (pdf.byteLength > MAX_INVOICE_BYTES) {
         return { status: "error", message: "Generated invoice PDF is too large to send", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
       }
@@ -91,19 +107,24 @@ const queueCloudInvoiceForStore = async (
     }
     const componentParameters = buildInvoiceCloudComponents(
       binding.asset.components,
-      selectedTemplate.body,
-      getInvoiceTemplateValues(sale, { organizationName: organization.name, storeName: store.name, links: store.whatsappLinks }),
+      localTemplateBody,
+      getInvoiceTemplateValues(sale, {
+        organizationName: organization.name,
+        storeName: store.name,
+        links: store.whatsappLinks,
+        invoiceUrl,
+      }),
       documentLink,
       binding.binding.variableMapping,
     );
     const enqueue = userId
       ? enqueueCloudTemplateSend(userId, organizationId, {
           storeId, accountId, customerId: sale.customerId!, saleId: sale.id,
-          bindingId: binding.binding.id, idempotencyKey: `invoice:${sale.id}`, intent: "bill", componentParameters,
+          bindingId: binding.binding.id, idempotencyKey, intent: "bill", componentParameters,
         })
       : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
           storeId, accountId, customerId: sale.customerId!, saleId: sale.id,
-          bindingId: binding.binding.id, idempotencyKey: `invoice:${sale.id}`, intent: "bill", componentParameters,
+          bindingId: binding.binding.id, idempotencyKey, intent: "bill", componentParameters,
         });
     const queued = await enqueue;
     if (queued.status === "error" || !queued.data) return queued as ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
@@ -168,6 +189,7 @@ export const queueInvoiceForStore = async (
   customMessage?: string,
   templateId?: string,
   userId?: string,
+  options: InvoiceQueueOptions = {},
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   const store = await organizationRepository.getStoreById(
     organizationId,
@@ -222,18 +244,29 @@ export const queueInvoiceForStore = async (
       code: STATUS_CODES.CONFLICT,
     };
   }
-  const existing = await repository.getInvoiceOutbox(
-    organizationId,
-    storeId,
-    account.id,
-    saleId,
-  );
-  if (existing) return response(saleId, existing, true);
+  if (!options.resend) {
+    const existing = await repository.getInvoiceOutbox(
+      organizationId,
+      storeId,
+      account.id,
+      saleId,
+    );
+    if (existing) return response(saleId, existing, true);
+  }
 
   if (account.status !== "connected") {
     return {
       status: "error",
       message: "Connect the Store WhatsApp account before sending invoices",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  if (options.resend && account.provider !== "cloud_api") {
+    return {
+      status: "error",
+      message: "Invoice resend is supported only for WhatsApp Cloud accounts",
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
@@ -266,7 +299,7 @@ export const queueInvoiceForStore = async (
     }
     if (account.provider === "cloud_api") {
       if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
-      if (!selectedTemplate || !selectedTemplate.isActive) {
+      if (templateId && (!selectedTemplate || !selectedTemplate.isActive)) {
         return {
           status: "error",
           message: "No active bill template is available for this Store",
@@ -283,7 +316,9 @@ export const queueInvoiceForStore = async (
         { name: organization.name, tagline: organization.tagline ?? null },
         account.id,
         customMessage,
-        selectedTemplate!,
+        selectedTemplate,
+        templateId,
+        invoiceIdempotencyKey(saleId, options),
       );
     }
     if (!bucket) {
@@ -294,12 +329,7 @@ export const queueInvoiceForStore = async (
         code: STATUS_CODES.INTERNAL_SERVER_ERROR,
       };
     }
-    const pdf = await renderSalePdf(sale, {
-      organizationName: organization.name,
-      organizationTagline: organization.tagline,
-      storeName: store.name,
-      storeAddress: store.address,
-    });
+    const pdf = await renderBrandedSalePdf(organizationId, storeId, sale);
     if (pdf.byteLength > MAX_INVOICE_BYTES) {
       return {
         status: "error",
@@ -329,19 +359,21 @@ export const queueInvoiceForStore = async (
       attachmentFileName: `Sale_${sale.saleNumber ?? sale.id}.pdf`,
       attachmentMimeType: "application/pdf",
       messageId: crypto.randomUUID(),
-      idempotencyKey: `invoice:${saleId}`,
+      idempotencyKey: invoiceIdempotencyKey(saleId, options),
     });
     return response(saleId, request, false);
   } catch (error) {
     try {
-      const existingAfterFailure = await repository.getInvoiceOutbox(
-        organizationId,
-        storeId,
-        account.id,
-        saleId,
-      );
-      if (existingAfterFailure)
-        return response(saleId, existingAfterFailure, true);
+      if (!options.resend) {
+        const existingAfterFailure = await repository.getInvoiceOutbox(
+          organizationId,
+          storeId,
+          account.id,
+          saleId,
+        );
+        if (existingAfterFailure)
+          return response(saleId, existingAfterFailure, true);
+      }
     } catch {
       // Preserve the original preparation failure when the race check cannot run.
     }
@@ -379,6 +411,7 @@ export const queueInvoice = async (
   saleId: string,
   customMessage?: string,
   templateId?: string,
+  options: InvoiceQueueOptions = {},
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
   if (!organization) {
@@ -389,7 +422,34 @@ export const queueInvoice = async (
       code: STATUS_CODES.NOT_FOUND,
     };
   }
-  return queueInvoiceForStore(organizationId, storeId, saleId, customMessage, templateId, userId);
+  return queueInvoiceForStore(organizationId, storeId, saleId, customMessage, templateId, userId, options);
+};
+
+export const resendInvoice = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  requestId?: string,
+): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+  return queueInvoiceForStore(
+    organizationId,
+    storeId,
+    saleId,
+    undefined,
+    undefined,
+    userId,
+    { resend: true, requestId },
+  );
 };
 
 const getExistingInvoice = async (
@@ -442,6 +502,21 @@ export const queueInvoiceForDevice = async (
   templateId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> =>
   queueInvoiceForStore(session.organization.id, session.store.id, saleId, customMessage, templateId);
+
+export const resendInvoiceForDevice = async (
+  session: DeviceSessionDTO,
+  saleId: string,
+  requestId?: string,
+): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> =>
+  queueInvoiceForStore(
+    session.organization.id,
+    session.store.id,
+    saleId,
+    undefined,
+    undefined,
+    undefined,
+    { resend: true, requestId },
+  );
 
 export const getInvoiceStatusForDevice = async (
   session: DeviceSessionDTO,

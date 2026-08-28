@@ -9,6 +9,7 @@ export type InvoiceMessageContext = {
   storeName?: string | null;
   template?: string | null;
   links?: StoreMessageLink[];
+  invoiceUrl?: string | null;
 };
 
 const formatAmount = (amount: number | string | null | undefined): string => {
@@ -21,7 +22,7 @@ const clean = (value: string | null | undefined): string => value?.trim() ?? "";
 
 export const getInvoiceTemplateValues = (
   sale: SaleDetailDTO,
-  context: Pick<InvoiceMessageContext, "organizationName" | "storeName" | "links"> = {},
+  context: Pick<InvoiceMessageContext, "organizationName" | "storeName" | "links" | "invoiceUrl"> = {},
 ): Record<string, string> => {
   const businessName = clean(context.organizationName) || "Ganatri";
   const customerName =
@@ -37,6 +38,7 @@ export const getInvoiceTemplateValues = (
     balance_due: formatAmount(sale.dueTotal),
     store_name: clean(context.storeName),
     organization_name: businessName,
+    invoice_url: clean(context.invoiceUrl),
     ...Object.fromEntries(
       links.filter(link => link.isActive).map(link => [`link_${link.key}`, link.url]),
     ),

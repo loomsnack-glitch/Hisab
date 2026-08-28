@@ -1,5 +1,6 @@
 import type { CloudTemplateParameter } from "./cloud-api/cloud-outbound";
 import type { CloudTemplateComponentInput } from "./cloud-api/cloud-template-components";
+import { getCloudUrlButtonParameter } from "./cloud-api/cloud-url-button";
 import { uniqueProviderPlaceholderIndexes, validateCloudTemplateVariableMapping, type CloudTemplateVariableMapping } from "./cloud-api/cloud-template-variable-mapping";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -10,6 +11,17 @@ export const cloudInvoiceTemplateHasDocumentHeader = (definitions: unknown[]): b
     if (!isRecord(definition)) return false;
     return String(definition.type ?? "").toLowerCase() === "header" &&
       String(definition.format ?? "").toLowerCase() === "document";
+  });
+
+export const cloudInvoiceTemplateHasDynamicUrlButton = (definitions: unknown[]): boolean =>
+  definitions.some(definition => {
+    if (!isRecord(definition)) return false;
+    const type = String(definition.type ?? "").toLowerCase();
+    if (type !== "buttons" && type !== "button") return false;
+    const buttons = Array.isArray(definition.buttons) ? definition.buttons : [];
+    return buttons.some(button =>
+      isRecord(button) && /\{\{\d+\}\}/.test(String(button.url ?? "")),
+    );
   });
 
 const componentTextParameters = (
@@ -57,7 +69,12 @@ export const buildInvoiceCloudComponents = (
       const buttons = Array.isArray(definition.buttons) ? definition.buttons : [];
       buttons.forEach((button, index) => {
         if (!isRecord(button)) return;
-        const parameters = componentTextParameters(button.url, `button:${index}`, mapping, values);
+        const parameters = componentTextParameters(button.url, `button:${index}`, mapping, values)
+          .map(parameter => ({
+            ...(parameter.type === "text"
+              ? { ...parameter, text: getCloudUrlButtonParameter(button.url, parameter.text) }
+              : parameter),
+          }));
         if (parameters.length > 0) inputs.push({ type: "button", subType: "url", index: String(index), parameters });
       });
     }

@@ -51,6 +51,8 @@ import {
     listCloudTemplateSubmissionsForAccount,
     setCloudTemplateDefaultForSubmission,
     setCloudTemplateAssetDefaultForStore,
+    archiveCloudTemplateBindingForStore,
+    rollbackCloudTemplateBindingForStore,
 } from "./cloud-api/cloud-template.service";
 import * as consentService from "./cloud-api/customer-consent.service";
 import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
@@ -208,6 +210,20 @@ userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/templates", 
     }
 });
 
+userRouter.get("/:organizationId/whatsapp/cloud/invoice-template-config", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(
+            c,
+            await service.getPublicInvoiceTemplateConfig(c.get("authUser").id, organizationId),
+        );
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
 userRouter.get("/:organizationId/whatsapp/cloud/accounts/:accountId/submissions", async c => {
     try {
         const organizationId = c.req.param("organizationId");
@@ -257,6 +273,38 @@ userRouter.post(
         }
     },
 );
+
+userRouter.post("/:organizationId/whatsapp/cloud/template-bindings/:bindingId/archive", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const bindingId = c.req.param("bindingId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(bindingId, "Invalid binding id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await archiveCloudTemplateBindingForStore(
+            c.get("authUser").id,
+            organizationId,
+            bindingId,
+        ));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/whatsapp/cloud/template-bindings/:bindingId/rollback", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const bindingId = c.req.param("bindingId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(bindingId, "Invalid binding id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await rollbackCloudTemplateBindingForStore(
+            c.get("authUser").id,
+            organizationId,
+            bindingId,
+        ));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
 
 userRouter.post(
     "/:organizationId/whatsapp/cloud/accounts/:accountId/templates",
@@ -532,6 +580,38 @@ userRouter.post("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId/retry
             ?? invalidUuid(saleId, "Invalid sale id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.retryInvoice(c.get("authUser").id, organizationId, storeId, saleId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId/resend", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const saleId = c.req.param("saleId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id")
+            ?? invalidUuid(storeId, "Invalid store id")
+            ?? invalidUuid(saleId, "Invalid sale id");
+        if (invalid) return c.json(invalid, invalid.code);
+        const payload = await c.req.json().catch(() => ({}));
+        const requestId = typeof payload?.requestId === "string" ? payload.requestId : undefined;
+        return handleServiceResponse(c, await service.resendInvoice(c.get("authUser").id, organizationId, storeId, saleId, requestId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.post("/:organizationId/stores/:storeId/whatsapp/invoice/:saleId/public-link/revoke", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const saleId = c.req.param("saleId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id")
+            ?? invalidUuid(storeId, "Invalid store id")
+            ?? invalidUuid(saleId, "Invalid sale id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await service.revokePublicInvoiceLink(c.get("authUser").id, organizationId, storeId, saleId));
     } catch (error) {
         return unexpectedError(c, error);
     }

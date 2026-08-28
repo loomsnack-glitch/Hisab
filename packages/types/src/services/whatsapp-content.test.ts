@@ -26,10 +26,11 @@ describe("WhatsApp content contract", () => {
       "balance_due",
       "store_name",
       "organization_name",
+      "invoice_url",
     ]);
     expect(
       WHATSAPP_TEMPLATE_TOKENS.due_reminder.map((token) => token.name),
-    ).toEqual(["customer_name", "total_due", "bill_count", "store_name"]);
+    ).toEqual(["customer_name", "total_due", "bill_count", "store_name", "invoice_url"]);
   });
 
   it("reports unknown tokens before a template is saved", () => {
@@ -56,6 +57,7 @@ describe("WhatsApp content contract", () => {
           total: "₹90.00",
           paid: "₹50.00",
           balance_due: "₹40.00",
+          invoice_url: "https://example.com/invoice",
         },
       }),
     ).toBe(
@@ -65,7 +67,8 @@ describe("WhatsApp content contract", () => {
         .replaceAll("{{bill_number}}", "B-42")
         .replaceAll("{{total}}", "₹90.00")
         .replaceAll("{{paid}}", "₹50.00")
-        .replaceAll("{{balance_due}}", "₹40.00"),
+        .replaceAll("{{balance_due}}", "₹40.00")
+        .replaceAll("{{invoice_url}}", "https://example.com/invoice"),
     );
   });
 

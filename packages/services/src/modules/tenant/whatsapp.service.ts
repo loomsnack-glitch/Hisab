@@ -35,10 +35,10 @@ import type {
     WhatsAppCustomerConsentEventDTO,
     WhatsAppRecordCustomerConsentJSON,
     WhatsAppSetCustomerSuppressionJSON,
-    WhatsAppCloudQuotaPolicy,
     WhatsAppCloudSafety,
     WhatsAppCloudOutboxOperationsResponseDTO,
     WhatsAppCloudOutboxActionResponseDTO,
+    WhatsAppPublicInvoiceTemplateConfigDTO,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -48,6 +48,7 @@ type WhatsAppCloudAccountsResponse = ServiceResponse<{ accounts: WhatsAppCloudAc
 type WhatsAppCloudAccountResponse = ServiceResponse<WhatsAppCloudAccountSnapshot | null>;
 type WhatsAppCloudOnboardingResponse = ServiceResponse<WhatsAppCloudOnboardingStateResponseDTO | null>;
 type WhatsAppCloudTemplatesResponse = ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>;
+type WhatsAppPublicInvoiceTemplateConfigResponse = ServiceResponse<WhatsAppPublicInvoiceTemplateConfigDTO | null>;
 type WhatsAppCloudBindingsResponse = ServiceResponse<{ bindings: WhatsAppCloudTemplateBindingDTO[] } | null>;
 type WhatsAppCloudBindingResponse = ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>;
 type WhatsAppCloudSubmissionResponse = ServiceResponse<{ submission: WhatsAppCloudTemplateSubmissionDTO; template: WhatsAppCloudTemplateAssetDTO | null } | null>;
@@ -152,6 +153,17 @@ export const getWhatsAppCloudTemplates = async (organizationId: string, accountI
     }
 };
 
+export const getWhatsAppPublicInvoiceTemplateConfig = async (
+    organizationId: string,
+): Promise<WhatsAppPublicInvoiceTemplateConfigResponse> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/whatsapp/cloud/invoice-template-config`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const submitWhatsAppCloudTemplate = async (
     organizationId: string,
     accountId: string,
@@ -223,6 +235,30 @@ export const getWhatsAppCloudTemplateBindings = async (
 ): Promise<WhatsAppCloudBindingsResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/whatsapp/cloud/template-bindings`, { params: whatsappBusinessAccountId ? { whatsappBusinessAccountId } : undefined });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const archiveWhatsAppCloudTemplateBinding = async (
+    organizationId: string,
+    bindingId: string,
+): Promise<WhatsAppCloudBindingResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/template-bindings/${bindingId}/archive`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const rollbackWhatsAppCloudTemplateBinding = async (
+    organizationId: string,
+    bindingId: string,
+): Promise<WhatsAppCloudBindingResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/template-bindings/${bindingId}/rollback`);
         return response.data;
     } catch (error) {
         return handleApiError(error);
@@ -556,6 +592,21 @@ export const retryWhatsAppInvoice = async (
 ): Promise<WhatsAppInvoiceResponse> => {
     try {
         const response = await api.post(invoicePath(organizationId, storeId, saleId) + "/retry");
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const resendWhatsAppInvoice = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<WhatsAppInvoiceResponse> => {
+    try {
+        const response = await api.post(invoicePath(organizationId, storeId, saleId) + "/resend", {
+            requestId: crypto.randomUUID(),
+        });
         return response.data;
     } catch (error) {
         return handleApiError(error);

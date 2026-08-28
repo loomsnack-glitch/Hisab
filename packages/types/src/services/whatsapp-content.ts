@@ -26,12 +26,14 @@ export const WHATSAPP_TEMPLATE_TOKENS: Record<
     { name: "balance_due", label: "Balance due", description: "The remaining amount due" },
     { name: "store_name", label: "Store name", description: "The Store name" },
     { name: "organization_name", label: "Organization name", description: "The Organization name" },
+    { name: "invoice_url", label: "Invoice link", description: "A secure link to view the invoice" },
   ],
   due_reminder: [
     { name: "customer_name", label: "Customer name", description: "The customer's name" },
     { name: "total_due", label: "Total due", description: "The customer's outstanding balance" },
     { name: "bill_count", label: "Bill count", description: "The number of due Sales" },
     { name: "store_name", label: "Store name", description: "The Store name" },
+    { name: "invoice_url", label: "Invoice link", description: "A secure link to view the invoice" },
   ],
   promotion: [
     { name: "customer_name", label: "Customer name", description: "The customer's name" },
@@ -55,6 +57,7 @@ Balance due: {{balance_due}}
 
 Please keep this invoice for your records.
 Regards from {{organization_name}}.
+View your invoice online: {{invoice_url}}
 Thank you for shopping with us.`,
   due_reminder: `Hello {{customer_name}},
 
@@ -63,6 +66,7 @@ Your total outstanding balance is {{total_due}}.
 Number of bills: {{bill_count}}
 
 Please contact us if you have already made the payment.
+View your invoice online: {{invoice_url}}
 Thank you for your attention.`,
   promotion: `Hello {{customer_name}},
 

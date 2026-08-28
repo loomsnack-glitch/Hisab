@@ -16,6 +16,7 @@ import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import * as organizationService from "./organization.service";
+import invoiceAppearanceRoutes from "../invoice-appearance/invoice-appearance.routes";
 
 const FILE_NAME = "organization.routes";
 const uuidSchema = z.uuid("Invalid id");
@@ -420,5 +421,7 @@ router.patch(
     }
   },
 );
+
+router.route("/", invoiceAppearanceRoutes);
 
 export default router;

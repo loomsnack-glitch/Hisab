@@ -144,7 +144,7 @@ export const getCloudTemplateSubmission = async (
 };
 
 export type CloudTemplateSubmissionUpdate = {
-  status?: "draft" | "submitting" | "pending" | "approved" | "rejected" | "paused" | "disabled" | "failed";
+  status?: "draft" | "submitting" | "pending" | "approved" | "rejected" | "paused" | "disabled" | "failed" | "archived";
   metaTemplateId?: string | null;
   rejectionReason?: string | null;
   lastErrorCode?: string | null;
@@ -152,7 +152,7 @@ export type CloudTemplateSubmissionUpdate = {
   submittedAt?: string | null;
   providerUpdatedAt?: string | null;
   updatedBy?: string | null;
-  expectedStatus?: "draft" | "submitting" | "pending" | "approved" | "rejected" | "paused" | "disabled" | "failed";
+  expectedStatus?: "draft" | "submitting" | "pending" | "approved" | "rejected" | "paused" | "disabled" | "failed" | "archived";
 };
 
 export const updateCloudTemplateSubmission = async (
@@ -247,7 +247,8 @@ export const applyCloudTemplateProviderStatus = async (
           AND assets.language_code = ${languageCode}
         )
       )
-    RETURNING assets.id
+    RETURNING assets.id, assets.organization_id, assets.whatsapp_business_account_id,
+              assets.meta_template_id, assets.name, assets.language_code, assets.status
   `;
 
   const updatedSubmissions = await tx`
@@ -274,7 +275,52 @@ export const applyCloudTemplateProviderStatus = async (
           AND submissions.language_code = ${languageCode}
         )
       )
-    RETURNING submissions.id
+    RETURNING submissions.id, submissions.organization_id,
+              submissions.whatsapp_business_account_id, submissions.originating_store_id,
+              submissions.meta_template_id, submissions.meta_template_name,
+              submissions.language_code, submissions.status
   `;
+
+  for (const asset of updatedAssets as Array<Record<string, unknown>>) {
+    await tx`
+      INSERT INTO whatsapp_cloud_template_audit_events (
+        organization_id, whatsapp_business_account_id, event_type, details
+      ) VALUES (
+        ${asset.organization_id}, ${asset.whatsapp_business_account_id},
+        'provider_status_updated', ${{
+          resource: "asset",
+          assetId: asset.id,
+          metaTemplateId: asset.meta_template_id,
+          name: asset.name,
+          languageCode: asset.language_code,
+          status: asset.status,
+          reason,
+          occurredAt: input.occurredAt,
+        }}::jsonb
+      )
+    `;
+  }
+
+  for (const submission of updatedSubmissions as Array<Record<string, unknown>>) {
+    await tx`
+      INSERT INTO whatsapp_cloud_template_audit_events (
+        organization_id, whatsapp_business_account_id, store_id, submission_id,
+        event_type, details
+      ) VALUES (
+        ${submission.organization_id}, ${submission.whatsapp_business_account_id},
+        ${submission.originating_store_id ?? null}, ${submission.id},
+        'provider_status_updated', ${{
+          resource: "submission",
+          metaTemplateId: submission.meta_template_id,
+          name: submission.meta_template_name,
+          languageCode: submission.language_code,
+          status: submission.status,
+          reason,
+          occurredAt: input.occurredAt,
+        }}::jsonb
+      )
+    `;
+  }
+
   return updatedAssets.length > 0 || updatedSubmissions.length > 0;
 });
