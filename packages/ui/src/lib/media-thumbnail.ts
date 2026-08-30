@@ -21,7 +21,7 @@ export interface CreateThumbnailFileOptions
     source?: ThumbnailSource
 }
 
-const loadImageElement = (file: File): Promise<HTMLImageElement> => {
+export const loadImageElement = (file: File): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
         const objectUrl = URL.createObjectURL(file)
         const image = new Image()
