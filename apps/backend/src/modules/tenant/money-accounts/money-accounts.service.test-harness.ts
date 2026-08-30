@@ -6,9 +6,13 @@ export const otherOrganizationId = "99999999-9999-4999-8999-999999999999";
 export const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 export const moneyAccountId = "11111111-1111-4111-8111-111111111111";
 export const inactiveMoneyAccountId = "22222222-2222-4222-8222-222222222222";
+export const storeScopedMoneyAccountId = "44444444-4444-4444-8444-444444444444";
+export const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+export const otherOrganizationStoreId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 export const now = new Date("2026-08-31T12:00:00.000Z");
 
 export const organization = { id: organizationId, name: "Demo Org" };
+export const store = { id: storeId, organizationId, name: "Adajan" };
 
 export const hdfcBankAccount: MoneyAccountDTO = {
     id: moneyAccountId,
@@ -16,6 +20,7 @@ export const hdfcBankAccount: MoneyAccountDTO = {
     name: "HDFC Current",
     type: "bank",
     scope: "organization_wide",
+    storeId: null,
     notes: "Main operating account",
     status: "active",
     createdBy: userId,
@@ -30,6 +35,7 @@ export const gpayUpiAccount: MoneyAccountDTO = {
     name: "Shared UPI QR",
     type: "upi",
     scope: "organization_wide",
+    storeId: null,
     notes: null,
     status: "active",
     createdBy: userId,
@@ -44,6 +50,7 @@ export const inactivePettyCashAccount: MoneyAccountDTO = {
     name: "Office petty cash",
     type: "petty_cash",
     scope: "organization_wide",
+    storeId: null,
     notes: null,
     status: "inactive",
     createdBy: userId,
@@ -52,11 +59,28 @@ export const inactivePettyCashAccount: MoneyAccountDTO = {
     updatedAt: now,
 };
 
+export const adajanUpiAccount: MoneyAccountDTO = {
+    id: storeScopedMoneyAccountId,
+    organizationId,
+    name: "Adajan UPI QR",
+    type: "upi",
+    scope: "store_scoped",
+    storeId,
+    notes: "Counter QR",
+    status: "active",
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
 export const getOrganizationByIdForUser = mock(async () => organization);
+export const getStoreById = mock(async () => store);
 export const getMoneyAccountsByOrganizationId = mock(async () => [
     hdfcBankAccount,
     inactivePettyCashAccount,
     gpayUpiAccount,
+    adajanUpiAccount,
 ]);
 export const getMoneyAccountById = mock(async () => hdfcBankAccount);
 
@@ -66,6 +90,7 @@ type CreateMoneyAccountRepoArg = {
     name: string;
     type: MoneyAccountDTO["type"];
     scope: MoneyAccountDTO["scope"];
+    storeId: string | null;
     notes: string | null;
     status: MoneyAccountDTO["status"];
     createdBy: string;
@@ -78,6 +103,7 @@ type UpdateMoneyAccountRepoArg = {
     name: string;
     type: MoneyAccountDTO["type"];
     scope: MoneyAccountDTO["scope"];
+    storeId: string | null;
     notes: string | null;
     status: MoneyAccountDTO["status"];
     updatedBy: string;
@@ -99,6 +125,7 @@ export const updateMoneyAccountRepo = mock(async (data: UpdateMoneyAccountRepoAr
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
+    getStoreById,
 }));
 
 mock.module("./money-accounts.repository", () => ({

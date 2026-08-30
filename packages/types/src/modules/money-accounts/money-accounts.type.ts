@@ -21,7 +21,7 @@ export type CreateMoneyAccountJSON = z.infer<typeof CreateMoneyAccountSchema>;
 export type CreateMoneyAccountSVC = CreateMoneyAccountJSON;
 export type CreateMoneyAccountREPO = Pick<
   MoneyAccountDTO,
-  "id" | "organizationId" | "name" | "type" | "scope" | "notes" | "status" | "createdBy"
+  "id" | "organizationId" | "name" | "type" | "scope" | "storeId" | "notes" | "status" | "createdBy"
 > & {
   updatedBy?: string | null;
 };
@@ -30,7 +30,7 @@ export type UpdateMoneyAccountJSON = z.infer<typeof UpdateMoneyAccountSchema>;
 export type UpdateMoneyAccountSVC = UpdateMoneyAccountJSON;
 export type UpdateMoneyAccountREPO = Pick<
   MoneyAccountDTO,
-  "id" | "organizationId" | "name" | "type" | "scope" | "notes" | "status" | "updatedBy"
+  "id" | "organizationId" | "name" | "type" | "scope" | "storeId" | "notes" | "status" | "updatedBy"
 >;
 
 export type MoneyAccountsListResponse = {

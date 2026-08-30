@@ -4,6 +4,7 @@ import {
   CreateMoneyAccountSchema,
   MONEY_ACCOUNT_NAME_MAX_LENGTH,
   MONEY_ACCOUNT_NOTES_MAX_LENGTH,
+  MONEY_ACCOUNT_SCOPE_LABELS,
   MoneyAccountDTOSchema,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES,
@@ -20,6 +21,21 @@ const validCreate = {
   type: "bank" as const,
   notes: "Main operating account",
   status: "active" as const,
+};
+
+const organizationWideDto = {
+  id: moneyAccountId,
+  organizationId,
+  name: "HDFC Current",
+  type: "bank" as const,
+  scope: "organization_wide" as const,
+  storeId: null,
+  notes: "Main operating account",
+  status: "active" as const,
+  createdBy: userId,
+  updatedBy: null,
+  createdAt: "2026-08-31T00:00:00.000Z",
+  updatedAt: "2026-08-31T00:00:00.000Z",
 };
 
 describe("Money Account contracts", () => {
@@ -89,6 +105,54 @@ describe("Money Account contracts", () => {
     }
   });
 
+  test("create Money Account accepts an explicit Organization-wide scope without a Store", () => {
+    const result = CreateMoneyAccountSchema.safeParse({
+      ...validCreate,
+      scope: "organization_wide",
+      storeId: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scope).toBe("organization_wide");
+      expect(result.data.storeId).toBeNull();
+    }
+  });
+
+  test("create Money Account accepts Store-scoped configuration with exactly one Store", () => {
+    const result = CreateMoneyAccountSchema.safeParse({
+      name: "Adajan UPI QR",
+      type: "upi",
+      scope: "store_scoped",
+      storeId,
+      notes: "Counter QR",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scope).toBe("store_scoped");
+      expect(result.data.storeId).toBe(storeId);
+      expect(result.data.type).toBe("upi");
+    }
+  });
+
+  test("create Money Account accepts every eligible non-cash type as Store-scoped", () => {
+    for (const type of ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES) {
+      const result = CreateMoneyAccountSchema.safeParse({
+        name: `${ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[type]} at store`,
+        type,
+        scope: "store_scoped",
+        storeId,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.scope).toBe("store_scoped");
+        expect(result.data.storeId).toBe(storeId);
+      }
+    }
+  });
+
   test("rejects a Money Account without a name", () => {
     expect(CreateMoneyAccountSchema.safeParse({ type: "bank" }).success).toBe(false);
   });
@@ -134,7 +198,18 @@ describe("Money Account contracts", () => {
     ).toBe(false);
   });
 
-  test("rejects Store assignment and Store-scoped fields on create", () => {
+  test("rejects Cash even when Store-scoped", () => {
+    expect(
+      CreateMoneyAccountSchema.safeParse({
+        name: "Store cash",
+        type: "cash",
+        scope: "store_scoped",
+        storeId,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects Store assignment and Store-scoped fields without a valid Store", () => {
     expect(
       CreateMoneyAccountSchema.safeParse({
         ...validCreate,
@@ -150,8 +225,26 @@ describe("Money Account contracts", () => {
     expect(
       CreateMoneyAccountSchema.safeParse({
         ...validCreate,
+        scope: "store_scoped",
+        storeId: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateMoneyAccountSchema.safeParse({
+        ...validCreate,
         scope: "organization_wide",
         storeId,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects an invalid Store id", () => {
+    expect(
+      CreateMoneyAccountSchema.safeParse({
+        name: "Adajan UPI QR",
+        type: "upi",
+        scope: "store_scoped",
+        storeId: "not-a-uuid",
       }).success,
     ).toBe(false);
   });
@@ -201,6 +294,36 @@ describe("Money Account contracts", () => {
     expect(UpdateMoneyAccountSchema.safeParse({ status: "active" }).success).toBe(true);
   });
 
+  test("update Money Account can become Store-scoped with a Store", () => {
+    const result = UpdateMoneyAccountSchema.safeParse({
+      scope: "store_scoped",
+      storeId,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scope).toBe("store_scoped");
+      expect(result.data.storeId).toBe(storeId);
+    }
+  });
+
+  test("update Money Account can become Organization-wide and drop its Store assignment", () => {
+    const result = UpdateMoneyAccountSchema.safeParse({
+      scope: "organization_wide",
+      storeId: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scope).toBe("organization_wide");
+      expect(result.data.storeId).toBeNull();
+    }
+  });
+
+  test("update Money Account can change Store without restating scope", () => {
+    expect(UpdateMoneyAccountSchema.safeParse({ storeId }).success).toBe(true);
+  });
+
   test("update Money Account requires at least one field", () => {
     expect(UpdateMoneyAccountSchema.safeParse({}).success).toBe(false);
   });
@@ -214,57 +337,71 @@ describe("Money Account contracts", () => {
     ).toBe(false);
   });
 
-  test("rejects Store assignment on update", () => {
+  test("rejects Store assignment on an Organization-wide update", () => {
     expect(
       UpdateMoneyAccountSchema.safeParse({
+        scope: "organization_wide",
         storeId,
         status: "active",
       }).success,
     ).toBe(false);
   });
 
+  test("rejects a Store-scoped update without a Store", () => {
+    expect(
+      UpdateMoneyAccountSchema.safeParse({
+        scope: "store_scoped",
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateMoneyAccountSchema.safeParse({
+        scope: "store_scoped",
+        storeId: null,
+      }).success,
+    ).toBe(false);
+  });
+
   test("Money Account DTO includes Organization ownership, type, Organization-wide scope, notes, and status", () => {
-    const result = MoneyAccountDTOSchema.safeParse({
-      id: moneyAccountId,
-      organizationId,
-      name: "HDFC Current",
-      type: "bank",
-      scope: "organization_wide",
-      notes: "Main operating account",
-      status: "active",
-      createdBy: userId,
-      updatedBy: null,
-      createdAt: "2026-08-31T00:00:00.000Z",
-      updatedAt: "2026-08-31T00:00:00.000Z",
-    });
+    const result = MoneyAccountDTOSchema.safeParse(organizationWideDto);
 
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.organizationId).toBe(organizationId);
       expect(result.data.type).toBe("bank");
       expect(result.data.scope).toBe("organization_wide");
+      expect(result.data.storeId).toBeNull();
       expect(result.data.notes).toBe("Main operating account");
       expect(result.data.status).toBe("active");
-      expect("storeId" in result.data).toBe(false);
       expect("bankAccountNumber" in result.data).toBe(false);
       expect("upiId" in result.data).toBe(false);
       expect("balance" in result.data).toBe(false);
     }
   });
 
+  test("Money Account DTO includes Store-scoped availability and the selected Store", () => {
+    const result = MoneyAccountDTOSchema.safeParse({
+      ...organizationWideDto,
+      name: "Adajan UPI QR",
+      type: "upi",
+      scope: "store_scoped",
+      storeId,
+      notes: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scope).toBe("store_scoped");
+      expect(result.data.storeId).toBe(storeId);
+      expect(result.data.scope).not.toBe("organization_wide");
+      expect(MONEY_ACCOUNT_SCOPE_LABELS[result.data.scope]).toBe("Store-scoped");
+    }
+  });
+
   test("Money Account DTO accepts a null notes value", () => {
     const result = MoneyAccountDTOSchema.safeParse({
-      id: moneyAccountId,
-      organizationId,
-      name: "HDFC Current",
-      type: "bank",
-      scope: "organization_wide",
+      ...organizationWideDto,
       notes: null,
       status: "inactive",
-      createdBy: userId,
-      updatedBy: null,
-      createdAt: "2026-08-31T00:00:00.000Z",
-      updatedAt: "2026-08-31T00:00:00.000Z",
     });
 
     expect(result.success).toBe(true);
@@ -275,51 +412,37 @@ describe("Money Account contracts", () => {
 
   test("rejects a Money Account DTO with an invalid organization id", () => {
     const result = MoneyAccountDTOSchema.safeParse({
-      id: moneyAccountId,
+      ...organizationWideDto,
       organizationId: "not-a-uuid",
-      name: "HDFC Current",
-      type: "bank",
-      scope: "organization_wide",
-      notes: null,
-      status: "active",
-      createdBy: userId,
-      updatedBy: null,
-      createdAt: "2026-08-31T00:00:00.000Z",
-      updatedAt: "2026-08-31T00:00:00.000Z",
     });
 
     expect(result.success).toBe(false);
   });
 
-  test("rejects a Money Account DTO that is Store-scoped or Cash", () => {
+  test("rejects a Money Account DTO with an invalid scope and Store combination", () => {
     expect(
       MoneyAccountDTOSchema.safeParse({
-        id: moneyAccountId,
-        organizationId,
-        name: "Store UPI",
-        type: "upi",
+        ...organizationWideDto,
         scope: "store_scoped",
-        notes: null,
-        status: "active",
-        createdBy: userId,
-        updatedBy: null,
-        createdAt: "2026-08-31T00:00:00.000Z",
-        updatedAt: "2026-08-31T00:00:00.000Z",
+        storeId: null,
       }).success,
     ).toBe(false);
     expect(
       MoneyAccountDTOSchema.safeParse({
-        id: moneyAccountId,
-        organizationId,
+        ...organizationWideDto,
+        storeId,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects a Cash Money Account DTO", () => {
+    expect(
+      MoneyAccountDTOSchema.safeParse({
+        ...organizationWideDto,
         name: "Store cash",
         type: "cash",
-        scope: "organization_wide",
-        notes: null,
-        status: "active",
-        createdBy: userId,
-        updatedBy: null,
-        createdAt: "2026-08-31T00:00:00.000Z",
-        updatedAt: "2026-08-31T00:00:00.000Z",
+        scope: "store_scoped",
+        storeId,
       }).success,
     ).toBe(false);
   });

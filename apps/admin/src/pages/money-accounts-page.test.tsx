@@ -3,14 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import {
+    MONEY_ACCOUNT_SCOPE_LABELS,
     ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
     type MoneyAccountDTO,
 } from "@repo/types";
 
-import { moneyAccountKeys } from "@/lib/query-keys";
+import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 import MoneyAccountsPage from "@/pages/money-accounts-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const now = new Date("2026-08-31T12:00:00.000Z");
 const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
@@ -20,6 +22,7 @@ const hdfcBank: MoneyAccountDTO = {
     name: "HDFC Current",
     type: "bank",
     scope: "organization_wide",
+    storeId: null,
     notes: "Main operating account",
     status: "active",
     createdBy: userId,
@@ -34,6 +37,7 @@ const sharedUpi: MoneyAccountDTO = {
     name: "Shared UPI QR",
     type: "upi",
     scope: "organization_wide",
+    storeId: null,
     notes: null,
     status: "active",
     createdBy: userId,
@@ -48,6 +52,7 @@ const cardSettlement: MoneyAccountDTO = {
     name: "Card machine settlement",
     type: "card_settlement",
     scope: "organization_wide",
+    storeId: null,
     notes: null,
     status: "active",
     createdBy: userId,
@@ -62,6 +67,7 @@ const pettyCash: MoneyAccountDTO = {
     name: "Office petty cash",
     type: "petty_cash",
     scope: "organization_wide",
+    storeId: null,
     notes: null,
     status: "inactive",
     createdBy: userId,
@@ -76,6 +82,7 @@ const otherAccount: MoneyAccountDTO = {
     name: "Director wallet",
     type: "other",
     scope: "organization_wide",
+    storeId: null,
     notes: "Non-sensitive purpose note",
     status: "active",
     createdBy: userId,
@@ -84,13 +91,61 @@ const otherAccount: MoneyAccountDTO = {
     updatedAt: now,
 };
 
-const allAccounts = [hdfcBank, sharedUpi, cardSettlement, pettyCash, otherAccount];
+const adajanUpi: MoneyAccountDTO = {
+    id: "66666666-6666-4666-8666-666666666666",
+    organizationId,
+    name: "Adajan UPI QR",
+    type: "upi",
+    scope: "store_scoped",
+    storeId,
+    notes: "Counter QR",
+    status: "active",
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+const allAccounts = [hdfcBank, sharedUpi, cardSettlement, pettyCash, otherAccount, adajanUpi];
+
+const seedOrganizationDetails = (queryClient: QueryClient) => {
+    queryClient.setQueryData(organizationKeys.detail(organizationId), {
+        status: "success",
+        data: {
+            organization: {
+                id: organizationId,
+                name: "Demo Org",
+                username: "demo",
+                tagline: null,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+                stores: [
+                    {
+                        id: storeId,
+                        organizationId,
+                        name: "Adajan",
+                        address: null,
+                        devices: [],
+                        createdBy: userId,
+                        createdAt: now,
+                        updatedAt: now,
+                    },
+                ],
+            },
+        },
+        message: "Organization fetched successfully",
+        code: 200,
+    });
+};
 
 const renderMoneyAccountsPage = (
     result: "pending" | "success" | "error" | "empty" = "success",
     moneyAccounts: MoneyAccountDTO[] = allAccounts,
 ) => {
     const queryClient = new QueryClient();
+    seedOrganizationDetails(queryClient);
     if (result !== "pending") {
         queryClient.setQueryData(moneyAccountKeys.list(organizationId), {
             status: result === "error" ? "error" : "success",
@@ -118,7 +173,7 @@ const renderMoneyAccountsPage = (
 };
 
 describe("Admin Money Accounts page", () => {
-    test("shows Organization-wide Money Accounts with type, scope, status, search, and no delete command", () => {
+    test("shows Organization-wide and Store-scoped Money Accounts with type, scope, Store, status, search, and no delete command", () => {
         const markup = renderMoneyAccountsPage();
 
         expect(markup).toContain("data-testid=\"money-accounts-page\"");
@@ -128,16 +183,22 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain("Card machine settlement");
         expect(markup).toContain("Office petty cash");
         expect(markup).toContain("Director wallet");
+        expect(markup).toContain("Adajan UPI QR");
+        expect(markup).toContain("Adajan");
         expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.bank);
         expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.upi);
         expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.card_settlement);
         expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.petty_cash);
         expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.other);
-        expect(markup).toContain("Organization-wide");
+        expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.organization_wide);
+        expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.store_scoped);
+        expect(markup).toContain("Every store");
         expect(markup).toContain("Add money account");
         expect(markup).toContain("Search money accounts...");
         expect(markup).toContain("Status");
         expect(markup).toContain("Type");
+        expect(markup).toContain("Scope");
+        expect(markup).toContain("Store");
         expect(markup).toContain("active");
         expect(markup).toContain("inactive");
         expect(markup).toContain("Edit");
@@ -145,7 +206,6 @@ describe("Admin Money Accounts page", () => {
         expect(markup).not.toContain("Store Cash");
         expect(markup).not.toContain("bank account number");
         expect(markup).not.toContain("UPI ID");
-        expect(markup).not.toContain("Select store");
     });
 
     test("shows a loading spinner while Money Accounts are fetched", () => {
@@ -169,6 +229,7 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain("No money accounts yet");
         expect(markup).toContain("Add money account");
         expect(markup).toContain("Bank, UPI, Card Settlement, Petty Cash, or Other");
+        expect(markup).toContain("for every Store, or for one Store");
         expect(markup).not.toContain("Delete");
     });
 });

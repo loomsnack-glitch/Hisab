@@ -19,7 +19,6 @@ export const getMoneyAccountsByOrganizationId = async (
         SELECT *
         FROM money_accounts
         WHERE organization_id = ${organizationId}
-          AND scope = 'organization_wide'
         ORDER BY lower(name) ASC
     `;
 
@@ -37,7 +36,6 @@ export const getMoneyAccountById = async (
         FROM money_accounts
         WHERE id = ${moneyAccountId}
           AND organization_id = ${organizationId}
-          AND scope = 'organization_wide'
     `;
 
     return result ? mapMoneyAccount(result) : null;
@@ -64,13 +62,13 @@ export const updateMoneyAccount = async (
         SET name = ${moneyAccountData.name},
             type = ${moneyAccountData.type},
             scope = ${moneyAccountData.scope},
+            store_id = ${moneyAccountData.storeId},
             notes = ${moneyAccountData.notes},
             status = ${moneyAccountData.status},
             updated_by = ${moneyAccountData.updatedBy},
             updated_at = NOW()
         WHERE id = ${moneyAccountData.id}
           AND organization_id = ${moneyAccountData.organizationId}
-          AND scope = 'organization_wide'
         RETURNING *
     `;
 

@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import { getMoneyAccounts } from "@repo/services";
+import { getMoneyAccounts, getOrganizationDetails } from "@repo/services";
 import {
     MONEY_ACCOUNT_SCOPE_LABELS,
     ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
     type MoneyAccountDTO,
+    type MoneyAccountScope,
     type MoneyAccountType,
 } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
@@ -20,12 +21,18 @@ import { LayoutGrid, Pencil, PlusCircle, RefreshCw, Search, Table as TableIcon, 
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertMoneyAccountDialog from "@/components/money-accounts/upsert-money-account-dialog";
 import { formatDateTime } from "@/lib/format";
-import { moneyAccountKeys } from "@/lib/query-keys";
+import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
 const MoneyAccountTypeBadge = ({ type }: { type: MoneyAccountType }) => (
     <Badge variant="outline" className="rounded-full">
         {ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[type]}
+    </Badge>
+);
+
+const MoneyAccountScopeBadge = ({ scope }: { scope: MoneyAccountScope }) => (
+    <Badge variant="outline" className="rounded-full">
+        {MONEY_ACCOUNT_SCOPE_LABELS[scope]}
     </Badge>
 );
 
@@ -40,10 +47,29 @@ const MoneyAccountsPage = () => {
         enabled: Boolean(organizationId),
     });
 
+    const organizationQuery = useQuery({
+        queryKey: organizationKeys.detail(organizationId),
+        queryFn: () => getOrganizationDetails(organizationId),
+        enabled: Boolean(organizationId),
+    });
+
     const moneyAccounts =
         moneyAccountsQuery.data?.status === "success"
             ? moneyAccountsQuery.data.data?.moneyAccounts ?? []
             : [];
+
+    const stores =
+        organizationQuery.data?.status === "success"
+            ? organizationQuery.data.data?.organization.stores ?? []
+            : [];
+
+    const storeNameById = useMemo(
+        () => new Map(stores.map((store) => [store.id, store.name])),
+        [stores],
+    );
+
+    const storeNameFor = (account: MoneyAccountDTO) =>
+        account.storeId ? storeNameById.get(account.storeId) ?? "" : "";
 
     const filteredMoneyAccounts = useMemo(() => {
         if (!mobileSearchQuery.trim()) return moneyAccounts;
@@ -51,9 +77,11 @@ const MoneyAccountsPage = () => {
         return moneyAccounts.filter((account) =>
             account.name.toLowerCase().includes(query)
             || ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type].toLowerCase().includes(query)
+            || MONEY_ACCOUNT_SCOPE_LABELS[account.scope].toLowerCase().includes(query)
+            || storeNameFor(account).toLowerCase().includes(query)
             || (account.notes ?? "").toLowerCase().includes(query),
         );
-    }, [mobileSearchQuery, moneyAccounts]);
+    }, [mobileSearchQuery, moneyAccounts, storeNameById]);
 
     const columns = useMemo<ColumnDef<MoneyAccountDTO>[]>(() => [
         {
@@ -90,13 +118,30 @@ const MoneyAccountsPage = () => {
         {
             id: "scope",
             header: "Scope",
-            accessor: () => (
-                <Badge variant="outline" className="rounded-full">
-                    {MONEY_ACCOUNT_SCOPE_LABELS.organization_wide}
-                </Badge>
+            accessor: (account) => <MoneyAccountScopeBadge scope={account.scope} />,
+            sortable: true,
+            getSortValue: (account) => MONEY_ACCOUNT_SCOPE_LABELS[account.scope],
+            filterOptions: Object.entries(MONEY_ACCOUNT_SCOPE_LABELS).map(([value, label]) => ({
+                label,
+                value,
+            })),
+            getFilterValue: (account) => account.scope,
+        },
+        {
+            id: "store",
+            header: "Store",
+            accessor: (account) => (
+                <span className="text-sm text-muted-foreground">
+                    {account.scope === "store_scoped" ? (storeNameFor(account) || "Store") : "Every store"}
+                </span>
             ),
             sortable: true,
-            getSortValue: () => MONEY_ACCOUNT_SCOPE_LABELS.organization_wide,
+            getSortValue: (account) => storeNameFor(account),
+            filterOptions: stores.map((store) => ({
+                label: store.name,
+                value: store.id,
+            })),
+            getFilterValue: (account) => account.storeId ?? "",
         },
         {
             id: "status",
@@ -117,7 +162,7 @@ const MoneyAccountsPage = () => {
             sortable: true,
             getSortValue: (account) => String(account.updatedAt),
         },
-    ], []);
+    ], [storeNameById, stores]);
 
     const renderActions = (account: MoneyAccountDTO) => (
         <UpsertMoneyAccountDialog
@@ -131,6 +176,14 @@ const MoneyAccountsPage = () => {
             }
         />
     );
+
+    const searchKeys = [
+        (account: MoneyAccountDTO) => account.name,
+        (account: MoneyAccountDTO) => ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type],
+        (account: MoneyAccountDTO) => MONEY_ACCOUNT_SCOPE_LABELS[account.scope],
+        (account: MoneyAccountDTO) => storeNameFor(account),
+        (account: MoneyAccountDTO) => account.notes ?? "",
+    ];
 
     if (moneyAccountsQuery.isPending) {
         return (
@@ -183,7 +236,7 @@ const MoneyAccountsPage = () => {
                                 </EmptyMedia>
                                 <EmptyTitle>No money accounts yet</EmptyTitle>
                                 <EmptyDescription>
-                                    Add a Bank, UPI, Card Settlement, Petty Cash, or Other Money Account that every Store in this Organization can use.
+                                    Add a Bank, UPI, Card Settlement, Petty Cash, or Other Money Account for every Store, or for one Store in this Organization.
                                 </EmptyDescription>
                             </EmptyHeader>
                             <EmptyContent>
@@ -203,11 +256,7 @@ const MoneyAccountsPage = () => {
                             defaultPageSize={20}
                             fillAvailableViewport
                             searchPlaceholder="Search money accounts..."
-                            searchKeys={[
-                                (account) => account.name,
-                                (account) => ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type],
-                                (account) => account.notes ?? "",
-                            ]}
+                            searchKeys={searchKeys}
                             infoText={`${moneyAccounts.length} account${moneyAccounts.length === 1 ? "" : "s"}`}
                             toolbarActions={
                                 <UpsertMoneyAccountDialog
@@ -310,7 +359,10 @@ const MoneyAccountsPage = () => {
                                                         <p className="text-[11px] text-muted-foreground/70 truncate">
                                                             {ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type]}
                                                             {" · "}
-                                                            {MONEY_ACCOUNT_SCOPE_LABELS.organization_wide}
+                                                            {MONEY_ACCOUNT_SCOPE_LABELS[account.scope]}
+                                                            {account.scope === "store_scoped" && storeNameFor(account)
+                                                                ? ` · ${storeNameFor(account)}`
+                                                                : ""}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -344,11 +396,7 @@ const MoneyAccountsPage = () => {
                                 rowIdKey="id"
                                 defaultPageSize={10}
                                 searchPlaceholder="Search money accounts..."
-                                searchKeys={[
-                                    (account) => account.name,
-                                    (account) => ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type],
-                                    (account) => account.notes ?? "",
-                                ]}
+                                searchKeys={searchKeys}
                             />
                         )}
                     </div>

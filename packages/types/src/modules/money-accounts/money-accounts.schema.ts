@@ -13,7 +13,7 @@ export const ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES = [
 ] as const;
 
 export const MoneyAccountStatusSchema = z.enum(["active", "inactive"]);
-export const MoneyAccountScopeSchema = z.enum(["organization_wide"]);
+export const MoneyAccountScopeSchema = z.enum(["organization_wide", "store_scoped"]);
 export const OrganizationWideMoneyAccountTypeSchema = z.enum(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES);
 export const MoneyAccountTypeSchema = OrganizationWideMoneyAccountTypeSchema;
 
@@ -30,6 +30,7 @@ export const ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS: Record<
 
 export const MONEY_ACCOUNT_SCOPE_LABELS: Record<z.infer<typeof MoneyAccountScopeSchema>, string> = {
   organization_wide: "Organization-wide",
+  store_scoped: "Store-scoped",
 };
 
 const moneyAccountNameSchema = z
@@ -55,33 +56,76 @@ const moneyAccountNotesSchema = z
   .nullable()
   .optional();
 
-export const MoneyAccountDTOSchema = z.object({
-  id: z.uuid("Invalid money account id"),
-  organizationId: z.uuid("Invalid organization id"),
-  name: moneyAccountNameSchema,
-  type: MoneyAccountTypeSchema,
-  scope: MoneyAccountScopeSchema,
-  notes: z.string().nullable(),
-  status: MoneyAccountStatusSchema,
-  createdBy: z.uuid("Invalid creator id"),
-  updatedBy: z.uuid("Invalid updater id").nullable().optional(),
-  createdAt: dtoDateSchema,
-  updatedAt: dtoDateSchema,
-});
+const moneyAccountStoreIdSchema = z.uuid("Invalid store id").nullable().optional();
+
+const STORE_REQUIRED_FOR_STORE_SCOPE = "Store is required for a Store-scoped Money Account";
+const STORE_FORBIDDEN_FOR_ORGANIZATION_WIDE =
+  "An Organization-wide Money Account cannot have a Store assignment";
+
+const refineMoneyAccountScopeAndStore = (
+  value: {
+    scope?: z.infer<typeof MoneyAccountScopeSchema>;
+    storeId?: string | null;
+  },
+  ctx: z.RefinementCtx,
+  options?: { defaultScope?: z.infer<typeof MoneyAccountScopeSchema> },
+) => {
+  const scope = value.scope ?? options?.defaultScope;
+  if (scope === "store_scoped" && !value.storeId) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["storeId"],
+      message: STORE_REQUIRED_FOR_STORE_SCOPE,
+    });
+    return;
+  }
+
+  if (scope === "organization_wide" && value.storeId) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["storeId"],
+      message: STORE_FORBIDDEN_FOR_ORGANIZATION_WIDE,
+    });
+  }
+};
+
+export const MoneyAccountDTOSchema = z
+  .object({
+    id: z.uuid("Invalid money account id"),
+    organizationId: z.uuid("Invalid organization id"),
+    name: moneyAccountNameSchema,
+    type: MoneyAccountTypeSchema,
+    scope: MoneyAccountScopeSchema,
+    storeId: z.uuid("Invalid store id").nullable(),
+    notes: z.string().nullable(),
+    status: MoneyAccountStatusSchema,
+    createdBy: z.uuid("Invalid creator id"),
+    updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+  })
+  .superRefine((value, ctx) => refineMoneyAccountScopeAndStore(value, ctx));
 
 export const CreateMoneyAccountSchema = z
   .object({
     name: moneyAccountNameSchema,
     type: OrganizationWideMoneyAccountTypeSchema,
+    scope: MoneyAccountScopeSchema.optional(),
+    storeId: moneyAccountStoreIdSchema,
     notes: moneyAccountNotesSchema,
     status: MoneyAccountStatusSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) =>
+    refineMoneyAccountScopeAndStore(value, ctx, { defaultScope: "organization_wide" }),
+  );
 
 export const UpdateMoneyAccountSchema = z
   .object({
     name: moneyAccountNameSchema.optional(),
     type: OrganizationWideMoneyAccountTypeSchema.optional(),
+    scope: MoneyAccountScopeSchema.optional(),
+    storeId: moneyAccountStoreIdSchema,
     notes: moneyAccountNotesSchema,
     status: MoneyAccountStatusSchema.optional(),
   })
@@ -90,7 +134,10 @@ export const UpdateMoneyAccountSchema = z
     (value) =>
       value.name !== undefined ||
       value.type !== undefined ||
+      value.scope !== undefined ||
+      value.storeId !== undefined ||
       value.notes !== undefined ||
       value.status !== undefined,
     { message: "At least one field is required" },
-  );
+  )
+  .superRefine((value, ctx) => refineMoneyAccountScopeAndStore(value, ctx));

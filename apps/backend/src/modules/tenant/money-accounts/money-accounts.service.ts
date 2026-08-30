@@ -1,7 +1,9 @@
 import {
     STATUS_CODES,
     type CreateMoneyAccountSVC,
+    type MoneyAccountDTO,
     type MoneyAccountResponse,
+    type MoneyAccountScope,
     type MoneyAccountsListResponse,
     type ServiceResponse,
     type UpdateMoneyAccountSVC,
@@ -26,12 +28,64 @@ const moneyAccountNotFound = (): ServiceResponse<null> => ({
     code: STATUS_CODES.NOT_FOUND,
 });
 
+const invalidScopeStore = (message: string): ServiceResponse<null> => ({
+    status: "error",
+    message,
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
 const normalizeNotes = (notes: string | null | undefined): string | null => {
     if (notes === undefined || notes === null) {
         return null;
     }
     const trimmed = notes.trim();
     return trimmed.length === 0 ? null : trimmed;
+};
+
+const resolveMoneyAccountScopeAndStore = async (
+    organizationId: string,
+    data: { scope?: MoneyAccountScope; storeId?: string | null },
+    existing?: Pick<MoneyAccountDTO, "scope" | "storeId">,
+): Promise<
+    | { ok: true; scope: MoneyAccountScope; storeId: string | null }
+    | { ok: false; response: ServiceResponse<null> }
+> => {
+    const scope = data.scope ?? existing?.scope ?? "organization_wide";
+    const storeId =
+        scope === "organization_wide"
+            ? null
+            : data.storeId !== undefined
+                ? data.storeId
+                : (existing?.storeId ?? null);
+
+    if (scope === "organization_wide" && data.storeId) {
+        return {
+            ok: false,
+            response: invalidScopeStore(
+                "An Organization-wide Money Account cannot have a Store assignment",
+            ),
+        };
+    }
+
+    if (scope === "store_scoped" && !storeId) {
+        return {
+            ok: false,
+            response: invalidScopeStore("Store is required for a Store-scoped Money Account"),
+        };
+    }
+
+    if (storeId) {
+        const store = await organizationRepository.getStoreById(organizationId, storeId);
+        if (!store) {
+            return {
+                ok: false,
+                response: invalidScopeStore("Store not found"),
+            };
+        }
+    }
+
+    return { ok: true, scope, storeId };
 };
 
 export const getMoneyAccounts = async (
@@ -85,12 +139,18 @@ export const createMoneyAccount = async (
         return organizationNotFound();
     }
 
+    const resolved = await resolveMoneyAccountScopeAndStore(organizationId, moneyAccountData);
+    if (!resolved.ok) {
+        return resolved.response;
+    }
+
     const moneyAccount = await moneyAccountsRepository.createMoneyAccount({
         id: crypto.randomUUID(),
         organizationId,
         name: moneyAccountData.name,
         type: moneyAccountData.type,
-        scope: "organization_wide",
+        scope: resolved.scope,
+        storeId: resolved.storeId,
         notes: normalizeNotes(moneyAccountData.notes),
         status: moneyAccountData.status ?? "active",
         createdBy: userId,
@@ -129,12 +189,18 @@ export const updateMoneyAccount = async (
         return moneyAccountNotFound();
     }
 
+    const resolved = await resolveMoneyAccountScopeAndStore(organizationId, moneyAccountData, existing);
+    if (!resolved.ok) {
+        return resolved.response;
+    }
+
     const moneyAccount = await moneyAccountsRepository.updateMoneyAccount({
         id: moneyAccountId,
         organizationId,
         name: moneyAccountData.name ?? existing.name,
         type: moneyAccountData.type ?? existing.type,
-        scope: "organization_wide",
+        scope: resolved.scope,
+        storeId: resolved.storeId,
         notes:
             moneyAccountData.notes === undefined
                 ? existing.notes
