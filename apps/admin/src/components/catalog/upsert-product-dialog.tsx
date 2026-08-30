@@ -571,16 +571,18 @@ const UpsertProductDialog = ({
             )
           }
         />
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:max-w-lg">
           <DialogHeader
+            className="shrink-0 px-4 pt-4"
             icon={<Package2 className="size-5" />}
             title={isEditMode ? "Edit product" : "Create product"}
           />
 
           <form
-            className="space-y-5 pt-2"
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={form.handleSubmit(onSubmit)}
           >
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 pt-2">
             <Controller
               control={form.control}
               name="categoryId"
@@ -986,8 +988,9 @@ const UpsertProductDialog = ({
                 )}
               </div>
             </div>
+            </div>
 
-            <DialogFooter>
+            <DialogFooter className="mx-0 mb-0 shrink-0">
               <Button
                 type="button"
                 variant="outline"
