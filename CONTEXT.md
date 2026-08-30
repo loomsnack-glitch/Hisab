@@ -28,6 +28,18 @@ _Avoid_: Organization admin, customer dashboard, POS back office
 The user-authenticated Ganatri application used by an Organization's administrators to manage that Organization's settings and business data. It is separate from Ganatri Console and Ganatri POS.
 _Avoid_: Ganatri Console, POS, platform administration
 
+**Vendor**:
+An Organization-owned business from which the Organization buys goods. A Vendor has a name, optional description, active or inactive status, and a shared catalogue of Vendor Items that may later be selected in Store-scoped Purchases; an inactive Vendor makes all of its items unavailable for selection without changing their own statuses. Vendors are retained and managed by status rather than deleted in Ganatri Admin.
+_Avoid_: Store vendor, supplier record when referring to the vendor's offered goods
+
+**Vendor Item**:
+An Organization-owned good available from exactly one Vendor, with a name, purchase unit, required non-negative two-decimal default purchase price, and active or inactive status. Identically named Vendor Items may belong to different Vendors and retain independent prices. Vendor Items are retained and managed by status rather than deleted in Ganatri Admin. A Vendor Item is not a sellable Catalog Product and does not yet represent inventory.
+_Avoid_: Product, stock item, purchase line
+
+**Unit**:
+An Organization-wide measure used to express a Vendor Item's default purchase price and a future Purchase quantity. A Unit has a descriptive name and short label but no conversion rules in the first release. Units are either predefined read-only measures supplied by Hisab or Organization-defined measures. The Organization controls each Unit's active or inactive availability; inactive Units cannot be assigned to new or edited records but remain shown on existing records. Predefined Unit definitions remain read-only, while Organization-defined Units are retained rather than deleted. Normalized Unit names and labels are unique across both predefined and Organization-defined Units, even when inactive. Units will also be available to the Product catalogue.
+_Avoid_: Vendor-only setting, product-only unit, quantity
+
 **Ganatri POS**:
 The device-authenticated Ganatri application used by a Store Device to perform its Store-Scoped POS Workflow. It is separate from Ganatri Admin and does not live under an Admin URL path.
 _Avoid_: Admin POS route, embedded admin billing page, Ganatri Console
