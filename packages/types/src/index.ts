@@ -20,6 +20,7 @@ export * from "./modules/platform";
 export * from "./modules/user";
 export * from "./modules/units";
 export * from "./modules/vendors";
+export * from "./modules/money-accounts";
 export * from "./services/whatsapp.type";
 export * from "./services/whatsapp.schema";
 export * from "./services/whatsapp-content";

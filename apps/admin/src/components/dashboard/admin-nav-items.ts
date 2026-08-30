@@ -11,6 +11,7 @@ import {
     Store,
     Truck,
     Users,
+    Wallet,
 } from "lucide-react";
 
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
@@ -77,6 +78,14 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         requiresOrganization: true,
         getPath: (organizationId) => `/organizations/${organizationId}/units`,
         isActive: (pathname) => /\/organizations\/[^/]+\/units(\/|$)/.test(pathname),
+    },
+    {
+        id: "money-accounts",
+        label: "Money Accounts",
+        icon: Wallet,
+        requiresOrganization: true,
+        getPath: (organizationId) => `/organizations/${organizationId}/money-accounts`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/money-accounts(\/|$)/.test(pathname),
     },
     {
         id: "whatsapp",

@@ -51,6 +51,9 @@ const getOrganizationSwitchPath = (pathname: string, organizationId: string) => 
     if (pathname.includes("/units")) {
         return `/organizations/${organizationId}/units`;
     }
+    if (pathname.includes("/money-accounts")) {
+        return `/organizations/${organizationId}/money-accounts`;
+    }
     if (pathname.includes("/whatsapp")) {
         return `/organizations/${organizationId}/whatsapp/accounts`;
     }
