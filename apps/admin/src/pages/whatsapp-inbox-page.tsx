@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { WhatsAppMessageDTO } from "@repo/types";
@@ -22,6 +22,7 @@ import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 type InboxViewProps = {
     organizationId: string;
     storeId: string;
+    embedded?: boolean;
 };
 
 const normalizePhone = (phone: string) => phone.replace(/\D/g, "");
@@ -35,39 +36,35 @@ const formatTimestamp = (value?: string | Date | null) => {
 const responseMessage = (response: { status: string; message?: string }) =>
     response.status === "success" ? "" : response.message || "WhatsApp request failed";
 
-const WhatsAppInboxView = (props: InboxViewProps) => {
+export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }: InboxViewProps) => {
     const queryClient = useQueryClient();
-    const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+    const [selectedConversationIdState, setSelectedConversationId] = useState<string | null>(null);
     const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
 
-    const organizationId = props.organizationId;
-    const storeId = props.storeId;
     const conversationsKey = whatsappKeys.conversations(organizationId, storeId);
-    const conversationKey = selectedConversationId
-        ? whatsappKeys.conversation(organizationId, storeId, selectedConversationId)
-        : [...conversationsKey, "selected", "none"];
-
     const conversationsQuery = useQuery({
         queryKey: conversationsKey,
         queryFn: () => getWhatsAppConversations(organizationId, storeId),
         refetchInterval: 5_000,
     });
 
-    const conversations = conversationsQuery.data?.status === "success"
-        ? conversationsQuery.data.data?.conversations ?? []
-        : [];
+    const conversations = useMemo(
+        () => conversationsQuery.data?.status === "success"
+            ? conversationsQuery.data.data?.conversations ?? []
+            : [],
+        [conversationsQuery.data],
+    );
     const accountStatus = conversationsQuery.data?.status === "success"
         ? conversationsQuery.data.data?.accountStatus
         : null;
-    useEffect(() => {
-        if (!selectedConversationId && conversations[0]) {
-            setSelectedConversationId(conversations[0].id);
-            return;
-        }
-        if (selectedConversationId && !conversations.some((conversation) => conversation.id === selectedConversationId)) {
-            setSelectedConversationId(conversations[0]?.id ?? null);
-        }
-    }, [conversations, selectedConversationId]);
+    const selectedConversationId = selectedConversationIdState && conversations.some(
+        (conversation) => conversation.id === selectedConversationIdState,
+    )
+        ? selectedConversationIdState
+        : conversations[0]?.id ?? null;
+    const conversationKey = selectedConversationId
+        ? whatsappKeys.conversation(organizationId, storeId, selectedConversationId)
+        : [...conversationsKey, "selected", "none"];
 
     const conversationQuery = useQuery({
         queryKey: conversationKey,
@@ -123,22 +120,28 @@ const WhatsAppInboxView = (props: InboxViewProps) => {
         window.open(response.data.url, "_blank", "noopener,noreferrer");
     };
 
+    const Heading = embedded ? "h2" : "h1";
+
     return (
         <div className="mx-auto flex max-w-7xl flex-col gap-4">
             <div className="flex items-center justify-between gap-3">
                 <div>
-                    <h1 className="flex items-center gap-2 font-display text-2xl font-semibold">
+                    <Heading className="flex items-center gap-2 font-display text-2xl font-semibold">
                         <WhatsAppIcon className="size-5 text-primary" />
-                        WhatsApp conversations
-                    </h1>
-                    <p className="mt-1 text-sm text-muted-foreground">Direct customer chats for this Store.</p>
+                        {embedded ? "Message history" : "WhatsApp conversations"}
+                    </Heading>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {embedded ? "Review customer conversations and delivery status for this Store." : "Direct customer chats for this Store."}
+                    </p>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button variant="outline" render={<Link to={`/organizations/${organizationId}/stores/${storeId}/whatsapp`} />}>
-                        <ArrowLeft className="size-4" />
-                        Account settings
-                    </Button>
-                </div>
+                {!embedded ? (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Button variant="outline" render={<Link to={`/organizations/${organizationId}/stores/${storeId}/whatsapp`} />}>
+                            <ArrowLeft className="size-4" />
+                            Account settings
+                        </Button>
+                    </div>
+                ) : null}
             </div>
 
             {conversationsQuery.data?.status === "error" ? (

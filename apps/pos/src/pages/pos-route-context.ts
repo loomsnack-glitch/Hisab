@@ -1,6 +1,6 @@
 import type { DeviceSessionDTO, SaleDetailDTO, ServiceTableDTO, TableOrderDTO } from "@repo/types";
 
-export type PosPanelTab = "products" | "tables" | "bills" | "kots" | "reports" | "customers" | "purchases" | "whatsapp";
+export type PosPanelTab = "products" | "tables" | "bills" | "kots" | "reports" | "customers" | "purchases";
 
 export type PosComposerHandoff = {
     sale: SaleDetailDTO | null;
@@ -17,7 +17,6 @@ export const posPanelConfig = {
     reports: { path: "/reports", searchPlaceholder: "" },
     customers: { path: "/customers", searchPlaceholder: "Search customers..." },
     purchases: { path: "/purchases", searchPlaceholder: "Search purchases..." },
-    whatsapp: { path: "/whatsapp", searchPlaceholder: "" },
 } as const satisfies Record<PosPanelTab, { path: string; searchPlaceholder: string }>;
 
 export const posPanelTabs = Object.keys(posPanelConfig) as PosPanelTab[];

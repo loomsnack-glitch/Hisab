@@ -4,7 +4,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import type { Query } from "@tanstack/query-core";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@repo/ui/components/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
-import { FileText, KeyRound, Link2, LoaderCircle, LogOut, Megaphone, Pencil, RefreshCw, Settings2 } from "lucide-react";
+import { FileText, KeyRound, Link2, LoaderCircle, LogOut, Megaphone, MessageSquareText, Pencil, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhoneNumber, STATUS_CODES, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import {
@@ -36,6 +36,7 @@ import WhatsAppLinkManager from "@/components/organizations/whatsapp-link-manage
 import WhatsAppPromotionDashboard from "@/components/organizations/whatsapp-promotion-dashboard";
 import WhatsAppCloudTemplateManager, { type WhatsAppCloudAccountOption } from "@/components/organizations/whatsapp-cloud-template-manager";
 import WhatsAppCloudSafetyCard from "@/components/organizations/whatsapp-cloud-safety-card";
+import { WhatsAppInboxView } from "@/pages/whatsapp-inbox-page";
 
 const ACCOUNT_STATUS_POLL_INTERVAL_MS = 2_000;
 const ACCOUNT_STATUS_POLL_WINDOW_MS = 60_000;
@@ -140,6 +141,7 @@ const workspaceTabs = [
     { id: "accounts", label: "Accounts", icon: Settings2 },
     { id: "templates", label: "Templates", icon: FileText },
     { id: "promotions", label: "Promotions", icon: Megaphone },
+    { id: "message-history", label: "Message history", icon: MessageSquareText },
 ] as const;
 
 type WorkspaceTab = (typeof workspaceTabs)[number]["id"];
@@ -445,12 +447,12 @@ const WhatsAppOrganizationPage = () => {
     }
 
     return (
-        <div className="mx-auto max-w-5xl space-y-5">
+        <div className={cn("mx-auto space-y-5", activeTab === "message-history" ? "max-w-7xl" : "max-w-5xl")}>
             <div className="space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="font-display text-2xl font-semibold sm:text-3xl">WhatsApp</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">Manage accounts, templates, and promotions.</p>
+                        <p className="mt-1 text-sm text-muted-foreground">Manage accounts, templates, promotions, and message history.</p>
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                         {activeTab !== "accounts" && organizationQuery.data?.status === "success" ? (
@@ -479,7 +481,7 @@ const WhatsAppOrganizationPage = () => {
                 </div>
 
                 <nav aria-label="WhatsApp workspace tabs" className="border-b border-border/60">
-                    <div className="grid grid-cols-3 gap-1 sm:flex sm:w-fit">
+                    <div className="grid grid-cols-2 gap-1 sm:flex sm:w-fit">
                         {workspaceTabs.map(tab => {
                             const Icon = tab.icon;
                             const active = activeTab === tab.id;
@@ -661,9 +663,13 @@ const WhatsAppOrganizationPage = () => {
                     {activeTab === "promotions" ? (
                         <WhatsAppPromotionDashboard organizationId={organizationId} storeId={selectedStore.id} storeName={selectedStore.name} links={selectedStore.whatsappLinks} cloudAccount={selectedCloudAccount} cloudEnabled={Boolean(selectedCloudAccount)} />
                     ) : null}
+
+                    {activeTab === "message-history" ? (
+                        <WhatsAppInboxView organizationId={organizationId} storeId={selectedStore.id} embedded />
+                    ) : null}
                 </section>
             ) : organizationQuery.data?.status === "success" ? (
-                <Card className="border-dashed border-border/70 bg-muted/10"><CardContent className="flex flex-col items-center gap-3 py-12 text-center"><Settings2 className="size-7 text-muted-foreground" /><p className="font-medium">Add a Store to configure WhatsApp settings</p><p className="max-w-md text-sm text-muted-foreground">Templates and promotions become available after a Store is created.</p></CardContent></Card>
+                <Card className="border-dashed border-border/70 bg-muted/10"><CardContent className="flex flex-col items-center gap-3 py-12 text-center"><Settings2 className="size-7 text-muted-foreground" /><p className="font-medium">Add a Store to configure WhatsApp settings</p><p className="max-w-md text-sm text-muted-foreground">Templates, promotions, and message history become available after a Store is created.</p></CardContent></Card>
             ) : null}
 
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
