@@ -15,6 +15,7 @@ import whatsappRoutes, { whatsappInternalRoutes } from './modules/tenant/whatsap
 import { whatsappCloudWebhookRoutes } from './modules/tenant/whatsapp/cloud-api/cloud-webhook.routes';
 import googleContactsRoutes from './modules/tenant/google-contacts/google-contacts.routes';
 import unitsRoutes from './modules/tenant/units/units.routes';
+import vendorsRoutes from './modules/tenant/vendors/vendors.routes';
 import googleContactsInternalRoutes from './modules/tenant/google-contacts/google-contacts.internal-routes';
 import publicInvoiceRoutes from './modules/tenant/whatsapp/public-invoice.routes';
 
@@ -75,6 +76,7 @@ app.route('/organizations', tableServiceRoutes);
 app.route('/organizations', whatsappRoutes);
 app.route('/organizations', googleContactsRoutes);
 app.route('/organizations', unitsRoutes);
+app.route('/organizations', vendorsRoutes);
 app.route('/internal/whatsapp', whatsappInternalRoutes);
 app.route('/internal/google-contacts', googleContactsInternalRoutes);
 app.route('/public/whatsapp', publicInvoiceRoutes);

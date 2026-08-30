@@ -6,9 +6,13 @@
 
 **Status:** ready-for-agent
 
-- [ ] The Vendors sidebar destination opens its default Vendors tab for the selected Organization.
-- [ ] The Vendor table provides search, active/inactive filtering, clear status presentation, and appropriate loading, empty, and failure states.
-- [ ] Administrators can add and edit an Organization-owned Vendor with a required name, optional description, and status; new Vendors default to active.
-- [ ] Vendors cannot be deleted through the Admin UI or API contract; activation status is the supported lifecycle operation.
-- [ ] Vendor data is isolated to the selected Organization and protected by the existing Organization-administrator boundary.
-- [ ] API, validation, authorization, Organization isolation, and visible Admin table/dialog behavior are covered by external-behavior tests.
+- [x] The Vendors sidebar destination opens its default Vendors tab for the selected Organization.
+- [x] The Vendor table provides search, active/inactive filtering, clear status presentation, and appropriate loading, empty, and failure states.
+- [x] Administrators can add and edit an Organization-owned Vendor with a required name, optional description, and status; new Vendors default to active.
+- [x] Vendors cannot be deleted through the Admin UI or API contract; activation status is the supported lifecycle operation.
+- [x] Vendor data is isolated to the selected Organization and protected by the existing Organization-administrator boundary.
+- [x] API, validation, authorization, Organization isolation, and visible Admin table/dialog behavior are covered by external-behavior tests.
+
+## Comments
+
+Implemented the Organization-scoped Vendor directory vertical slice. The Items tab is present as destination chrome with a placeholder only; Vendor Item catalogue remains Ticket 03.

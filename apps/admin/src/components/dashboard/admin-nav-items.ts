@@ -9,6 +9,7 @@ import {
     Ruler,
     Settings2,
     Store,
+    Truck,
     Users,
 } from "lucide-react";
 
@@ -60,6 +61,14 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         requiresOrganization: true,
         getPath: (organizationId) => `/organizations/${organizationId}/products`,
         isActive: (pathname) => /\/organizations\/[^/]+\/products(\/|$)/.test(pathname),
+    },
+    {
+        id: "vendors",
+        label: "Vendors",
+        icon: Truck,
+        requiresOrganization: true,
+        getPath: (organizationId) => `/organizations/${organizationId}/vendors`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/vendors(\/|$)/.test(pathname),
     },
     {
         id: "units",

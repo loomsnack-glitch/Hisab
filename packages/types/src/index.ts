@@ -19,6 +19,7 @@ export * from "./modules/invoice-appearance";
 export * from "./modules/platform";
 export * from "./modules/user";
 export * from "./modules/units";
+export * from "./modules/vendors";
 export * from "./services/whatsapp.type";
 export * from "./services/whatsapp.schema";
 export * from "./services/whatsapp-content";

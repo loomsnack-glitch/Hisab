@@ -24,6 +24,16 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/units`, withOrg)).toBe(true);
     });
 
+    test("includes Vendors as an Organization-scoped workspace destination", () => {
+        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
+        const vendors = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "vendors");
+
+        expect(workspaceIds).toContain("vendors");
+        expect(vendors?.path).toBe(`/organizations/${organizationId}/vendors`);
+        expect(vendors?.isActive(`/organizations/${organizationId}/vendors`)).toBe(true);
+        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/vendors`, withOrg)).toBe(true);
+    });
+
     test("pins Stores, Product, and Billing as the primary tabs when an organization is selected", () => {
         const primaryIds = getVisibleAdminPrimaryMobileDestinations(withOrg).map((destination) => destination.id);
 
