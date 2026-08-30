@@ -7,7 +7,6 @@ import {
     Package2,
     ReceiptText,
     Settings2,
-    ShoppingBag,
     Store,
     Users,
 } from "lucide-react";
@@ -108,14 +107,6 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         requiresOrganization: true,
         getPath: (organizationId) => `/organizations/${organizationId}/tables`,
         isActive: (pathname) => /\/organizations\/[^/]+\/tables/.test(pathname),
-    },
-    {
-        id: "purchases",
-        label: "Purchases",
-        icon: ShoppingBag,
-        requiresOrganization: true,
-        getPath: (organizationId) => `/organizations/${organizationId}/purchases`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/purchases/.test(pathname),
     },
     {
         id: "appearance",

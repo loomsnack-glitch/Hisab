@@ -51,11 +51,5 @@ export {
   sendPosWhatsAppConversationText,
   attachPosWhatsAppConversationCustomer,
   getPosWhatsAppAttachment,
-  createPosPurchase,
-  getPosPurchase,
-  getPosPurchases,
-  getPosPurchaseSummary,
-  updatePosPurchase,
-  voidPosPurchase,
 } from "./modules/pos/pos.service";
 export * from "./modules/tenant";

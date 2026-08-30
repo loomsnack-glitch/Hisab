@@ -103,16 +103,6 @@ CREATE TYPE public.product_type_enum AS ENUM (
 
 
 --
--- Name: purchase_status_enum; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.purchase_status_enum AS ENUM (
-    'recorded',
-    'voided'
-);
-
-
---
 -- Name: sale_number_reset_period_enum; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -518,53 +508,6 @@ CREATE TABLE public.products (
     CONSTRAINT products_discount_check CHECK ((discount >= (0)::numeric)),
     CONSTRAINT products_image_path_no_icons CHECK (((image_path IS NULL) OR ((image_path)::text !~~ 'icon:%'::text))),
     CONSTRAINT products_price_check CHECK ((price >= (0)::numeric))
-);
-
-
---
--- Name: purchase_items; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.purchase_items (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    purchase_id uuid NOT NULL,
-    item_name character varying(255) NOT NULL,
-    description text,
-    quantity numeric(14,3) NOT NULL,
-    rate numeric(12,2) NOT NULL,
-    line_total numeric(12,2) NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT purchase_items_line_total_check CHECK ((line_total >= (0)::numeric)),
-    CONSTRAINT purchase_items_quantity_check CHECK ((quantity > (0)::numeric)),
-    CONSTRAINT purchase_items_rate_check CHECK ((rate >= (0)::numeric))
-);
-
-
---
--- Name: purchases; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.purchases (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    organization_id uuid NOT NULL,
-    store_id uuid NOT NULL,
-    purchase_date date NOT NULL,
-    supplier_name character varying(255) NOT NULL,
-    invoice_number character varying(255),
-    notes text,
-    total_amount numeric(12,2) DEFAULT 0 NOT NULL,
-    status public.purchase_status_enum DEFAULT 'recorded'::public.purchase_status_enum NOT NULL,
-    created_by_user_id uuid,
-    created_by_device_id uuid,
-    updated_by_user_id uuid,
-    updated_by_device_id uuid,
-    voided_at timestamp with time zone,
-    void_reason text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT purchases_total_amount_check CHECK ((total_amount >= (0)::numeric)),
-    CONSTRAINT purchases_void_metadata_check CHECK ((((status = 'recorded'::public.purchase_status_enum) AND (voided_at IS NULL) AND (void_reason IS NULL)) OR ((status = 'voided'::public.purchase_status_enum) AND (voided_at IS NOT NULL) AND (void_reason IS NOT NULL))))
 );
 
 
@@ -1097,22 +1040,6 @@ ALTER TABLE ONLY public.products
 
 
 --
--- Name: purchase_items purchase_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchase_items
-    ADD CONSTRAINT purchase_items_pkey PRIMARY KEY (id);
-
-
---
--- Name: purchases purchases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchases
-    ADD CONSTRAINT purchases_pkey PRIMARY KEY (id);
-
-
---
 -- Name: sale_item_add_ons sale_item_add_ons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1560,34 +1487,6 @@ CREATE INDEX idx_products_organization_status ON public.products USING btree (or
 --
 
 CREATE INDEX idx_products_organization_category_sort_order ON public.products USING btree (organization_id, category_id, sort_order, id);
-
-
---
--- Name: idx_purchase_items_purchase_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_purchase_items_purchase_id ON public.purchase_items USING btree (purchase_id);
-
-
---
--- Name: idx_purchases_store_purchase_date; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_purchases_store_purchase_date ON public.purchases USING btree (store_id, purchase_date DESC);
-
-
---
--- Name: idx_purchases_store_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_purchases_store_status ON public.purchases USING btree (store_id, status);
-
-
---
--- Name: idx_purchases_supplier_name; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_purchases_supplier_name ON public.purchases USING btree (organization_id, supplier_name);
 
 
 --
@@ -2160,62 +2059,6 @@ ALTER TABLE ONLY public.products
 
 ALTER TABLE ONLY public.products
     ADD CONSTRAINT products_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
-
-
---
--- Name: purchase_items purchase_items_purchase_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchase_items
-    ADD CONSTRAINT purchase_items_purchase_id_fkey FOREIGN KEY (purchase_id) REFERENCES public.purchases(id) ON DELETE CASCADE;
-
-
---
--- Name: purchases purchases_created_by_device_id_organization_id_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchases
-    ADD CONSTRAINT purchases_created_by_device_id_organization_id_store_id_fkey FOREIGN KEY (created_by_device_id, organization_id, store_id) REFERENCES public.store_devices(id, organization_id, store_id) ON DELETE RESTRICT;
-
-
---
--- Name: purchases purchases_created_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchases
-    ADD CONSTRAINT purchases_created_by_user_id_fkey FOREIGN KEY (created_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
-
-
---
--- Name: purchases purchases_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchases
-    ADD CONSTRAINT purchases_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: purchases purchases_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchases
-    ADD CONSTRAINT purchases_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
-
-
---
--- Name: purchases purchases_updated_by_device_id_organization_id_store_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchases
-    ADD CONSTRAINT purchases_updated_by_device_id_organization_id_store_id_fkey FOREIGN KEY (updated_by_device_id, organization_id, store_id) REFERENCES public.store_devices(id, organization_id, store_id) ON DELETE RESTRICT;
-
-
---
--- Name: purchases purchases_updated_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.purchases
-    ADD CONSTRAINT purchases_updated_by_user_id_fkey FOREIGN KEY (updated_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --

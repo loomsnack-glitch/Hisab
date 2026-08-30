@@ -15,8 +15,6 @@ import {
     type PlatformCatalogProductDetailResponse,
     type PlatformCustomerInspectionDetailResponse,
     type PlatformCustomerInspectionListResponse,
-    type PlatformPurchaseInspectionDetailResponse,
-    type PlatformPurchaseInspectionListResponse,
     type PlatformSaleInspectionDetailResponse,
     type PlatformSaleInspectionListResponse,
     type PlatformReportInspectionResponse,
@@ -91,9 +89,6 @@ const missingCustomerId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const tableMixedEngaged = "a1111111-1111-4111-8111-a11111111111";
 const tableMixedFree = "a2222222-2222-4222-8222-a22222222222";
 const missingTableId = "99999999-9999-4999-8999-999999999998";
-const purchaseMixedRecorded = "a3333333-3333-4333-8333-a33333333333";
-const purchaseMixedVoided = "a4444444-4444-4444-8444-a44444444444";
-const missingPurchaseId = "99999999-9999-4999-8999-999999999997";
 const whatsappAccountMixed = "f1111111-1111-4111-8111-f11111111111";
 
 type SaleStatus = "draft" | "completed" | "voided";
@@ -233,37 +228,6 @@ type ReportingTable = {
     updatedAt: Date;
 };
 
-type ReportingPurchaseItem = {
-    id: string;
-    purchaseId: string;
-    itemName: string;
-    description: string | null;
-    quantity: number;
-    rate: number;
-    lineTotal: number;
-    createdAt: Date;
-    updatedAt: Date;
-};
-
-type ReportingPurchase = {
-    id: string;
-    organizationId: string;
-    storeId: string;
-    purchaseDate: string;
-    supplierName: string;
-    invoiceNumber: string | null;
-    notes: string | null;
-    totalAmount: number;
-    status: "recorded" | "voided";
-    itemCount: number;
-    itemsSummary: string | null;
-    voidedAt: Date | null;
-    voidReason: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-    items: ReportingPurchaseItem[];
-};
-
 type ReportingWhatsAppAccount = {
     id: string;
     organizationId: string;
@@ -329,7 +293,6 @@ const createReportingMetrics = (
     ledgerEntries: ReportingLedgerEntry[] = [],
     saleLines: ReportingSaleLine[] = [],
     tables: ReportingTable[] = [],
-    purchases: ReportingPurchase[] = [],
     whatsappAccounts: ReportingWhatsAppAccount[] = [],
     whatsappTemplates: ReportingWhatsAppTemplate[] = [],
     whatsappStoreConfigs: ReportingWhatsAppStoreConfig[] = [],
@@ -1079,69 +1042,6 @@ const createReportingMetrics = (
         };
     };
 
-    const listOrganizationPurchases = async (
-        query: {
-            organizationId: string;
-            storeId?: string;
-            search: string;
-            status: "all" | "recorded" | "voided";
-            startDate: string | null;
-            endDate: string | null;
-            sort: "newest" | "oldest" | "highest" | "lowest";
-            page: number;
-            limit: number;
-        },
-    ) => {
-        const organization = organizations.find((item) => item.id === query.organizationId);
-        if (!organization) return null;
-
-        const search = query.search.trim().toLowerCase();
-        const filtered = purchases
-            .filter((purchase) => purchase.organizationId === organization.id)
-            .filter((purchase) => !query.storeId || purchase.storeId === query.storeId)
-            .filter((purchase) => query.status === "all" || purchase.status === query.status)
-            .filter((purchase) => !query.startDate || purchase.purchaseDate >= query.startDate)
-            .filter((purchase) => !query.endDate || purchase.purchaseDate <= query.endDate)
-            .filter((purchase) => {
-                if (!search) return true;
-                const haystack = [purchase.supplierName, purchase.invoiceNumber ?? "", purchase.itemsSummary ?? ""].join(" ").toLowerCase();
-                return haystack.includes(search);
-            })
-            .sort((left, right) => {
-                if (query.sort === "oldest") {
-                    return left.purchaseDate.localeCompare(right.purchaseDate) || left.id.localeCompare(right.id);
-                }
-                if (query.sort === "highest") {
-                    return right.totalAmount - left.totalAmount || left.purchaseDate.localeCompare(right.purchaseDate);
-                }
-                if (query.sort === "lowest") {
-                    return left.totalAmount - right.totalAmount || left.purchaseDate.localeCompare(right.purchaseDate);
-                }
-                return right.purchaseDate.localeCompare(left.purchaseDate) || right.id.localeCompare(left.id);
-            });
-
-        const start = (query.page - 1) * query.limit;
-        return {
-            stores: stores
-                .filter((store) => store.organizationId === organization.id)
-                .map((store) => ({ id: store.id, name: store.name })),
-            totalCount: filtered.length,
-            purchases: filtered.slice(start, start + query.limit).map((purchase) => ({
-                ...purchase,
-                storeName: stores.find((store) => store.id === purchase.storeId)?.name ?? "",
-            })),
-        };
-    };
-
-    const getOrganizationPurchaseContext = async (organizationId: string, purchaseId: string) => {
-        const purchase = purchases.find((item) => item.organizationId === organizationId && item.id === purchaseId);
-        if (!purchase) return null;
-        return {
-            ...purchase,
-            storeName: stores.find((store) => store.id === purchase.storeId)?.name ?? "",
-        };
-    };
-
     const getOrganizationWhatsAppContext = async (organizationId: string) => {
         const organization = organizations.find((item) => item.id === organizationId);
         if (!organization) return null;
@@ -1209,8 +1109,6 @@ const createReportingMetrics = (
         listOrganizationBillActivity,
         listOrganizationTables,
         getOrganizationTableContext,
-        listOrganizationPurchases,
-        getOrganizationPurchaseContext,
         getOrganizationWhatsAppContext,
     };
 };
@@ -1560,65 +1458,6 @@ const platformFacts = () => {
         },
     ];
 
-    const purchases: ReportingPurchase[] = [
-        {
-            id: purchaseMixedRecorded,
-            organizationId: orgMixed,
-            storeId: storeMixedActive,
-            purchaseDate: "2026-08-18",
-            supplierName: "Fresh Produce Co",
-            invoiceNumber: "INV-100",
-            notes: "Weekly vegetables",
-            totalAmount: 1200,
-            status: "recorded",
-            itemCount: 1,
-            itemsSummary: "Tomatoes",
-            voidedAt: null,
-            voidReason: null,
-            createdAt: new Date("2026-08-18T10:00:00.000Z"),
-            updatedAt: new Date("2026-08-18T10:00:00.000Z"),
-            items: [{
-                id: "11111111-1111-4111-8111-111111111111",
-                purchaseId: purchaseMixedRecorded,
-                itemName: "Tomatoes",
-                description: null,
-                quantity: 10,
-                rate: 120,
-                lineTotal: 1200,
-                createdAt: new Date("2026-08-18T10:00:00.000Z"),
-                updatedAt: new Date("2026-08-18T10:00:00.000Z"),
-            }],
-        },
-        {
-            id: purchaseMixedVoided,
-            organizationId: orgMixed,
-            storeId: storeMixedQuiet,
-            purchaseDate: "2026-08-10",
-            supplierName: "Paper Supplies",
-            invoiceNumber: null,
-            notes: null,
-            totalAmount: 500,
-            status: "voided",
-            itemCount: 1,
-            itemsSummary: "Napkins",
-            voidedAt: new Date("2026-08-11T10:00:00.000Z"),
-            voidReason: "Duplicate entry",
-            createdAt: new Date("2026-08-10T10:00:00.000Z"),
-            updatedAt: new Date("2026-08-11T10:00:00.000Z"),
-            items: [{
-                id: "22222222-2222-4222-8222-222222222222",
-                purchaseId: purchaseMixedVoided,
-                itemName: "Napkins",
-                description: null,
-                quantity: 5,
-                rate: 100,
-                lineTotal: 500,
-                createdAt: new Date("2026-08-10T10:00:00.000Z"),
-                updatedAt: new Date("2026-08-10T10:00:00.000Z"),
-            }],
-        },
-    ];
-
     const whatsappAccounts: ReportingWhatsAppAccount[] = [{
         id: whatsappAccountMixed,
         organizationId: orgMixed,
@@ -1680,7 +1519,6 @@ const platformFacts = () => {
         ledgerEntries,
         saleLines,
         tables,
-        purchases,
         whatsappAccounts,
         whatsappTemplates,
         whatsappStoreConfigs,
@@ -1730,7 +1568,6 @@ const createHarness = async () => {
             facts.ledgerEntries,
             facts.saleLines,
             facts.tables,
-            facts.purchases,
             facts.whatsappAccounts,
             facts.whatsappTemplates,
             facts.whatsappStoreConfigs,
@@ -1919,12 +1756,6 @@ const organizationTables = (app: Hono, cookie: string, organizationId: string, q
 
 const organizationTableDetail = (app: Hono, cookie: string, organizationId: string, tableId: string) =>
     app.request(`/platform/organizations/${organizationId}/tables/${tableId}`, { headers: { cookie } });
-
-const organizationPurchases = (app: Hono, cookie: string, organizationId: string, query = "") =>
-    app.request(`/platform/organizations/${organizationId}/purchases${query}`, { headers: { cookie } });
-
-const organizationPurchaseDetail = (app: Hono, cookie: string, organizationId: string, purchaseId: string) =>
-    app.request(`/platform/organizations/${organizationId}/purchases/${purchaseId}`, { headers: { cookie } });
 
 const organizationWhatsApp = (app: Hono, cookie: string, organizationId: string) =>
     app.request(`/platform/organizations/${organizationId}/whatsapp`, { headers: { cookie } });
@@ -2999,84 +2830,6 @@ describe("Platform Table inspection API", () => {
         expect(missingTableBody.message).toBe("Table not found");
         expect(otherOrgStore.status).toBe(404);
         expect(JSON.stringify(missingTableBody)).not.toContain("T1");
-    });
-});
-
-describe("Platform Purchase inspection API", () => {
-    beforeEach(() => {
-        process.env.NODE_ENV = "test";
-    });
-
-    test("returns Organization Purchases only to an active Owner User", async () => {
-        const { app, setOwnerActive } = await createHarness();
-        const customerToken = await sign(
-            { id: ownerId, exp: Math.floor(Date.now() / 1000) + 3600 },
-            "customer-and-device-secret",
-        );
-        const ownerCookie = cookieFrom(await passwordLogin(app));
-
-        expect((await app.request(`/platform/organizations/${orgMixed}/purchases`)).status).toBe(401);
-        expect((await app.request(`/platform/organizations/${orgMixed}/purchases`, { headers: { authorization: `Bearer ${customerToken}` } })).status).toBe(401);
-
-        setOwnerActive(false);
-        expect((await organizationPurchases(app, ownerCookie, orgMixed)).status).toBe(401);
-    });
-
-    test("lists Purchases with store, status, search filters, and pagination", async () => {
-        const { app } = await createHarness();
-        const cookie = cookieFrom(await passwordLogin(app));
-        const allPurchases = await organizationPurchases(app, cookie, orgMixed);
-        const recordedPurchases = await organizationPurchases(app, cookie, orgMixed, "?status=recorded");
-        const searchedPurchases = await organizationPurchases(app, cookie, orgMixed, "?search=Paper");
-        const allBody = await allPurchases.json() as ServiceResponse<PlatformPurchaseInspectionListResponse>;
-        const recordedBody = await recordedPurchases.json() as ServiceResponse<PlatformPurchaseInspectionListResponse>;
-        const searchedBody = await searchedPurchases.json() as ServiceResponse<PlatformPurchaseInspectionListResponse>;
-
-        expect(allPurchases.status).toBe(200);
-        expect(allBody.data?.purchases.map((purchase) => purchase.supplierName)).toEqual(["Fresh Produce Co", "Paper Supplies"]);
-        expect(recordedBody.data?.purchases.map((purchase) => purchase.supplierName)).toEqual(["Fresh Produce Co"]);
-        expect(searchedBody.data?.purchases.map((purchase) => purchase.supplierName)).toEqual(["Paper Supplies"]);
-        expect(JSON.stringify(allBody.data)).not.toContain("password");
-        expect(JSON.stringify(allBody.data)).not.toContain("token");
-        expect(JSON.stringify(allBody.data)).not.toContain("deviceSecret");
-    });
-
-    test("returns Purchase detail with line items", async () => {
-        const { app } = await createHarness();
-        const cookie = cookieFrom(await passwordLogin(app));
-        const response = await organizationPurchaseDetail(app, cookie, orgMixed, purchaseMixedRecorded);
-        const body = await response.json() as ServiceResponse<PlatformPurchaseInspectionDetailResponse>;
-
-        expect(response.status).toBe(200);
-        expect(body.data?.purchase.supplierName).toBe("Fresh Produce Co");
-        expect(body.data?.purchase.store).toEqual({ id: storeMixedActive, name: "Front Hall" });
-        expect(body.data?.purchase.items).toEqual([
-            expect.objectContaining({
-                itemName: "Tomatoes",
-                lineTotal: 1200,
-            }),
-        ]);
-    });
-
-    test("returns 404 for missing Organization, Purchases, invalid store scope, and future dates", async () => {
-        const { app } = await createHarness();
-        const cookie = cookieFrom(await passwordLogin(app));
-        const missingOrg = await organizationPurchases(app, cookie, missingOrganizationId);
-        const missingPurchase = await organizationPurchaseDetail(app, cookie, orgMixed, missingPurchaseId);
-        const otherOrgStore = await organizationPurchases(app, cookie, orgActive, `?storeId=${storeMixedActive}`);
-        const future = await organizationPurchases(app, cookie, orgMixed, "?startDate=2026-08-21&endDate=2026-08-22");
-        const missingOrgBody = await missingOrg.json() as ServiceResponse<null>;
-        const missingPurchaseBody = await missingPurchase.json() as ServiceResponse<null>;
-        const futureBody = await future.json() as { message: string };
-
-        expect(missingOrg.status).toBe(404);
-        expect(missingOrgBody.message).toBe("Organization not found");
-        expect(missingPurchase.status).toBe(404);
-        expect(missingPurchaseBody.message).toBe("Purchase not found");
-        expect(otherOrgStore.status).toBe(404);
-        expect(future.status).toBe(400);
-        expect(futureBody.message).toBe(FUTURE_BILLING_INSPECTION_DATE_MESSAGE);
-        expect(JSON.stringify(missingPurchaseBody)).not.toContain("Fresh Produce Co");
     });
 });
 

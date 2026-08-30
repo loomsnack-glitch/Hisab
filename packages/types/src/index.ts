@@ -10,7 +10,6 @@ export {
   normalizeProductCodeInput,
 } from "./modules/catalog/catalog.schema";
 export * from "./modules/billing";
-export * from "./modules/purchase";
 export * from "./modules/table-service";
 export * from "./modules/kot";
 export * from "./modules/auth";

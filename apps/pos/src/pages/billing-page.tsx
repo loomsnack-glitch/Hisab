@@ -159,7 +159,6 @@ import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
-import PosPurchasesPanel from "@/components/purchases/pos-purchases-panel";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import type {
@@ -337,7 +336,7 @@ type SalesDateMode = "date" | "range";
 type SalesDatePreset =
   "today" | "yesterday" | "this-week" | "this-month" | "custom" | "all";
 type BillingPanelTab =
-  "products" | "bills" | "reports" | "purchases" | "customers";
+  "products" | "bills" | "reports" | "customers";
 type InvoiceAction = "print" | "whatsapp";
 
 const SERVICE_MODE_OPTIONS: Array<{
@@ -563,10 +562,9 @@ type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
   initialPanelTab?:
-    "products" | "bills" | "reports" | "customers" | "purchases";
+    "products" | "bills" | "reports" | "customers";
     productSearch?: string;
     salesSearch?: string;
-    purchaseSearch?: string;
     customerSearch?: string;
     onPanelTabChange?: (
         tab: PosPanelTab,
@@ -584,7 +582,6 @@ const BillingPage = ({
     initialPanelTab = "products",
     productSearch: productSearchProp,
     salesSearch: salesSearchProp,
-    purchaseSearch: purchaseSearchProp,
     customerSearch: customerSearchProp,
     onPanelTabChange,
     onProductSearchChange,
@@ -722,7 +719,6 @@ const BillingPage = ({
 
     const productSearch = productSearchProp ?? "";
     const salesSearch = salesSearchProp ?? "";
-    const purchaseSearch = purchaseSearchProp ?? "";
   const deferredProductSearch = useDeferredValue(
     productSearch.trim().toLowerCase(),
   );
@@ -1291,8 +1287,7 @@ const BillingPage = ({
             leftPanelTab === "products" ||
             leftPanelTab === "bills" ||
             leftPanelTab === "reports" ||
-            leftPanelTab === "customers" ||
-            leftPanelTab === "purchases"
+            leftPanelTab === "customers"
         ) {
             onPanelTabChange(leftPanelTab);
         }
@@ -3159,10 +3154,6 @@ const BillingPage = ({
                 />
               ) : null}
                         </div>
-                    ) : canMutate && leftPanelTab === "purchases" ? (
-                        session ? (
-                            <PosPurchasesPanel session={session} search={purchaseSearch} />
-                        ) : null
                     ) : canMutate && leftPanelTab === "products" ? (
                         <>
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col">

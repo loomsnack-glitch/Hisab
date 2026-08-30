@@ -27,9 +27,6 @@ import {
     type PlatformTableInspectionDetailResponse,
     type PlatformTableInspectionListResponse,
     type PlatformTableInspectionQueryJSON,
-    type PlatformPurchaseInspectionDetailResponse,
-    type PlatformPurchaseInspectionListResponse,
-    type PlatformPurchaseInspectionQueryJSON,
     type PlatformWhatsAppInspectionResponse,
     type PlatformSaleInspectionDetailResponse,
     type PlatformSaleInspectionListResponse,
@@ -164,9 +161,6 @@ const customerMixedDue = "cccccccc-2222-4222-8222-ccccccccccc2";
 const tableMixedEngaged = "a1111111-1111-4111-8111-a11111111111";
 const tableMixedFree = "a2222222-2222-4222-8222-a22222222222";
 const saleMixedReceivable = "b6666666-6666-4666-8666-b66666666666";
-const purchaseMixedRecorded = "a3333333-3333-4333-8333-a33333333333";
-const purchaseMixedVoided = "a4444444-4444-4444-8444-a44444444444";
-
 const successCatalog = (
     overrides: Partial<PlatformCatalogListResponse> = {},
 ): ServiceResponse<PlatformCatalogListResponse> => ({
@@ -386,88 +380,6 @@ const successTableDetail = (): ServiceResponse<PlatformTableInspectionDetailResp
         },
     },
     message: "Platform Organization Table retrieved successfully",
-    code: 200,
-});
-
-const successPurchases = (
-    overrides: Partial<PlatformPurchaseInspectionListResponse> = {},
-): ServiceResponse<PlatformPurchaseInspectionListResponse> => ({
-    status: "success",
-    data: {
-        stores: mixedStores.map((store) => ({ id: store.id, name: store.name })),
-        purchases: [
-            {
-                id: purchaseMixedRecorded,
-                purchaseDate: "2026-08-18",
-                supplierName: "Fresh Produce Co",
-                invoiceNumber: "INV-100",
-                notes: "Weekly vegetables",
-                totalAmount: 1200,
-                status: "recorded",
-                itemCount: 1,
-                itemsSummary: "Tomatoes",
-                voidedAt: null,
-                voidReason: null,
-                createdAt: "2026-08-18T10:00:00.000Z",
-                updatedAt: "2026-08-18T10:00:00.000Z",
-                store: { id: mixedStores[0]!.id, name: "Front Hall" },
-            },
-            {
-                id: purchaseMixedVoided,
-                purchaseDate: "2026-08-10",
-                supplierName: "Paper Supplies",
-                invoiceNumber: null,
-                notes: null,
-                totalAmount: 500,
-                status: "voided",
-                itemCount: 1,
-                itemsSummary: "Napkins",
-                voidedAt: "2026-08-11T10:00:00.000Z",
-                voidReason: "Duplicate entry",
-                createdAt: "2026-08-10T10:00:00.000Z",
-                updatedAt: "2026-08-11T10:00:00.000Z",
-                store: { id: mixedStores[1]!.id, name: "Garden Patio" },
-            },
-        ],
-        pagination: { page: 1, limit: 20, totalCount: 2 },
-        ...overrides,
-    },
-    message: "Platform Organization Purchases retrieved successfully",
-    code: 200,
-});
-
-const successPurchaseDetail = (): ServiceResponse<PlatformPurchaseInspectionDetailResponse> => ({
-    status: "success",
-    data: {
-        purchase: {
-            id: purchaseMixedRecorded,
-            purchaseDate: "2026-08-18",
-            supplierName: "Fresh Produce Co",
-            invoiceNumber: "INV-100",
-            notes: "Weekly vegetables",
-            totalAmount: 1200,
-            status: "recorded",
-            itemCount: 1,
-            itemsSummary: "Tomatoes",
-            voidedAt: null,
-            voidReason: null,
-            createdAt: "2026-08-18T10:00:00.000Z",
-            updatedAt: "2026-08-18T10:00:00.000Z",
-            store: { id: mixedStores[0]!.id, name: "Front Hall" },
-            items: [{
-                id: "pi111111-1111-4111-8111-111111111111",
-                purchaseId: purchaseMixedRecorded,
-                itemName: "Tomatoes",
-                description: null,
-                quantity: 10,
-                rate: 120,
-                lineTotal: 1200,
-                createdAt: "2026-08-18T10:00:00.000Z",
-                updatedAt: "2026-08-18T10:00:00.000Z",
-            }],
-        },
-    },
-    message: "Platform Organization Purchase retrieved successfully",
     code: 200,
 });
 
@@ -1668,98 +1580,6 @@ describe("Organization Table inspection", () => {
         );
         expect(await missingView.findByText("Table was not found")).toBeTruthy();
         expect(missingView.queryByText("Table T1")).toBeNull();
-    });
-});
-
-describe("Organization Purchase inspection", () => {
-    const renderPurchaseSection = (
-        path: string,
-        options: {
-            getPlatformOrganization?: LoadOrganization;
-            getPlatformOrganizationPurchases?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationPurchases"]>;
-            getPlatformOrganizationPurchase?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationPurchase"]>;
-        } = {},
-    ) => {
-        window.history.replaceState(null, "", path);
-        const inspection = parseOrganizationInspectionPath(path);
-        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        return render(
-            <QueryClientProvider client={client}>
-                <PlatformOrganizationDetailPage
-                    organizationId={mixedBistro.id}
-                    section="purchases"
-                    resourceId={inspection?.kind === "workspace" ? inspection.resourceId : undefined}
-                    onNavigate={(nextPath) => {
-                        window.history.pushState(null, "", nextPath);
-                    }}
-                    onBack={() => {}}
-                    getPlatformOrganization={options.getPlatformOrganization ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales))}
-                    getPlatformOrganizationPurchases={options.getPlatformOrganizationPurchases ?? (async () => successPurchases())}
-                    getPlatformOrganizationPurchase={options.getPlatformOrganizationPurchase ?? (async () => successPurchaseDetail())}
-                />
-            </QueryClientProvider>,
-        );
-    };
-
-    test("shows a read-only purchase list with filters and no mutation controls", async () => {
-        const requested: PlatformPurchaseInspectionQueryJSON[] = [];
-        const view = renderPurchaseSection(
-            organizationInspectionPath(mixedBistro.id, "purchases", undefined, { status: "recorded", search: "Fresh" }),
-            {
-                getPlatformOrganizationPurchases: async (_organizationId, query = {}) => {
-                    requested.push(query);
-                    return successPurchases();
-                },
-            },
-        );
-
-        expect(await view.findByRole("heading", { name: "Purchases" })).toBeTruthy();
-        expect(view.getByText("Fresh Produce Co")).toBeTruthy();
-        expect(view.getByText("Paper Supplies")).toBeTruthy();
-        expect(view.getByText(/independent of the Dashboard reporting period/)).toBeTruthy();
-        expect(view.queryByText("Add purchase")).toBeNull();
-        expect(view.queryByText("Void purchase")).toBeNull();
-        expect(view.queryByText("Edit")).toBeNull();
-        await waitFor(() => {
-            expect(requested.some((query) => query.status === "recorded" && query.search === "Fresh")).toBe(true);
-        });
-    });
-
-    test("opens purchase detail with line items from an Inspection URL", async () => {
-        const view = renderPurchaseSection(
-            organizationInspectionPath(mixedBistro.id, "purchases", purchaseMixedRecorded),
-        );
-
-        expect(await view.findByRole("heading", { name: "Fresh Produce Co" })).toBeTruthy();
-        expect(view.getByText("Tomatoes")).toBeTruthy();
-        expect(view.getByRole("button", { name: "Back to purchases" })).toBeTruthy();
-        expect(view.queryByText("Save purchase")).toBeNull();
-    });
-
-    test("shows empty, loading, and not-found purchase states without exposing other Organizations", async () => {
-        const emptyView = renderPurchaseSection(organizationInspectionPath(mixedBistro.id, "purchases"), {
-            getPlatformOrganizationPurchases: async () => successPurchases({
-                purchases: [],
-                pagination: { page: 1, limit: 20, totalCount: 0 },
-            }),
-        });
-        expect(await emptyView.findByText("No purchases match these filters")).toBeTruthy();
-
-        const loadingView = renderPurchaseSection(organizationInspectionPath(mixedBistro.id, "purchases"), {
-            getPlatformOrganizationPurchases: () => new Promise(() => {}),
-        });
-        expect(await loadingView.findByLabelText("Loading purchases")).toBeTruthy();
-
-        const missingView = renderPurchaseSection(
-            organizationInspectionPath(mixedBistro.id, "purchases", purchaseMixedRecorded),
-            {
-                getPlatformOrganizationPurchase: async () => {
-                    throw { code: 404, message: "Purchase not found", data: null, status: "error" };
-                },
-            },
-        );
-        expect(await missingView.findByText("Purchase was not found")).toBeTruthy();
-        expect(missingView.queryByText("Fresh Produce Co")).toBeNull();
     });
 });
 

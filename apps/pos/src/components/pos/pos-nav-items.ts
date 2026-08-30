@@ -4,7 +4,6 @@ import {
     ChefHat,
     ReceiptText,
     Settings2,
-    ShoppingBag,
     Store,
     Users,
     type LucideIcon,
@@ -28,7 +27,6 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "kots", label: "KOT", icon: ChefHat, path: getPosPanelPath("kots"), tab: "kots" },
     { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
     { id: "reports", label: "Reports", icon: BarChart3, path: getPosPanelPath("reports"), tab: "reports" },
-    { id: "purchases", label: "Purchases", icon: ShoppingBag, path: getPosPanelPath("purchases"), tab: "purchases" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
 ];
 
@@ -68,5 +66,5 @@ export const isPosMoreDestinationActive = (pathname: string) => {
     }
 
     const tab = posWorkspaceDestinations.find((destination) => destination.path === pathname)?.tab;
-    return tab === "reports" || tab === "customers" || tab === "purchases" || tab === "kots";
+    return tab === "reports" || tab === "customers" || tab === "kots";
 };

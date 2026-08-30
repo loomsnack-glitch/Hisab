@@ -247,7 +247,7 @@ type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
 type BillPaymentMethod = Exclude<SalesPaymentMethodFilter, "all">;
 type SalesDateMode = "date" | "range";
 type SalesDatePreset = "today" | "yesterday" | "this-week" | "this-month" | "custom" | "all";
-type BillingPanelTab = "products" | "bills" | "reports" | "purchases" | "customers";
+type BillingPanelTab = "products" | "bills" | "reports" | "customers";
 type InvoiceAction = "print" | "whatsapp";
 
 const SERVICE_MODE_OPTIONS: Array<{
@@ -449,7 +449,7 @@ const discountPresetPercentages = [5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 75, 10
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
-    initialPanelTab?: "products" | "bills" | "reports" | "customers" | "purchases";
+    initialPanelTab?: "products" | "bills" | "reports" | "customers";
     productSearch?: string;
     salesSearch?: string;
     customerSearch?: string;
@@ -1014,8 +1014,7 @@ const BillingPage = ({
             leftPanelTab === "products" ||
             leftPanelTab === "bills" ||
             leftPanelTab === "reports" ||
-            leftPanelTab === "customers" ||
-            leftPanelTab === "purchases"
+            leftPanelTab === "customers"
         ) {
             onPanelTabChange(leftPanelTab);
         }

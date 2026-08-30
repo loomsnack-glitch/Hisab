@@ -30,9 +30,6 @@ import type {
     PlatformTableInspectionDetailResponse,
     PlatformTableInspectionListResponse,
     PlatformTableInspectionQueryJSON,
-    PlatformPurchaseInspectionDetailResponse,
-    PlatformPurchaseInspectionListResponse,
-    PlatformPurchaseInspectionQueryJSON,
     PlatformWhatsAppInspectionResponse,
     PlatformSaleInspectionDetailResponse,
     PlatformSaleInspectionListResponse,
@@ -305,30 +302,6 @@ export const getPlatformOrganizationTable = async (
 ): Promise<ServiceResponse<PlatformTableInspectionDetailResponse | null>> => {
     try {
         const response = await api.get(`/platform/organizations/${organizationId}/tables/${tableId}`);
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
-export const getPlatformOrganizationPurchases = async (
-    organizationId: string,
-    query: PlatformPurchaseInspectionQueryJSON = {},
-): Promise<ServiceResponse<PlatformPurchaseInspectionListResponse | null>> => {
-    try {
-        const response = await api.get(`/platform/organizations/${organizationId}/purchases`, { params: query });
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
-export const getPlatformOrganizationPurchase = async (
-    organizationId: string,
-    purchaseId: string,
-): Promise<ServiceResponse<PlatformPurchaseInspectionDetailResponse | null>> => {
-    try {
-        const response = await api.get(`/platform/organizations/${organizationId}/purchases/${purchaseId}`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

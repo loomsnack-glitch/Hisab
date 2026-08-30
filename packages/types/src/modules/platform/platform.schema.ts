@@ -25,7 +25,6 @@ import {
     ProductTypeSchema,
 } from "../catalog/catalog.schema";
 import { StoreDeviceStatusSchema, StoreMessageLinkTypeSchema } from "../organization/organization.schema";
-import { PurchaseItemDTOSchema, PurchaseStatusSchema } from "../purchase/purchase.schema";
 import {
     WhatsAppAccountStatusSchema,
     WhatsAppMessageTemplateKindSchema,
@@ -669,66 +668,6 @@ export const PlatformTableInspectionDetailDTOSchema = PlatformTableInspectionSum
 
 export const PlatformTableInspectionDetailResponseSchema = z.object({
     table: PlatformTableInspectionDetailDTOSchema,
-});
-
-export const PlatformPurchaseStatusFilterSchema = z.enum(["all", ...PurchaseStatusSchema.options]);
-
-export const PlatformPurchaseInspectionSortSchema = z.enum(["newest", "oldest", "highest", "lowest"]);
-
-export const PlatformPurchaseInspectionQuerySchema = z
-    .object({
-        storeId: z.uuid("Invalid store id").optional(),
-        search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
-        status: PlatformPurchaseStatusFilterSchema.default("all"),
-        startDate: calendarDateSchema.optional(),
-        endDate: calendarDateSchema.optional(),
-        page: positivePageSchema.default(1),
-        limit: organizationListLimitSchema.default(20),
-        sort: PlatformPurchaseInspectionSortSchema.default("newest"),
-    })
-    .superRefine((value, ctx) => {
-        if (value.startDate && value.endDate && value.startDate > value.endDate) {
-            ctx.addIssue({
-                code: "custom",
-                path: ["startDate"],
-                message: "Start date must be before or equal to end date",
-            });
-        }
-    });
-
-export const PlatformPurchaseInspectionSummaryDTOSchema = z.object({
-    id: z.uuid("Invalid purchase id"),
-    purchaseDate: z.string(),
-    supplierName: z.string().trim().min(1),
-    invoiceNumber: z.string().nullable().optional(),
-    notes: z.string().nullable().optional(),
-    totalAmount: nonNegativeMoneySchema,
-    status: PurchaseStatusSchema,
-    itemCount: nonNegativeIntSchema,
-    itemsSummary: z.string().nullable().optional(),
-    voidedAt: dtoDateSchema.nullable().optional(),
-    voidReason: z.string().nullable().optional(),
-    createdAt: dtoDateSchema,
-    updatedAt: dtoDateSchema,
-    store: PlatformSaleInspectionStoreDTOSchema,
-});
-
-export const PlatformPurchaseInspectionListDTOSchema = z.object({
-    stores: z.array(PlatformSaleInspectionStoreDTOSchema),
-    purchases: z.array(PlatformPurchaseInspectionSummaryDTOSchema),
-    pagination: z.object({
-        page: z.number().int().min(1),
-        limit: z.number().int().min(1).max(100),
-        totalCount: nonNegativeIntSchema,
-    }),
-});
-
-export const PlatformPurchaseInspectionDetailDTOSchema = PlatformPurchaseInspectionSummaryDTOSchema.extend({
-    items: z.array(PurchaseItemDTOSchema),
-});
-
-export const PlatformPurchaseInspectionDetailResponseSchema = z.object({
-    purchase: PlatformPurchaseInspectionDetailDTOSchema,
 });
 
 export const PlatformWhatsAppInspectionStoreDTOSchema = z.object({

@@ -6,7 +6,6 @@ import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import BillingPage from "@/pages/billing-page";
-import PurchasesPage from "@/pages/purchases-page";
 import LoginPage from "@/pages/login-page";
 import OrganizationsPage from "@/pages/organizations-page";
 import RegisterPage from "@/pages/register-page";
@@ -140,7 +139,6 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                                 <Route path="/organizations/:organizationId/settings" element={<OrganizationSettingsPage />} />
                                 <Route path="/google-contacts/oauth/callback" element={<GoogleContactsOAuthCallbackPage />} />
-                                <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                                 <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
                                 <Route path="/organizations/:organizationId/whatsapp" element={<Navigate to="accounts" replace />} />
                                 <Route path="/organizations/:organizationId/whatsapp/accounts" element={<WhatsAppOrganizationPage />} />

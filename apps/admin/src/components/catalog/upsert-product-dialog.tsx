@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
@@ -49,7 +49,11 @@ import {
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
-import { Plus, UploadCloud, Pencil, ImageOff, Package2 } from "lucide-react";
+import {
+  compressCatalogImage,
+  formatCatalogImageSize,
+} from "@repo/ui/lib/compress-catalog-image";
+import { Plus, UploadCloud, Pencil, ImageOff, Package2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
@@ -179,6 +183,8 @@ const UpsertProductDialog = ({
 }: UpsertProductDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const imageCompressionRequestRef = useRef(0);
   const [removeCurrentImage, setRemoveCurrentImage] = useState(false);
   const [codeChangeConfirmationOpen, setCodeChangeConfirmationOpen] =
     useState(false);
@@ -271,6 +277,8 @@ const UpsertProductDialog = ({
             },
       );
       setSelectedFile(null);
+      setIsCompressingImage(false);
+      imageCompressionRequestRef.current += 1;
       setRemoveCurrentImage(false);
       setPendingPayload(null);
       setCodeChangeConfirmationOpen(false);
@@ -571,16 +579,18 @@ const UpsertProductDialog = ({
             )
           }
         />
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:max-w-lg">
           <DialogHeader
+            className="shrink-0 px-4 pt-4"
             icon={<Package2 className="size-5" />}
             title={isEditMode ? "Edit product" : "Create product"}
           />
 
           <form
-            className="space-y-5 pt-2"
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={form.handleSubmit(onSubmit)}
           >
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 pt-2">
             <Controller
               control={form.control}
               name="categoryId"
@@ -936,23 +946,62 @@ const UpsertProductDialog = ({
               <FieldLabel>Product image</FieldLabel>
               <div className="space-y-3">
                 <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/30 p-4 text-center transition-colors hover:border-primary/40 hover:bg-primary/5">
-                  <UploadCloud className="size-5 text-primary" />
+                  {isCompressingImage ? (
+                    <Loader2 className="size-5 animate-spin text-primary" />
+                  ) : (
+                    <UploadCloud className="size-5 text-primary" />
+                  )}
                   <p className="mt-2 text-sm font-medium text-foreground">
-                    {selectedFile ? selectedFile.name : "Click to upload image"}
+                    {isCompressingImage
+                      ? "Optimizing image..."
+                      : selectedFile
+                        ? selectedFile.name
+                        : "Click to upload image"}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    JPG, PNG, or WebP
+                    {selectedFile && !isCompressingImage
+                      ? `Optimized to ${formatCatalogImageSize(selectedFile.size)} for faster loading`
+                      : "JPG, PNG, WebP, or HEIC. We optimize images to 100 KB or less."}
                   </p>
                   <input
                     type="file"
                     accept="image/*"
                     className="sr-only"
+                    disabled={isCompressingImage}
                     onChange={(event) => {
                       const file = event.target.files?.[0] ?? null;
-                      setSelectedFile(file);
-                      if (file) {
-                        setRemoveCurrentImage(false);
+                      event.target.value = "";
+                      if (!file) {
+                        return;
                       }
+
+                      const requestId = imageCompressionRequestRef.current + 1;
+                      imageCompressionRequestRef.current = requestId;
+                      setSelectedFile(null);
+                      setIsCompressingImage(true);
+                      void compressCatalogImage(file)
+                        .then((compressed) => {
+                          if (imageCompressionRequestRef.current !== requestId) {
+                            return;
+                          }
+                          setSelectedFile(compressed);
+                          setRemoveCurrentImage(false);
+                        })
+                        .catch((error: unknown) => {
+                          if (imageCompressionRequestRef.current !== requestId) {
+                            return;
+                          }
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : "Could not optimize that image. Try a JPG, PNG, WebP, or HEIC file.",
+                          );
+                        })
+                        .finally(() => {
+                          if (imageCompressionRequestRef.current === requestId) {
+                            setIsCompressingImage(false);
+                          }
+                        });
                     }}
                   />
                 </label>
@@ -986,8 +1035,9 @@ const UpsertProductDialog = ({
                 )}
               </div>
             </div>
+            </div>
 
-            <DialogFooter>
+            <DialogFooter className="mx-0 mb-0 shrink-0">
               <Button
                 type="button"
                 variant="outline"
@@ -999,7 +1049,9 @@ const UpsertProductDialog = ({
               <Button
                 type="submit"
                 className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
-                disabled={mutation.isPending || !hasCategories}
+                disabled={
+                  mutation.isPending || !hasCategories || isCompressingImage
+                }
               >
                 {mutation.isPending
                   ? isEditMode

@@ -16,7 +16,6 @@ import {
     Receipt,
     RotateCcw,
     Search,
-    ShoppingCart,
     Store,
     Users,
     type LucideIcon,
@@ -36,8 +35,6 @@ import {
     getPlatformOrganizationBillActivity as getPlatformOrganizationBillActivityRequest,
     getPlatformOrganizationTables as getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable as getPlatformOrganizationTableRequest,
-    getPlatformOrganizationPurchases as getPlatformOrganizationPurchasesRequest,
-    getPlatformOrganizationPurchase as getPlatformOrganizationPurchaseRequest,
     getPlatformOrganizationWhatsApp as getPlatformOrganizationWhatsAppRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
@@ -51,7 +48,6 @@ import {
     type PlatformCustomerInspectionQueryJSON,
     type PlatformDashboardQueryJSON,
     type PlatformOrganizationDetailQueryJSON,
-    type PlatformPurchaseInspectionDetailDTO,
     type PlatformRecentSaleDTO,
     type PlatformSaleInspectionSummaryDTO,
     type PlatformStoreActivityDTO,
@@ -85,7 +81,6 @@ import {
     parseCatalogInspectionSearch,
     parseCustomerInspectionSearch,
     parseOverviewBillActivitySearch,
-    parsePurchaseInspectionSearch,
     parseReportInspectionSearch,
     parseTableInspectionSearch,
     resolveBillingInspectionFilters,
@@ -97,7 +92,6 @@ import {
     type CustomerInspectionFilters,
     type OrganizationInspectionSection,
     type OverviewBillActivityFilters,
-    type PurchaseInspectionFilters,
     type ReportInspectionFilters,
     type TableInspectionFilters,
 } from "@/lib/organization-inspection-url";
@@ -117,8 +111,6 @@ const organizationReportsQueryKey = ["platform-owner", "organization-reports"] a
 const organizationBillActivityQueryKey = ["platform-owner", "organization-bill-activity"] as const;
 const organizationTablesQueryKey = ["platform-owner", "organization-tables"] as const;
 const organizationTableQueryKey = ["platform-owner", "organization-table"] as const;
-const organizationPurchasesQueryKey = ["platform-owner", "organization-purchases"] as const;
-const organizationPurchaseQueryKey = ["platform-owner", "organization-purchase"] as const;
 const organizationWhatsAppQueryKey = ["platform-owner", "organization-whatsapp"] as const;
 
 type PlatformOrganizationDetailPageProps = {
@@ -143,8 +135,6 @@ type PlatformOrganizationDetailPageProps = {
     getPlatformOrganizationBillActivity?: typeof getPlatformOrganizationBillActivityRequest;
     getPlatformOrganizationTables?: typeof getPlatformOrganizationTablesRequest;
     getPlatformOrganizationTable?: typeof getPlatformOrganizationTableRequest;
-    getPlatformOrganizationPurchases?: typeof getPlatformOrganizationPurchasesRequest;
-    getPlatformOrganizationPurchase?: typeof getPlatformOrganizationPurchaseRequest;
     getPlatformOrganizationWhatsApp?: typeof getPlatformOrganizationWhatsAppRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
@@ -158,7 +148,6 @@ const sectionConfig: Record<OrganizationInspectionSection, { label: string; icon
     customers: { label: "Customers", icon: Users },
     reports: { label: "Reports", icon: BarChart3 },
     tables: { label: "Tables", icon: LayoutGrid },
-    purchases: { label: "Purchases", icon: ShoppingCart },
     whatsapp: { label: "WhatsApp", icon: MessageCircle },
 };
 
@@ -182,9 +171,6 @@ const serviceTableStateLabel = (state: PlatformTableInspectionDetailDTO["state"]
     if (state === "payment_due") return "Payment due";
     return "Paid";
 };
-
-const purchaseStatusLabel = (status: PlatformPurchaseInspectionDetailDTO["status"]) =>
-    status === "voided" ? "Voided" : "Recorded";
 
 const whatsappAccountStatusLabel = (status: PlatformWhatsAppAccountInspectionDTO["status"]) => {
     if (status === "pending_qr") return "Pending QR";
@@ -453,8 +439,6 @@ const PlatformOrganizationDetailPage = ({
     getPlatformOrganizationBillActivity = getPlatformOrganizationBillActivityRequest,
     getPlatformOrganizationTables = getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable = getPlatformOrganizationTableRequest,
-    getPlatformOrganizationPurchases = getPlatformOrganizationPurchasesRequest,
-    getPlatformOrganizationPurchase = getPlatformOrganizationPurchaseRequest,
     getPlatformOrganizationWhatsApp = getPlatformOrganizationWhatsAppRequest,
     onNavigate,
     onUnauthorized,
@@ -485,10 +469,6 @@ const PlatformOrganizationDetailPage = ({
         parseTableInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
     );
     const [tableSearchInput, setTableSearchInput] = useState(tableFilters.search ?? "");
-    const [purchaseFilters, setPurchaseFilters] = useState<PurchaseInspectionFilters>(() =>
-        parsePurchaseInspectionSearch(typeof window === "undefined" ? "" : window.location.search),
-    );
-    const [purchaseSearchInput, setPurchaseSearchInput] = useState(purchaseFilters.search ?? "");
     const [storeSearchInput, setStoreSearchInput] = useState("");
     const deferredStoreSearch = useDeferredValue(storeSearchInput.trim());
     const [storeStatusSelection, setStoreStatusSelection] = useState<Set<StoreStatusSelection>>(new Set());
@@ -599,20 +579,6 @@ const PlatformOrganizationDetailPage = ({
         placeholderData: keepPreviousData,
         enabled: section === "tables" && Boolean(resourceId),
     });
-    const purchasesQuery = useQuery({
-        queryKey: [...organizationPurchasesQueryKey, organizationId, purchaseFilters],
-        queryFn: () => getPlatformOrganizationPurchases(organizationId, purchaseFilters),
-        retry: false,
-        placeholderData: keepPreviousData,
-        enabled: section === "purchases" && !resourceId,
-    });
-    const purchaseQuery = useQuery({
-        queryKey: [...organizationPurchaseQueryKey, organizationId, resourceId],
-        queryFn: () => getPlatformOrganizationPurchase(organizationId, resourceId!),
-        retry: false,
-        placeholderData: keepPreviousData,
-        enabled: section === "purchases" && Boolean(resourceId),
-    });
     const whatsappQuery = useQuery({
         queryKey: [...organizationWhatsAppQueryKey, organizationId],
         queryFn: () => getPlatformOrganizationWhatsApp(organizationId),
@@ -650,10 +616,6 @@ const PlatformOrganizationDetailPage = ({
     const tablesList = tablesResponse?.status === "success" ? tablesResponse.data : undefined;
     const tableResponse = tableQuery.data;
     const tableDetail = tableResponse?.status === "success" ? tableResponse.data?.table : undefined;
-    const purchasesResponse = purchasesQuery.data;
-    const purchasesList = purchasesResponse?.status === "success" ? purchasesResponse.data : undefined;
-    const purchaseResponse = purchaseQuery.data;
-    const purchaseDetail = purchaseResponse?.status === "success" ? purchaseResponse.data?.purchase : undefined;
     const whatsappResponse = whatsappQuery.data;
     const whatsappData = whatsappResponse?.status === "success" ? whatsappResponse.data : undefined;
     const errorCode = (detailQuery.error as { code?: number } | null)?.code ?? (response?.status === "error" ? response.code : undefined);
@@ -683,10 +645,6 @@ const PlatformOrganizationDetailPage = ({
         ?? (tablesResponse?.status === "error" ? tablesResponse.code : undefined);
     const tableErrorCode = (tableQuery.error as { code?: number } | null)?.code
         ?? (tableResponse?.status === "error" ? tableResponse.code : undefined);
-    const purchasesErrorCode = (purchasesQuery.error as { code?: number } | null)?.code
-        ?? (purchasesResponse?.status === "error" ? purchasesResponse.code : undefined);
-    const purchaseErrorCode = (purchaseQuery.error as { code?: number } | null)?.code
-        ?? (purchaseResponse?.status === "error" ? purchaseResponse.code : undefined);
     const whatsappErrorCode = (whatsappQuery.error as { code?: number } | null)?.code
         ?? (whatsappResponse?.status === "error" ? whatsappResponse.code : undefined);
     const catalogDetailErrorCode = catalogResourceKind === "products"
@@ -718,12 +676,8 @@ const PlatformOrganizationDetailPage = ({
                                             ? tableErrorCode ?? errorCode
                                             : section === "tables"
                                                 ? tablesErrorCode ?? errorCode
-                                                : section === "purchases" && resourceId
-                                                    ? purchaseErrorCode ?? errorCode
-                                                    : section === "purchases"
-                                                        ? purchasesErrorCode ?? errorCode
-                                                        : section === "whatsapp"
-                                                            ? whatsappErrorCode ?? errorCode
+                                                : section === "whatsapp"
+                                                    ? whatsappErrorCode ?? errorCode
                                     : errorCode;
     const errorMessage =
         (detailQuery.error as { message?: string } | null)?.message
@@ -764,12 +718,6 @@ const PlatformOrganizationDetailPage = ({
     const tableErrorMessage =
         (tableQuery.error as { message?: string } | null)?.message
         ?? (tableResponse?.status === "error" ? tableResponse.message : undefined);
-    const purchasesErrorMessage =
-        (purchasesQuery.error as { message?: string } | null)?.message
-        ?? (purchasesResponse?.status === "error" ? purchasesResponse.message : undefined);
-    const purchaseErrorMessage =
-        (purchaseQuery.error as { message?: string } | null)?.message
-        ?? (purchaseResponse?.status === "error" ? purchaseResponse.message : undefined);
     const whatsappErrorMessage =
         (whatsappQuery.error as { message?: string } | null)?.message
         ?? (whatsappResponse?.status === "error" ? whatsappResponse.message : undefined);
@@ -804,12 +752,8 @@ const PlatformOrganizationDetailPage = ({
                                             ? tableErrorMessage ?? errorMessage
                                             : section === "tables"
                                                 ? tablesErrorMessage ?? errorMessage
-                                                : section === "purchases" && resourceId
-                                                    ? purchaseErrorMessage ?? errorMessage
-                                                    : section === "purchases"
-                                                        ? purchasesErrorMessage ?? errorMessage
-                                                        : section === "whatsapp"
-                                                            ? whatsappErrorMessage ?? errorMessage
+                                                : section === "whatsapp"
+                                                    ? whatsappErrorMessage ?? errorMessage
                                     : errorMessage;
 
     useEffect(() => {
@@ -878,18 +822,6 @@ const PlatformOrganizationDetailPage = ({
         syncTableFilters();
         window.addEventListener("popstate", syncTableFilters);
         return () => window.removeEventListener("popstate", syncTableFilters);
-    }, [section, resourceId]);
-
-    useEffect(() => {
-        if (section !== "purchases") return;
-        const syncPurchaseFilters = () => {
-            const nextFilters = parsePurchaseInspectionSearch(window.location.search);
-            setPurchaseFilters(nextFilters);
-            setPurchaseSearchInput(nextFilters.search ?? "");
-        };
-        syncPurchaseFilters();
-        window.addEventListener("popstate", syncPurchaseFilters);
-        return () => window.removeEventListener("popstate", syncPurchaseFilters);
     }, [section, resourceId]);
 
     const navigateBilling = (nextFilters: BillingInspectionFilters, nextResourceId?: string) => {
@@ -963,16 +895,6 @@ const PlatformOrganizationDetailPage = ({
         navigateTables({ ...tableFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
     };
 
-    const navigatePurchases = (nextFilters: PurchaseInspectionFilters, nextResourceId?: string) => {
-        const path = organizationInspectionPath(organizationId, "purchases", nextResourceId, nextFilters);
-        setPurchaseFilters(nextFilters);
-        go(path);
-    };
-
-    const updatePurchaseFilters = (patch: Partial<PurchaseInspectionFilters>, nextResourceId?: string) => {
-        navigatePurchases({ ...purchaseFilters, ...patch, page: patch.page ?? 1 }, nextResourceId);
-    };
-
     useEffect(() => {
         if (activeSectionErrorCode === 401) void onUnauthorized?.();
     }, [activeSectionErrorCode, onUnauthorized]);
@@ -1009,9 +931,7 @@ const PlatformOrganizationDetailPage = ({
                                     ? organizationInspectionPath(organizationId, item, undefined, reportFilters)
                                     : item === "tables"
                                         ? organizationInspectionPath(organizationId, item, undefined, tableFilters)
-                                        : item === "purchases"
-                                            ? organizationInspectionPath(organizationId, item, undefined, purchaseFilters)
-                                : organizationInspectionPath(organizationId, item);
+                                        : organizationInspectionPath(organizationId, item);
                     const active = item === section;
                     const Icon = sectionConfig[item].icon;
                     return (
@@ -2903,303 +2823,6 @@ const PlatformOrganizationDetailPage = ({
         );
     };
 
-    const renderPurchaseInspection = () => {
-        if (resourceId) {
-            if (purchaseQuery.isLoading) {
-                return (
-                    <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading purchase">
-                        <Spinner className="size-6 text-primary" />
-                    </div>
-                );
-            }
-            if (purchaseErrorCode === 404 || purchaseErrorMessage === "Purchase not found") {
-                return (
-                    <Alert role="alert">
-                        <AlertTitle>Purchase was not found</AlertTitle>
-                        <AlertDescription>
-                            This purchase is not available in this organization. Return to the purchase list to continue.
-                        </AlertDescription>
-                    </Alert>
-                );
-            }
-            if (purchaseQuery.isError || purchaseResponse?.status === "error") {
-                return (
-                    <Alert variant="destructive" role="alert">
-                        <AlertTitle>Purchase could not be loaded</AlertTitle>
-                        <AlertDescription>{purchaseErrorMessage ?? "The purchase detail is unavailable."}</AlertDescription>
-                    </Alert>
-                );
-            }
-            if (!purchaseDetail) return null;
-
-            return (
-                <div className="space-y-4">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                        onClick={() => navigatePurchases(purchaseFilters)}
-                    >
-                        <ArrowLeft className="size-4" />
-                        Back to purchases
-                    </Button>
-                    <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                        <CardHeader>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <h2 className="font-display text-2xl font-semibold tracking-tight">{purchaseDetail.supplierName}</h2>
-                                <Badge variant="outline" className="rounded-full">{purchaseStatusLabel(purchaseDetail.status)}</Badge>
-                            </div>
-                            <CardDescription>
-                                {`${purchaseDetail.store.name} · ${purchaseDetail.purchaseDate} · Read-only purchase inspection`}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                                <MetricCard label="Store" value={purchaseDetail.store.name} />
-                                <MetricCard label="Invoice" value={purchaseDetail.invoiceNumber ?? "—"} />
-                                <MetricCard label="Total" value={formatCompletedSalesValue(purchaseDetail.totalAmount)} />
-                                <MetricCard label="Items" value={String(purchaseDetail.itemCount)} />
-                            </div>
-                            {purchaseDetail.notes ? (
-                                <p className="text-sm text-muted-foreground">{purchaseDetail.notes}</p>
-                            ) : null}
-                            {purchaseDetail.status === "voided" ? (
-                                <Alert role="alert">
-                                    <AlertTitle>Purchase voided</AlertTitle>
-                                    <AlertDescription>{purchaseDetail.voidReason ?? "No void reason recorded."}</AlertDescription>
-                                </Alert>
-                            ) : null}
-                            <div className="overflow-x-auto rounded-xl border border-border/60">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Item</TableHead>
-                                            <TableHead>Description</TableHead>
-                                            <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="text-right">Rate</TableHead>
-                                            <TableHead className="text-right">Line total</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {purchaseDetail.items.map((item) => (
-                                            <TableRow key={item.id}>
-                                                <TableCell className="font-medium">{item.itemName}</TableCell>
-                                                <TableCell>{item.description ?? "—"}</TableCell>
-                                                <TableCell className="text-right">{item.quantity}</TableCell>
-                                                <TableCell className="text-right">{formatCompletedSalesValue(item.rate)}</TableCell>
-                                                <TableCell className="text-right">{formatCompletedSalesValue(item.lineTotal)}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            );
-        }
-
-        if (purchasesQuery.isLoading) {
-            return (
-                <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading purchases">
-                    <Spinner className="size-6 text-primary" />
-                </div>
-            );
-        }
-        if (purchasesErrorCode === 404 || purchasesErrorMessage === "Organization not found" || purchasesErrorMessage === "Store not found") {
-            return (
-                <Alert role="alert">
-                    <AlertTitle>Purchase data was not found</AlertTitle>
-                    <AlertDescription>
-                        This organization or store is not available. Adjust the purchase filters to continue.
-                    </AlertDescription>
-                </Alert>
-            );
-        }
-        if (purchasesQuery.isError || purchasesResponse?.status === "error") {
-            return (
-                <Alert variant="destructive" role="alert">
-                    <AlertTitle>Purchases could not be loaded</AlertTitle>
-                    <AlertDescription>{purchasesErrorMessage ?? "The purchase list is unavailable."}</AlertDescription>
-                </Alert>
-            );
-        }
-        if (!purchasesList) return null;
-
-        const page = purchasesList.pagination.page;
-        const limit = purchasesList.pagination.limit;
-        const totalPages = Math.max(1, Math.ceil(purchasesList.pagination.totalCount / limit));
-
-        return (
-            <div className="space-y-4">
-                <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                    <CardHeader className="gap-3">
-                        <div>
-                            <h2 className="font-display text-xl font-semibold tracking-tight">Purchases</h2>
-                            <CardDescription>
-                                Read-only supplier purchase records by Store. Filters are independent of the Dashboard reporting period.
-                            </CardDescription>
-                        </div>
-                        <form
-                            className="flex flex-col gap-3 lg:flex-row lg:items-end"
-                            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                                event.preventDefault();
-                                updatePurchaseFilters({ search: purchaseSearchInput.trim() || undefined });
-                            }}
-                            role="search"
-                        >
-                            <div className="relative min-w-0 flex-1">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    value={purchaseSearchInput}
-                                    onChange={(event) => setPurchaseSearchInput(event.target.value)}
-                                    aria-label="Search purchases"
-                                    placeholder="Search supplier, invoice, or item"
-                                    className="h-10 rounded-xl pl-9"
-                                />
-                            </div>
-                            <Button type="submit" size="sm" className="rounded-full">Search</Button>
-                        </form>
-                        <div className="flex flex-wrap gap-2">
-                            <Select
-                                value={purchaseFilters.storeId ?? "all"}
-                                onValueChange={(value) =>
-                                    updatePurchaseFilters({
-                                        storeId: value === "all" || !value ? undefined : value,
-                                        page: 1,
-                                    })}
-                            >
-                                <SelectTrigger className="h-10 w-44 rounded-xl" aria-label="Filter purchases by store">
-                                    <SelectValue placeholder="All stores" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All stores</SelectItem>
-                                    {purchasesList.stores.map((storeOption) => (
-                                        <SelectItem key={storeOption.id} value={storeOption.id}>{storeOption.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <Select
-                                value={purchaseFilters.status ?? "all"}
-                                onValueChange={(value) =>
-                                    updatePurchaseFilters({
-                                        status: value as PurchaseInspectionFilters["status"],
-                                        page: 1,
-                                    })}
-                            >
-                                <SelectTrigger className="h-10 w-40 rounded-xl" aria-label="Filter purchases by status">
-                                    <SelectValue placeholder="All status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All status</SelectItem>
-                                    <SelectItem value="recorded">Recorded</SelectItem>
-                                    <SelectItem value="voided">Voided</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Input
-                                type="date"
-                                aria-label="Purchase start date"
-                                value={purchaseFilters.startDate ?? ""}
-                                onChange={(event) => updatePurchaseFilters({ startDate: event.target.value || undefined, page: 1 })}
-                                className="h-10 w-40 rounded-xl"
-                            />
-                            <Input
-                                type="date"
-                                aria-label="Purchase end date"
-                                value={purchaseFilters.endDate ?? ""}
-                                onChange={(event) => updatePurchaseFilters({ endDate: event.target.value || undefined, page: 1 })}
-                                className="h-10 w-40 rounded-xl"
-                            />
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                            {`Read-only purchase directory · ${purchasesList.pagination.totalCount} purchases`}
-                        </p>
-                        {purchasesList.purchases.length === 0 ? (
-                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
-                                <EmptyHeader>
-                                    <EmptyMedia variant="icon">
-                                        <ShoppingCart />
-                                    </EmptyMedia>
-                                    <EmptyTitle>No purchases match these filters</EmptyTitle>
-                                    <EmptyDescription>Try another store, date range, or search term.</EmptyDescription>
-                                </EmptyHeader>
-                            </Empty>
-                        ) : (
-                            <div className="overflow-x-auto rounded-xl border border-border/60">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Supplier</TableHead>
-                                            <TableHead>Store</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="text-right">Total</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {purchasesList.purchases.map((purchaseRow) => {
-                                            const href = organizationInspectionPath(organizationId, "purchases", purchaseRow.id, purchaseFilters);
-                                            return (
-                                                <TableRow key={purchaseRow.id}>
-                                                    <TableCell>{purchaseRow.purchaseDate}</TableCell>
-                                                    <TableCell>
-                                                        <a
-                                                            href={href}
-                                                            className="font-medium text-primary hover:underline"
-                                                            onClick={(event) => followInspectionLink(event, href)}
-                                                        >
-                                                            {purchaseRow.supplierName}
-                                                        </a>
-                                                    </TableCell>
-                                                    <TableCell>{purchaseRow.store.name}</TableCell>
-                                                    <TableCell>{purchaseStatusLabel(purchaseRow.status)}</TableCell>
-                                                    <TableCell className="text-right font-semibold">
-                                                        {formatCompletedSalesValue(purchaseRow.totalAmount)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        )}
-                        {purchasesList.pagination.totalCount > limit ? (
-                            <div className="mt-4 flex items-center justify-between gap-3">
-                                <p className="text-sm text-muted-foreground">{`Page ${page} of ${totalPages}`}</p>
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-full"
-                                        disabled={page <= 1}
-                                        onClick={() => updatePurchaseFilters({ page: page - 1 })}
-                                    >
-                                        <ChevronLeft className="size-4" />
-                                        Previous
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-full"
-                                        disabled={page >= totalPages}
-                                        onClick={() => updatePurchaseFilters({ page: page + 1 })}
-                                    >
-                                        Next
-                                        <ChevronRight className="size-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : null}
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    };
-
     const renderWhatsAppInspection = () => {
         if (whatsappQuery.isLoading) {
             return (
@@ -3489,7 +3112,7 @@ const PlatformOrganizationDetailPage = ({
                 {renderSectionNav()}
             </div>
 
-            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && section !== "whatsapp" ? (
+            {detailQuery.isLoading && section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "whatsapp" ? (
                 <div className="flex min-h-[24vh] items-center justify-center" aria-busy="true" aria-label="Loading organization">
                     <Spinner className="size-6 text-primary" />
                 </div>
@@ -3500,19 +3123,19 @@ const PlatformOrganizationDetailPage = ({
                         {activeSectionErrorMessage ?? "Sign in again to continue using Ganatri Console."}
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && section !== "whatsapp" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "whatsapp" && (activeSectionErrorCode === 404 || activeSectionErrorMessage === "Organization not found") ? (
                 <Alert role="alert">
                     <AlertTitle>Organization was not found</AlertTitle>
                     <AlertDescription>
                         This organization is not available. Return to the organizations list to continue.
                     </AlertDescription>
                 </Alert>
-            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "purchases" && section !== "whatsapp" && (detailQuery.isError || response?.status === "error") ? (
+            ) : section !== "stores" && section !== "billing" && section !== "catalog" && section !== "customers" && section !== "reports" && section !== "tables" && section !== "whatsapp" && (detailQuery.isError || response?.status === "error") ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Organization could not be loaded</AlertTitle>
                     <AlertDescription>{errorMessage ?? "The organization detail is unavailable."}</AlertDescription>
                 </Alert>
-            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || section === "reports" || section === "tables" || section === "purchases" || section === "whatsapp" || organization ? (
+            ) : section === "stores" || section === "billing" || section === "catalog" || section === "customers" || section === "reports" || section === "tables" || section === "whatsapp" || organization ? (
                 section === "overview" && organization
                     ? renderOverview()
                     : section === "stores"
@@ -3527,10 +3150,8 @@ const PlatformOrganizationDetailPage = ({
                                         ? renderReportInspection()
                                         : section === "tables"
                                             ? renderTableInspection()
-                                            : section === "purchases"
-                                                ? renderPurchaseInspection()
-                                                : section === "whatsapp"
-                                                    ? renderWhatsAppInspection()
+                                            : section === "whatsapp"
+                                                ? renderWhatsAppInspection()
                                     : organization
                                         ? renderLaterSection()
                                         : null

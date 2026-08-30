@@ -14,11 +14,7 @@ import {
   UpdateCustomerSchema,
   UpdateDraftSaleSchema,
   VoidSaleSchema,
-  CreatePurchaseSchema,
-  PurchaseListQuerySchema,
-  UpdatePurchaseSchema,
   UpdateStoreDevicePosSettingsSchema,
-  VoidPurchaseSchema,
   WhatsAppAttachConversationCustomerSchema,
   WhatsAppSendConversationTextSchema,
   WhatsAppDueReminderRequestSchema,
@@ -34,7 +30,6 @@ import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import * as billingService from "@/modules/tenant/billing/billing.service";
 import * as catalogService from "@/modules/tenant/catalog/catalog.service";
-import * as purchaseService from "@/modules/tenant/purchase/purchase.service";
 import * as organizationService from "@/modules/tenant/organization/organization.service";
 import * as tableService from "@/modules/tenant/table-service/table-service.service";
 import * as kotService from "@/modules/tenant/kot/kot.service";
@@ -820,114 +815,6 @@ router.get(
       );
     } catch (error) {
       return handleError(FILE_NAME, "getAttachmentForDevice", c, error);
-    }
-  },
-);
-
-router.get(
-  "/purchases",
-  validateSchema("query", PurchaseListQuerySchema),
-  async (c) => {
-    try {
-      return handleServiceResponse(
-        c,
-        await purchaseService.getPurchasesForDevice(
-          c.get("authDevice"),
-          c.req.valid("query"),
-        ),
-      );
-    } catch (error) {
-      return handleError(FILE_NAME, "getPurchasesForDevice", c, error);
-    }
-  },
-);
-
-router.get("/purchases/summary", async (c) => {
-  try {
-    return handleServiceResponse(
-      c,
-      await purchaseService.getSummaryForDevice(c.get("authDevice")),
-    );
-  } catch (error) {
-    return handleError(FILE_NAME, "getSummaryForDevice", c, error);
-  }
-});
-
-router.post(
-  "/purchases",
-  validateSchema("json", CreatePurchaseSchema),
-  async (c) => {
-    try {
-      return handleServiceResponse(
-        c,
-        await purchaseService.createPurchaseForDevice(
-          c.get("authDevice"),
-          c.req.valid("json"),
-        ),
-      );
-    } catch (error) {
-      return handleError(FILE_NAME, "createPurchaseForDevice", c, error);
-    }
-  },
-);
-
-router.get("/purchases/:purchaseId", async (c) => {
-  try {
-    const purchaseId = c.req.param("purchaseId");
-    const invalid = validateUuidParam(purchaseId, "Invalid purchase id");
-    if (invalid) return c.json(invalid, invalid.code);
-    return handleServiceResponse(
-      c,
-      await purchaseService.getPurchaseForDevice(
-        c.get("authDevice"),
-        purchaseId,
-      ),
-    );
-  } catch (error) {
-    return handleError(FILE_NAME, "getPurchaseForDevice", c, error);
-  }
-});
-
-router.patch(
-  "/purchases/:purchaseId",
-  validateSchema("json", UpdatePurchaseSchema),
-  async (c) => {
-    try {
-      const purchaseId = c.req.param("purchaseId");
-      const invalid = validateUuidParam(purchaseId, "Invalid purchase id");
-      if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(
-        c,
-        await purchaseService.updatePurchaseForDevice(
-          c.get("authDevice"),
-          purchaseId,
-          c.req.valid("json"),
-        ),
-      );
-    } catch (error) {
-      return handleError(FILE_NAME, "updatePurchaseForDevice", c, error);
-    }
-  },
-);
-
-router.post(
-  "/purchases/:purchaseId/void",
-  validateSchema("json", VoidPurchaseSchema),
-  async (c) => {
-    try {
-      const purchaseId = c.req.param("purchaseId");
-      const invalid = validateUuidParam(purchaseId, "Invalid purchase id");
-      if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(
-        c,
-        await purchaseService.voidPurchaseForDevice(
-          c.get("authDevice"),
-          purchaseId,
-          c.req.valid("json"),
-        ),
-      );
-    } catch (error) {
-      return handleError(FILE_NAME, "voidPurchaseForDevice", c, error);
     }
   },
 );

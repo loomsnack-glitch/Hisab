@@ -101,35 +101,6 @@ export const billingKeys = {
     [...billingKeys.all, "pos-product-sales-summary", filters ?? {}] as const,
 };
 
-export const purchaseKeys = {
-  all: ["purchases"] as const,
-  store: (organizationId: string, storeId: string) =>
-    [...purchaseKeys.all, organizationId, storeId] as const,
-  list: (
-    organizationId: string,
-    storeId: string,
-    filters?: Record<string, unknown>,
-  ) =>
-    [
-      ...purchaseKeys.store(organizationId, storeId),
-      "list",
-      filters ?? {},
-    ] as const,
-  detail: (organizationId: string, storeId: string, purchaseId: string) =>
-    [
-      ...purchaseKeys.store(organizationId, storeId),
-      "detail",
-      purchaseId,
-    ] as const,
-  summary: (organizationId: string, storeId: string) =>
-    [...purchaseKeys.store(organizationId, storeId), "summary"] as const,
-  posList: (filters?: Record<string, unknown>) =>
-    [...purchaseKeys.all, "pos", "list", filters ?? {}] as const,
-  posDetail: (purchaseId: string) =>
-    [...purchaseKeys.all, "pos", "detail", purchaseId] as const,
-  posSummary: () => [...purchaseKeys.all, "pos", "summary"] as const,
-};
-
 export const kotKeys = {
   all: ["kots"] as const,
   posKitchen: () => [...kotKeys.all, "pos", "kitchen"] as const,
