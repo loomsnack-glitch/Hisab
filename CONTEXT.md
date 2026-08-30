@@ -143,6 +143,30 @@ _Avoid_: Temporary invoice, cart
 A record of money collected against a Sale. A Sale may have many Payments across different methods or points in time.
 _Avoid_: Settlement row, transaction row
 
+**Money Account**:
+An Organization-owned place where business money is held or received, such as a Store Cash Account, Bank Account, UPI QR account, Card Settlement account, or Petty Cash box. A Money Account may be available to one Store or across the Organization. It is retained through active or inactive status rather than permanently deleted.
+_Avoid_: Full chart-of-account account, sales income account, expense category
+
+**Store Cash Account**:
+The sole active Cash Money Account at one Store in the first release, representing all physical cash held there. It does not distinguish individual counters, cash drawers, or cashier shifts.
+_Avoid_: Counter-specific cash account, cashier wallet
+
+**Store-Scoped Money Account**:
+A Money Account available to exactly one Store, such as that Store's Cash Account or dedicated UPI QR account.
+_Avoid_: Organization-wide account, shared account
+
+**Organization-Wide Money Account**:
+A Money Account available to every Store in its Organization, such as a centrally shared Bank Account or UPI QR account.
+_Avoid_: Store-specific account, per-store duplicate
+
+**Money Account Type**:
+The stable classification of a Money Account: Cash, Bank, UPI, Card Settlement, Petty Cash, or Other. It describes where money resides; it is not a sales-payment method or an income/expense category.
+_Avoid_: Payment method, full accounting account type, revenue category
+
+**Money Account Details**:
+The non-sensitive identifying information kept for a Money Account: its name, type, availability scope, optional Store, optional notes, and active status. Full bank-account numbers, UPI IDs, card-terminal IDs, and QR images are not Money Account Details in the first release.
+_Avoid_: Stored payment credential, bank-account master data
+
 **Sale Number**:
 A human-friendly bill identifier assigned when a Sale is committed. It is unique within a Store for the current financial year, prints as a plain sequence (1, 2, 3…), and resets each financial year with no Store customization.
 _Avoid_: UUID, internal id, FY-prefixed bill number, configurable reset period
