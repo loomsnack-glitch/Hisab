@@ -32,7 +32,7 @@ _Avoid_: Ganatri Console, POS, platform administration
 The device-authenticated Ganatri application used by a Store Device to perform its Store-Scoped POS Workflow. It is separate from Ganatri Admin and does not live under an Admin URL path.
 _Avoid_: Admin POS route, embedded admin billing page, Ganatri Console
 **Organization Inspection Workspace**:
-The read-only Ganatri Console workspace selected from the Organization list, providing Platform Administrators a consistent, Admin-like way to inspect that Organization's Stores, Catalog, Billing, Customers, Reports, Tables, Purchases, and WhatsApp information without allowing mutations.
+The read-only Ganatri Console workspace selected from the Organization list, providing Platform Administrators a consistent, Admin-like way to inspect that Organization's Stores, Catalog, Billing, Customers, Reports, Tables, and WhatsApp information without allowing mutations.
 _Avoid_: Console edit mode, tenant administration workspace, organization impersonation
 
 **Inspection URL**:

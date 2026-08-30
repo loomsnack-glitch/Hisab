@@ -77,7 +77,7 @@ const PosPage = () => {
 
     if (
         location.pathname === "/" &&
-        (legacyPanel === "bills" || legacyPanel === "customers" || legacyPanel === "reports" || legacyPanel === "purchases")
+        (legacyPanel === "bills" || legacyPanel === "customers" || legacyPanel === "reports")
     ) {
         return <Navigate to={getPosPanelPath(legacyPanel as PosPanelTab)} replace />;
     }

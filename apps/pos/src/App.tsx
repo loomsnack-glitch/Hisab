@@ -8,7 +8,6 @@ import PosProductsPage from "@/pages/pos-products-page";
 import PosTablesPage from "@/pages/pos-tables-page";
 import PosCustomersPage from "@/pages/pos-customers-page";
 import PosReportsPage from "@/pages/pos-reports-page";
-import PosPurchasesPage from "@/pages/pos-purchases-page";
 import PosKotsPage from "@/pages/pos-kots-page";
 import PosAppearancePage from "@/pages/pos-appearance-page";
 import { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
@@ -34,7 +33,6 @@ const App = () => {
                         <Route path="tables" element={<PosTablesPage />} />
                         <Route path="customers" element={<PosCustomersPage />} />
                         <Route path="reports" element={<PosReportsPage />} />
-                        <Route path="purchases" element={<PosPurchasesPage />} />
                         <Route path="whatsapp" element={<PosWhatsAppInboxPage />} />
                         <Route path="bills" element={<PosBillsPage />} />
                         <Route path="kots" element={<PosKotsPage />} />

@@ -39,11 +39,6 @@ import type {
     PlatformTableInspectionListDTOSchema,
     PlatformTableInspectionQuerySchema,
     PlatformTableInspectionSummaryDTOSchema,
-    PlatformPurchaseInspectionDetailDTOSchema,
-    PlatformPurchaseInspectionDetailResponseSchema,
-    PlatformPurchaseInspectionListDTOSchema,
-    PlatformPurchaseInspectionQuerySchema,
-    PlatformPurchaseInspectionSummaryDTOSchema,
     PlatformWhatsAppAccountInspectionDTOSchema,
     PlatformWhatsAppInspectionDTOSchema,
     PlatformWhatsAppMessageLinkInspectionDTOSchema,
@@ -160,14 +155,6 @@ export type PlatformTableInspectionListDTO = z.infer<typeof PlatformTableInspect
 export type PlatformTableInspectionListResponse = PlatformTableInspectionListDTO;
 export type PlatformTableInspectionDetailDTO = z.infer<typeof PlatformTableInspectionDetailDTOSchema>;
 export type PlatformTableInspectionDetailResponse = z.infer<typeof PlatformTableInspectionDetailResponseSchema>;
-
-export type PlatformPurchaseInspectionQueryJSON = z.input<typeof PlatformPurchaseInspectionQuerySchema>;
-export type PlatformPurchaseInspectionQuerySVC = z.output<typeof PlatformPurchaseInspectionQuerySchema>;
-export type PlatformPurchaseInspectionSummaryDTO = z.infer<typeof PlatformPurchaseInspectionSummaryDTOSchema>;
-export type PlatformPurchaseInspectionListDTO = z.infer<typeof PlatformPurchaseInspectionListDTOSchema>;
-export type PlatformPurchaseInspectionListResponse = PlatformPurchaseInspectionListDTO;
-export type PlatformPurchaseInspectionDetailDTO = z.infer<typeof PlatformPurchaseInspectionDetailDTOSchema>;
-export type PlatformPurchaseInspectionDetailResponse = z.infer<typeof PlatformPurchaseInspectionDetailResponseSchema>;
 
 export type PlatformWhatsAppAccountInspectionDTO = z.infer<typeof PlatformWhatsAppAccountInspectionDTOSchema>;
 export type PlatformWhatsAppTemplateInspectionDTO = z.infer<typeof PlatformWhatsAppTemplateInspectionDTOSchema>;

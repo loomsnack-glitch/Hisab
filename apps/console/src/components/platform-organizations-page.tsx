@@ -16,8 +16,6 @@ import {
     getPlatformOrganizationBillActivity as getPlatformOrganizationBillActivityRequest,
     getPlatformOrganizationTables as getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable as getPlatformOrganizationTableRequest,
-    getPlatformOrganizationPurchases as getPlatformOrganizationPurchasesRequest,
-    getPlatformOrganizationPurchase as getPlatformOrganizationPurchaseRequest,
     getPlatformOrganizations as getPlatformOrganizationsRequest,
     getPlatformStore as getPlatformStoreRequest,
 } from "@repo/services";
@@ -70,8 +68,6 @@ type PlatformOrganizationsPageProps = {
     getPlatformOrganizationBillActivity?: typeof getPlatformOrganizationBillActivityRequest;
     getPlatformOrganizationTables?: typeof getPlatformOrganizationTablesRequest;
     getPlatformOrganizationTable?: typeof getPlatformOrganizationTableRequest;
-    getPlatformOrganizationPurchases?: typeof getPlatformOrganizationPurchasesRequest;
-    getPlatformOrganizationPurchase?: typeof getPlatformOrganizationPurchaseRequest;
     initialSearch?: string;
     initialActivity?: ActivityFilter;
     initialSort?: DirectorySort;
@@ -159,8 +155,6 @@ const PlatformOrganizationsPage = ({
     getPlatformOrganizationBillActivity = getPlatformOrganizationBillActivityRequest,
     getPlatformOrganizationTables = getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable = getPlatformOrganizationTableRequest,
-    getPlatformOrganizationPurchases = getPlatformOrganizationPurchasesRequest,
-    getPlatformOrganizationPurchase = getPlatformOrganizationPurchaseRequest,
     initialSearch = "",
     initialActivity = "all",
     initialSort = "recent_activity",
@@ -294,8 +288,6 @@ const PlatformOrganizationsPage = ({
                 getPlatformOrganizationBillActivity={getPlatformOrganizationBillActivity}
                 getPlatformOrganizationTables={getPlatformOrganizationTables}
                 getPlatformOrganizationTable={getPlatformOrganizationTable}
-                getPlatformOrganizationPurchases={getPlatformOrganizationPurchases}
-                getPlatformOrganizationPurchase={getPlatformOrganizationPurchase}
             />
         );
     }
