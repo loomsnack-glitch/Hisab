@@ -101,6 +101,12 @@ describe("WhatsApp schemas", () => {
             body: null,
             caption: "Your bill is ready",
             templateName: "bill_ready",
+            templatePreview: {
+                header: { type: "text", text: "Hello Asha" },
+                body: "Your bill is ready.",
+                footer: "Thank you",
+                buttons: [{ type: "url", text: "View invoice", url: "https://example.com/invoice/1" }],
+            },
             attachmentFileName: null,
             attachmentMimeType: null,
             status: "sent",

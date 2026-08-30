@@ -17,6 +17,7 @@ import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
 import { releaseCloudQuota, settleCloudQuota } from "./cloud-api/cloud-quota.repository";
 import { promotionRecipientResendAvailableAt, promotionRecipientResendIsBlocked } from "./promotion-recipient-actions";
+import { buildCloudTemplatePreview } from "./cloud-api/cloud-template-preview";
 
 type AccountRow = Record<string, unknown>;
 
@@ -105,6 +106,24 @@ const mapConversation = (row: Record<string, unknown>): WhatsAppConversationDTO 
 
 const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
+    const snapshot = mapped.cloudTemplateSnapshot;
+    const snapshotRecord = snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+        ? snapshot as Record<string, unknown>
+        : null;
+    const snapshotVersion = typeof snapshotRecord?.version === "number" ? snapshotRecord.version : null;
+    const snapshotAssetId = typeof snapshotRecord?.assetId === "string" ? snapshotRecord.assetId : null;
+    const definition = Array.isArray(snapshotRecord?.templateComponents)
+        ? snapshotRecord.templateComponents
+        : snapshotAssetId !== null
+            && mapped.cloudTemplateDefinitionAssetId === snapshotAssetId
+            && snapshotVersion !== null
+            && Number(mapped.cloudTemplateDefinitionVersion) === snapshotVersion
+            && Array.isArray(mapped.cloudTemplateDefinition)
+            ? mapped.cloudTemplateDefinition
+            : null;
+    const templatePreview = mapped.messageType === "template" && snapshotRecord && Array.isArray(snapshotRecord.components)
+        ? buildCloudTemplatePreview(definition, snapshotRecord.components)
+        : null;
     return {
         id: String(mapped.id),
         organizationId: String(mapped.organizationId),
@@ -116,6 +135,7 @@ const mapMessage = (row: Record<string, unknown>): WhatsAppMessageDTO => {
         body: (mapped.body as string | null | undefined) ?? null,
         caption: (mapped.caption as string | null | undefined) ?? null,
         templateName: (mapped.templateName as string | null | undefined) ?? null,
+        templatePreview,
         attachmentFileName: (mapped.attachmentFileName as string | null | undefined) ?? null,
         attachmentMimeType: (mapped.attachmentMimeType as string | null | undefined) ?? null,
         status: mapped.status as WhatsAppMessageDTO["status"],
@@ -736,9 +756,19 @@ export const getConversationMessages = async (
     conversationId: string,
 ): Promise<WhatsAppMessageDTO[]> => {
     const rows = await pg`
-        SELECT message.*, outbox.cloud_template_snapshot ->> 'name' AS template_name
+        SELECT message.*, outbox.cloud_template_snapshot ->> 'name' AS template_name,
+               outbox.cloud_template_snapshot,
+               assets.id AS cloud_template_definition_asset_id,
+               assets.components AS cloud_template_definition,
+               assets.version AS cloud_template_definition_version
         FROM whatsapp_messages message
         LEFT JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+        LEFT JOIN whatsapp_cloud_template_bindings bindings
+          ON bindings.id = outbox.cloud_template_binding_id
+         AND bindings.organization_id = message.organization_id
+        LEFT JOIN whatsapp_cloud_templates assets
+          ON assets.id = bindings.cloud_template_id
+         AND assets.organization_id = message.organization_id
         WHERE message.conversation_id = ${conversationId}
           AND message.organization_id = ${organizationId}
           AND message.store_id = ${storeId}

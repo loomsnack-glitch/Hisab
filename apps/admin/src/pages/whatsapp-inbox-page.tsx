@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { WhatsAppMessageDTO } from "@repo/types";
@@ -13,7 +13,7 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Spinner } from "@repo/ui/components/spinner";
-import { ArrowLeft, FileText, RefreshCw } from "lucide-react";
+import { ArrowLeft, FileText, Image as ImageIcon, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { whatsappKeys } from "@/lib/query-keys";
@@ -274,7 +274,12 @@ const MessageBubble = ({
         <div className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm ${outbound ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card"}`}>
                 {message.body ? <p className="whitespace-pre-wrap break-words">{message.body}</p> : null}
-                {message.messageType === "template" ? <p className="whitespace-pre-wrap break-words">Template{message.templateName ? ` · ${message.templateName}` : " message"}</p> : null}
+                {message.messageType === "template" ? (
+                    <div className="space-y-1.5">
+                        <p className="break-words text-[11px] opacity-75">Template{message.templateName ? ` · ${message.templateName}` : " message"}</p>
+                        {message.templatePreview ? <TemplateMessagePreview preview={message.templatePreview} /> : null}
+                    </div>
+                ) : null}
                 {message.caption ? <p className="mt-1 whitespace-pre-wrap break-words">{message.caption}</p> : null}
                 {message.attachmentFileName ? (
                     <Button
@@ -296,6 +301,71 @@ const MessageBubble = ({
         </div>
     );
 };
+
+const TemplateMessagePreview = ({ preview }: { preview: WhatsAppMessageDTO["templatePreview"] }) => {
+    if (!preview) return null;
+    return (
+        <div className="overflow-hidden rounded-xl border border-border/60 bg-card text-card-foreground shadow-sm">
+            {preview.header?.type === "image" ? (
+                preview.header.url ? (
+                    <img
+                        src={preview.header.url}
+                        alt="WhatsApp template header"
+                        className="aspect-[16/9] w-full object-cover"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                    />
+                ) : (
+                    <TemplateMediaPlaceholder icon={<ImageIcon className="size-5" />} label={preview.header.label} />
+                )
+            ) : null}
+            {preview.header?.type === "document" ? (
+                preview.header.url ? (
+                    <a
+                        href={preview.header.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 border-b border-border/60 px-3 py-2 text-xs font-medium text-primary hover:underline"
+                    >
+                        <FileText className="size-4 shrink-0" />
+                        <span className="truncate">{preview.header.label}</span>
+                    </a>
+                ) : (
+                    <TemplateMediaPlaceholder icon={<FileText className="size-5" />} label={preview.header.label} />
+                )
+            ) : null}
+            {preview.header?.type === "text" ? <p className="border-b border-border/60 px-3 pb-2 pt-3 font-semibold">{preview.header.text}</p> : null}
+            <p className="whitespace-pre-wrap break-words px-3 py-3 text-sm">{preview.body}</p>
+            {preview.footer ? <p className="whitespace-pre-wrap break-words px-3 pb-2 text-xs text-muted-foreground">{preview.footer}</p> : null}
+            {preview.buttons.length > 0 ? (
+                <div className="border-t border-border/60">
+                    {preview.buttons.map((button, index) => button.url ? (
+                        <a
+                            key={`${button.type}-${index}`}
+                            href={button.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block border-b border-border/60 px-3 py-2 text-center text-xs font-medium text-primary last:border-b-0 hover:underline"
+                        >
+                            {button.text}
+                        </a>
+                    ) : (
+                        <div key={`${button.type}-${index}`} className="border-b border-border/60 px-3 py-2 text-center text-xs font-medium text-primary last:border-b-0">
+                            {button.text}
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+        </div>
+    );
+};
+
+const TemplateMediaPlaceholder = ({ icon, label }: { icon: ReactNode; label: string }) => (
+    <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-3 py-4 text-xs text-muted-foreground">
+        {icon}
+        <span>{label}</span>
+    </div>
+);
 
 const WhatsAppInboxPage = () => {
     const { organizationId = "", storeId = "" } = useParams();

@@ -6,6 +6,7 @@ import {
     WhatsAppConversationDTOSchema,
     WhatsAppConversationMessageDirectionSchema,
     WhatsAppMessageDTOSchema,
+    WhatsAppTemplatePreviewSchema,
     WhatsAppMessageStatusSchema,
     WhatsAppMessageTypeSchema,
     WhatsAppOutboxKindSchema,
@@ -100,6 +101,7 @@ export type WhatsAppProvider = z.infer<typeof WhatsAppProviderSchema>;
 export type WhatsAppAccountStatus = z.infer<typeof WhatsAppAccountStatusSchema>;
 export type WhatsAppConversationMessageDirection = z.infer<typeof WhatsAppConversationMessageDirectionSchema>;
 export type WhatsAppMessageType = z.infer<typeof WhatsAppMessageTypeSchema>;
+export type WhatsAppTemplatePreviewDTO = z.infer<typeof WhatsAppTemplatePreviewSchema>;
 export type WhatsAppMessageStatus = z.infer<typeof WhatsAppMessageStatusSchema>;
 export type WhatsAppOutboxKind = z.infer<typeof WhatsAppOutboxKindSchema>;
 export type WhatsAppOutboxStatus = z.infer<typeof WhatsAppOutboxStatusSchema>;

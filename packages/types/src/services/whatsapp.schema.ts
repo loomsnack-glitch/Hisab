@@ -343,6 +343,25 @@ export const WhatsAppConversationDTOSchema = z.object({
     updatedAt: dtoDateSchema,
 });
 
+const WhatsAppTemplatePreviewHeaderSchema = z.discriminatedUnion("type", [
+    z.object({ type: z.literal("text"), text: z.string().max(4096) }),
+    z.object({ type: z.literal("image"), url: z.string().url().nullable(), label: z.string().max(255) }),
+    z.object({ type: z.literal("document"), url: z.string().url().nullable(), label: z.string().max(255) }),
+]);
+
+const WhatsAppTemplatePreviewButtonSchema = z.object({
+    type: z.enum(["url", "quick_reply", "other"]),
+    text: z.string().max(255),
+    url: z.string().url().nullable(),
+});
+
+export const WhatsAppTemplatePreviewSchema = z.object({
+    header: WhatsAppTemplatePreviewHeaderSchema.nullable(),
+    body: z.string().max(4096),
+    footer: z.string().max(1024).nullable(),
+    buttons: z.array(WhatsAppTemplatePreviewButtonSchema).max(10),
+});
+
 export const WhatsAppMessageDTOSchema = z.object({
     id: z.uuid("Invalid WhatsApp message id"),
     organizationId: z.uuid("Invalid organization id"),
@@ -354,6 +373,7 @@ export const WhatsAppMessageDTOSchema = z.object({
     body: z.string().nullable().optional(),
     caption: z.string().nullable().optional(),
     templateName: z.string().trim().max(512).nullable().optional(),
+    templatePreview: WhatsAppTemplatePreviewSchema.nullable().optional(),
     attachmentFileName: z.string().nullable().optional(),
     attachmentMimeType: z.string().nullable().optional(),
     status: WhatsAppMessageStatusSchema,
