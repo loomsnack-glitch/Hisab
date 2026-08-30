@@ -47,6 +47,25 @@ export const formatWhatsAppTimestamp = (value: string | Date | null | undefined)
     return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()} ${hour}:${minute} ${hours >= 12 ? "PM" : "AM"}`;
 };
 
+export const formatWhatsAppDayLabel = (value: string | Date | null | undefined) => {
+    if (!value) return "";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const sameDay = (left: Date, right: Date) =>
+        left.getFullYear() === right.getFullYear()
+        && left.getMonth() === right.getMonth()
+        && left.getDate() === right.getDate();
+
+    if (sameDay(date, today)) return "Today";
+    if (sameDay(date, yesterday)) return "Yesterday";
+    return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
+
 export const formatCurrency = (value: number | string | null | undefined) => {
     const numericValue = Number(value ?? 0);
 
