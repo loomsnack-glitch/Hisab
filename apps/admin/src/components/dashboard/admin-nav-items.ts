@@ -6,6 +6,7 @@ import {
     Contact,
     Package2,
     ReceiptText,
+    Ruler,
     Settings2,
     Store,
     Users,
@@ -59,6 +60,14 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         requiresOrganization: true,
         getPath: (organizationId) => `/organizations/${organizationId}/products`,
         isActive: (pathname) => /\/organizations\/[^/]+\/products(\/|$)/.test(pathname),
+    },
+    {
+        id: "units",
+        label: "Units",
+        icon: Ruler,
+        requiresOrganization: true,
+        getPath: (organizationId) => `/organizations/${organizationId}/units`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/units(\/|$)/.test(pathname),
     },
     {
         id: "whatsapp",

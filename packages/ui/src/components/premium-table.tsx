@@ -47,6 +47,8 @@ interface PremiumTableProps<T> {
   rowIdKey?: keyof T;
   toolbarActions?: React.ReactNode;
   fullHeight?: boolean;
+  /** Use a taller viewport calc for pages without a page title block. */
+  fillAvailableViewport?: boolean;
   onRefresh?: () => void;
   showColumnsToggle?: boolean;
   infoText?: string;
@@ -67,6 +69,7 @@ export function PremiumTable<T>({
   rowIdKey = "id" as keyof T,
   toolbarActions,
   fullHeight = false,
+  fillAvailableViewport = false,
   onRefresh,
   showColumnsToggle = false,
   infoText,
@@ -445,7 +448,9 @@ export function PremiumTable<T>({
               "w-full overflow-auto relative border-0 shadow-none rounded-none",
               fullHeight
                 ? "flex-1 min-h-0 max-h-none"
-                : "max-h-[calc(100dvh-240px)] md:max-h-[calc(100dvh-340px)]"
+                : fillAvailableViewport
+                  ? "max-h-[calc(100dvh-200px)] md:max-h-[calc(100dvh-220px)]"
+                  : "max-h-[calc(100dvh-240px)] md:max-h-[calc(100dvh-340px)]"
             )}
           >
             <TableHeader className="border-b border-border/50 bg-card/90 text-muted-foreground sticky top-0 backdrop-blur-md z-10">

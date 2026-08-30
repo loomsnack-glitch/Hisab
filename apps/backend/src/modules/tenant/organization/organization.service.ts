@@ -28,6 +28,7 @@ import {
   encryptDeviceSecret,
 } from "@/helpers/deviceSecret.helper";
 import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository";
+import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as organizationRepository from "./organization.repository";
 
 const normalizeOptionalText = (value?: string) => {
@@ -151,6 +152,15 @@ export const createOrganization = async (
     );
     if (labelTemplates.length === 0) {
       throw new Error("Failed to seed Label Templates");
+    }
+
+    const units = await unitsRepository.seedDefaultUnits(
+      organization.id,
+      userId,
+      tx,
+    );
+    if (units.length === 0) {
+      throw new Error("Failed to seed Units");
     }
   });
 

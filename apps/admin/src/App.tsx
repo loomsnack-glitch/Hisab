@@ -26,6 +26,7 @@ import LandingPage from "@/pages/landing-page";
 import ReportsPage from "@/pages/reports-page";
 import AppearancePage from "@/pages/appearance-page";
 import TablesPage from "@/pages/tables-page";
+import UnitsPage from "@/pages/units-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
 import WhatsAppInboxPage from "@/pages/whatsapp-inbox-page";
@@ -129,6 +130,7 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/settings" element={<OrganizationSettingsPage />} />
                                 <Route path="/google-contacts/oauth/callback" element={<GoogleContactsOAuthCallbackPage />} />
                                 <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
+                                <Route path="/organizations/:organizationId/units" element={<UnitsPage />} />
                                 <Route path="/organizations/:organizationId/whatsapp" element={<Navigate to="accounts" replace />} />
                                 <Route path="/organizations/:organizationId/whatsapp/accounts" element={<WhatsAppOrganizationPage />} />
                                 <Route path="/organizations/:organizationId/whatsapp/templates" element={<WhatsAppOrganizationPage />} />

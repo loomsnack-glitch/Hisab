@@ -140,3 +140,8 @@ export const googleContactsKeys = {
   status: (organizationId: string) =>
     [...googleContactsKeys.all, "status", organizationId] as const,
 };
+
+export const unitKeys = {
+  all: ["units"] as const,
+  list: (organizationId: string) => [...unitKeys.all, organizationId] as const,
+};
