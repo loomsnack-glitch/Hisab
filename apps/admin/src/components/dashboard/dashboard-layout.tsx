@@ -204,13 +204,18 @@ const DashboardLayout = () => {
         navigate(getOrganizationSwitchPath(location.pathname, orgId));
     };
 
+    const isWhatsAppMessageHistory = location.pathname.includes("/whatsapp/message-history");
+
     return (
-        <div className="min-h-screen bg-background text-foreground [--pos-mobile-nav-height:calc(3.375rem+env(safe-area-inset-bottom,0px))] lg:[--pos-mobile-nav-height:0px]">
+        <div className={cn(
+            "min-h-screen bg-background text-foreground [--pos-mobile-nav-height:calc(3.375rem+env(safe-area-inset-bottom,0px))] lg:[--pos-mobile-nav-height:0px]",
+            isWhatsAppMessageHistory && "h-screen overflow-hidden",
+        )}>
             <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),_transparent_30%)]" />
             </div>
 
-            <div className="flex min-h-screen">
+            <div className={cn("flex min-h-screen", isWhatsAppMessageHistory && "h-full min-h-0")}>
                 <aside
                     className={cn(
                         "sidebar-shell relative z-30 hidden shrink-0 overflow-visible lg:block",
@@ -222,7 +227,7 @@ const DashboardLayout = () => {
                     </div>
                 </aside>
 
-                <div className="flex min-w-0 flex-1 flex-col">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                     <header className="sticky top-0 z-20 flex min-h-[calc(3.5rem+env(safe-area-inset-top,0px))] shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-3 pt-[env(safe-area-inset-top,0px)] sm:px-6 lg:px-8 backdrop-blur-xl">
                         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                             <Link
@@ -315,6 +320,7 @@ const DashboardLayout = () => {
 
                     <main className={cn(
                         "flex-1 min-w-0 w-full",
+                        isWhatsAppMessageHistory && "min-h-0 overflow-hidden",
                         location.pathname.includes("/billing")
                             ? "p-0"
                             : "px-3.5 py-4 sm:px-6 lg:px-8 lg:py-8",
@@ -323,6 +329,7 @@ const DashboardLayout = () => {
                         <div className={cn(
                             "mx-auto w-full min-w-0",
                             location.pathname.includes("/billing") ? "max-w-none" : "max-w-7xl",
+                            isWhatsAppMessageHistory && "h-full min-h-0",
                         )}>
                             <Outlet />
                         </div>

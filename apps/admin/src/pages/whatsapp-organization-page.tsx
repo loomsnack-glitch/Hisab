@@ -313,8 +313,11 @@ const WhatsAppOrganizationPage = () => {
     }
 
     return (
-        <div className={cn("mx-auto space-y-5", activeTab === "message-history" ? "max-w-7xl" : "max-w-5xl")}>
-            <div className="space-y-3">
+        <div className={cn(
+            "mx-auto space-y-5",
+            activeTab === "message-history" ? "flex h-full min-h-0 max-w-7xl flex-col" : "max-w-5xl",
+        )}>
+            <div className={cn("space-y-3", activeTab === "message-history" && "shrink-0")}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="font-display text-2xl font-semibold sm:text-3xl">WhatsApp</h1>
@@ -443,7 +446,10 @@ const WhatsAppOrganizationPage = () => {
                 })}
                 <WhatsAppCloudSafetyCard organizationId={organizationId} />
             </section> : organizationQuery.data?.status === "success" && selectedStore ? (
-                <section className="space-y-4">
+                <section className={cn(
+                    "space-y-4",
+                    activeTab === "message-history" && "flex min-h-0 flex-1 flex-col",
+                )}>
                     {activeTab === "templates" ? (
                         <Card className="border-border/60 bg-card/80">
                             {cloudAccountsForStore.length > 0 ? <CardContent className="p-6">

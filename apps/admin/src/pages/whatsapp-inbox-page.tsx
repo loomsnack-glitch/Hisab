@@ -16,6 +16,7 @@ import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { ArrowLeft, CalendarDays, Check, CheckCheck, CircleAlert, Clock3, FileText, Image as ImageIcon, RefreshCw, Search, X } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@repo/ui/lib/utils";
 
 import { whatsappKeys } from "@/lib/query-keys";
 import { formatWhatsAppDayLabel, formatWhatsAppTimestamp } from "@/lib/format";
@@ -129,7 +130,10 @@ export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }:
     const Heading = embedded ? "h2" : "h1";
 
     return (
-        <div className="mx-auto flex max-w-7xl flex-col gap-4">
+        <div className={cn(
+            "mx-auto flex min-h-0 max-w-7xl flex-col gap-4",
+            embedded ? "h-full flex-1" : "h-full",
+        )}>
             <div className="flex items-center justify-between gap-3">
                 <div>
                     <Heading className="flex items-center gap-2 font-display text-2xl font-semibold">
@@ -165,7 +169,7 @@ export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }:
                 </div>
             ) : null}
 
-            <Card className="h-[min(78vh,760px)] min-h-[520px] overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
+            <Card className="min-h-0 flex-1 overflow-hidden border-border/60 bg-card/80 shadow-xl shadow-black/5">
                 <CardContent className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(170px,34%)_minmax(0,1fr)] p-0 md:grid-cols-[minmax(220px,30%)_1fr] md:grid-rows-1">
                     <aside className="flex min-h-0 flex-col border-b border-border/60 md:border-r md:border-b-0">
                         <div className="space-y-3 border-b border-border/60 px-4 py-3">
