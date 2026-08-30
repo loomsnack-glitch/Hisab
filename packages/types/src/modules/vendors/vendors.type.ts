@@ -1,8 +1,12 @@
 import type { z } from "zod";
 import type {
+  CreateVendorItemSchema,
   CreateVendorSchema,
   VendorDTOSchema,
+  VendorItemDTOSchema,
+  VendorItemStatusSchema,
   VendorStatusSchema,
+  UpdateVendorItemSchema,
   UpdateVendorSchema,
 } from "./vendors.schema";
 
@@ -31,4 +35,44 @@ export type VendorsListResponse = {
 
 export type VendorResponse = {
   vendor: VendorDTO;
+};
+
+export type VendorItemStatus = z.infer<typeof VendorItemStatusSchema>;
+export type VendorItemDTO = z.infer<typeof VendorItemDTOSchema>;
+
+export type CreateVendorItemJSON = z.infer<typeof CreateVendorItemSchema>;
+export type CreateVendorItemSVC = CreateVendorItemJSON;
+export type CreateVendorItemREPO = Pick<
+  VendorItemDTO,
+  | "id"
+  | "organizationId"
+  | "vendorId"
+  | "name"
+  | "unitId"
+  | "defaultPurchasePrice"
+  | "status"
+  | "createdBy"
+> & {
+  updatedBy?: string | null;
+};
+
+export type UpdateVendorItemJSON = z.infer<typeof UpdateVendorItemSchema>;
+export type UpdateVendorItemSVC = UpdateVendorItemJSON;
+export type UpdateVendorItemREPO = Pick<
+  VendorItemDTO,
+  | "id"
+  | "organizationId"
+  | "name"
+  | "unitId"
+  | "defaultPurchasePrice"
+  | "status"
+  | "updatedBy"
+>;
+
+export type VendorItemsListResponse = {
+  vendorItems: VendorItemDTO[];
+};
+
+export type VendorItemResponse = {
+  vendorItem: VendorItemDTO;
 };

@@ -154,3 +154,207 @@ describe("Organization Vendor routes", () => {
         expect(harness.updateVendorRepo).not.toHaveBeenCalled();
     });
 });
+
+describe("Organization Vendor Item routes", () => {
+    beforeEach(() => {
+        harness.getOrganizationByIdForUser.mockClear();
+        harness.getVendorsByOrganizationId.mockClear();
+        harness.getVendorById.mockClear();
+        harness.getUnitById.mockClear();
+        harness.getVendorItemsByOrganizationId.mockClear();
+        harness.getVendorItemById.mockClear();
+        harness.createVendorRepo.mockClear();
+        harness.updateVendorRepo.mockClear();
+        harness.createVendorItemRepo.mockClear();
+        harness.updateVendorItemRepo.mockClear();
+
+        harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
+        harness.getVendorById.mockResolvedValue(harness.freshFarmsVendor);
+        harness.getUnitById.mockResolvedValue(harness.kilogramUnit);
+        harness.getVendorItemsByOrganizationId.mockResolvedValue([
+            harness.tomatoItem,
+            harness.millersTomatoItem,
+            harness.onionItem,
+        ]);
+        harness.getVendorItemById.mockResolvedValue(harness.tomatoItem);
+        harness.createVendorItemRepo.mockImplementation(async (data) => ({
+            ...harness.tomatoItem,
+            ...data,
+            updatedBy: data.updatedBy ?? null,
+            createdAt: harness.now,
+            updatedAt: harness.now,
+        }));
+        harness.updateVendorItemRepo.mockImplementation(async (data) => ({
+            ...harness.tomatoItem,
+            ...data,
+            vendorId: harness.tomatoItem.vendorId,
+            createdBy: harness.tomatoItem.createdBy,
+            createdAt: harness.now,
+            updatedAt: harness.now,
+        }));
+    });
+
+    test("rejects unauthenticated Vendor Item listing", async () => {
+        const response = await unauthenticatedRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items`,
+        );
+
+        expect(response.status).toBe(401);
+        const body = await response.json();
+        expect(body.message).toBe("Authentication is required");
+    });
+
+    test("lists Organization Vendor Items for an authenticated administrator", async () => {
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items`,
+        );
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.vendorItems).toHaveLength(3);
+        expect(body.data.vendorItems.filter((item: { name: string }) => item.name === "Tomato")).toHaveLength(2);
+    });
+
+    test("creates a Vendor Item at the Organization administrator seam", async () => {
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    vendorId: harness.vendorId,
+                    name: "Tomato",
+                    unitId: harness.unitId,
+                    defaultPurchasePrice: 40.5,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(201);
+        expect(harness.createVendorItemRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                organizationId: harness.organizationId,
+                vendorId: harness.vendorId,
+                name: "Tomato",
+                unitId: harness.unitId,
+                defaultPurchasePrice: 40.5,
+                status: "active",
+            }),
+        );
+    });
+
+    test("rejects a Vendor Item payload with a negative or three-decimal price", async () => {
+        const negative = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    vendorId: harness.vendorId,
+                    name: "Tomato",
+                    unitId: harness.unitId,
+                    defaultPurchasePrice: -1,
+                }),
+            },
+        );
+        const extraDecimals = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    vendorId: harness.vendorId,
+                    name: "Tomato",
+                    unitId: harness.unitId,
+                    defaultPurchasePrice: 10.999,
+                }),
+            },
+        );
+
+        expect(negative.status).toBe(400);
+        expect(extraDecimals.status).toBe(400);
+        expect(harness.createVendorItemRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects Product, inventory, and Store fields on Vendor Item create", async () => {
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    vendorId: harness.vendorId,
+                    name: "Tomato",
+                    unitId: harness.unitId,
+                    defaultPurchasePrice: 40.5,
+                    productId: harness.vendorItemId,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.createVendorItemRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects assigning an inactive Unit through the Vendor Item route", async () => {
+        harness.getUnitById.mockResolvedValue(harness.inactiveCrateUnit);
+
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    vendorId: harness.vendorId,
+                    name: "Tomato",
+                    unitId: harness.inactiveUnitId,
+                    defaultPurchasePrice: 40.5,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.message).toBe("Inactive Units cannot be assigned");
+        expect(harness.createVendorItemRepo).not.toHaveBeenCalled();
+    });
+
+    test("updates Vendor Item status for the authenticated Organization", async () => {
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items/${harness.vendorItemId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "inactive" }),
+            },
+        );
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.vendorItem.status).toBe("inactive");
+        expect(body.data.vendorItem.name).toBe("Tomato");
+        expect(body.data.vendorItem.vendorId).toBe(harness.vendorId);
+    });
+
+    test("denies Vendor Item access when the user is not a member of the Organization", async () => {
+        harness.getOrganizationByIdForUser.mockResolvedValue(null);
+
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items`,
+        );
+
+        expect(response.status).toBe(404);
+        expect(harness.getVendorItemsByOrganizationId).not.toHaveBeenCalled();
+    });
+
+    test("does not expose a Vendor Item deletion route", async () => {
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items/${harness.vendorItemId}`,
+            { method: "DELETE" },
+        );
+
+        expect(response.status).toBe(404);
+        expect(harness.updateVendorItemRepo).not.toHaveBeenCalled();
+        expect(harness.createVendorItemRepo).not.toHaveBeenCalled();
+    });
+});

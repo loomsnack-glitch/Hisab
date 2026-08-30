@@ -149,4 +149,5 @@ export const unitKeys = {
 export const vendorKeys = {
   all: ["vendors"] as const,
   list: (organizationId: string) => [...vendorKeys.all, organizationId] as const,
+  items: (organizationId: string) => [...vendorKeys.all, organizationId, "items"] as const,
 };

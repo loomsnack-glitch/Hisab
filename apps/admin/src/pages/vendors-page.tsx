@@ -14,6 +14,7 @@ import { LayoutGrid, Package, Pencil, PlusCircle, RefreshCw, Search, Table as Ta
 
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertVendorDialog from "@/components/vendors/upsert-vendor-dialog";
+import VendorItemsCatalogue from "@/components/vendors/vendor-items-catalogue";
 import { formatDateTime } from "@/lib/format";
 import { vendorKeys } from "@/lib/query-keys";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
@@ -354,22 +355,8 @@ const VendorsPage = () => {
                     {vendorsDirectory()}
                 </TabsContent>
 
-                <TabsContent value="items" className="focus-visible:outline-none" data-testid="vendor-items-placeholder">
-                    <Card className="border-border/60 bg-card/80 shadow-md">
-                        <CardContent className="pt-6">
-                            <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
-                                <EmptyHeader>
-                                    <EmptyMedia variant="icon">
-                                        <Package />
-                                    </EmptyMedia>
-                                    <EmptyTitle>No vendor items yet</EmptyTitle>
-                                    <EmptyDescription>
-                                        Vendor Items will appear here, grouped by Vendor.
-                                    </EmptyDescription>
-                                </EmptyHeader>
-                            </Empty>
-                        </CardContent>
-                    </Card>
+                <TabsContent value="items" className="focus-visible:outline-none" data-testid="vendor-items-catalogue-tab">
+                    <VendorItemsCatalogue organizationId={organizationId} />
                 </TabsContent>
             </Tabs>
         </div>

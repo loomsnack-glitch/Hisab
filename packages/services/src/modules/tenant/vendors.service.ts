@@ -1,8 +1,12 @@
 import type {
+    CreateVendorItemJSON,
     CreateVendorJSON,
     ServiceResponse,
+    VendorItemResponse,
+    VendorItemsListResponse,
     VendorResponse,
     VendorsListResponse,
+    UpdateVendorItemJSON,
     UpdateVendorJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
@@ -49,6 +53,54 @@ export const updateVendor = async (
 ): Promise<ServiceResponse<VendorResponse | null>> => {
     try {
         const response = await api.patch(`/organizations/${organizationId}/vendors/${vendorId}`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getVendorItems = async (
+    organizationId: string,
+): Promise<ServiceResponse<VendorItemsListResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/vendor-items`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getVendorItem = async (
+    organizationId: string,
+    vendorItemId: string,
+): Promise<ServiceResponse<VendorItemResponse | null>> => {
+    try {
+        const response = await api.get(`/organizations/${organizationId}/vendor-items/${vendorItemId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createVendorItem = async (
+    organizationId: string,
+    data: CreateVendorItemJSON,
+): Promise<ServiceResponse<VendorItemResponse | null>> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/vendor-items`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateVendorItem = async (
+    organizationId: string,
+    vendorItemId: string,
+    data: UpdateVendorItemJSON,
+): Promise<ServiceResponse<VendorItemResponse | null>> => {
+    try {
+        const response = await api.patch(`/organizations/${organizationId}/vendor-items/${vendorItemId}`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

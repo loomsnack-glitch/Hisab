@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateVendorSchema, STATUS_CODES, UpdateVendorSchema } from "@repo/types";
+import { CreateVendorItemSchema, CreateVendorSchema, STATUS_CODES, UpdateVendorItemSchema, UpdateVendorSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -111,6 +111,97 @@ export const createVendorsRoutes = (
             return handleError(FILE_NAME, "updateVendor", c, error);
         }
     });
+
+    router.get("/:organizationId/vendor-items", async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const serviceResponse = await vendorsService.getVendorItems(c.get("authUser").id, organizationId);
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "getVendorItems", c, error);
+        }
+    });
+
+    router.post(
+        "/:organizationId/vendor-items",
+        validateSchema("json", CreateVendorItemSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+
+                const serviceResponse = await vendorsService.createVendorItem(
+                    c.get("authUser").id,
+                    organizationId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "createVendorItem", c, error);
+            }
+        },
+    );
+
+    router.get("/:organizationId/vendor-items/:vendorItemId", async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const vendorItemId = c.req.param("vendorItemId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+            const invalidVendorItemId = validateUuidParam(vendorItemId, "Invalid vendor item id");
+            if (invalidVendorItemId) {
+                return c.json(invalidVendorItemId, invalidVendorItemId.code);
+            }
+
+            const serviceResponse = await vendorsService.getVendorItemDetails(
+                c.get("authUser").id,
+                organizationId,
+                vendorItemId,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "getVendorItemDetails", c, error);
+        }
+    });
+
+    router.patch(
+        "/:organizationId/vendor-items/:vendorItemId",
+        validateSchema("json", UpdateVendorItemSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const vendorItemId = c.req.param("vendorItemId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidVendorItemId = validateUuidParam(vendorItemId, "Invalid vendor item id");
+                if (invalidVendorItemId) {
+                    return c.json(invalidVendorItemId, invalidVendorItemId.code);
+                }
+
+                const serviceResponse = await vendorsService.updateVendorItem(
+                    c.get("authUser").id,
+                    organizationId,
+                    vendorItemId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "updateVendorItem", c, error);
+            }
+        },
+    );
 
     return router;
 };
