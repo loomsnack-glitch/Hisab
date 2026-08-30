@@ -37,9 +37,9 @@ cp apps/backend/.env.example apps/backend/.env
 cp apps/admin/.env.example apps/admin/.env
 ```
 
-The worker file is optional for a Cloud-only test. Never commit any of these
-files. The App Secret, webhook verify token, onboarding state secret, and
-credential key are backend-only secrets. The Admin file may contain the App ID
+No additional WhatsApp service or environment file is required. Never commit
+any of these files. The App Secret, webhook verify token, onboarding state
+secret, and credential key are backend-only secrets. The Admin file may contain the App ID
 and Config ID because Vite exposes `VITE_*` values to the browser; it must not
 contain an App Secret or access token.
 

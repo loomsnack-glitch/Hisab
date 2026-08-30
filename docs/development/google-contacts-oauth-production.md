@@ -110,8 +110,9 @@ GOOGLE_CONTACTS_WORKER_ID=google-contacts-worker-0
 ```
 
 The dedicated Google Contacts worker uses `GOOGLE_CONTACTS_API_URL`,
-`GOOGLE_CONTACTS_WORKER_TOKEN`, and `GOOGLE_CONTACTS_WORKER_ID`. It must not
-share the WhatsApp worker process or token.
+`GOOGLE_CONTACTS_WORKER_TOKEN`, and `GOOGLE_CONTACTS_WORKER_ID`. Give this
+service its own process credentials and do not reuse tokens from another
+service.
 
 Production worker `.env` on ganatri.in
 (`/var/www/ganatri.in/backend/apps/google-contacts-worker/.env`):

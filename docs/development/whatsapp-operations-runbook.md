@@ -1,10 +1,9 @@
 # WhatsApp Cloud API operations runbook
 
 This runbook covers the supported WhatsApp transport: Meta WhatsApp Cloud API.
-The backend owns account configuration, template operations, webhooks, durable
+The Backend owns account configuration, template operations, webhooks, durable
 outbox dispatch, retries, delivery reconciliation, message history, invoices,
-due reminders, and promotions. The retired QR/Baileys worker, port `8100`, and
-worker PM2 process are not part of this system.
+due reminders, and promotions.
 
 ## Local development
 
@@ -14,8 +13,9 @@ Start the repository development processes using the normal project workflow:
 bun run dev
 ```
 
-The backend sends Cloud API requests directly. No separate WhatsApp worker,
-worker token, QR session, or auth-state directory is required.
+The Backend sends Cloud API requests directly. Configure the Cloud API
+environment described in the setup guide and use the Backend logs for delivery
+diagnostics.
 
 For a local Cloud API test, configure the backend environment using
 [the Cloud API setup and test guide](whatsapp-cloud-api-setup-and-test-guide.md).
@@ -86,7 +86,7 @@ Check these in order:
    its processing error is visible in the event record.
 
 Use ngrok or another tunnel only for local development. Keep the tunnel URL
-stable while the webhook is configured, and do not expose internal worker ports.
+stable while the webhook is configured.
 
 ## Account and template changes
 
