@@ -46,6 +46,11 @@ import * as tableRepository from "@/modules/tenant/table-service/table-service.r
 import * as billingKotRead from "./billing-kot-read";
 import { decodeSalesCursor } from "./sales-pagination";
 import { DEFAULT_SALE_NUMBER_TIMEZONE } from "./sale-numbering";
+import {
+  googleContactsChangeIsSyncRelevant,
+  googleContactsCustomerIsEligible,
+} from "@/modules/tenant/google-contacts/google-contacts.customer-sync";
+import * as googleContactsOutbox from "@/modules/tenant/google-contacts/google-contacts.outbox";
 
 const normalizeOptionalText = (value?: string | null) => {
   const trimmed = value?.trim();
@@ -1633,14 +1638,32 @@ const createCustomerInOrganization = async (
     }
   }
 
-  const customer = await billingRepository.createCustomer({
-    id: crypto.randomUUID(),
-    organizationId,
-    name: customerData.name,
-    phone,
-    balance: 0,
-    isActive: customerData.isActive ?? true,
-    createdBy,
+  const customer = await pg.begin(async (tx) => {
+    const created = await billingRepository.createCustomer(
+      {
+        id: crypto.randomUUID(),
+        organizationId,
+        name: customerData.name,
+        phone,
+        balance: 0,
+        isActive: customerData.isActive ?? true,
+        createdBy,
+      },
+      tx,
+    );
+    if (!created) return null;
+    if (googleContactsCustomerIsEligible(created.phone)) {
+      await googleContactsOutbox.scheduleGoogleContactsCustomerChange(
+        {
+          organizationId,
+          customerId: created.id,
+          customerUpdatedAt: created.updatedAt,
+          phone: created.phone,
+        },
+        tx,
+      );
+    }
+    return created;
   });
 
   if (!customer) {
@@ -3995,15 +4018,40 @@ export const updateCustomer = async (
     }
   }
 
-  const customer = await billingRepository.updateCustomer({
-    id: customerId,
-    organizationId,
-    name: customerData.name ?? existingCustomer.name,
-    phone,
-    isActive: customerData.isActive ?? existingCustomer.isActive,
-    marketingOptedOut:
-      customerData.marketingOptedOut ?? existingCustomer.marketingOptedOut,
-    updatedBy: userId,
+  const customer = await pg.begin(async (tx) => {
+    const updated = await billingRepository.updateCustomer(
+      {
+        id: customerId,
+        organizationId,
+        name: customerData.name ?? existingCustomer.name,
+        phone,
+        isActive: customerData.isActive ?? existingCustomer.isActive,
+        marketingOptedOut:
+          customerData.marketingOptedOut ?? existingCustomer.marketingOptedOut,
+        updatedBy: userId,
+      },
+      tx,
+    );
+    if (!updated) return null;
+    if (
+      googleContactsChangeIsSyncRelevant({
+        previousName: existingCustomer.name,
+        nextName: updated.name,
+        previousPhone: existingCustomer.phone ?? null,
+        nextPhone: updated.phone ?? null,
+      })
+    ) {
+      await googleContactsOutbox.scheduleGoogleContactsCustomerChange(
+        {
+          organizationId,
+          customerId: updated.id,
+          customerUpdatedAt: updated.updatedAt,
+          phone: updated.phone,
+        },
+        tx,
+      );
+    }
+    return updated;
   });
 
   if (!customer) {

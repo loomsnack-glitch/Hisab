@@ -19,8 +19,8 @@ Bun.serve({
   fetch: app.fetch,
 });
 
-process.on("SIGINT", handleShutdown);   // Ctrl+C
-process.on("SIGTERM", handleShutdown);  // kill, Docker, K8s
+process.on("SIGINT", handleShutdown); // Ctrl+C
+process.on("SIGTERM", handleShutdown); // kill, Docker, K8s
 process.on("SIGQUIT", handleShutdown);
 
 console.log(`🚀 Server running at http://localhost:${port}/api`);
@@ -39,10 +39,7 @@ process.once("SIGQUIT", stopProviderEventReplay);
 
 const cloudWebhookReplay = setInterval(() => {
   void replayPendingCloudWebhookEvents().catch((error) => {
-    console.warn(
-      "[whatsapp-cloud] webhook replay failed",
-      error instanceof Error ? error.message : "unknown error",
-    );
+    console.warn("[whatsapp-cloud] webhook replay failed", error instanceof Error ? error.message : "unknown error");
   });
 }, 5_000);
 cloudWebhookReplay.unref();
@@ -53,10 +50,7 @@ process.once("SIGQUIT", stopCloudWebhookReplay);
 
 const cloudOutboxDispatch = setInterval(() => {
   void dispatchCloudOutbox().catch((error) => {
-    console.warn(
-      "[whatsapp-cloud] outbox dispatch failed",
-      error instanceof Error ? error.message : "unknown error",
-    );
+    console.warn("[whatsapp-cloud] outbox dispatch failed", error instanceof Error ? error.message : "unknown error");
   });
 }, 5_000);
 cloudOutboxDispatch.unref();

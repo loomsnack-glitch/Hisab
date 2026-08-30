@@ -2,9 +2,10 @@ import axios, { AxiosError } from "axios";
 import { getAuthToken } from "./auth-token";
 import { getDeviceId } from "./device-id";
 
+// Web apps should use same-origin BASE_API_URL=/api (Vite/nginx proxy).
+// Pointing the browser at a different host (localhost vs LAN IP) makes
+// SameSite=Lax device cookies look third-party, so deviceId rotates every request.
 const FALLBACK_BASE_API_URL = "https://ganatri.in/api";
-// Local LAN (physical phone against this PC): "http://192.168.29.221:8001/api"
-// const FALLBACK_BASE_API_URL = "http://192.168.29.221:8001/api";
 // Previous production host, kept live until cutover: "https://ganatri.loomsnack.com/api"
 
 const sanitizeBaseUrl = (value?: string | null): string | undefined => {

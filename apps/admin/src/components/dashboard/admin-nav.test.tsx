@@ -32,6 +32,7 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/stores`, withOrg)).toBe(false);
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/billing`, withOrg)).toBe(false);
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/reports`, withOrg)).toBe(true);
+        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/settings`, withOrg)).toBe(true);
         expect(isAdminMoreDestinationActive("/appearance", withOrg)).toBe(true);
         expect(isAdminMoreDestinationActive("/organizations", withOrg)).toBe(true);
     });

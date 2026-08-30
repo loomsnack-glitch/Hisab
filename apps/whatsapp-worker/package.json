@@ -7,7 +7,7 @@
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target node --format esm --minify --external link-preview-js --external jimp --external sharp",
-        "dev": "node ../../scripts/dev-whatsapp-worker.mjs",
+        "dev-local": "node ../../scripts/dev-whatsapp-worker.mjs",
         "start": "node dist/index.js",
         "typecheck": "tsc --noEmit",
         "load-test": "bun src/operations/load-test.ts"

@@ -55,4 +55,22 @@ describe("POS navigation visibility", () => {
         expect(disabledSidebar).not.toContain('href="/kots"');
         expect(disabledSidebar).not.toContain("KOT");
     });
+
+    test("does not offer Google Contacts settings or connection controls", () => {
+        const sidebar = renderToStaticMarkup(
+            <MemoryRouter>
+                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled kotSystemEnabled />
+            </MemoryRouter>,
+        );
+        const mobileNav = renderToStaticMarkup(
+            <MemoryRouter>
+                <PosMobileBottomNav tableManagementEnabled kotSystemEnabled />
+            </MemoryRouter>,
+        );
+
+        expect(sidebar).not.toContain("Google Contacts");
+        expect(sidebar).not.toContain("google-contacts");
+        expect(mobileNav).not.toContain("Google Contacts");
+        expect(mobileNav).not.toContain("google-contacts");
+    });
 });

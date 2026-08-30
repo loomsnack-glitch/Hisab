@@ -29,6 +29,9 @@ import AppearancePage from "@/pages/appearance-page";
 import TablesPage from "@/pages/tables-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
+import WhatsAppInboxPage from "@/pages/whatsapp-inbox-page";
+import OrganizationSettingsPage from "@/pages/organization-settings-page";
+import GoogleContactsOAuthCallbackPage from "@/pages/google-contacts-oauth-callback-page";
 import RetiredPosRoutePage from "@/pages/retired-pos-route-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -135,6 +138,8 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
                                 <Route path="/organizations/:organizationId/reports" element={<ReportsPage />} />
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
+                                <Route path="/organizations/:organizationId/settings" element={<OrganizationSettingsPage />} />
+                                <Route path="/google-contacts/oauth/callback" element={<GoogleContactsOAuthCallbackPage />} />
                                 <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                                 <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
                                 <Route path="/organizations/:organizationId/whatsapp" element={<Navigate to="accounts" replace />} />

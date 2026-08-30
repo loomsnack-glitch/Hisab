@@ -10,7 +10,7 @@ test("proxies same-origin /api to the shared backend on an origin isolated from 
     expect(resolvedConfig.server?.port).toBe(5173);
     expect(resolvedConfig.server?.proxy).toMatchObject({
         "/api": {
-            target: "http://localhost:8001",
+            target: "http://127.0.0.1:8001",
             changeOrigin: true,
         },
     });

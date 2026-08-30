@@ -3,6 +3,7 @@ import {
     Armchair,
     BarChart3,
     Building2,
+    Contact,
     Package2,
     ReceiptText,
     Settings2,
@@ -91,6 +92,14 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         requiresOrganization: true,
         getPath: (organizationId) => `/organizations/${organizationId}/customers`,
         isActive: (pathname) => /\/organizations\/[^/]+\/customers/.test(pathname),
+    },
+    {
+        id: "google-contacts",
+        label: "Google Contacts",
+        icon: Contact,
+        requiresOrganization: true,
+        getPath: (organizationId) => `/organizations/${organizationId}/settings`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/settings(\/|$)/.test(pathname),
     },
     {
         id: "tables",

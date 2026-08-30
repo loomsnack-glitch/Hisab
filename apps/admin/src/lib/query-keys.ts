@@ -163,3 +163,9 @@ export const whatsappKeys = {
   posTemplates: (kind: string) => [...whatsappKeys.all, "pos-templates", kind] as const,
   posAccount: () => [...whatsappKeys.all, "pos-account"] as const,
 };
+
+export const googleContactsKeys = {
+  all: ["google-contacts"] as const,
+  status: (organizationId: string) =>
+    [...googleContactsKeys.all, "status", organizationId] as const,
+};
