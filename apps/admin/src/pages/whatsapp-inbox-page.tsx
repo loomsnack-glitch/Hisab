@@ -17,6 +17,7 @@ import { ArrowLeft, FileText, Image as ImageIcon, RefreshCw } from "lucide-react
 import { toast } from "sonner";
 
 import { whatsappKeys } from "@/lib/query-keys";
+import { formatWhatsAppTimestamp } from "@/lib/format";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
 type InboxViewProps = {
@@ -26,12 +27,6 @@ type InboxViewProps = {
 };
 
 const normalizePhone = (phone: string) => phone.replace(/\D/g, "");
-
-const formatTimestamp = (value?: string | Date | null) => {
-    if (!value) return "No messages yet";
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "" : date.toLocaleString([], { dateStyle: "short", timeStyle: "short" });
-};
 
 const responseMessage = (response: { status: string; message?: string }) =>
     response.status === "success" ? "" : response.message || "WhatsApp request failed";
@@ -186,7 +181,7 @@ export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }:
                                             {conversation.unreadCount > 0 ? <Badge className="shrink-0 rounded-full">{conversation.unreadCount}</Badge> : null}
                                         </div>
                                         <p className="mt-1 truncate text-xs text-muted-foreground">{conversation.contactPhoneNumber}</p>
-                                        <p className="mt-1 text-[11px] text-muted-foreground">{formatTimestamp(conversation.lastMessageAt)}</p>
+                                        <p className="mt-1 text-[11px] text-muted-foreground">{formatWhatsAppTimestamp(conversation.lastMessageAt)}</p>
                                     </button>
                                 ))}
                             </div>
@@ -295,7 +290,7 @@ const MessageBubble = ({
                     </Button>
                 ) : null}
                 <p className={`mt-1 text-[10px] ${outbound ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                    {formatTimestamp(message.createdAt)}{outbound && message.status ? ` · ${message.status}` : ""}
+                    {formatWhatsAppTimestamp(message.createdAt)}{outbound && message.status ? ` · ${message.status}` : ""}
                 </p>
             </div>
         </div>

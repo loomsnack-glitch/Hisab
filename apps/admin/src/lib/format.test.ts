@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatDiscountPercentage, getAverageBillPerOrder, getDiscountPercentage } from "./format";
+import { formatDiscountPercentage, formatWhatsAppTimestamp, getAverageBillPerOrder, getDiscountPercentage } from "./format";
+
+describe("WhatsApp timestamp formatting", () => {
+    test("formats timestamps as day/month/year with an AM/PM time", () => {
+        expect(formatWhatsAppTimestamp(new Date(2026, 7, 30, 21, 24))).toBe("30/08/2026 09:24 PM");
+    });
+});
 
 describe("discount formatting", () => {
     test("calculates a discount percentage from the original amount", () => {
