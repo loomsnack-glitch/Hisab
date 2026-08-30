@@ -325,13 +325,14 @@ const MessageBubble = ({
     openingAttachmentId: string | null;
 }) => {
     const outbound = message.direction === "outbound";
+    const isTemplate = message.messageType === "template";
     return (
         <div className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm ${outbound ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card"}`}>
+            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm ${isTemplate ? "rounded-br-sm border border-border bg-card text-card-foreground" : outbound ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card"}`}>
                 {message.body ? <p className="whitespace-pre-wrap break-words">{message.body}</p> : null}
-                {message.messageType === "template" ? (
+                {isTemplate ? (
                     <div className="space-y-1.5">
-                        <p className="break-words text-[11px] opacity-75">Template{message.templateName ? ` · ${message.templateName}` : " message"}</p>
+                        <p className="break-words px-1 text-[11px] text-muted-foreground">Template{message.templateName ? ` · ${message.templateName}` : " message"}</p>
                         {message.templatePreview ? <TemplateMessagePreview preview={message.templatePreview} /> : null}
                     </div>
                 ) : null}
@@ -350,22 +351,21 @@ const MessageBubble = ({
                         <span className="truncate">{message.attachmentFileName}</span>
                     </Button>
                 ) : null}
-                <p className={`mt-1 text-[10px] ${outbound ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                    {formatWhatsAppTimestamp(message.createdAt)}
+                <div className={`mt-1 flex items-center justify-end gap-1.5 whitespace-nowrap px-1 text-[10px] ${isTemplate ? "text-muted-foreground" : outbound ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                    <span>{formatWhatsAppTimestamp(message.createdAt)}</span>
                     {outbound && message.status ? (
-                        <>
-                            {" · "}
-                            <MessageStatus status={message.status} />
-                            {` ${message.status}`}
-                        </>
+                        <span className="inline-flex items-center gap-1">
+                            <span aria-hidden="true">·</span>
+                            <MessageStatus status={message.status} surface={isTemplate ? "neutral" : "primary"} />
+                        </span>
                     ) : null}
-                </p>
+                </div>
             </div>
         </div>
     );
 };
 
-const MessageStatus = ({ status }: { status: WhatsAppMessageDTO["status"] }) => {
+const MessageStatus = ({ status, surface }: { status: WhatsAppMessageDTO["status"]; surface: "primary" | "neutral" }) => {
     const Icon = status === "failed"
         ? CircleAlert
         : status === "queued" || status === "sending"
@@ -374,9 +374,15 @@ const MessageStatus = ({ status }: { status: WhatsAppMessageDTO["status"] }) => 
                 ? CheckCheck
                 : Check;
     const label = status === "queued" ? "Queued" : status === "sending" ? "Sending" : status === "sent" ? "Sent" : status === "delivered" ? "Delivered" : status === "read" ? "Read" : "Failed";
+    const color = status === "failed"
+        ? surface === "primary" ? "text-red-200" : "text-red-600 dark:text-red-400"
+        : status === "read"
+            ? surface === "primary" ? "text-sky-200" : "text-sky-600 dark:text-sky-400"
+            : "";
     return (
-        <span className={`inline-flex items-center align-[-2px] ${status === "failed" ? "text-red-300" : status === "read" ? "text-sky-200" : ""}`} title={label} aria-label={label}>
+        <span className={`inline-flex items-center align-[-2px] ${color}`} title={label} aria-label={label}>
             <Icon className="size-3" />
+            <span className="sr-only">{label}</span>
         </span>
     );
 };
@@ -384,7 +390,7 @@ const MessageStatus = ({ status }: { status: WhatsAppMessageDTO["status"] }) => 
 const TemplateMessagePreview = ({ preview }: { preview: WhatsAppMessageDTO["templatePreview"] }) => {
     if (!preview) return null;
     return (
-        <div className="overflow-hidden rounded-xl border border-border/60 bg-card text-card-foreground shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-border bg-background text-card-foreground shadow-sm">
             {preview.header?.type === "image" ? (
                 preview.header.url ? (
                     <img
