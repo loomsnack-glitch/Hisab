@@ -10,9 +10,9 @@ import {
     type WhatsAppAttachmentResponse,
     type WhatsAppMessageDTO,
     type WhatsAppSendConversationTextJSON,
-    type WhatsAppWorkerInboundMessageJSON,
-    type WhatsAppWorkerMessageEventJSON,
-    WhatsAppWorkerMessageEventSchema,
+    type WhatsAppInboundMessageJSON,
+    type WhatsAppMessageEventJSON,
+    WhatsAppMessageEventSchema,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as storage from "@/services/storage";
@@ -97,30 +97,12 @@ const conversationForScope = async (
 
 const sendTextForScope = async (
     scope: Scope,
-    conversationId: string,
-    data: WhatsAppSendConversationTextJSON,
+    _conversationId: string,
+    _data: WhatsAppSendConversationTextJSON,
 ): Promise<ServiceResponse<WhatsAppConversationMessagesResponse["messages"][number] | null>> => {
-    if (scope.account.provider === "cloud_api") return error("Cloud WhatsApp messages require an approved Cloud template route", STATUS_CODES.CONFLICT);
-    if (scope.account.status !== "connected") return error("Connect the Store WhatsApp account before sending messages", STATUS_CODES.CONFLICT);
-    const conversation = await repository.getConversation(scope.organizationId, scope.storeId, scope.account.id, conversationId);
-    if (!conversation) return error("WhatsApp conversation not found", STATUS_CODES.NOT_FOUND);
-    try {
-        const outbox = await repository.createTextOutbox(
-            scope.organizationId,
-            scope.storeId,
-            scope.account.id,
-            conversationId,
-            data.body.trim(),
-        );
-        const messages = await repository.getConversationMessages(scope.organizationId, scope.storeId, scope.account.id, conversationId);
-        const message = messages.find(item => item.id === outbox.messageId) ?? null;
-        return message ? success(message, "Message queued for WhatsApp") : error("Message could not be loaded", STATUS_CODES.INTERNAL_SERVER_ERROR);
-    } catch (cause) {
-        if (cause instanceof repository.WhatsAppOutboxLimitError) {
-            return error("WhatsApp account queue is full; retry shortly", STATUS_CODES.TOO_MANY_REQUESTS);
-        }
-        return error("Message could not be queued for WhatsApp", STATUS_CODES.INTERNAL_SERVER_ERROR);
-    }
+    return scope.account.provider === "cloud_api"
+        ? error("Cloud WhatsApp messages require an approved Cloud template route", STATUS_CODES.CONFLICT)
+        : error("This WhatsApp account uses a retired provider; connect a Cloud API account before sending messages", STATUS_CODES.CONFLICT);
 };
 
 const attachCustomerForScope = async (
@@ -247,7 +229,7 @@ export const getAttachmentForDevice = async (
 
 const processMessageEvent = async (
     accountId: string,
-    data: WhatsAppWorkerMessageEventJSON,
+    data: WhatsAppMessageEventJSON,
 ): Promise<{ stored: boolean }> => {
     const account = await repository.getAccountById(accountId);
     if (!account) throw new Error("WhatsApp account not found");
@@ -321,16 +303,16 @@ const processMessageEvent = async (
 
 /**
  * Cloud receipts already have their own durable inbox. They must enter the
- * shared Store-scoped writer without creating a legacy Baileys inbox row.
+ * shared Store-scoped writer without creating a legacy provider inbox row.
  */
 export const ingestNormalizedMessageEvent = async (
     accountId: string,
-    data: WhatsAppWorkerMessageEventJSON,
+    data: WhatsAppMessageEventJSON,
 ): Promise<{ stored: boolean }> => processMessageEvent(accountId, data);
 
 export const ingestMessageEvent = async (
     accountId: string,
-    data: WhatsAppWorkerMessageEventJSON,
+    data: WhatsAppMessageEventJSON,
 ): Promise<{ stored: boolean }> => {
     const claim = await repository.claimProviderEvent(accountId, data.providerMessageId, data);
     if (claim.completed || !claim.claimed) return { stored: false };
@@ -348,7 +330,7 @@ export const ingestMessageEvent = async (
 export const replayPendingMessageEvents = async (): Promise<void> => {
     const events = await repository.claimPendingProviderEvents();
     for (const event of events) {
-        const parsed = WhatsAppWorkerMessageEventSchema.safeParse(event.payload);
+        const parsed = WhatsAppMessageEventSchema.safeParse(event.payload);
         if (!parsed.success) {
             await repository.failProviderEvent(event.id, "Stored WhatsApp provider event payload is invalid");
             continue;
@@ -364,7 +346,7 @@ export const replayPendingMessageEvents = async (): Promise<void> => {
 
 export const ingestInboundMessage = async (
     accountId: string,
-    data: WhatsAppWorkerInboundMessageJSON,
+    data: WhatsAppInboundMessageJSON,
 ): Promise<{ stored: boolean }> => ingestMessageEvent(accountId, {
     ...data,
     direction: "inbound",

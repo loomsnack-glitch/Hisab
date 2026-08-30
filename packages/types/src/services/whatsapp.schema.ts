@@ -11,7 +11,7 @@ export const WhatsAppAccountStatusSchema = z.enum([
     "revoked",
 ]);
 export const WhatsAppConversationMessageDirectionSchema = z.enum(["inbound", "outbound"]);
-export const WhatsAppLegacyMessageTypeSchema = z.enum(["text", "document", "image"]);
+export const WhatsAppTransportMessageTypeSchema = z.enum(["text", "document", "image"]);
 export const WhatsAppMessageTypeSchema = z.enum(["text", "document", "image", "template"]);
 export const WhatsAppMessageStatusSchema = z.enum(["queued", "sending", "sent", "delivered", "read", "failed"]);
 export const WhatsAppOutboxKindSchema = z.enum(["invoice", "text", "document", "promotion", "template"]);
@@ -385,15 +385,9 @@ export const WhatsAppMessageDTOSchema = z.object({
     readAt: dtoDateSchema.nullable().optional(),
 });
 
-export const WhatsAppCreateAccountSchema = z.object({
-    phoneNumber: phoneSchema,
-});
-
 export const WhatsAppAssignAccountSchema = z.object({
     whatsappAccountId: z.uuid("Invalid WhatsApp account id"),
 });
-
-export const WhatsAppChangeAccountNumberSchema = WhatsAppCreateAccountSchema;
 
 export const WhatsAppAccountStatusResponseSchema = z.object({
     account: WhatsAppAccountDTOSchema,
@@ -402,22 +396,6 @@ export const WhatsAppAccountStatusResponseSchema = z.object({
 
 export const WhatsAppAccountsResponseSchema = z.object({
     accounts: z.array(WhatsAppAccountDTOSchema),
-});
-
-export const WhatsAppWorkerAccountSchema = z.object({
-    id: z.uuid("Invalid WhatsApp account id"),
-    phoneNumber: phoneSchema,
-    status: WhatsAppAccountStatusSchema,
-});
-
-export const WhatsAppWorkerStatusUpdateSchema = z.object({
-    status: WhatsAppAccountStatusSchema,
-    qrImageDataUrl: z.string().startsWith("data:image/png;base64,").max(200_000).nullable(),
-    lastErrorCode: z.string().regex(/^[a-z0-9_]+$/).max(100).nullable(),
-});
-
-export const WhatsAppWorkerStatusResponseSchema = WhatsAppWorkerStatusUpdateSchema.extend({
-    accountId: z.uuid("Invalid WhatsApp account id"),
 });
 
 export const WhatsAppSendTextSchema = z.object({
@@ -593,53 +571,12 @@ export const WhatsAppReminderQueueResponseSchema = z.object({
     outboxStatus: WhatsAppOutboxStatusSchema,
 });
 
-export const WhatsAppWorkerInvoiceJobSchema = z.object({
-    accountId: z.uuid("Invalid WhatsApp account id"),
-    outboxId: z.uuid("Invalid outbox id"),
-    messageId: z.uuid("Invalid message id"),
-    phoneNumber: phoneSchema,
-    attachmentFileName: z.string().trim().min(1).max(255),
-    attachmentMimeType: z.string().trim().min(1).max(255),
-    caption: z.string().max(4096).nullable(),
-    documentBase64: z.string().min(1).max(14_000_000),
-    attemptCount: z.number().int().positive(),
-    leaseOwner: z.string().trim().min(1).max(255),
-});
-
-export const WhatsAppWorkerInvoiceResultSchema = z.object({
-    leaseOwner: z.string().trim().min(1).max(255),
-    providerMessageId: z.string().trim().min(1).max(255).nullable(),
-    failureCode: z.string().regex(/^[a-z0-9_]+$/).max(100).nullable(),
-    failureMessage: z.string().trim().max(1000).nullable(),
-    retryable: z.boolean(),
-});
-
-export const WhatsAppWorkerMessageStatusSchema = z.object({
-    providerMessageId: z.string().trim().min(1).max(255),
-    status: z.enum(["delivered", "read"]),
-});
-
-export const WhatsAppWorkerOutboundJobSchema = z.object({
-    accountId: z.uuid("Invalid WhatsApp account id"),
-    outboxId: z.uuid("Invalid outbox id"),
-    messageId: z.uuid("Invalid message id"),
-    phoneNumber: phoneSchema,
-    messageType: WhatsAppLegacyMessageTypeSchema,
-    body: z.string().nullable(),
-    caption: z.string().max(4096).nullable(),
-    attachmentFileName: z.string().trim().min(1).max(255).nullable(),
-    attachmentMimeType: z.string().trim().min(1).max(255).nullable(),
-    documentBase64: z.string().max(14_000_000).nullable(),
-    attemptCount: z.number().int().positive(),
-    leaseOwner: z.string().trim().min(1).max(255),
-});
-
-const WhatsAppWorkerMessageFields = {
+const WhatsAppMessageFields = {
     providerMessageId: z.string().trim().min(1).max(255),
     externalChatId: z.string().trim().min(1).max(255),
     contactPhoneNumber: phoneSchema,
     displayName: z.string().trim().min(1).max(255),
-    messageType: WhatsAppLegacyMessageTypeSchema,
+    messageType: WhatsAppTransportMessageTypeSchema,
     body: z.string().max(4096).nullable(),
     caption: z.string().max(4096).nullable(),
     attachmentFileName: z.string().trim().min(1).max(255).nullable(),
@@ -648,7 +585,7 @@ const WhatsAppWorkerMessageFields = {
     occurredAt: dtoDateSchema,
 };
 
-const validateWorkerMessageContent = (value: {
+const validateMessageContent = (value: {
     messageType: "text" | "document" | "image";
     body: string | null;
     documentBase64: string | null;
@@ -661,13 +598,13 @@ const validateWorkerMessageContent = (value: {
     }
 };
 
-export const WhatsAppWorkerInboundMessageSchema = z.object(WhatsAppWorkerMessageFields).superRefine(validateWorkerMessageContent);
+export const WhatsAppInboundMessageSchema = z.object(WhatsAppMessageFields).superRefine(validateMessageContent);
 
-export const WhatsAppWorkerMessageEventSchema = z.object({
-    ...WhatsAppWorkerMessageFields,
+export const WhatsAppMessageEventSchema = z.object({
+    ...WhatsAppMessageFields,
     direction: WhatsAppConversationMessageDirectionSchema,
     source: z.enum(["realtime", "history"]),
-}).superRefine(validateWorkerMessageContent);
+}).superRefine(validateMessageContent);
 
 export const WhatsAppConversationListResponseSchema = z.object({
     accountId: z.uuid("Invalid WhatsApp account id"),

@@ -3275,7 +3275,7 @@ const PlatformOrganizationDetailPage = ({
                                                 <TableCell className="font-medium whitespace-nowrap">
                                                     {formatPhoneDisplay(account.phoneNumber)}
                                                 </TableCell>
-                                                <TableCell>{account.provider === "cloud_api" ? "Cloud API" : "Baileys"}</TableCell>
+                                                <TableCell>{account.provider === "cloud_api" ? "Cloud API" : "Legacy provider"}</TableCell>
                                                 <TableCell>
                                                     <Badge variant="outline" className="rounded-full">
                                                         {whatsappAccountStatusLabel(account.status)}

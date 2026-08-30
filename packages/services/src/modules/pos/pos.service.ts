@@ -606,17 +606,6 @@ export const getPosWhatsAppAccount = async (): Promise<
   }
 };
 
-export const connectPosWhatsAppAccount = async (): Promise<
-  ServiceResponse<WhatsAppAccountStatusResponseDTO | null>
-> => {
-  try {
-    const response = await api.post("/pos/whatsapp/account/connect");
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-};
-
 export const syncPosWhatsAppAccount = async (): Promise<
   ServiceResponse<unknown>
 > => {

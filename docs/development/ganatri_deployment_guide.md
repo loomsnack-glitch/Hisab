@@ -1,10 +1,13 @@
 # Ganatri Deployment Guide
 
 > **Retired host.** `ganatri.loomsnack.com` is no longer the live stack.
-> Do not start `ganatri-backend` or `ganatri-whatsapp-worker`. Do not rsync
-> here. Live deploys are **ganatri.in** — follow
+> Do not start `ganatri-backend` or any WhatsApp worker. Do not rsync
+> here. This document is historical only. Live deploys are **ganatri.in** — follow
 > `docs/development/ganatri_in_deployment_guide.md` (Admin / POS / Console,
-> API on port 8181, WhatsApp worker on port 8100).
+> API on port 8181, and WhatsApp through the Cloud API).
+>
+> The legacy Baileys worker, QR-linking runtime, and port `8100` were retired.
+> Ignore the old worker setup, PM2, port, and auth-state instructions below.
 >
 > To shut this host down: stop and delete the old PM2 apps, then optionally
 > disable its nginx site. The exact commands are in the ganatri.in guide
@@ -16,7 +19,7 @@ Deploy **ganatri.loomsnack.com** on the Ubuntu VPS at `216.158.228.89` (same mac
 |-------|-------|-------------|
 | Frontend | React static build (Vite) | `/var/www/ganatri.loomsnack.com/frontend/` |
 | Backend | Bun + Hono (PM2) | `/var/www/ganatri.loomsnack.com/backend/` |
-| WhatsApp worker | Node 20 + Baileys (PM2) | `/var/www/ganatri.loomsnack.com/backend/apps/whatsapp-worker/` |
+| WhatsApp | Meta Cloud API through the backend | — |
 | Reverse proxy | nginx | `/api` → `127.0.0.1:8001` |
 
 **Port note:** `boxmap-backend` already uses port **8000**. Ganatri uses **8001** so both apps can run on the same VPS.
@@ -44,12 +47,11 @@ source ~/.bashrc
 bun --version
 ```
 
-### Install Node.js 20+ (required by the WhatsApp worker)
+### Install Node.js 20+
 
-The backend continues to use its existing Bun/Hono runtime. The isolated
-WhatsApp worker must be started with Node 20 or newer; do not start it with Bun.
-PM2 uses `/usr/bin/node`, so that binary must be v20, not an older system Node
-or a newer Node that only exists under nvm.
+The backend continues to use its existing Bun/Hono runtime. Node is only
+needed for other host tooling; WhatsApp is handled by the backend's Meta Cloud
+API integration and has no separate worker process.
 
 ```bash
 node --version

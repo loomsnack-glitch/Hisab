@@ -2,8 +2,7 @@
 
 This is the end-to-end setup for the Cloud API path in Hisab. It covers a
 Meta test number first, then the Embedded Signup flow used for customer
-onboarding. The existing Baileys worker is not required for Cloud API sends.
-It remains required only for QR-linked accounts.
+onboarding. WhatsApp Cloud API is the only supported WhatsApp transport.
 
 ## What you need from Meta
 
@@ -36,7 +35,6 @@ Copy the checked-in examples to ignored local files:
 ```bash
 cp apps/backend/.env.example apps/backend/.env
 cp apps/admin/.env.example apps/admin/.env
-cp apps/whatsapp-worker/.env.example apps/whatsapp-worker/.env
 ```
 
 The worker file is optional for a Cloud-only test. Never commit any of these
@@ -109,21 +107,6 @@ This matches the current local Admin `.env` and shows the API test-account
 form. Set it to `false` when you want to test only Embedded Signup. Restart
 Vite after changing any `VITE_*` value.
 
-### Worker `.env`
-
-The worker is unrelated to a Cloud API send. Keep it configured only if the
-same local environment also tests QR-linked Baileys accounts. Run it with
-Node 20+, not Bun, because it owns the WebSocket connection.
-
-```env
-WHATSAPP_WORKER_HOST=127.0.0.1
-WHATSAPP_WORKER_PORT=8100
-WHATSAPP_API_URL=http://127.0.0.1:8001/api
-WHATSAPP_WORKER_TOKEN=<SAME_SHARED_TOKEN_AS_BACKEND>
-WHATSAPP_AUTH_ENCRYPTION_KEY=<AT_LEAST_32_RANDOM_BYTES>
-WHATSAPP_AUTH_STATE_DIRECTORY=./data/whatsapp-auth
-```
-
 ## Apply the database migrations
 
 Run this from `apps/backend` against the database named by
@@ -152,12 +135,6 @@ The expected local URLs are:
 
 - Backend: `http://localhost:8001/api`
 - Admin: `http://localhost:5173`
-
-Start the worker only for QR-linked accounts:
-
-```bash
-bun run --cwd apps/whatsapp-worker dev
-```
 
 ## Configure the Meta webhook
 
@@ -277,8 +254,7 @@ Then run one controlled test in this order:
 7. For an invoice, confirm Meta can download the signed document URL before it
    expires.
 
-The backend dispatch loop runs inside the API process. Cloud sends do not use
-the port-8100 worker. If an item remains `queued`, check that
+The backend dispatch loop runs inside the API process. If an item remains `queued`, check that
 `WHATSAPP_CLOUD_OUTBOX_ENABLED=true` was loaded by the backend process and
 restart the backend after changing `.env`.
 

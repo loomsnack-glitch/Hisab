@@ -1,8 +1,14 @@
 ﻿# Ganatri.in Deployment Guide
 
 Deploy **ganatri.in** on the Ubuntu VPS at `216.158.228.89`. This is the live
-Ganatri stack. `ganatri.loomsnack.com` is retired: stop its backend and
-WhatsApp worker (see [Stop ganatri.loomsnack.com](#stop-ganatriloomsnackcom)).
+Ganatri stack. `ganatri.loomsnack.com` is retired.
+
+> **WhatsApp runtime notice:** the legacy Baileys worker, QR-linking runtime,
+> port `8100`, and worker PM2 process were retired. Do not follow any older
+> WhatsApp worker commands further down this historical deployment document.
+> Deploy and operate WhatsApp through the backend's Cloud API path using
+> [the Cloud API setup and test guide](whatsapp-cloud-api-setup-and-test-guide.md).
+> The Google Contacts worker remains an independent service.
 
 The previous host guide stays in `docs/development/ganatri_deployment_guide.md`
 for history only. Do not rsync new builds into `/var/www/ganatri.loomsnack.com`.
@@ -14,18 +20,13 @@ for history only. Do not rsync new builds into `/var/www/ganatri.loomsnack.com`.
 | Console web | Vite static (`apps/console`) | `/var/www/ganatri.in/console/` | — |
 | Backend | Bun + Hono (PM2 `ganatri-in-backend`) | `/var/www/ganatri.in/backend/` | **8181** |
 | Canonical API | nginx | `https://ganatri.in/api` → `127.0.0.1:8181` | — |
-| WhatsApp worker | Node 20 + Baileys (PM2 `ganatri-in-whatsapp-worker`) | `/var/www/ganatri.in/backend/apps/whatsapp-worker/` | **8100** |
+| WhatsApp | Meta Cloud API through the backend | — | — |
 | Google Contacts worker | Bun (PM2 `ganatri-in-google-contacts-worker`) | `/var/www/ganatri.in/backend/apps/google-contacts-worker/` | — |
 
 **Ports on this VPS:** `boxmap-backend` uses **8000**. The retired Ganatri
-process used **8001**. ganatri.in uses **8181**. The WhatsApp worker stays on
-**8100** (only one worker process).
+process used **8001**. ganatri.in uses **8181**. WhatsApp has no separate port.
 
 **Same database / Redis / MinIO.** Do not create a second Postgres database.
-
-**Never run two WhatsApp workers.** Two Baileys processes fight over the same
-linked account. Stop `ganatri-whatsapp-worker` before starting
-`ganatri-in-whatsapp-worker`.
 
 Web apps keep `BASE_API_URL=/api`. Each subdomain proxies `/api` to port 8181,
 so cookies stay host-isolated (Admin cookies on `admin.ganatri.in`, POS on
