@@ -35,7 +35,23 @@ describe("Money Accounts client service", () => {
         ]);
     });
 
-    test("does not expose a direct balance write or manual Movement client", () => {
+    test("records Deposit and Withdrawal through administrator endpoints", async () => {
+        const requests: Array<{ method: string; url: string }> = [];
+        api.post = (async (url: string) => {
+            requests.push({ method: "POST", url });
+            return { data: { status: "success", data: null } };
+        }) as typeof api.post;
+
+        await moneyAccountsService.recordMoneyAccountDeposit("org-id", "account-id", { amount: 10 });
+        await moneyAccountsService.recordMoneyAccountWithdrawal("org-id", "account-id", { amount: 5, note: "Till skim" });
+
+        expect(requests).toEqual([
+            { method: "POST", url: "/organizations/org-id/money-accounts/account-id/deposits" },
+            { method: "POST", url: "/organizations/org-id/money-accounts/account-id/withdrawals" },
+        ]);
+    });
+
+    test("does not expose a direct balance write or generic Movement client", () => {
         expect("createMoneyAccountMovement" in moneyAccountsService).toBe(false);
         expect("updateMoneyAccountMovement" in moneyAccountsService).toBe(false);
         expect("updateMoneyAccountBalance" in moneyAccountsService).toBe(false);

@@ -12,10 +12,12 @@ import {
     type MoneyAccountScope,
     type MoneyAccountType,
     type MoneyAccountsListResponse,
+    type RecordManualMoneyMovementSVC,
     type ServiceResponse,
     type UpdateMoneyAccountSVC,
     type UpsertMoneyAccountPaymentRouteSVC,
 } from "@repo/types";
+import { pg } from "@/config/db";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as moneyAccountsRepository from "./money-accounts.repository";
 
@@ -515,7 +517,7 @@ export const getMoneyAccountHistory = async (
     const movementEntries: MoneyAccountHistoryEntry[] = movements.flatMap(
         (movement): MoneyAccountHistoryEntry[] => {
             if (movement.sourceKind === "sale_replacement_reversal") {
-                if (!movement.reversedMovementId) {
+                if (!movement.reversedMovementId || !movement.storeId) {
                     return [];
                 }
                 return [
@@ -539,7 +541,8 @@ export const getMoneyAccountHistory = async (
                     !movement.outgoingPaymentId ||
                     !movement.purchaseId ||
                     !movement.vendorName ||
-                    !movement.paymentMethod
+                    !movement.paymentMethod ||
+                    !movement.storeId
                 ) {
                     return [];
                 }
@@ -569,7 +572,8 @@ export const getMoneyAccountHistory = async (
                     !originalOutgoingPaymentId ||
                     !movement.purchaseId ||
                     !movement.vendorName ||
-                    !movement.paymentMethod
+                    !movement.paymentMethod ||
+                    !movement.storeId
                 ) {
                     return [];
                 }
@@ -594,7 +598,8 @@ export const getMoneyAccountHistory = async (
                     !movement.outgoingPaymentId ||
                     !movement.expenseId ||
                     !movement.expenseCategoryName ||
-                    !movement.paymentMethod
+                    !movement.paymentMethod ||
+                    !movement.storeId
                 ) {
                     return [];
                 }
@@ -624,7 +629,8 @@ export const getMoneyAccountHistory = async (
                     !originalOutgoingPaymentId ||
                     !movement.expenseId ||
                     !movement.expenseCategoryName ||
-                    !movement.paymentMethod
+                    !movement.paymentMethod ||
+                    !movement.storeId
                 ) {
                     return [];
                 }
@@ -644,7 +650,39 @@ export const getMoneyAccountHistory = async (
                 ];
             }
 
-            if (!movement.paymentId || !movement.saleId || !movement.paymentMethod) {
+            if (movement.sourceKind === "manual_deposit") {
+                if (!(movement.amount > 0)) {
+                    return [];
+                }
+                return [
+                    {
+                        kind: "manual_deposit",
+                        id: movement.id,
+                        amount: movement.amount,
+                        occurredAt: movement.occurredAt,
+                        storeId: movement.storeId,
+                        note: movement.note ?? null,
+                    },
+                ];
+            }
+
+            if (movement.sourceKind === "manual_withdrawal") {
+                if (!(movement.amount < 0)) {
+                    return [];
+                }
+                return [
+                    {
+                        kind: "manual_withdrawal",
+                        id: movement.id,
+                        amount: movement.amount,
+                        occurredAt: movement.occurredAt,
+                        storeId: movement.storeId,
+                        note: movement.note ?? null,
+                    },
+                ];
+            }
+
+            if (!movement.paymentId || !movement.saleId || !movement.paymentMethod || !movement.storeId) {
                 return [];
             }
 
@@ -680,4 +718,138 @@ export const getMoneyAccountHistory = async (
         code: STATUS_CODES.SUCCESS,
     };
 };
+
+const moneyAccountInactive = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "This Money Account is inactive",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+const insufficientWithdrawalBalance = (): ServiceResponse<null> => ({
+    status: "error",
+    message:
+        "This withdrawal would make the Money Account Balance negative. Reconcile the account first if earlier activity was missed.",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+const failedToRecordMovement = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "Failed to record money movement",
+    data: null,
+    code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+});
+
+const resolveManualMovementStoreId = (moneyAccount: MoneyAccountDTO): string | null =>
+    moneyAccount.scope === "store_scoped" ? moneyAccount.storeId : null;
+
+const recordManualMoneyMovement = async (
+    userId: string,
+    organizationId: string,
+    moneyAccountId: string,
+    movementData: RecordManualMoneyMovementSVC,
+    sourceKind: "manual_deposit" | "manual_withdrawal",
+): Promise<ServiceResponse<MoneyAccountResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const result = await pg.begin(async (tx) => {
+        const locked = await moneyAccountsRepository.lockMoneyAccountById(
+            organizationId,
+            moneyAccountId,
+            tx,
+        );
+        if (!locked) {
+            return { ok: false as const, response: moneyAccountNotFound() };
+        }
+        if (locked.status !== "active") {
+            return { ok: false as const, response: moneyAccountInactive() };
+        }
+
+        const signedAmount =
+            sourceKind === "manual_deposit"
+                ? toMoneyAmount(movementData.amount)
+                : toMoneyAmount(-movementData.amount);
+        if (sourceKind === "manual_withdrawal") {
+            const nextBalance = toMoneyAmount(locked.balance + signedAmount);
+            if (nextBalance < 0) {
+                return { ok: false as const, response: insufficientWithdrawalBalance() };
+            }
+        }
+
+        const movement = await moneyAccountsRepository.createMoneyAccountMovement(
+            {
+                id: crypto.randomUUID(),
+                organizationId,
+                moneyAccountId,
+                storeId: resolveManualMovementStoreId(locked),
+                amount: signedAmount,
+                occurredAt: new Date(),
+                sourceKind,
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                note: normalizeNotes(movementData.note),
+            },
+            tx,
+        );
+        if (!movement) {
+            return { ok: false as const, response: failedToRecordMovement() };
+        }
+
+        return {
+            ok: true as const,
+            moneyAccount: {
+                ...locked,
+                balance: toMoneyAmount(locked.balance + signedAmount),
+                hasMovements: true,
+            },
+        };
+    });
+
+    if (!result.ok) {
+        return result.response;
+    }
+
+    return {
+        status: "success",
+        data: { moneyAccount: result.moneyAccount },
+        message:
+            sourceKind === "manual_deposit"
+                ? "Deposit recorded successfully"
+                : "Withdrawal recorded successfully",
+        code: STATUS_CODES.CREATED,
+    };
+};
+
+export const recordMoneyAccountDeposit = async (
+    userId: string,
+    organizationId: string,
+    moneyAccountId: string,
+    movementData: RecordManualMoneyMovementSVC,
+): Promise<ServiceResponse<MoneyAccountResponse | null>> =>
+    recordManualMoneyMovement(
+        userId,
+        organizationId,
+        moneyAccountId,
+        movementData,
+        "manual_deposit",
+    );
+
+export const recordMoneyAccountWithdrawal = async (
+    userId: string,
+    organizationId: string,
+    moneyAccountId: string,
+    movementData: RecordManualMoneyMovementSVC,
+): Promise<ServiceResponse<MoneyAccountResponse | null>> =>
+    recordManualMoneyMovement(
+        userId,
+        organizationId,
+        moneyAccountId,
+        movementData,
+        "manual_withdrawal",
+    );
 

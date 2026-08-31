@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Add money and Withdraw money work end-to-end for an authorized Organization administrator, with positive two-decimal amounts, optional notes, validation feedback, and refreshed balance/history.
-- [ ] Deposits and withdrawals are durable immutable Money Account Movements with accurate current-time history presentation; existing automatic movement history remains compatible.
-- [ ] The server enforces tenant ownership, active-account eligibility, valid amount precision, and sufficient source balance, including concurrent withdrawals.
-- [ ] Store-Scoped manual movements show their account's Store, while Organization-Wide manual movements do not invent a Store attribution.
-- [ ] Shared-contract, authenticated server, migration/database, and Admin behavior tests cover the delivered flow and `git diff --check` passes.
+- [x] Add money and Withdraw money work end-to-end for an authorized Organization administrator, with positive two-decimal amounts, optional notes, validation feedback, and refreshed balance/history.
+- [x] Deposits and withdrawals are durable immutable Money Account Movements with accurate current-time history presentation; existing automatic movement history remains compatible.
+- [x] The server enforces tenant ownership, active-account eligibility, valid amount precision, and sufficient source balance, including concurrent withdrawals.
+- [x] Store-Scoped manual movements show their account's Store, while Organization-Wide manual movements do not invent a Store attribution.
+- [x] Shared-contract, authenticated server, migration/database, and Admin behavior tests cover the delivered flow and `git diff --check` passes.

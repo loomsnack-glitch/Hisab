@@ -25,6 +25,7 @@ import {
     inactiveCashMoneyAccountId,
     inactiveMoneyAccountId,
     inactivePettyCashAccount,
+    begin,
     lockMoneyAccountById,
     lockPaymentRouteByStoreAndMethod,
     moneyAccountId,
@@ -66,6 +67,8 @@ describe("Organization Money Account service", () => {
         lockActiveStoreCashAccount.mockClear();
         lockPaymentRouteByStoreAndMethod.mockClear();
         lockMoneyAccountById.mockClear();
+        begin.mockClear();
+        begin.mockImplementation(async (callback) => callback({}));
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
         getStoreById.mockResolvedValue(store);
@@ -1567,6 +1570,267 @@ describe("Organization Money Account service", () => {
         expect(response.data?.entries).toHaveLength(1);
         expect(response.data?.entries[0]?.kind).toBe("opening_balance");
         expect(response.data?.entries[0]?.amount).toBe(80);
+    });
+
+    test("records a Deposit on an Organization-wide Money Account without inventing a Store", async () => {
+        lockMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsService.recordMoneyAccountDeposit(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 250.5, note: "Owner cash-in" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.code).toBe(201);
+        expect(response.data?.moneyAccount.balance).toBe(350.5);
+        expect(response.data?.moneyAccount.hasMovements).toBe(true);
+        expect(lockMoneyAccountById).toHaveBeenCalledWith(organizationId, moneyAccountId, {});
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                organizationId,
+                moneyAccountId,
+                storeId: null,
+                amount: 250.5,
+                sourceKind: "manual_deposit",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                note: "Owner cash-in",
+            }),
+            {},
+        );
+        const created = createMoneyAccountMovementRepo.mock.calls[0]?.[0] as {
+            occurredAt: Date;
+        };
+        expect(created.occurredAt).toBeInstanceOf(Date);
+    });
+
+    test("records a Withdrawal on a Store-scoped Money Account with that account's Store", async () => {
+        lockMoneyAccountById.mockResolvedValue({
+            ...adajanCashAccount,
+            openingBalance: 100,
+            balance: 100,
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsService.recordMoneyAccountWithdrawal(
+            userId,
+            organizationId,
+            cashMoneyAccountId,
+            { amount: 40 },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.balance).toBe(60);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                moneyAccountId: cashMoneyAccountId,
+                storeId,
+                amount: -40,
+                sourceKind: "manual_withdrawal",
+                paymentId: null,
+                note: null,
+            }),
+            {},
+        );
+    });
+
+    test("includes Deposit and Withdrawal history without changing existing automatic rows", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: true,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([
+            hdfcUpiMovement,
+            {
+                ...hdfcUpiMovement,
+                id: "30303030-3030-4030-8030-303030303030",
+                amount: 80,
+                sourceKind: "manual_deposit",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                storeId: null,
+                note: "Owner cash-in",
+                saleId: null,
+                saleNumber: null,
+                paymentMethod: null,
+            },
+            {
+                ...hdfcUpiMovement,
+                id: "31313131-3131-4131-8131-313131313131",
+                amount: -40,
+                sourceKind: "manual_withdrawal",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                storeId,
+                note: null,
+                saleId: null,
+                saleNumber: null,
+                paymentMethod: null,
+            },
+        ]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.balance).toBe(390.5);
+        expect(response.data?.entries[1]).toMatchObject({
+            kind: "pos_payment",
+            amount: 250.5,
+            paymentId: hdfcUpiMovement.paymentId,
+            saleNumber: "12",
+        });
+        expect(response.data?.entries[2]).toEqual({
+            kind: "manual_deposit",
+            id: "30303030-3030-4030-8030-303030303030",
+            amount: 80,
+            occurredAt: hdfcUpiMovement.occurredAt,
+            storeId: null,
+            note: "Owner cash-in",
+        });
+        expect(response.data?.entries[3]).toEqual({
+            kind: "manual_withdrawal",
+            id: "31313131-3131-4131-8131-313131313131",
+            amount: -40,
+            occurredAt: hdfcUpiMovement.occurredAt,
+            storeId,
+            note: null,
+        });
+    });
+
+    test("rejects a Withdrawal that would make the Money Account Balance negative", async () => {
+        lockMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 10,
+            balance: 10,
+        });
+
+        const response = await moneyAccountsService.recordMoneyAccountWithdrawal(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 10.01 },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toContain("would make the Money Account Balance negative");
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("locks the Money Account so a later competing Withdrawal cannot overdraw", async () => {
+        lockMoneyAccountById
+            .mockResolvedValueOnce({
+                ...hdfcBankAccount,
+                openingBalance: 50,
+                balance: 50,
+            })
+            .mockResolvedValueOnce({
+                ...hdfcBankAccount,
+                openingBalance: 50,
+                balance: 0,
+            });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const first = await moneyAccountsService.recordMoneyAccountWithdrawal(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 50 },
+        );
+        const second = await moneyAccountsService.recordMoneyAccountWithdrawal(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 50 },
+        );
+
+        expect(first.status).toBe("success");
+        expect(first.data?.moneyAccount.balance).toBe(0);
+        expect(second.status).toBe("error");
+        expect(second.message).toContain("would make the Money Account Balance negative");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(1);
+        expect(lockMoneyAccountById).toHaveBeenCalledTimes(2);
+    });
+
+    test("rejects a Deposit or Withdrawal for an inactive Money Account", async () => {
+        lockMoneyAccountById.mockResolvedValue(inactivePettyCashAccount);
+
+        const response = await moneyAccountsService.recordMoneyAccountDeposit(
+            userId,
+            organizationId,
+            inactiveMoneyAccountId,
+            { amount: 10 },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("This Money Account is inactive");
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Deposit for a Money Account from another Organization", async () => {
+        lockMoneyAccountById.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.recordMoneyAccountDeposit(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 10 },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("denies a Deposit when the user is not a member of the Organization", async () => {
+        getOrganizationByIdForUser.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.recordMoneyAccountDeposit(
+            userId,
+            otherOrganizationId,
+            moneyAccountId,
+            { amount: 10 },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(lockMoneyAccountById).not.toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
     });
 
     test("does not expose create, update, or delete Movement commands", () => {

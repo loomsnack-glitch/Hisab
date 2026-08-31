@@ -29,6 +29,7 @@ import {
 
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import HistoryDateToolbar from "@/components/common/history-date-toolbar";
+import RecordManualMoneyMovementDialog from "@/components/money-accounts/record-manual-money-movement-dialog";
 import { getDefaultHistoryQuery } from "@/lib/date-range-filter";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
@@ -128,6 +129,7 @@ const MovementRow = ({
     entityIcon: EntityIcon,
     paymentMethod,
     storeName,
+    note,
     action,
 }: {
     title: string;
@@ -138,6 +140,7 @@ const MovementRow = ({
     entityIcon?: ComponentType<{ className?: string }>;
     paymentMethod?: string | null;
     storeName?: string | null;
+    note?: string | null;
     action?: ReactNode;
 }) => {
     const tone = movementToneForAmount(amount);
@@ -182,6 +185,7 @@ const MovementRow = ({
                             {formatDateTime(occurredAt)}
                         </time>
                     </div>
+                    {note ? <p className="mt-1.5 text-xs text-muted-foreground">{note}</p> : null}
                 </div>
 
                 <div className="flex shrink-0 flex-col items-end gap-2 text-right">
@@ -345,6 +349,19 @@ const HistoryEntry = ({
         );
     }
 
+    if (entry.kind === "manual_deposit" || entry.kind === "manual_withdrawal") {
+        return (
+            <MovementRow
+                title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[entry.kind]}
+                amount={entry.amount}
+                occurredAt={entry.occurredAt}
+                icon={entry.kind === "manual_deposit" ? ArrowDownLeft : ArrowUpRight}
+                storeName={entry.storeId ? resolveStoreName(entry.storeId, storeNameById) : null}
+                note={entry.note}
+            />
+        );
+    }
+
     return (
         <MovementRow
             title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.pos_payment}
@@ -490,7 +507,12 @@ const MoneyAccountDetailPage = () => {
     const filteredEntries =
         selectedStoreIds.size === 0
             ? entries
-            : entries.filter((entry) => entry.kind !== "opening_balance" && selectedStoreIds.has(entry.storeId));
+            : entries.filter(
+                  (entry) =>
+                      entry.kind !== "opening_balance" &&
+                      entry.storeId != null &&
+                      selectedStoreIds.has(entry.storeId),
+              );
     const movementEntries = filteredEntries.filter((entry) => entry.kind !== "opening_balance");
     const showingAllDates = !historyQuery.occurredFrom && !historyQuery.occurredTo;
 
@@ -533,6 +555,20 @@ const MoneyAccountDetailPage = () => {
                         <p className="text-lg font-semibold tabular-nums text-foreground">{formatCurrency(balance)}</p>
                     </div>
                 </div>
+                {moneyAccount.status === "active" ? (
+                    <div className="flex flex-wrap items-center gap-2 border-b border-border/40 px-4 py-2">
+                        <RecordManualMoneyMovementDialog
+                            organizationId={organizationId}
+                            moneyAccount={{ ...moneyAccount, balance }}
+                            mode="deposit"
+                        />
+                        <RecordManualMoneyMovementDialog
+                            organizationId={organizationId}
+                            moneyAccount={{ ...moneyAccount, balance }}
+                            mode="withdrawal"
+                        />
+                    </div>
+                ) : null}
 
                 <CardHeader className="gap-3 space-y-0 px-4 py-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">

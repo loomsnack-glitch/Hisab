@@ -7,6 +7,7 @@ import type {
     MoneyAccountPaymentRoutesResponse,
     MoneyAccountResponse,
     MoneyAccountsListResponse,
+    RecordManualMoneyMovementJSON,
     ServiceResponse,
     UpdateMoneyAccountJSON,
     UpsertMoneyAccountPaymentRouteJSON,
@@ -118,6 +119,38 @@ export const getMoneyAccountHistory = async (
         const response = await api.get(
             `/organizations/${organizationId}/money-accounts/${moneyAccountId}/history`,
             { params: query },
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const recordMoneyAccountDeposit = async (
+    organizationId: string,
+    moneyAccountId: string,
+    data: RecordManualMoneyMovementJSON,
+): Promise<ServiceResponse<MoneyAccountResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/money-accounts/${moneyAccountId}/deposits`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const recordMoneyAccountWithdrawal = async (
+    organizationId: string,
+    moneyAccountId: string,
+    data: RecordManualMoneyMovementJSON,
+): Promise<ServiceResponse<MoneyAccountResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/money-accounts/${moneyAccountId}/withdrawals`,
+            data,
         );
         return response.data;
     } catch (error) {

@@ -14,6 +14,7 @@ import type {
   MoneyAccountStatusSchema,
   MoneyAccountTypeSchema,
   OrganizationWideMoneyAccountTypeSchema,
+  RecordManualMoneyMovementSchema,
   UpdateMoneyAccountSchema,
   UpsertMoneyAccountPaymentRouteSchema,
 } from "./money-accounts.schema";
@@ -89,6 +90,8 @@ export type MoneyAccountPaymentRouteResponse = {
 
 export type MoneyAccountMovementSourceKind = z.infer<typeof MoneyAccountMovementSourceKindSchema>;
 export type MoneyAccountMovementDTO = z.infer<typeof MoneyAccountMovementDTOSchema>;
+export type RecordManualMoneyMovementJSON = z.infer<typeof RecordManualMoneyMovementSchema>;
+export type RecordManualMoneyMovementSVC = RecordManualMoneyMovementJSON;
 export type CreateMoneyAccountMovementREPO = Pick<
   MoneyAccountMovementDTO,
   | "id"
@@ -102,6 +105,7 @@ export type CreateMoneyAccountMovementREPO = Pick<
   | "reversedMovementId"
 > & {
   outgoingPaymentId?: string | null;
+  note?: string | null;
 };
 
 export type MoneyAccountHistoryEntry = z.infer<typeof MoneyAccountHistoryEntrySchema>;

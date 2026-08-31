@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateMoneyAccountSchema, MoneyAccountHistoryQuerySchema, MoneyAccountPaymentRouteMethodSchema, STATUS_CODES, UpdateMoneyAccountSchema, UpsertMoneyAccountPaymentRouteSchema } from "@repo/types";
+import { CreateMoneyAccountSchema, MoneyAccountHistoryQuerySchema, MoneyAccountPaymentRouteMethodSchema, RecordManualMoneyMovementSchema, STATUS_CODES, UpdateMoneyAccountSchema, UpsertMoneyAccountPaymentRouteSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -150,6 +150,64 @@ export const createMoneyAccountsRoutes = (
             return handleError(FILE_NAME, "getMoneyAccountHistory", c, error);
         }
     },
+    );
+
+    router.post(
+        "/:organizationId/money-accounts/:moneyAccountId/deposits",
+        validateSchema("json", RecordManualMoneyMovementSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const moneyAccountId = c.req.param("moneyAccountId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidMoneyAccountId = validateUuidParam(moneyAccountId, "Invalid money account id");
+                if (invalidMoneyAccountId) {
+                    return c.json(invalidMoneyAccountId, invalidMoneyAccountId.code);
+                }
+
+                const serviceResponse = await moneyAccountsService.recordMoneyAccountDeposit(
+                    c.get("authUser").id,
+                    organizationId,
+                    moneyAccountId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "recordMoneyAccountDeposit", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/:organizationId/money-accounts/:moneyAccountId/withdrawals",
+        validateSchema("json", RecordManualMoneyMovementSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const moneyAccountId = c.req.param("moneyAccountId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidMoneyAccountId = validateUuidParam(moneyAccountId, "Invalid money account id");
+                if (invalidMoneyAccountId) {
+                    return c.json(invalidMoneyAccountId, invalidMoneyAccountId.code);
+                }
+
+                const serviceResponse = await moneyAccountsService.recordMoneyAccountWithdrawal(
+                    c.get("authUser").id,
+                    organizationId,
+                    moneyAccountId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "recordMoneyAccountWithdrawal", c, error);
+            }
+        },
     );
 
     router.get("/:organizationId/stores/:storeId/money-account-payment-routes", async (c) => {

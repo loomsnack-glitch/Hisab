@@ -191,6 +191,7 @@ export const hdfcUpiMovement: MoneyAccountHistoryMovementREPO = {
     sourceKind: "pos_payment",
     paymentId,
     reversedMovementId: null,
+    note: null,
     createdAt: now,
     saleId,
     saleNumber: "12",
@@ -214,6 +215,7 @@ export const hdfcCardMovement: MoneyAccountHistoryMovementREPO = {
     sourceKind: "pos_payment",
     paymentId: laterPaymentId,
     reversedMovementId: null,
+    note: null,
     createdAt: new Date("2026-08-31T13:00:00.000Z"),
     saleId: laterSaleId,
     saleNumber: "13",
@@ -326,6 +328,11 @@ export const getPosPaymentMovementsBySaleId = mock(async () => [] as never[]);
 export const lockActiveStoreCashAccount = mock(async () => adajanCashAccount);
 export const lockPaymentRouteByStoreAndMethod = mock(async () => null);
 export const lockMoneyAccountById = mock(async () => hdfcBankAccount);
+export const begin = mock(async (callback: (tx: unknown) => Promise<unknown>) => callback({}));
+
+mock.module("@/config/db", () => ({
+    pg: { begin },
+}));
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,

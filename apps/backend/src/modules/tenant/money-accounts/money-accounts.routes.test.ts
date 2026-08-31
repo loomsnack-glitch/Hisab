@@ -35,6 +35,8 @@ describe("Organization Money Account routes", () => {
         harness.lockActiveStoreCashAccount.mockClear();
         harness.lockPaymentRouteByStoreAndMethod.mockClear();
         harness.lockMoneyAccountById.mockClear();
+        harness.begin.mockClear();
+        harness.begin.mockImplementation(async (callback) => callback({}));
 
         harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
         harness.getStoreById.mockResolvedValue(harness.store);
@@ -747,6 +749,138 @@ describe("Organization Money Account routes", () => {
 
         expect(createMovement.status).toBe(404);
         expect(updateMovement.status).toBe(404);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("records a Deposit for an authenticated administrator", async () => {
+        harness.lockMoneyAccountById.mockResolvedValue({
+            ...harness.hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+        });
+        harness.createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...harness.hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/deposits`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 250.5, note: "Owner cash-in" }),
+            },
+        );
+
+        expect(response.status).toBe(201);
+        const body = await response.json();
+        expect(body.data.moneyAccount.balance).toBe(350.5);
+        expect(harness.createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceKind: "manual_deposit",
+                amount: 250.5,
+                storeId: null,
+                note: "Owner cash-in",
+            }),
+            {},
+        );
+    });
+
+    test("records a Withdrawal for an authenticated administrator", async () => {
+        harness.lockMoneyAccountById.mockResolvedValue({
+            ...harness.adajanCashAccount,
+            openingBalance: 100,
+            balance: 100,
+        });
+        harness.createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...harness.hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.cashMoneyAccountId}/withdrawals`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 40 }),
+            },
+        );
+
+        expect(response.status).toBe(201);
+        const body = await response.json();
+        expect(body.data.moneyAccount.balance).toBe(60);
+        expect(harness.createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceKind: "manual_withdrawal",
+                amount: -40,
+                storeId: harness.storeId,
+            }),
+            {},
+        );
+    });
+
+    test("rejects an unauthenticated Deposit", async () => {
+        const response = await unauthenticatedRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/deposits`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 10 }),
+            },
+        );
+
+        expect(response.status).toBe(401);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a zero or malformed Manual Money Movement amount at the route seam", async () => {
+        const zero = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/deposits`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 0 }),
+            },
+        );
+        const malformed = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/withdrawals`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 1.234 }),
+            },
+        );
+
+        expect(zero.status).toBe(400);
+        expect(malformed.status).toBe(400);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Withdrawal that would make the Money Account Balance negative at the route seam", async () => {
+        harness.lockMoneyAccountById.mockResolvedValue({
+            ...harness.hdfcBankAccount,
+            openingBalance: 5,
+            balance: 5,
+        });
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/withdrawals`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 10 }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.message).toContain("would make the Money Account Balance negative");
         expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
     });
 

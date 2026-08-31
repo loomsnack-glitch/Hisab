@@ -13,6 +13,7 @@ import {
   MoneyAccountPaymentRouteDTOSchema,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES,
+  RecordManualMoneyMovementSchema,
   UpdateMoneyAccountSchema,
   UpsertMoneyAccountPaymentRouteSchema,
 } from "./money-accounts.schema";
@@ -743,6 +744,7 @@ describe("Money Account Movement and history contracts", () => {
     paymentId,
     outgoingPaymentId: null,
     reversedMovementId: null,
+    note: null,
     createdAt: "2026-08-31T12:00:00.000Z",
   };
 
@@ -1425,6 +1427,218 @@ describe("Money Account Movement and history contracts", () => {
       if (result.data.entries[1]?.kind === "outgoing_expense_void_reversal") {
         expect(result.data.entries[1].amount).toBe(40);
         expect(result.data.entries[1].expenseCategoryName).toBe("Rent");
+      }
+    }
+  });
+
+  test("accepts a Manual Money Movement amount with optional note and two-decimal precision", () => {
+    const omitted = RecordManualMoneyMovementSchema.safeParse({ amount: 250.5 });
+    const withNote = RecordManualMoneyMovementSchema.safeParse({
+      amount: 250.5,
+      note: "  Owner cash-in  ",
+    });
+    const blankNote = RecordManualMoneyMovementSchema.safeParse({
+      amount: 10,
+      note: "   ",
+    });
+
+    expect(omitted.success).toBe(true);
+    if (omitted.success) {
+      expect(omitted.data.amount).toBe(250.5);
+      expect(omitted.data.note).toBeUndefined();
+    }
+    expect(withNote.success).toBe(true);
+    if (withNote.success) {
+      expect(withNote.data.amount).toBe(250.5);
+      expect(withNote.data.note).toBe("Owner cash-in");
+    }
+    expect(blankNote.success).toBe(true);
+    if (blankNote.success) {
+      expect(blankNote.data.note).toBe("");
+    }
+  });
+
+  test("rejects a zero, negative, or malformed Manual Money Movement amount", () => {
+    expect(RecordManualMoneyMovementSchema.safeParse({ amount: 0 }).success).toBe(false);
+    expect(RecordManualMoneyMovementSchema.safeParse({ amount: -10 }).success).toBe(false);
+    expect(RecordManualMoneyMovementSchema.safeParse({ amount: 1.234 }).success).toBe(false);
+    expect(RecordManualMoneyMovementSchema.safeParse({}).success).toBe(false);
+  });
+
+  test("rejects a Manual Money Movement with a backdated timestamp, destination, or extra fields", () => {
+    expect(
+      RecordManualMoneyMovementSchema.safeParse({
+        amount: 10,
+        occurredAt: "2026-01-01T00:00:00.000Z",
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordManualMoneyMovementSchema.safeParse({
+        amount: 10,
+        storeId,
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordManualMoneyMovementSchema.safeParse({
+        amount: 10,
+        sourceKind: "manual_deposit",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("Money Account Movement DTO records a positive Deposit without a Payment or Store invention", () => {
+    const result = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: 250.5,
+      sourceKind: "manual_deposit",
+      storeId: null,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: "Owner cash-in",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sourceKind).toBe("manual_deposit");
+      expect(result.data.amount).toBe(250.5);
+      expect(result.data.storeId).toBeNull();
+      expect(result.data.paymentId).toBeNull();
+      expect(result.data.outgoingPaymentId).toBeNull();
+      expect(result.data.reversedMovementId).toBeNull();
+      expect(result.data.note).toBe("Owner cash-in");
+    }
+  });
+
+  test("Money Account Movement DTO records a negative Withdrawal with the Store-scoped account's Store", () => {
+    const result = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: -40,
+      sourceKind: "manual_withdrawal",
+      storeId,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sourceKind).toBe("manual_withdrawal");
+      expect(result.data.amount).toBe(-40);
+      expect(result.data.storeId).toBe(storeId);
+      expect(result.data.note).toBeNull();
+    }
+  });
+
+  test("rejects a Deposit or Withdrawal that has the wrong sign, a Payment link, or a generated Store when absent", () => {
+    const deposit = {
+      ...movementDto,
+      amount: 40,
+      sourceKind: "manual_deposit" as const,
+      storeId: null,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: null,
+    };
+
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...deposit, amount: -40 }).success).toBe(
+      false,
+    );
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...deposit, paymentId }).success).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({
+        ...deposit,
+        sourceKind: "manual_withdrawal",
+        amount: 40,
+      }).success,
+    ).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({
+        ...movementDto,
+        sourceKind: "pos_payment",
+        storeId: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("account history includes a Deposit as a dedicated positive entry without invented Store attribution", () => {
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        openingBalance: 100,
+        balance: 350.5,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 350.5,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "manual_deposit",
+          id: movementId,
+          amount: 250.5,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId: null,
+          note: "Owner cash-in",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.entries[1]?.kind).toBe("manual_deposit");
+      if (result.data.entries[1]?.kind === "manual_deposit") {
+        expect(result.data.entries[1].amount).toBe(250.5);
+        expect(result.data.entries[1].storeId).toBeNull();
+        expect(result.data.entries[1].note).toBe("Owner cash-in");
+      }
+    }
+  });
+
+  test("account history includes a Withdrawal as a dedicated negative entry with the Store-scoped account's Store", () => {
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        name: "Adajan cash",
+        type: "cash",
+        scope: "store_scoped",
+        storeId,
+        openingBalance: 100,
+        balance: 60,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 60,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "manual_withdrawal",
+          id: movementId,
+          amount: -40,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId,
+          note: null,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.entries[1]?.kind).toBe("manual_withdrawal");
+      if (result.data.entries[1]?.kind === "manual_withdrawal") {
+        expect(result.data.entries[1].amount).toBe(-40);
+        expect(result.data.entries[1].storeId).toBe(storeId);
+        expect(result.data.entries[1].note).toBeNull();
       }
     }
   });

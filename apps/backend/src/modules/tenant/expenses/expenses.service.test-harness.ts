@@ -205,6 +205,7 @@ const createMoneyAccountMovementImpl = async (
     }
     const movement: MoneyAccountMovementDTO = {
         ...data,
+        note: data.note ?? null,
         createdAt: now,
     };
     storedMovements = [...storedMovements, movement];

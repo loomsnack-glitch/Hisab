@@ -42,13 +42,18 @@ const mapPaymentRoute = (row: Record<string, unknown>): MoneyAccountPaymentRoute
 const mapMovement = (row: Record<string, unknown>): MoneyAccountMovementDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     return {
-        ...(mapped as Omit<MoneyAccountMovementDTO, "amount" | "paymentId" | "outgoingPaymentId" | "reversedMovementId">),
+        ...(mapped as Omit<
+            MoneyAccountMovementDTO,
+            "amount" | "paymentId" | "outgoingPaymentId" | "reversedMovementId" | "storeId" | "note"
+        >),
         amount: toMoneyAmount(mapped.amount),
+        storeId: typeof mapped.storeId === "string" ? mapped.storeId : null,
         paymentId: typeof mapped.paymentId === "string" ? mapped.paymentId : null,
         outgoingPaymentId:
             typeof mapped.outgoingPaymentId === "string" ? mapped.outgoingPaymentId : null,
         reversedMovementId:
             typeof mapped.reversedMovementId === "string" ? mapped.reversedMovementId : null,
+        note: typeof mapped.note === "string" ? mapped.note : null,
     };
 };
 
@@ -61,6 +66,8 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
             | "paymentId"
             | "outgoingPaymentId"
             | "reversedMovementId"
+            | "storeId"
+            | "note"
             | "saleId"
             | "paymentMethod"
             | "originalPaymentId"
@@ -71,11 +78,13 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
             | "expenseCategoryName"
         >),
         amount: toMoneyAmount(mapped.amount),
+        storeId: typeof mapped.storeId === "string" ? mapped.storeId : null,
         paymentId: typeof mapped.paymentId === "string" ? mapped.paymentId : null,
         outgoingPaymentId:
             typeof mapped.outgoingPaymentId === "string" ? mapped.outgoingPaymentId : null,
         reversedMovementId:
             typeof mapped.reversedMovementId === "string" ? mapped.reversedMovementId : null,
+        note: typeof mapped.note === "string" ? mapped.note : null,
         saleId: typeof mapped.saleId === "string" ? mapped.saleId : null,
         paymentMethod:
             typeof mapped.paymentMethod === "string"
@@ -366,6 +375,7 @@ export const getMovementsByMoneyAccountId = async (
             movements.payment_id,
             movements.outgoing_payment_id,
             movements.reversed_movement_id,
+            movements.note,
             movements.created_at,
             linked_payments.sale_id,
             COALESCE(linked_payments.method, outgoing_payments.payment_method) AS payment_method,
@@ -496,6 +506,21 @@ export const createMoneyAccountMovement = async (
     tx?: Bun.TransactionSQL,
 ): Promise<MoneyAccountMovementDTO | null> => {
     const db = tx || pg;
+    if (
+        movementData.sourceKind === "manual_deposit" ||
+        movementData.sourceKind === "manual_withdrawal"
+    ) {
+        const [result] = await db`
+            INSERT INTO money_account_movements ${camelToSnakeSql({
+                ...movementData,
+                note: movementData.note ?? null,
+            })}
+            RETURNING *
+        `;
+
+        return result ? mapMovement(result) : null;
+    }
+
     if (
         movementData.sourceKind === "sale_replacement_reversal" ||
         movementData.sourceKind === "outgoing_purchase_payment_reversal" ||

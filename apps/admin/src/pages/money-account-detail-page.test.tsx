@@ -171,8 +171,12 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("saleId=18181818-1818-4181-8181-181818181818");
         expect(markup).toContain("Date");
         expect(markup).toContain("Back to money accounts");
+        expect(markup).toContain("Add money");
+        expect(markup).toContain("Withdraw money");
         expect(markup).not.toContain("Add movement");
         expect(markup).not.toContain("Correct balance");
+        expect(markup).not.toContain("Adjust balance");
+        expect(markup).not.toContain("Transfer money");
     });
 
     test("shows a bill-edit reversal as a dedicated negative history entry", () => {
@@ -426,6 +430,8 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Bill #12");
         expect(markup).toContain("Count");
         expect(markup).toContain("inactive");
+        expect(markup).not.toContain("Add money");
+        expect(markup).not.toContain("Withdraw money");
     });
 
     test("shows a loading spinner while history is fetched", () => {
@@ -441,5 +447,64 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Unable to load account history");
         expect(markup).toContain("Money Account history could not be loaded right now.");
         expect(markup).toContain("Try again");
+    });
+
+    test("shows a Deposit as green money in without inventing a Store", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, openingBalance: 100, balance: 350.5 },
+            openingBalance: 100,
+            balance: 350.5,
+            entries: [
+                {
+                    kind: "manual_deposit",
+                    id: "14141414-1414-4141-8141-141414141414",
+                    amount: 250.5,
+                    occurredAt: now,
+                    storeId: null,
+                    note: "Owner cash-in",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Deposit");
+        expect(markup).toContain("Owner cash-in");
+        expect(markup).toContain("+₹250.50");
+        expect(markup).toContain("text-emerald-600");
+        expect(markup).not.toContain("Adajan");
+        expect(markup).not.toContain("View Bill");
+    });
+
+    test("shows a Withdrawal as red money out with the Store-scoped account's Store", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: {
+                ...moneyAccount,
+                name: "Adajan cash",
+                type: "cash",
+                scope: "store_scoped",
+                storeId,
+                openingBalance: 100,
+                balance: 60,
+            },
+            openingBalance: 100,
+            balance: 60,
+            entries: [
+                {
+                    kind: "manual_withdrawal",
+                    id: "15151515-1515-4151-8151-151515151515",
+                    amount: -40,
+                    occurredAt: now,
+                    storeId,
+                    note: "Till skim",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Withdrawal");
+        expect(markup).toContain("Till skim");
+        expect(markup).toContain("Adajan");
+        expect(markup).toContain("−₹40.00");
+        expect(markup).toContain("text-destructive");
+        expect(markup).toContain("Add money");
+        expect(markup).toContain("Withdraw money");
     });
 });
