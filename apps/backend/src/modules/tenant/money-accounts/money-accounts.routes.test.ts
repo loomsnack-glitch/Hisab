@@ -31,6 +31,10 @@ describe("Organization Money Account routes", () => {
         harness.deletePaymentRouteRepo.mockClear();
         harness.getMovementsByMoneyAccountId.mockClear();
         harness.createMoneyAccountMovementRepo.mockClear();
+        harness.getMovementByPaymentId.mockClear();
+        harness.lockActiveStoreCashAccount.mockClear();
+        harness.lockPaymentRouteByStoreAndMethod.mockClear();
+        harness.lockMoneyAccountById.mockClear();
 
         harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
         harness.getStoreById.mockResolvedValue(harness.store);

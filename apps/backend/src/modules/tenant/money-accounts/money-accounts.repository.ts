@@ -190,6 +190,82 @@ export const getPaymentRouteByStoreAndMethod = async (
     return result ? mapPaymentRoute(result) : null;
 };
 
+export const lockPaymentRouteByStoreAndMethod = async (
+    organizationId: string,
+    storeId: string,
+    paymentMethod: MoneyAccountPaymentRouteMethod,
+    tx: Bun.TransactionSQL,
+): Promise<MoneyAccountPaymentRouteDTO | null> => {
+    const [result] = await tx`
+        SELECT *
+        FROM store_money_account_payment_routes
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND payment_method = ${paymentMethod}
+        FOR UPDATE
+    `;
+
+    return result ? mapPaymentRoute(result) : null;
+};
+
+export const lockMoneyAccountById = async (
+    organizationId: string,
+    moneyAccountId: string,
+    tx: Bun.TransactionSQL,
+): Promise<MoneyAccountDTO | null> => {
+    const [result] = await tx`
+        SELECT
+            money_accounts.*,
+            COALESCE(movement_totals.movement_total, 0) AS movement_total,
+            COALESCE(movement_totals.movement_count, 0) > 0 AS has_movements
+        FROM money_accounts
+        LEFT JOIN (
+            SELECT
+                money_account_id,
+                SUM(amount) AS movement_total,
+                COUNT(*)::int AS movement_count
+            FROM money_account_movements
+            GROUP BY money_account_id
+        ) AS movement_totals
+            ON movement_totals.money_account_id = money_accounts.id
+        WHERE money_accounts.id = ${moneyAccountId}
+          AND money_accounts.organization_id = ${organizationId}
+        FOR UPDATE OF money_accounts
+    `;
+
+    return result ? mapMoneyAccount(result) : null;
+};
+
+export const lockActiveStoreCashAccount = async (
+    organizationId: string,
+    storeId: string,
+    tx: Bun.TransactionSQL,
+): Promise<MoneyAccountDTO | null> => {
+    const [result] = await tx`
+        SELECT
+            money_accounts.*,
+            COALESCE(movement_totals.movement_total, 0) AS movement_total,
+            COALESCE(movement_totals.movement_count, 0) > 0 AS has_movements
+        FROM money_accounts
+        LEFT JOIN (
+            SELECT
+                money_account_id,
+                SUM(amount) AS movement_total,
+                COUNT(*)::int AS movement_count
+            FROM money_account_movements
+            GROUP BY money_account_id
+        ) AS movement_totals
+            ON movement_totals.money_account_id = money_accounts.id
+        WHERE money_accounts.organization_id = ${organizationId}
+          AND money_accounts.store_id = ${storeId}
+          AND money_accounts.type = 'cash'
+          AND money_accounts.status = 'active'
+        FOR UPDATE OF money_accounts
+    `;
+
+    return result ? mapMoneyAccount(result) : null;
+};
+
 export const upsertPaymentRoute = async (
     routeData: UpsertMoneyAccountPaymentRouteREPO,
     tx?: Bun.TransactionSQL,
@@ -259,6 +335,22 @@ export const getMovementsByMoneyAccountId = async (
     return results.map((result: Record<string, unknown>) => mapHistoryMovement(result));
 };
 
+export const getMovementByPaymentId = async (
+    organizationId: string,
+    paymentId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<MoneyAccountMovementDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM money_account_movements
+        WHERE organization_id = ${organizationId}
+          AND payment_id = ${paymentId}
+    `;
+
+    return result ? mapMovement(result) : null;
+};
+
 export const createMoneyAccountMovement = async (
     movementData: CreateMoneyAccountMovementREPO,
     tx?: Bun.TransactionSQL,
@@ -266,8 +358,13 @@ export const createMoneyAccountMovement = async (
     const db = tx || pg;
     const [result] = await db`
         INSERT INTO money_account_movements ${camelToSnakeSql(movementData)}
+        ON CONFLICT (payment_id) DO NOTHING
         RETURNING *
     `;
 
-    return result ? mapMovement(result) : null;
+    if (result) {
+        return mapMovement(result);
+    }
+
+    return getMovementByPaymentId(movementData.organizationId, movementData.paymentId, tx);
 };

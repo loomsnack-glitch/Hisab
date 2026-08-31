@@ -11,6 +11,7 @@ import {
     getMoneyAccountById,
     getMoneyAccountsByOrganizationId,
     getMovementsByMoneyAccountId,
+    getMovementByPaymentId,
     getOrganizationByIdForUser,
     getPaymentRouteByStoreAndMethod,
     getPaymentRoutesByStoreId,
@@ -22,6 +23,9 @@ import {
     inactiveCashMoneyAccountId,
     inactiveMoneyAccountId,
     inactivePettyCashAccount,
+    lockActiveStoreCashAccount,
+    lockMoneyAccountById,
+    lockPaymentRouteByStoreAndMethod,
     moneyAccountId,
     moneyAccountsService,
     organization,
@@ -56,6 +60,10 @@ describe("Organization Money Account service", () => {
         deletePaymentRouteRepo.mockClear();
         getMovementsByMoneyAccountId.mockClear();
         createMoneyAccountMovementRepo.mockClear();
+        getMovementByPaymentId.mockClear();
+        lockActiveStoreCashAccount.mockClear();
+        lockPaymentRouteByStoreAndMethod.mockClear();
+        lockMoneyAccountById.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
         getStoreById.mockResolvedValue(store);

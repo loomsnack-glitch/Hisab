@@ -44,6 +44,11 @@ import {
 import * as billingRepository from "./billing.repository";
 import * as tableRepository from "@/modules/tenant/table-service/table-service.repository";
 import * as billingKotRead from "./billing-kot-read";
+import {
+  createPosPaymentMoneyAccountMovement,
+  isMoneyAccountTrackingSetupError,
+  resolvePosPaymentMoneyAccount,
+} from "@/modules/tenant/money-accounts/money-account-pos-payment";
 import { decodeSalesCursor } from "./sales-pagination";
 import { DEFAULT_SALE_NUMBER_TIMEZONE } from "./sale-numbering";
 import {
@@ -1590,6 +1595,86 @@ const appendCustomerLedgerEntry = async (
   return updatedCustomer;
 };
 
+const moneyAccountTrackingSetupResponse = <T>(
+  error: unknown,
+): ServiceResponse<T | null> | null => {
+  if (!isMoneyAccountTrackingSetupError(error)) {
+    return null;
+  }
+
+  return {
+    status: "error",
+    message: error.message,
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+  };
+};
+
+const persistSalePayment = async (
+  tx: Bun.TransactionSQL,
+  params: {
+    actor: SaleWriteActor;
+    organizationId: string;
+    storeId: string;
+    saleId: string;
+    paymentInput: CreatePaymentSVC;
+    amount?: number;
+    collectedAt: Date;
+    customer: CustomerDTO | null;
+  },
+) => {
+  const amount = params.amount ?? roundMoney(params.paymentInput.amount);
+  const destination = await resolvePosPaymentMoneyAccount(
+    tx,
+    params.organizationId,
+    params.storeId,
+    params.paymentInput.method,
+  );
+
+  const createdPayment = await billingRepository.createPayment(
+    {
+      id: crypto.randomUUID(),
+      organizationId: params.organizationId,
+      storeId: params.storeId,
+      saleId: params.saleId,
+      collectedBy: params.actor.userId ?? null,
+      amount,
+      method: params.paymentInput.method,
+      referenceNumber: normalizeOptionalText(params.paymentInput.referenceNumber),
+      notes: normalizeOptionalText(params.paymentInput.notes),
+      collectedAt: params.collectedAt,
+    },
+    tx,
+  );
+  if (!createdPayment) {
+    throw new Error("Failed to create payment");
+  }
+
+  if (destination) {
+    await createPosPaymentMoneyAccountMovement(tx, {
+      organizationId: params.organizationId,
+      storeId: params.storeId,
+      destination,
+      payment: createdPayment,
+    });
+  }
+
+  let customer = params.customer;
+  if (customer) {
+    customer = await appendCustomerLedgerEntry(tx, {
+      customer,
+      organizationId: params.organizationId,
+      amount: -amount,
+      entryType: "payment",
+      saleId: params.saleId,
+      paymentId: createdPayment.id,
+      notes: normalizeOptionalText(params.paymentInput.notes),
+    });
+  }
+
+  return { payment: createdPayment, customer };
+};
+
 const getCustomersInOrganization = async (
   organizationId: string,
   query: CustomerListQuery,
@@ -2966,39 +3051,16 @@ const commitSaleInStore = async (
     }
 
     for (const paymentInput of payments) {
-      const createdPayment = await billingRepository.createPayment(
-        {
-          id: crypto.randomUUID(),
-          organizationId,
-          storeId,
-          saleId,
-          collectedBy: actor.userId ?? null,
-          amount: roundMoney(paymentInput.amount),
-          method: paymentInput.method,
-            referenceNumber: normalizeOptionalText(
-              paymentInput.referenceNumber,
-            ),
-          notes: normalizeOptionalText(paymentInput.notes),
-          collectedAt: committedAt,
-        },
-        tx,
-      );
-
-      if (!createdPayment) {
-        throw new Error("Failed to create payment");
-      }
-
-      if (customer) {
-        customer = await appendCustomerLedgerEntry(tx, {
-          customer,
-          organizationId,
-          amount: -roundMoney(paymentInput.amount),
-          entryType: "payment",
-          saleId,
-          paymentId: createdPayment.id,
-          notes: normalizeOptionalText(paymentInput.notes),
-        });
-      }
+      const persisted = await persistSalePayment(tx, {
+        actor,
+        organizationId,
+        storeId,
+        saleId,
+        paymentInput,
+        collectedAt: committedAt,
+        customer,
+      });
+      customer = persisted.customer;
     }
 
     if (existingSale.serviceTableId) {
@@ -3023,6 +3085,10 @@ const commitSaleInStore = async (
     return { committed: true as const };
   });
   } catch (error) {
+    const trackingError = moneyAccountTrackingSetupResponse<SaleResponse>(error);
+    if (trackingError) {
+      return trackingError;
+    }
     const recovered = await recoverStandaloneKotGenerationRace(
       error,
       organizationId,
@@ -3143,36 +3209,16 @@ const persistCompletedSale = async (
   }
 
   for (const paymentInput of params.payments) {
-    const createdPayment = await billingRepository.createPayment(
-      {
-        id: crypto.randomUUID(),
-        organizationId: params.organizationId,
-        storeId: params.storeId,
-        saleId: params.saleId,
-        collectedBy: params.actor.userId ?? null,
-        amount: roundMoney(paymentInput.amount),
-        method: paymentInput.method,
-        referenceNumber: normalizeOptionalText(paymentInput.referenceNumber),
-        notes: normalizeOptionalText(paymentInput.notes),
-        collectedAt: params.committedAt,
-      },
-      tx,
-    );
-    if (!createdPayment) {
-      throw new Error("Failed to create payment");
-    }
-
-    if (customer) {
-      customer = await appendCustomerLedgerEntry(tx, {
-        customer,
-        organizationId: params.organizationId,
-        amount: -roundMoney(paymentInput.amount),
-        entryType: "payment",
-        saleId: params.saleId,
-        paymentId: createdPayment.id,
-        notes: normalizeOptionalText(paymentInput.notes),
-      });
-    }
+    const persisted = await persistSalePayment(tx, {
+      actor: params.actor,
+      organizationId: params.organizationId,
+      storeId: params.storeId,
+      saleId: params.saleId,
+      paymentInput,
+      collectedAt: params.committedAt,
+      customer,
+    });
+    customer = persisted.customer;
   }
 };
 
@@ -3293,6 +3339,10 @@ const completeSaleInStore = async (
       await kotWrite.persist?.(tx);
     });
   } catch (error) {
+    const trackingError = moneyAccountTrackingSetupResponse<SaleResponse>(error);
+    if (trackingError) {
+      return trackingError;
+    }
     if (isUniqueViolation(error)) {
       const completedSaleId =
         await billingRepository.getSaleIdByCompletionRequestId(
@@ -3504,6 +3554,10 @@ const replaceSaleInStore = async (
       }
     });
   } catch (error) {
+    const trackingError = moneyAccountTrackingSetupResponse<SaleResponse>(error);
+    if (trackingError) {
+      return trackingError;
+    }
     if (isUniqueViolation(error)) {
       const replacementSaleId =
         await billingRepository.getSaleIdByCompletionRequestId(
@@ -3613,7 +3667,8 @@ const collectPaymentInStore = async (
   let saleWasCurrentTableSale = false;
   let saleForPayment = existingSale;
 
-  await pg.begin(async (tx) => {
+  try {
+    await pg.begin(async (tx) => {
     if (existingSale.serviceTableId) {
       const table = await tableRepository.lockServiceTableForSale(
         organizationId,
@@ -3652,37 +3707,17 @@ const collectPaymentInStore = async (
       );
     }
 
-    createdPayment = await billingRepository.createPayment(
-      {
-        id: crypto.randomUUID(),
-        organizationId,
-        storeId,
-        saleId,
-        collectedBy: actor.userId ?? null,
-        amount,
-        method: paymentData.method,
-        referenceNumber: normalizeOptionalText(paymentData.referenceNumber),
-        notes: normalizeOptionalText(paymentData.notes),
-        collectedAt: new Date(),
-      },
-      tx,
-    );
-
-    if (!createdPayment) {
-      throw new Error("Failed to create payment");
-    }
-
-    if (customer) {
-      await appendCustomerLedgerEntry(tx, {
-        customer,
-        organizationId,
-        amount: -amount,
-        entryType: "payment",
-        saleId,
-        paymentId: createdPayment.id,
-        notes: normalizeOptionalText(paymentData.notes),
-      });
-    }
+    const persistedPayment = await persistSalePayment(tx, {
+      actor,
+      organizationId,
+      storeId,
+      saleId,
+      paymentInput: paymentData,
+      amount,
+      collectedAt: new Date(),
+      customer,
+    });
+    createdPayment = persistedPayment.payment;
 
     const nextPaidTotal = roundMoney(
       moneyFrom(saleForPayment.paidTotal) + amount,
@@ -3739,7 +3774,15 @@ const collectPaymentInStore = async (
         );
       }
     }
-  });
+    });
+  } catch (error) {
+    const trackingError =
+      moneyAccountTrackingSetupResponse<PaymentResponse>(error);
+    if (trackingError) {
+      return trackingError;
+    }
+    throw error;
+  }
 
   const sale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!sale || !createdPayment) {

@@ -305,6 +305,10 @@ export const upsertPaymentRouteRepo = mock(async (data: UpsertPaymentRouteRepoAr
 export const deletePaymentRouteRepo = mock(async () => true);
 export const getMovementsByMoneyAccountId = mock(async () => [] as MoneyAccountHistoryMovementREPO[]);
 export const createMoneyAccountMovementRepo = mock(async () => hdfcUpiMovement);
+export const getMovementByPaymentId = mock(async () => null);
+export const lockActiveStoreCashAccount = mock(async () => adajanCashAccount);
+export const lockPaymentRouteByStoreAndMethod = mock(async () => null);
+export const lockMoneyAccountById = mock(async () => hdfcBankAccount);
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
@@ -322,6 +326,10 @@ mock.module("./money-accounts.repository", () => ({
     deletePaymentRoute: deletePaymentRouteRepo,
     getMovementsByMoneyAccountId,
     createMoneyAccountMovement: createMoneyAccountMovementRepo,
+    getMovementByPaymentId,
+    lockActiveStoreCashAccount,
+    lockPaymentRouteByStoreAndMethod,
+    lockMoneyAccountById,
 }));
 
 export const moneyAccountsService = await import("./money-accounts.service");
