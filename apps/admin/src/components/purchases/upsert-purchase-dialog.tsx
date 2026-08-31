@@ -67,7 +67,32 @@ type UpsertPurchaseDialogProps = {
 };
 
 const decimalAmountPattern = /^-?\d+(\.\d{0,2})?$/;
+const positiveDecimalPattern = /^\d+(\.\d{0,2})?$/;
 const quantityPattern = /^\d+(\.\d{0,3})?$/;
+
+type PurchaseAdjustmentSign = "add" | "subtract";
+
+const adjustmentSignOptions: Array<{
+    value: PurchaseAdjustmentSign;
+    label: string;
+    activeClassName: string;
+}> = [
+    { value: "add", label: "+", activeClassName: "bg-emerald-500 text-white" },
+    { value: "subtract", label: "-", activeClassName: "bg-rose-500 text-white" },
+];
+
+const parseAdjustmentAmount = (value: string): number => {
+    if (!value) {
+        return 0;
+    }
+    const amount = Number(value);
+    return Number.isFinite(amount) ? amount : 0;
+};
+
+const toSignedAdjustment = (amount: string, sign: PurchaseAdjustmentSign): number => {
+    const parsed = parseAdjustmentAmount(amount);
+    return sign === "subtract" ? -parsed : parsed;
+};
 
 const sanitizeTwoDecimalInput = (value: string, allowNegative = false) => {
     const negative = allowNegative && value.trim().startsWith("-");
@@ -114,12 +139,20 @@ const UpsertPurchaseFormSchema = z.object({
     effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Effective date must be YYYY-MM-DD"),
     invoiceReference: z.string(),
     notes: z.string(),
+    adjustmentSign: z.enum(["add", "subtract"]),
     adjustment: z
         .string()
-        .refine((value) => value.length === 0 || decimalAmountPattern.test(value), "Use at most two decimal places")
-        .transform((value) => (value.length === 0 || value === "-" ? 0 : Number(value))),
+        .refine(
+            (value) => value.length === 0 || positiveDecimalPattern.test(value),
+            "Use at most two decimal places",
+        )
+        .transform((value) => parseAdjustmentAmount(value)),
     lines: z.array(lineFormSchema),
-});
+})
+    .transform((value) => ({
+        ...value,
+        adjustment: value.adjustmentSign === "subtract" ? -value.adjustment : value.adjustment,
+    }));
 
 type UpsertPurchaseFormInput = z.input<typeof UpsertPurchaseFormSchema>;
 
@@ -153,6 +186,7 @@ const defaultValues = (): UpsertPurchaseFormInput => ({
     effectiveDate: calendarDateInTimeZone(),
     invoiceReference: "",
     notes: "",
+    adjustmentSign: "add",
     adjustment: "0",
     lines: [],
 });
@@ -163,7 +197,8 @@ const toFormValues = (purchase: PurchaseDTO): UpsertPurchaseFormInput => ({
     effectiveDate: purchase.effectiveDate,
     invoiceReference: purchase.invoiceReference ?? "",
     notes: purchase.notes ?? "",
-    adjustment: String(purchase.adjustment),
+    adjustmentSign: purchase.adjustment < 0 ? "subtract" : "add",
+    adjustment: String(Math.abs(purchase.adjustment)),
     lines: purchase.lines.map((line) => ({
         vendorItemId: line.vendorItemId,
         quantity: String(line.quantity),
@@ -208,6 +243,7 @@ const UpsertPurchaseDialog = ({
     const storeId = useWatch({ control: form.control, name: "storeId" });
     const watchedLines = useWatch({ control: form.control, name: "lines" }) ?? [];
     const watchedAdjustment = useWatch({ control: form.control, name: "adjustment" }) ?? "0";
+    const watchedAdjustmentSign = useWatch({ control: form.control, name: "adjustmentSign" }) ?? "add";
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -423,13 +459,12 @@ const UpsertPurchaseDialog = ({
             }
             return [{ quantity, agreedUnitPrice }];
         });
-        const adjustmentValue =
-            watchedAdjustment === "" || watchedAdjustment === "-" ? 0 : Number(watchedAdjustment);
-        return calculatePurchaseTotals(
-            parsedLines,
-            Number.isFinite(adjustmentValue) ? adjustmentValue : 0,
+        const adjustmentValue = toSignedAdjustment(
+            watchedAdjustment,
+            watchedAdjustmentSign === "subtract" ? "subtract" : "add",
         );
-    }, [watchedAdjustment, watchedLines]);
+        return calculatePurchaseTotals(parsedLines, adjustmentValue);
+    }, [watchedAdjustment, watchedAdjustmentSign, watchedLines]);
 
     const invalidatePurchases = async (saved?: PurchaseDTO) => {
         await queryClient.invalidateQueries({ queryKey: purchaseKeys.list(organizationId) });
@@ -804,16 +839,48 @@ const UpsertPurchaseDialog = ({
                         <Field data-invalid={!!form.formState.errors.adjustment}>
                             <FieldLabel>Purchase Adjustment</FieldLabel>
                             <FieldContent>
-                                <Input
-                                    className="h-11 rounded-xl"
-                                    inputMode="decimal"
-                                    placeholder="Freight, discount, or rounding"
-                                    {...form.register("adjustment", {
-                                        onChange: (event) => {
-                                            event.target.value = sanitizeTwoDecimalInput(event.target.value, true);
-                                        },
-                                    })}
-                                />
+                                <div className="flex gap-2">
+                                    <div className="grid w-20 shrink-0 grid-cols-2 gap-1">
+                                        {adjustmentSignOptions.map((option) => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => {
+                                                    form.setValue("adjustmentSign", option.value, {
+                                                        shouldDirty: true,
+                                                    });
+                                                }}
+                                                aria-pressed={watchedAdjustmentSign === option.value}
+                                                className={cn(
+                                                    "h-11 min-h-11 rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                                    watchedAdjustmentSign === option.value
+                                                        ? `${option.activeClassName} shadow-md`
+                                                        : "border border-border/60 bg-background/70 text-muted-foreground hover:text-foreground",
+                                                )}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <Controller
+                                        control={form.control}
+                                        name="adjustment"
+                                        render={({ field }) => (
+                                            <Input
+                                                {...field}
+                                                className="h-11 rounded-xl"
+                                                inputMode="decimal"
+                                                placeholder="Freight, discount, or rounding"
+                                                onChange={(event) => {
+                                                    field.onChange(sanitizeTwoDecimalInput(event.target.value));
+                                                }}
+                                            />
+                                        )}
+                                    />
+                                </div>
+                                <p className="text-[11px] text-muted-foreground">
+                                    Use + for extra charges and - for discounts.
+                                </p>
                                 <FieldError errors={[form.formState.errors.adjustment]} />
                             </FieldContent>
                         </Field>
