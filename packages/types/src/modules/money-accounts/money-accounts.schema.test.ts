@@ -4,12 +4,17 @@ import {
   CreateMoneyAccountSchema,
   MONEY_ACCOUNT_NAME_MAX_LENGTH,
   MONEY_ACCOUNT_NOTES_MAX_LENGTH,
+  MONEY_ACCOUNT_PAYMENT_ROUTE_METHOD_LABELS,
   MONEY_ACCOUNT_SCOPE_LABELS,
   MONEY_ACCOUNT_TYPE_LABELS,
   MoneyAccountDTOSchema,
+  MoneyAccountHistoryResponseSchema,
+  MoneyAccountMovementDTOSchema,
+  MoneyAccountPaymentRouteDTOSchema,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES,
   UpdateMoneyAccountSchema,
+  UpsertMoneyAccountPaymentRouteSchema,
 } from "./money-accounts.schema";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -611,5 +616,232 @@ describe("Money Account contracts", () => {
 
   test("does not replace Billing Payment Method values", () => {
     expect(PaymentMethodSchema.options).toEqual(["cash", "upi", "card", "bank_transfer", "other"]);
+  });
+});
+
+describe("Payment Routing Rule contracts", () => {
+  const validRoute = {
+    paymentMethod: "upi" as const,
+    moneyAccountId,
+  };
+
+  const routeDto = {
+    id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    organizationId,
+    storeId,
+    paymentMethod: "upi" as const,
+    moneyAccountId,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: "2026-08-31T00:00:00.000Z",
+    updatedAt: "2026-08-31T00:00:00.000Z",
+  };
+
+  test("accepts a UPI or Card route to one Money Account", () => {
+    const upi = UpsertMoneyAccountPaymentRouteSchema.safeParse(validRoute);
+    const card = UpsertMoneyAccountPaymentRouteSchema.safeParse({
+      paymentMethod: "card",
+      moneyAccountId,
+    });
+
+    expect(upi.success).toBe(true);
+    if (upi.success) {
+      expect(upi.data.paymentMethod).toBe("upi");
+      expect(upi.data.moneyAccountId).toBe(moneyAccountId);
+    }
+    expect(card.success).toBe(true);
+    if (card.success) {
+      expect(card.data.paymentMethod).toBe("card");
+    }
+    expect(MONEY_ACCOUNT_PAYMENT_ROUTE_METHOD_LABELS.upi).toBe("UPI");
+    expect(MONEY_ACCOUNT_PAYMENT_ROUTE_METHOD_LABELS.card).toBe("Card");
+  });
+
+  test("rejects Cash, Bank Transfer, Other, and unknown payment methods", () => {
+    expect(
+      UpsertMoneyAccountPaymentRouteSchema.safeParse({
+        paymentMethod: "cash",
+        moneyAccountId,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpsertMoneyAccountPaymentRouteSchema.safeParse({
+        paymentMethod: "bank_transfer",
+        moneyAccountId,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpsertMoneyAccountPaymentRouteSchema.safeParse({
+        paymentMethod: "other",
+        moneyAccountId,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpsertMoneyAccountPaymentRouteSchema.safeParse({
+        paymentMethod: "wallet",
+        moneyAccountId,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects a missing or invalid Money Account id", () => {
+    expect(UpsertMoneyAccountPaymentRouteSchema.safeParse({ paymentMethod: "upi" }).success).toBe(
+      false,
+    );
+    expect(
+      UpsertMoneyAccountPaymentRouteSchema.safeParse({
+        paymentMethod: "upi",
+        moneyAccountId: "not-a-uuid",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects forbidden fields on a Payment Routing Rule", () => {
+    const forbiddenFields = {
+      cash: true,
+      balance: 100,
+      runningBalance: 100,
+      paymentId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      sourceKind: "manual",
+    };
+
+    for (const [field, value] of Object.entries(forbiddenFields)) {
+      expect(
+        UpsertMoneyAccountPaymentRouteSchema.safeParse({
+          ...validRoute,
+          [field]: value,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  test("Payment Routing Rule DTO includes Store, method, and destination Money Account", () => {
+    const result = MoneyAccountPaymentRouteDTOSchema.safeParse(routeDto);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.storeId).toBe(storeId);
+      expect(result.data.paymentMethod).toBe("upi");
+      expect(result.data.moneyAccountId).toBe(moneyAccountId);
+    }
+  });
+});
+
+describe("Money Account Movement and history contracts", () => {
+  const paymentId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  const saleId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  const movementId = "99999999-9999-4999-8999-999999999999";
+
+  const movementDto = {
+    id: movementId,
+    organizationId,
+    moneyAccountId,
+    storeId,
+    amount: 250.5,
+    occurredAt: "2026-08-31T12:00:00.000Z",
+    sourceKind: "pos_payment" as const,
+    paymentId,
+    createdAt: "2026-08-31T12:00:00.000Z",
+  };
+
+  test("Money Account Movement DTO records a positive POS Payment link without a running balance", () => {
+    const result = MoneyAccountMovementDTOSchema.safeParse(movementDto);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(250.5);
+      expect(result.data.sourceKind).toBe("pos_payment");
+      expect(result.data.paymentId).toBe(paymentId);
+      expect("balanceAfter" in result.data).toBe(false);
+      expect("runningBalance" in result.data).toBe(false);
+    }
+  });
+
+  test("rejects a zero, negative, or malformed Movement amount", () => {
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...movementDto, amount: 0 }).success).toBe(
+      false,
+    );
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...movementDto, amount: -10 }).success).toBe(
+      false,
+    );
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...movementDto, amount: 1.234 }).success).toBe(
+      false,
+    );
+  });
+
+  test("rejects a Movement without a unique Payment link or with a non-POS source", () => {
+    const { paymentId: _paymentId, ...withoutPayment } = movementDto;
+    expect(MoneyAccountMovementDTOSchema.safeParse(withoutPayment).success).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...movementDto, sourceKind: "manual" }).success,
+    ).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...movementDto, paymentId: "not-a-uuid" }).success,
+    ).toBe(false);
+  });
+
+  test("account history includes a stable Opening Balance entry plus payment-linked Movement entries", () => {
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        openingBalance: 100,
+        balance: 350.5,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 350.5,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "pos_payment",
+          id: movementId,
+          amount: 250.5,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId,
+          paymentId,
+          saleId,
+          saleNumber: "12",
+          paymentMethod: "upi",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.openingBalance).toBe(100);
+      expect(result.data.balance).toBe(350.5);
+      expect(result.data.entries[0]?.kind).toBe("opening_balance");
+      expect(result.data.entries[0]?.amount).toBe(100);
+      expect(result.data.entries[1]?.kind).toBe("pos_payment");
+      if (result.data.entries[1]?.kind === "pos_payment") {
+        expect(result.data.entries[1].saleNumber).toBe("12");
+        expect(result.data.entries[1].paymentMethod).toBe("upi");
+        expect(result.data.entries[1].paymentId).toBe(paymentId);
+        expect(result.data.entries[1].saleId).toBe(saleId);
+      }
+    }
+  });
+
+  test("rejects a history Movement entry without Sale and Payment information", () => {
+    expect(
+      MoneyAccountHistoryResponseSchema.safeParse({
+        moneyAccount: organizationWideDto,
+        openingBalance: 0,
+        balance: 0,
+        entries: [
+          {
+            kind: "pos_payment",
+            id: movementId,
+            amount: 10,
+            occurredAt: "2026-08-31T12:00:00.000Z",
+            storeId,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 });

@@ -13,6 +13,7 @@ import StoreWhatsAppDialog from "@/components/organizations/store-whatsapp-dialo
 import SaleNumberSettingsForm from "@/components/organizations/sale-number-settings-form";
 import StoreFeatureSettingsForm from "@/components/organizations/store-feature-settings-form";
 import InvoiceAppearanceSettingsForm from "@/components/organizations/invoice-appearance-settings-form";
+import StorePaymentRoutingForm from "@/components/organizations/store-payment-routing-form";
 import StoreDevicesSection from "@/components/organizations/store-devices-section";
 import { formatDateTime } from "@/lib/format";
 import { organizationKeys } from "@/lib/query-keys";
@@ -221,6 +222,7 @@ const StoreSettingsPage = () => {
                 <StoreFeatureSettingsForm organizationId={organizationId} store={store} />
                 <SaleNumberSettingsForm organizationId={organizationId} store={store} />
             </div>
+            <StorePaymentRoutingForm organizationId={organizationId} store={store} />
             <InvoiceAppearanceSettingsForm organizationId={organizationId} store={store} />
         </div>
     );

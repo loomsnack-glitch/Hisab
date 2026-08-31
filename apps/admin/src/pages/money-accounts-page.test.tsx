@@ -251,6 +251,7 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain("active");
         expect(markup).toContain("inactive");
         expect(markup).toContain("Edit");
+        expect(markup).toContain("View history");
         expect(markup).not.toContain("Delete");
         expect(markup).not.toContain("bank account number");
         expect(markup).not.toContain("UPI ID");

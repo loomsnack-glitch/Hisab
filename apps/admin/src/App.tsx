@@ -29,6 +29,7 @@ import TablesPage from "@/pages/tables-page";
 import UnitsPage from "@/pages/units-page";
 import VendorsPage from "@/pages/vendors-page";
 import MoneyAccountsPage from "@/pages/money-accounts-page";
+import MoneyAccountDetailPage from "@/pages/money-account-detail-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
 import WhatsAppInboxPage from "@/pages/whatsapp-inbox-page";
@@ -135,6 +136,7 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/units" element={<UnitsPage />} />
                                 <Route path="/organizations/:organizationId/vendors" element={<VendorsPage />} />
                                 <Route path="/organizations/:organizationId/money-accounts" element={<MoneyAccountsPage />} />
+                                <Route path="/organizations/:organizationId/money-accounts/:moneyAccountId" element={<MoneyAccountDetailPage />} />
                                 <Route path="/organizations/:organizationId/whatsapp" element={<Navigate to="accounts" replace />} />
                                 <Route path="/organizations/:organizationId/whatsapp/accounts" element={<WhatsAppOrganizationPage />} />
                                 <Route path="/organizations/:organizationId/whatsapp/templates" element={<WhatsAppOrganizationPage />} />

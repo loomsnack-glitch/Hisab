@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
+import { PaymentMethodSchema } from "../billing/billing.schema";
 
 export const MONEY_ACCOUNT_NAME_MAX_LENGTH = 255;
 export const MONEY_ACCOUNT_NOTES_MAX_LENGTH = 1000;
@@ -202,3 +203,87 @@ export const UpdateMoneyAccountSchema = z
     refineMoneyAccountScopeAndStore(value, ctx);
     refineCashMustBeStoreScoped(value, ctx);
   });
+
+export const MONEY_ACCOUNT_PAYMENT_ROUTE_METHODS = ["upi", "card"] as const;
+
+export const MoneyAccountPaymentRouteMethodSchema = z.enum(MONEY_ACCOUNT_PAYMENT_ROUTE_METHODS);
+
+export const MONEY_ACCOUNT_PAYMENT_ROUTE_METHOD_LABELS: Record<
+  z.infer<typeof MoneyAccountPaymentRouteMethodSchema>,
+  string
+> = {
+  upi: "UPI",
+  card: "Card",
+};
+
+export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS = ["pos_payment"] as const;
+
+export const MoneyAccountMovementSourceKindSchema = z.enum(MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS);
+
+export const moneyAccountMovementAmountSchema = z
+  .number({ error: "Amount is required" })
+  .gt(0, "Amount must be greater than 0")
+  .refine(isAtMostTwoDecimalPlaces, {
+    message: "Amount must have at most two decimal places",
+  });
+
+export const UpsertMoneyAccountPaymentRouteSchema = z
+  .object({
+    paymentMethod: MoneyAccountPaymentRouteMethodSchema,
+    moneyAccountId: z.uuid("Invalid money account id"),
+  })
+  .strict();
+
+export const MoneyAccountPaymentRouteDTOSchema = z.object({
+  id: z.uuid("Invalid payment route id"),
+  organizationId: z.uuid("Invalid organization id"),
+  storeId: z.uuid("Invalid store id"),
+  paymentMethod: MoneyAccountPaymentRouteMethodSchema,
+  moneyAccountId: z.uuid("Invalid money account id"),
+  createdBy: z.uuid("Invalid creator id"),
+  updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+});
+
+export const MoneyAccountMovementDTOSchema = z.object({
+  id: z.uuid("Invalid money account movement id"),
+  organizationId: z.uuid("Invalid organization id"),
+  moneyAccountId: z.uuid("Invalid money account id"),
+  storeId: z.uuid("Invalid store id"),
+  amount: moneyAccountMovementAmountSchema,
+  occurredAt: dtoDateSchema,
+  sourceKind: MoneyAccountMovementSourceKindSchema,
+  paymentId: z.uuid("Invalid payment id"),
+  createdAt: dtoDateSchema,
+});
+
+export const MoneyAccountHistoryOpeningEntrySchema = z.object({
+  kind: z.literal("opening_balance"),
+  amount: moneyAccountOpeningBalanceSchema,
+  occurredAt: dtoDateSchema,
+});
+
+export const MoneyAccountHistoryMovementEntrySchema = z.object({
+  kind: z.literal("pos_payment"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id"),
+  paymentId: z.uuid("Invalid payment id"),
+  saleId: z.uuid("Invalid sale id"),
+  saleNumber: z.string().nullable(),
+  paymentMethod: PaymentMethodSchema,
+});
+
+export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
+  MoneyAccountHistoryOpeningEntrySchema,
+  MoneyAccountHistoryMovementEntrySchema,
+]);
+
+export const MoneyAccountHistoryResponseSchema = z.object({
+  moneyAccount: MoneyAccountDTOSchema,
+  openingBalance: moneyAccountOpeningBalanceSchema,
+  balance: moneyAccountBalanceSchema,
+  entries: z.array(MoneyAccountHistoryEntrySchema),
+});

@@ -1,12 +1,20 @@
 import type { z } from "zod";
+import type { PaymentMethod } from "../billing/billing.type";
 import type {
   CreateMoneyAccountSchema,
   MoneyAccountDTOSchema,
+  MoneyAccountHistoryEntrySchema,
+  MoneyAccountHistoryResponseSchema,
+  MoneyAccountMovementDTOSchema,
+  MoneyAccountMovementSourceKindSchema,
+  MoneyAccountPaymentRouteDTOSchema,
+  MoneyAccountPaymentRouteMethodSchema,
   MoneyAccountScopeSchema,
   MoneyAccountStatusSchema,
   MoneyAccountTypeSchema,
   OrganizationWideMoneyAccountTypeSchema,
   UpdateMoneyAccountSchema,
+  UpsertMoneyAccountPaymentRouteSchema,
 } from "./money-accounts.schema";
 
 export type MoneyAccountStatus = z.infer<typeof MoneyAccountStatusSchema>;
@@ -57,4 +65,46 @@ export type MoneyAccountsListResponse = {
 
 export type MoneyAccountResponse = {
   moneyAccount: MoneyAccountDTO;
+};
+
+export type MoneyAccountPaymentRouteMethod = z.infer<typeof MoneyAccountPaymentRouteMethodSchema>;
+export type MoneyAccountPaymentRouteDTO = z.infer<typeof MoneyAccountPaymentRouteDTOSchema>;
+export type UpsertMoneyAccountPaymentRouteJSON = z.infer<typeof UpsertMoneyAccountPaymentRouteSchema>;
+export type UpsertMoneyAccountPaymentRouteSVC = UpsertMoneyAccountPaymentRouteJSON;
+export type UpsertMoneyAccountPaymentRouteREPO = Pick<
+  MoneyAccountPaymentRouteDTO,
+  "id" | "organizationId" | "storeId" | "paymentMethod" | "moneyAccountId" | "createdBy"
+> & {
+  updatedBy?: string | null;
+};
+
+export type MoneyAccountPaymentRoutesResponse = {
+  routes: MoneyAccountPaymentRouteDTO[];
+};
+
+export type MoneyAccountPaymentRouteResponse = {
+  route: MoneyAccountPaymentRouteDTO;
+};
+
+export type MoneyAccountMovementSourceKind = z.infer<typeof MoneyAccountMovementSourceKindSchema>;
+export type MoneyAccountMovementDTO = z.infer<typeof MoneyAccountMovementDTOSchema>;
+export type CreateMoneyAccountMovementREPO = Pick<
+  MoneyAccountMovementDTO,
+  | "id"
+  | "organizationId"
+  | "moneyAccountId"
+  | "storeId"
+  | "amount"
+  | "occurredAt"
+  | "sourceKind"
+  | "paymentId"
+>;
+
+export type MoneyAccountHistoryEntry = z.infer<typeof MoneyAccountHistoryEntrySchema>;
+export type MoneyAccountHistoryResponse = z.infer<typeof MoneyAccountHistoryResponseSchema>;
+
+export type MoneyAccountHistoryMovementREPO = MoneyAccountMovementDTO & {
+  saleId: string;
+  saleNumber: string | null;
+  paymentMethod: PaymentMethod;
 };

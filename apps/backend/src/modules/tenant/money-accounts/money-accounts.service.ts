@@ -2,12 +2,18 @@ import {
     STATUS_CODES,
     type CreateMoneyAccountSVC,
     type MoneyAccountDTO,
+    type MoneyAccountHistoryEntry,
+    type MoneyAccountHistoryResponse,
+    type MoneyAccountPaymentRouteMethod,
+    type MoneyAccountPaymentRouteResponse,
+    type MoneyAccountPaymentRoutesResponse,
     type MoneyAccountResponse,
     type MoneyAccountScope,
     type MoneyAccountType,
     type MoneyAccountsListResponse,
     type ServiceResponse,
     type UpdateMoneyAccountSVC,
+    type UpsertMoneyAccountPaymentRouteSVC,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as moneyAccountsRepository from "./money-accounts.repository";
@@ -320,3 +326,208 @@ export const updateMoneyAccount = async (
         throw error;
     }
 };
+
+const toMoneyAmount = (value: number): number =>
+    Math.round((value + Number.EPSILON) * 100) / 100;
+
+const isEligiblePaymentRouteDestination = (
+    moneyAccount: MoneyAccountDTO,
+    storeId: string,
+): boolean => {
+    if (moneyAccount.scope === "organization_wide") {
+        return moneyAccount.storeId === null;
+    }
+
+    return moneyAccount.scope === "store_scoped" && moneyAccount.storeId === storeId;
+};
+
+const paymentRouteNotEligible = (message: string): ServiceResponse<null> => ({
+    status: "error",
+    message,
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+const storeNotFound = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "Store not found",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+export const getMoneyAccountPaymentRoutes = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<MoneyAccountPaymentRoutesResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const store = await organizationRepository.getStoreById(organizationId, storeId);
+    if (!store) {
+        return storeNotFound();
+    }
+
+    const routes = await moneyAccountsRepository.getPaymentRoutesByStoreId(organizationId, storeId);
+    return {
+        status: "success",
+        data: { routes },
+        message: "Payment Routing Rules fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const upsertMoneyAccountPaymentRoute = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    routeData: UpsertMoneyAccountPaymentRouteSVC,
+): Promise<ServiceResponse<MoneyAccountPaymentRouteResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const store = await organizationRepository.getStoreById(organizationId, storeId);
+    if (!store) {
+        return storeNotFound();
+    }
+
+    const destination = await moneyAccountsRepository.getMoneyAccountById(
+        organizationId,
+        routeData.moneyAccountId,
+    );
+    if (!destination) {
+        return moneyAccountNotFound();
+    }
+
+    if (destination.status !== "active") {
+        return paymentRouteNotEligible("Select an active Money Account");
+    }
+
+    if (!isEligiblePaymentRouteDestination(destination, storeId)) {
+        return paymentRouteNotEligible("This Money Account is not available to this Store");
+    }
+
+    const existing = await moneyAccountsRepository.getPaymentRouteByStoreAndMethod(
+        organizationId,
+        storeId,
+        routeData.paymentMethod,
+    );
+
+    const route = await moneyAccountsRepository.upsertPaymentRoute({
+        id: crypto.randomUUID(),
+        organizationId,
+        storeId,
+        paymentMethod: routeData.paymentMethod,
+        moneyAccountId: routeData.moneyAccountId,
+        createdBy: existing?.createdBy ?? userId,
+        updatedBy: userId,
+    });
+
+    if (!route) {
+        return {
+            status: "error",
+            message: "Failed to save payment routing rule",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+
+    return {
+        status: "success",
+        data: { route },
+        message: existing
+            ? "Payment Routing Rule updated successfully"
+            : "Payment Routing Rule saved successfully",
+        code: existing ? STATUS_CODES.SUCCESS : STATUS_CODES.CREATED,
+    };
+};
+
+export const clearMoneyAccountPaymentRoute = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    paymentMethod: MoneyAccountPaymentRouteMethod,
+): Promise<ServiceResponse<MoneyAccountPaymentRoutesResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const store = await organizationRepository.getStoreById(organizationId, storeId);
+    if (!store) {
+        return storeNotFound();
+    }
+
+    await moneyAccountsRepository.deletePaymentRoute(organizationId, storeId, paymentMethod);
+    const routes = await moneyAccountsRepository.getPaymentRoutesByStoreId(organizationId, storeId);
+
+    return {
+        status: "success",
+        data: { routes },
+        message: "Payment Routing Rule cleared successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+
+export const getMoneyAccountHistory = async (
+    userId: string,
+    organizationId: string,
+    moneyAccountId: string,
+): Promise<ServiceResponse<MoneyAccountHistoryResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const moneyAccount = await moneyAccountsRepository.getMoneyAccountById(
+        organizationId,
+        moneyAccountId,
+    );
+    if (!moneyAccount) {
+        return moneyAccountNotFound();
+    }
+
+    const movements = await moneyAccountsRepository.getMovementsByMoneyAccountId(
+        organizationId,
+        moneyAccountId,
+    );
+    const movementTotal = movements.reduce((sum, movement) => sum + movement.amount, 0);
+    const balance = toMoneyAmount(moneyAccount.openingBalance + movementTotal);
+    const openingEntry: MoneyAccountHistoryEntry = {
+        kind: "opening_balance",
+        amount: moneyAccount.openingBalance,
+        occurredAt: moneyAccount.createdAt,
+    };
+    const movementEntries: MoneyAccountHistoryEntry[] = movements.map((movement) => ({
+        kind: "pos_payment",
+        id: movement.id,
+        amount: movement.amount,
+        occurredAt: movement.occurredAt,
+        storeId: movement.storeId,
+        paymentId: movement.paymentId,
+        saleId: movement.saleId,
+        saleNumber: movement.saleNumber,
+        paymentMethod: movement.paymentMethod,
+    }));
+
+    return {
+        status: "success",
+        data: {
+            moneyAccount: {
+                ...moneyAccount,
+                balance,
+                hasMovements: movements.length > 0,
+            },
+            openingBalance: moneyAccount.openingBalance,
+            balance,
+            entries: [openingEntry, ...movementEntries],
+        },
+        message: "Money Account history fetched successfully",
+        code: STATUS_CODES.SUCCESS,
+    };
+};
+

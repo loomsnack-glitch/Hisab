@@ -1,12 +1,23 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+    adajanCardRoute,
+    adajanCashAccount,
     adajanUpiAccount,
+    adajanUpiRoute,
+    cashMoneyAccountId,
+    createMoneyAccountMovementRepo,
     createMoneyAccountRepo,
+    deletePaymentRouteRepo,
     getMoneyAccountById,
     getMoneyAccountsByOrganizationId,
+    getMovementsByMoneyAccountId,
     getOrganizationByIdForUser,
+    getPaymentRouteByStoreAndMethod,
+    getPaymentRoutesByStoreId,
     getStoreById,
     hdfcBankAccount,
+    hdfcCardMovement,
+    hdfcUpiMovement,
     inactiveAdajanCashAccount,
     inactiveCashMoneyAccountId,
     inactiveMoneyAccountId,
@@ -21,11 +32,11 @@ import {
     storeId,
     storeScopedMoneyAccountId,
     updateMoneyAccountRepo,
+    upsertPaymentRouteRepo,
     userId,
     vesuStore,
     vesuStoreId,
-    adajanCashAccount,
-    cashMoneyAccountId,
+    vesuUpiAccount,
     activeCashUniqueViolation,
     messageOnlyActiveCashUniqueViolation,
     wrappedActiveCashUniqueViolation,
@@ -39,6 +50,12 @@ describe("Organization Money Account service", () => {
         getMoneyAccountById.mockClear();
         createMoneyAccountRepo.mockClear();
         updateMoneyAccountRepo.mockClear();
+        getPaymentRoutesByStoreId.mockClear();
+        getPaymentRouteByStoreAndMethod.mockClear();
+        upsertPaymentRouteRepo.mockClear();
+        deletePaymentRouteRepo.mockClear();
+        getMovementsByMoneyAccountId.mockClear();
+        createMoneyAccountMovementRepo.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
         getStoreById.mockResolvedValue(store);
@@ -70,6 +87,17 @@ describe("Organization Money Account service", () => {
             createdAt: hdfcBankAccount.createdAt,
             updatedAt: hdfcBankAccount.updatedAt,
         }));
+        getPaymentRoutesByStoreId.mockResolvedValue([]);
+        getPaymentRouteByStoreAndMethod.mockResolvedValue(null);
+        getMovementsByMoneyAccountId.mockResolvedValue([]);
+        upsertPaymentRouteRepo.mockImplementation(async (data) => ({
+            ...adajanUpiRoute,
+            ...data,
+            updatedBy: data.updatedBy ?? null,
+            createdAt: adajanUpiRoute.createdAt,
+            updatedAt: adajanUpiRoute.updatedAt,
+        }));
+        deletePaymentRouteRepo.mockResolvedValue(true);
     });
 
     test("lists Organization-wide and Store-scoped Money Accounts for a member", async () => {
@@ -920,5 +948,284 @@ describe("Organization Money Account service", () => {
         expect(response.status).toBe("error");
         expect(response.code).toBe(404);
         expect(updateMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("creates a UPI Payment Routing Rule to an Organization-wide Money Account", async () => {
+        const response = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            storeId,
+            { paymentMethod: "upi", moneyAccountId },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.code).toBe(201);
+        expect(response.data?.route.paymentMethod).toBe("upi");
+        expect(response.data?.route.moneyAccountId).toBe(moneyAccountId);
+        expect(response.data?.route.storeId).toBe(storeId);
+        expect(upsertPaymentRouteRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                organizationId,
+                storeId,
+                paymentMethod: "upi",
+                moneyAccountId,
+            }),
+        );
+    });
+
+    test("creates a Card Payment Routing Rule to the same Money Account as UPI", async () => {
+        getPaymentRoutesByStoreId.mockResolvedValue([adajanUpiRoute]);
+
+        const response = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            storeId,
+            { paymentMethod: "card", moneyAccountId },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.route.paymentMethod).toBe("card");
+        expect(response.data?.route.moneyAccountId).toBe(moneyAccountId);
+        expect(upsertPaymentRouteRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                paymentMethod: "card",
+                moneyAccountId,
+            }),
+        );
+    });
+
+    test("creates a Payment Routing Rule to a Store-scoped Money Account for that Store", async () => {
+        getMoneyAccountById.mockResolvedValue(adajanUpiAccount);
+
+        const response = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            storeId,
+            { paymentMethod: "upi", moneyAccountId: storeScopedMoneyAccountId },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.route.moneyAccountId).toBe(storeScopedMoneyAccountId);
+    });
+
+    test("replaces a Store's UPI route without changing existing Movements", async () => {
+        getPaymentRouteByStoreAndMethod.mockResolvedValue(adajanUpiRoute);
+        getMoneyAccountById.mockResolvedValue(adajanUpiAccount);
+        getMovementsByMoneyAccountId.mockResolvedValue([hdfcUpiMovement]);
+        getMoneyAccountById.mockImplementation(async (_orgId: string, accountId: string) =>
+            accountId === storeScopedMoneyAccountId
+                ? adajanUpiAccount
+                : { ...hdfcBankAccount, openingBalance: 100, balance: 350.5, hasMovements: true },
+        );
+
+        const updateResponse = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            storeId,
+            { paymentMethod: "upi", moneyAccountId: storeScopedMoneyAccountId },
+        );
+        const history = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(updateResponse.status).toBe("success");
+        expect(updateResponse.code).toBe(200);
+        expect(updateResponse.data?.route.moneyAccountId).toBe(storeScopedMoneyAccountId);
+        expect(history.data?.entries).toEqual([
+            {
+                kind: "opening_balance",
+                amount: 100,
+                occurredAt: hdfcBankAccount.createdAt,
+            },
+            {
+                kind: "pos_payment",
+                id: hdfcUpiMovement.id,
+                amount: 250.5,
+                occurredAt: hdfcUpiMovement.occurredAt,
+                storeId,
+                paymentId: hdfcUpiMovement.paymentId,
+                saleId: hdfcUpiMovement.saleId,
+                saleNumber: "12",
+                paymentMethod: "upi",
+            },
+        ]);
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("lists one UPI and one Card route for a Store", async () => {
+        getPaymentRoutesByStoreId.mockResolvedValue([adajanUpiRoute, adajanCardRoute]);
+
+        const response = await moneyAccountsService.getMoneyAccountPaymentRoutes(
+            userId,
+            organizationId,
+            storeId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.routes).toHaveLength(2);
+        expect(response.data?.routes.map((route) => route.paymentMethod).sort()).toEqual(["card", "upi"]);
+        expect(getPaymentRoutesByStoreId).toHaveBeenCalledWith(organizationId, storeId);
+    });
+
+    test("clears a Store's Card route and leaves its UPI route", async () => {
+        deletePaymentRouteRepo.mockResolvedValue(true);
+        getPaymentRoutesByStoreId.mockResolvedValue([adajanUpiRoute]);
+
+        const response = await moneyAccountsService.clearMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            storeId,
+            "card",
+        );
+
+        expect(response.status).toBe("success");
+        expect(deletePaymentRouteRepo).toHaveBeenCalledWith(organizationId, storeId, "card");
+        expect(response.data?.routes).toEqual([adajanUpiRoute]);
+        expect(response.data?.routes.some((route) => route.paymentMethod === "card")).toBe(false);
+    });
+
+    test("rejects an inactive Money Account as a Payment Routing destination", async () => {
+        getMoneyAccountById.mockResolvedValue(inactivePettyCashAccount);
+
+        const response = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            storeId,
+            { paymentMethod: "upi", moneyAccountId: inactiveMoneyAccountId },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("Select an active Money Account");
+        expect(upsertPaymentRouteRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects another Store's Money Account as a Payment Routing destination", async () => {
+        getMoneyAccountById.mockResolvedValue(vesuUpiAccount);
+
+        const response = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            storeId,
+            { paymentMethod: "upi", moneyAccountId: vesuUpiAccount.id },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.message).toBe("This Money Account is not available to this Store");
+        expect(upsertPaymentRouteRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Money Account from another Organization as a Payment Routing destination", async () => {
+        getMoneyAccountById.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            storeId,
+            { paymentMethod: "upi", moneyAccountId },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(upsertPaymentRouteRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects Payment Routing configuration for a Store from another Organization", async () => {
+        getStoreById.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+            userId,
+            organizationId,
+            otherOrganizationStoreId,
+            { paymentMethod: "upi", moneyAccountId },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.message).toBe("Store not found");
+        expect(upsertPaymentRouteRepo).not.toHaveBeenCalled();
+    });
+
+    test("denies Payment Routing Rules when the user is not a member of the Organization", async () => {
+        getOrganizationByIdForUser.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.getMoneyAccountPaymentRoutes(
+            userId,
+            otherOrganizationId,
+            storeId,
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(getPaymentRoutesByStoreId).not.toHaveBeenCalled();
+    });
+
+    test("returns Opening Balance plus payment-linked Movements and a calculated Balance", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: false,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([hdfcUpiMovement, hdfcCardMovement]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.openingBalance).toBe(100);
+        expect(response.data?.balance).toBe(450.5);
+        expect(response.data?.moneyAccount.balance).toBe(450.5);
+        expect(response.data?.moneyAccount.hasMovements).toBe(true);
+        expect(response.data?.entries[0]).toEqual({
+            kind: "opening_balance",
+            amount: 100,
+            occurredAt: hdfcBankAccount.createdAt,
+        });
+        expect(response.data?.entries[1]).toMatchObject({
+            kind: "pos_payment",
+            amount: 250.5,
+            paymentId: hdfcUpiMovement.paymentId,
+            saleId: hdfcUpiMovement.saleId,
+            saleNumber: "12",
+            paymentMethod: "upi",
+        });
+        expect(response.data?.entries[2]).toMatchObject({
+            kind: "pos_payment",
+            amount: 100,
+            paymentMethod: "card",
+            saleNumber: "13",
+        });
+    });
+
+    test("returns only the Opening Balance entry when a Money Account has no Movements", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 80,
+            balance: 80,
+            hasMovements: false,
+        });
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.balance).toBe(80);
+        expect(response.data?.entries).toHaveLength(1);
+        expect(response.data?.entries[0]?.kind).toBe("opening_balance");
+        expect(response.data?.entries[0]?.amount).toBe(80);
+    });
+
+    test("does not expose create, update, or delete Movement commands", () => {
+        expect("createMoneyAccountMovement" in moneyAccountsService).toBe(false);
+        expect("updateMoneyAccountMovement" in moneyAccountsService).toBe(false);
+        expect("deleteMoneyAccountMovement" in moneyAccountsService).toBe(false);
     });
 });

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateMoneyAccountSchema, STATUS_CODES, UpdateMoneyAccountSchema } from "@repo/types";
+import { CreateMoneyAccountSchema, MoneyAccountPaymentRouteMethodSchema, STATUS_CODES, UpdateMoneyAccountSchema, UpsertMoneyAccountPaymentRouteSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -119,6 +119,123 @@ export const createMoneyAccountsRoutes = (
                 return handleServiceResponse(c, serviceResponse);
             } catch (error) {
                 return handleError(FILE_NAME, "updateMoneyAccount", c, error);
+            }
+        },
+    );
+
+    router.get("/:organizationId/money-accounts/:moneyAccountId/history", async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const moneyAccountId = c.req.param("moneyAccountId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+            const invalidMoneyAccountId = validateUuidParam(moneyAccountId, "Invalid money account id");
+            if (invalidMoneyAccountId) {
+                return c.json(invalidMoneyAccountId, invalidMoneyAccountId.code);
+            }
+
+            const serviceResponse = await moneyAccountsService.getMoneyAccountHistory(
+                c.get("authUser").id,
+                organizationId,
+                moneyAccountId,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "getMoneyAccountHistory", c, error);
+        }
+    });
+
+    router.get("/:organizationId/stores/:storeId/money-account-payment-routes", async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) {
+                return c.json(invalidStoreId, invalidStoreId.code);
+            }
+
+            const serviceResponse = await moneyAccountsService.getMoneyAccountPaymentRoutes(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "getMoneyAccountPaymentRoutes", c, error);
+        }
+    });
+
+    router.put(
+        "/:organizationId/stores/:storeId/money-account-payment-routes",
+        validateSchema("json", UpsertMoneyAccountPaymentRouteSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const storeId = c.req.param("storeId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+                if (invalidStoreId) {
+                    return c.json(invalidStoreId, invalidStoreId.code);
+                }
+
+                const serviceResponse = await moneyAccountsService.upsertMoneyAccountPaymentRoute(
+                    c.get("authUser").id,
+                    organizationId,
+                    storeId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "upsertMoneyAccountPaymentRoute", c, error);
+            }
+        },
+    );
+
+    router.delete(
+        "/:organizationId/stores/:storeId/money-account-payment-routes/:paymentMethod",
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const storeId = c.req.param("storeId");
+                const paymentMethod = c.req.param("paymentMethod");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+                if (invalidStoreId) {
+                    return c.json(invalidStoreId, invalidStoreId.code);
+                }
+                const parsedMethod = MoneyAccountPaymentRouteMethodSchema.safeParse(paymentMethod);
+                if (!parsedMethod.success) {
+                    return c.json(
+                        {
+                            status: "error" as const,
+                            message: "Payment method must be UPI or Card",
+                            code: STATUS_CODES.BAD_REQUEST,
+                        },
+                        STATUS_CODES.BAD_REQUEST,
+                    );
+                }
+
+                const serviceResponse = await moneyAccountsService.clearMoneyAccountPaymentRoute(
+                    c.get("authUser").id,
+                    organizationId,
+                    storeId,
+                    parsedMethod.data,
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "clearMoneyAccountPaymentRoute", c, error);
             }
         },
     );

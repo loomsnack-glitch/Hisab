@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { getMoneyAccounts, getOrganizationDetails } from "@repo/services";
 import {
     MONEY_ACCOUNT_SCOPE_LABELS,
@@ -188,16 +188,26 @@ const MoneyAccountsPage = () => {
     ], [storeNameById, stores]);
 
     const renderActions = (account: MoneyAccountDTO) => (
-        <UpsertMoneyAccountDialog
-            organizationId={organizationId}
-            moneyAccount={account}
-            trigger={
-                <Button variant="outline" size="sm" className="rounded-full">
-                    <Pencil className="size-3" />
-                    Edit
-                </Button>
-            }
-        />
+        <div className="flex flex-wrap items-center gap-2">
+            <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                render={<Link to={`/organizations/${organizationId}/money-accounts/${account.id}`} />}
+            >
+                View history
+            </Button>
+            <UpsertMoneyAccountDialog
+                organizationId={organizationId}
+                moneyAccount={account}
+                trigger={
+                    <Button variant="outline" size="sm" className="rounded-full">
+                        <Pencil className="size-3" />
+                        Edit
+                    </Button>
+                }
+            />
+        </div>
     );
 
     const searchKeys = [
@@ -405,6 +415,15 @@ const MoneyAccountsPage = () => {
                                                         </p>
                                                     ) : null}
                                                 </div>
+                                                <div className="flex shrink-0 items-center gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="rounded-full h-8 text-xs px-3"
+                                                    render={<Link to={`/organizations/${organizationId}/money-accounts/${account.id}`} />}
+                                                >
+                                                    History
+                                                </Button>
                                                 <UpsertMoneyAccountDialog
                                                     organizationId={organizationId}
                                                     moneyAccount={account}
@@ -415,6 +434,7 @@ const MoneyAccountsPage = () => {
                                                         </Button>
                                                     }
                                                 />
+                                                </div>
                                             </div>
                                         </Card>
                                     ))}

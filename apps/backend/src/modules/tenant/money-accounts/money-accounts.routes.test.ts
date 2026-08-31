@@ -25,6 +25,12 @@ describe("Organization Money Account routes", () => {
         harness.getMoneyAccountById.mockClear();
         harness.createMoneyAccountRepo.mockClear();
         harness.updateMoneyAccountRepo.mockClear();
+        harness.getPaymentRoutesByStoreId.mockClear();
+        harness.getPaymentRouteByStoreAndMethod.mockClear();
+        harness.upsertPaymentRouteRepo.mockClear();
+        harness.deletePaymentRouteRepo.mockClear();
+        harness.getMovementsByMoneyAccountId.mockClear();
+        harness.createMoneyAccountMovementRepo.mockClear();
 
         harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
         harness.getStoreById.mockResolvedValue(harness.store);
@@ -57,6 +63,17 @@ describe("Organization Money Account routes", () => {
             createdAt: harness.now,
             updatedAt: harness.now,
         }));
+        harness.getPaymentRoutesByStoreId.mockResolvedValue([]);
+        harness.getPaymentRouteByStoreAndMethod.mockResolvedValue(null);
+        harness.getMovementsByMoneyAccountId.mockResolvedValue([]);
+        harness.upsertPaymentRouteRepo.mockImplementation(async (data) => ({
+            ...harness.adajanUpiRoute,
+            ...data,
+            updatedBy: data.updatedBy ?? null,
+            createdAt: harness.now,
+            updatedAt: harness.now,
+        }));
+        harness.deletePaymentRouteRepo.mockResolvedValue(true);
     });
 
     test("rejects unauthenticated Money Account listing with administrator authentication", async () => {
@@ -560,6 +577,172 @@ describe("Organization Money Account routes", () => {
 
         expect(posRoutes).not.toContain("money-accounts");
         expect(posRoutes).not.toContain("Money Account");
+        expect(posRoutes).not.toContain("money-account-payment-routes");
         expect(PaymentMethodSchema.options).toEqual(["cash", "upi", "card", "bank_transfer", "other"]);
+    });
+
+    test("creates a UPI Payment Routing Rule at the Organization administrator seam", async () => {
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/stores/${harness.storeId}/money-account-payment-routes`,
+            {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    paymentMethod: "upi",
+                    moneyAccountId: harness.moneyAccountId,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(201);
+        const body = await response.json();
+        expect(body.data.route.paymentMethod).toBe("upi");
+        expect(body.data.route.moneyAccountId).toBe(harness.moneyAccountId);
+        expect(harness.upsertPaymentRouteRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                storeId: harness.storeId,
+                paymentMethod: "upi",
+                moneyAccountId: harness.moneyAccountId,
+            }),
+        );
+    });
+
+    test("lets UPI and Card share one destination and rejects Cash as a routed method", async () => {
+        const cardResponse = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/stores/${harness.storeId}/money-account-payment-routes`,
+            {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    paymentMethod: "card",
+                    moneyAccountId: harness.moneyAccountId,
+                }),
+            },
+        );
+        const cashResponse = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/stores/${harness.storeId}/money-account-payment-routes`,
+            {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    paymentMethod: "cash",
+                    moneyAccountId: harness.moneyAccountId,
+                }),
+            },
+        );
+
+        expect(cardResponse.status).toBe(201);
+        expect((await cardResponse.json()).data.route.moneyAccountId).toBe(harness.moneyAccountId);
+        expect(cashResponse.status).toBe(400);
+    });
+
+    test("lists Payment Routing Rules for an authenticated administrator", async () => {
+        harness.getPaymentRoutesByStoreId.mockResolvedValue([
+            harness.adajanUpiRoute,
+            harness.adajanCardRoute,
+        ]);
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/stores/${harness.storeId}/money-account-payment-routes`,
+        );
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.routes).toHaveLength(2);
+    });
+
+    test("clears a Card Payment Routing Rule", async () => {
+        harness.getPaymentRoutesByStoreId.mockResolvedValue([harness.adajanUpiRoute]);
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/stores/${harness.storeId}/money-account-payment-routes/card`,
+            { method: "DELETE" },
+        );
+
+        expect(response.status).toBe(200);
+        expect(harness.deletePaymentRouteRepo).toHaveBeenCalledWith(
+            harness.organizationId,
+            harness.storeId,
+            "card",
+        );
+        const body = await response.json();
+        expect(body.data.routes).toHaveLength(1);
+        expect(body.data.routes[0].paymentMethod).toBe("upi");
+    });
+
+    test("rejects clearing a Cash payment route", async () => {
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/stores/${harness.storeId}/money-account-payment-routes/cash`,
+            { method: "DELETE" },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.deletePaymentRouteRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects an inactive destination at the Payment Routing route seam", async () => {
+        harness.getMoneyAccountById.mockResolvedValue(harness.inactivePettyCashAccount);
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/stores/${harness.storeId}/money-account-payment-routes`,
+            {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    paymentMethod: "upi",
+                    moneyAccountId: harness.inactiveMoneyAccountId,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.message).toBe("Select an active Money Account");
+    });
+
+    test("returns Opening Balance plus payment-linked history for an authenticated administrator", async () => {
+        harness.getMoneyAccountById.mockResolvedValue({
+            ...harness.hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: false,
+        });
+        harness.getMovementsByMoneyAccountId.mockResolvedValue([harness.hdfcUpiMovement]);
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/history`,
+        );
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.openingBalance).toBe(100);
+        expect(body.data.balance).toBe(350.5);
+        expect(body.data.entries[0].kind).toBe("opening_balance");
+        expect(body.data.entries[1].kind).toBe("pos_payment");
+        expect(body.data.entries[1].saleNumber).toBe("12");
+        expect(body.data.entries[1].paymentId).toBe(harness.paymentId);
+    });
+
+    test("does not expose a Movement write route", async () => {
+        const createMovement = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/movements`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 10, paymentId: harness.paymentId }),
+            },
+        );
+        const updateMovement = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/history`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 5 }),
+            },
+        );
+
+        expect(createMovement.status).toBe(404);
+        expect(updateMovement.status).toBe(404);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
     });
 });

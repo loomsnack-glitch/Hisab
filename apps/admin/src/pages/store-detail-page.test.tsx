@@ -10,7 +10,7 @@ import {
     StoreDevicesPage,
     StoreSettingsPage,
 } from "@/pages/store-detail-page";
-import { billingKeys, organizationKeys } from "@/lib/query-keys";
+import { billingKeys, moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -118,6 +118,52 @@ const renderStoreDetail = (path: string) => {
         message: "Sale number settings fetched successfully",
         code: 200,
     });
+    queryClient.setQueryData(moneyAccountKeys.list(organizationId), {
+        status: "success",
+        data: {
+            moneyAccounts: [
+                {
+                    id: "11111111-1111-4111-8111-111111111111",
+                    organizationId,
+                    name: "HDFC Current",
+                    type: "bank",
+                    scope: "organization_wide",
+                    storeId: null,
+                    notes: null,
+                    status: "active",
+                    openingBalance: 0,
+                    balance: 0,
+                    hasMovements: false,
+                    createdBy: "11111111-1111-4111-8111-111111111111",
+                    updatedBy: null,
+                    createdAt: now,
+                    updatedAt: now,
+                },
+            ],
+        },
+        message: "Money Accounts fetched successfully",
+        code: 200,
+    });
+    queryClient.setQueryData(moneyAccountKeys.paymentRoutes(organizationId, storeId), {
+        status: "success",
+        data: {
+            routes: [
+                {
+                    id: "12121212-1212-4121-8121-121212121212",
+                    organizationId,
+                    storeId,
+                    paymentMethod: "upi",
+                    moneyAccountId: "11111111-1111-4111-8111-111111111111",
+                    createdBy: "11111111-1111-4111-8111-111111111111",
+                    updatedBy: null,
+                    createdAt: now,
+                    updatedAt: now,
+                },
+            ],
+        },
+        message: "Payment Routing Rules fetched successfully",
+        code: 200,
+    });
 
     const router = createMemoryRouter(
         [
@@ -179,6 +225,12 @@ describe("Store detail page", () => {
         expect(markup).toContain("KOT system");
         expect(markup).toContain("Table management");
         expect(markup).toContain("Money Account Tracking");
+        expect(markup).toContain("Payment routing");
+        expect(markup).toContain("UPI payments");
+        expect(markup).toContain("Card payments");
+        expect(markup).toContain("HDFC Current");
+        expect(markup).toContain("future UPI and Card payments");
+        expect(markup).toContain("Not routed");
         expect(markup).toContain("financial year");
         expect(markup).toContain("Token numbers");
         expect(markup).toContain("KOT Numbers");

@@ -1,9 +1,14 @@
 import type {
     CreateMoneyAccountJSON,
+    MoneyAccountHistoryResponse,
+    MoneyAccountPaymentRouteMethod,
+    MoneyAccountPaymentRouteResponse,
+    MoneyAccountPaymentRoutesResponse,
     MoneyAccountResponse,
     MoneyAccountsListResponse,
     ServiceResponse,
     UpdateMoneyAccountJSON,
+    UpsertMoneyAccountPaymentRouteJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -51,6 +56,65 @@ export const updateMoneyAccount = async (
         const response = await api.patch(
             `/organizations/${organizationId}/money-accounts/${moneyAccountId}`,
             data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getMoneyAccountPaymentRoutes = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<MoneyAccountPaymentRoutesResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/stores/${storeId}/money-account-payment-routes`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const upsertMoneyAccountPaymentRoute = async (
+    organizationId: string,
+    storeId: string,
+    data: UpsertMoneyAccountPaymentRouteJSON,
+): Promise<ServiceResponse<MoneyAccountPaymentRouteResponse | null>> => {
+    try {
+        const response = await api.put(
+            `/organizations/${organizationId}/stores/${storeId}/money-account-payment-routes`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const clearMoneyAccountPaymentRoute = async (
+    organizationId: string,
+    storeId: string,
+    paymentMethod: MoneyAccountPaymentRouteMethod,
+): Promise<ServiceResponse<MoneyAccountPaymentRoutesResponse | null>> => {
+    try {
+        const response = await api.delete(
+            `/organizations/${organizationId}/stores/${storeId}/money-account-payment-routes/${paymentMethod}`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getMoneyAccountHistory = async (
+    organizationId: string,
+    moneyAccountId: string,
+): Promise<ServiceResponse<MoneyAccountHistoryResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/money-accounts/${moneyAccountId}/history`,
         );
         return response.data;
     } catch (error) {
