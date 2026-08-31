@@ -22,6 +22,7 @@ import {
     Landmark,
     RefreshCw,
     RotateCcw,
+    Scale,
     ShoppingBag,
     Truck,
     Wallet,
@@ -30,6 +31,7 @@ import {
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import HistoryDateToolbar from "@/components/common/history-date-toolbar";
 import RecordManualMoneyMovementDialog from "@/components/money-accounts/record-manual-money-movement-dialog";
+import AdjustMoneyAccountBalanceDialog from "@/components/money-accounts/adjust-money-account-balance-dialog";
 import { getDefaultHistoryQuery } from "@/lib/date-range-filter";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
@@ -49,7 +51,7 @@ const resolveStoreName = (storeId: string, storeNameById: Record<string, string>
 const buildBillHref = (organizationId: string, storeId: string, saleId: string) =>
     `/organizations/${organizationId}/billing?storeId=${storeId}&saleId=${saleId}`;
 
-type MovementTone = "inflow" | "outflow" | "neutral";
+type MovementTone = "inflow" | "outflow" | "neutral" | "adjustment";
 
 const MOVEMENT_TONE_STYLES: Record<
     MovementTone,
@@ -69,6 +71,11 @@ const MOVEMENT_TONE_STYLES: Record<
         iconWrap: "bg-muted ring-border/50",
         icon: "text-muted-foreground",
         amount: "text-foreground",
+    },
+    adjustment: {
+        iconWrap: "bg-muted ring-border/50",
+        icon: "text-muted-foreground",
+        amount: "text-muted-foreground",
     },
 };
 
@@ -131,6 +138,7 @@ const MovementRow = ({
     storeName,
     note,
     action,
+    tone: toneOverride,
 }: {
     title: string;
     amount: number;
@@ -142,8 +150,9 @@ const MovementRow = ({
     storeName?: string | null;
     note?: string | null;
     action?: ReactNode;
+    tone?: MovementTone;
 }) => {
-    const tone = movementToneForAmount(amount);
+    const tone = toneOverride ?? movementToneForAmount(amount);
     const styles = MOVEMENT_TONE_STYLES[tone];
 
     return (
@@ -362,6 +371,21 @@ const HistoryEntry = ({
         );
     }
 
+    if (entry.kind === "balance_adjustment") {
+        return (
+            <MovementRow
+                title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.balance_adjustment}
+                amount={entry.amount}
+                occurredAt={entry.occurredAt}
+                icon={Scale}
+                entityLabel={`Counted ${formatCurrency(entry.actualBalance)}`}
+                storeName={entry.storeId ? resolveStoreName(entry.storeId, storeNameById) : null}
+                note={entry.reason}
+                tone="adjustment"
+            />
+        );
+    }
+
     return (
         <MovementRow
             title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.pos_payment}
@@ -383,15 +407,18 @@ const HistoryEntry = ({
 
 const MovementSummaryBar = ({ entries }: { entries: MoneyAccountHistoryEntry[] }) => {
     const movementEntries = entries.filter((entry) => entry.kind !== "opening_balance");
-    const moneyIn = movementEntries.reduce((sum, entry) => (entry.amount > 0 ? sum + entry.amount : sum), 0);
-    const moneyOut = movementEntries.reduce(
+    const actualFlowEntries = movementEntries.filter((entry) => entry.kind !== "balance_adjustment");
+    const adjustmentEntries = movementEntries.filter((entry) => entry.kind === "balance_adjustment");
+    const moneyIn = actualFlowEntries.reduce((sum, entry) => (entry.amount > 0 ? sum + entry.amount : sum), 0);
+    const moneyOut = actualFlowEntries.reduce(
         (sum, entry) => (entry.amount < 0 ? sum + Math.abs(entry.amount) : sum),
         0,
     );
-    const net = movementEntries.reduce((sum, entry) => sum + entry.amount, 0);
+    const net = actualFlowEntries.reduce((sum, entry) => sum + entry.amount, 0);
+    const adjustmentTotal = adjustmentEntries.reduce((sum, entry) => sum + entry.amount, 0);
 
     return (
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/50 bg-border/50 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/50 bg-border/50 sm:grid-cols-5">
             <div className="min-w-0 bg-card/80 px-3 py-2.5">
                 <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Count</p>
                 <p className="whitespace-nowrap text-sm font-semibold sm:text-base">{movementEntries.length}</p>
@@ -417,6 +444,14 @@ const MovementSummaryBar = ({ entries }: { entries: MoneyAccountHistoryEntry[] }
                     )}
                 >
                     {formatSignedAmount(net)}
+                </p>
+            </div>
+            <div className="min-w-0 bg-card/80 px-3 py-2.5">
+                <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Adjustment
+                </p>
+                <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-muted-foreground sm:text-base">
+                    {formatSignedAmount(adjustmentTotal)}
                 </p>
             </div>
         </div>
@@ -566,6 +601,10 @@ const MoneyAccountDetailPage = () => {
                             organizationId={organizationId}
                             moneyAccount={{ ...moneyAccount, balance }}
                             mode="withdrawal"
+                        />
+                        <AdjustMoneyAccountBalanceDialog
+                            organizationId={organizationId}
+                            moneyAccount={{ ...moneyAccount, balance }}
                         />
                     </div>
                 ) : null}

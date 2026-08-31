@@ -13,6 +13,7 @@ import {
   MoneyAccountPaymentRouteDTOSchema,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES,
+  RecordBalanceAdjustmentSchema,
   RecordManualMoneyMovementSchema,
   UpdateMoneyAccountSchema,
   UpsertMoneyAccountPaymentRouteSchema,
@@ -1639,6 +1640,214 @@ describe("Money Account Movement and history contracts", () => {
         expect(result.data.entries[1].amount).toBe(-40);
         expect(result.data.entries[1].storeId).toBe(storeId);
         expect(result.data.entries[1].note).toBeNull();
+      }
+    }
+  });
+
+  test("accepts a Balance Adjustment with a non-negative actual balance and required reason", () => {
+    const accepted = RecordBalanceAdjustmentSchema.safeParse({
+      actualBalance: 320,
+      reason: "  Missed cash purchase  ",
+    });
+    const zeroCounted = RecordBalanceAdjustmentSchema.safeParse({
+      actualBalance: 0,
+      reason: "Till empty after missed payouts",
+    });
+
+    expect(accepted.success).toBe(true);
+    if (accepted.success) {
+      expect(accepted.data.actualBalance).toBe(320);
+      expect(accepted.data.reason).toBe("Missed cash purchase");
+    }
+    expect(zeroCounted.success).toBe(true);
+    if (zeroCounted.success) {
+      expect(zeroCounted.data.actualBalance).toBe(0);
+    }
+  });
+
+  test("rejects a negative, malformed, or missing actual balance and a blank or missing reason", () => {
+    expect(
+      RecordBalanceAdjustmentSchema.safeParse({
+        actualBalance: -0.01,
+        reason: "Counted short",
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordBalanceAdjustmentSchema.safeParse({
+        actualBalance: 10.999,
+        reason: "Counted short",
+      }).success,
+    ).toBe(false);
+    expect(RecordBalanceAdjustmentSchema.safeParse({ reason: "Counted short" }).success).toBe(
+      false,
+    );
+    expect(RecordBalanceAdjustmentSchema.safeParse({ actualBalance: 320 }).success).toBe(false);
+    expect(
+      RecordBalanceAdjustmentSchema.safeParse({
+        actualBalance: 320,
+        reason: "   ",
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordBalanceAdjustmentSchema.safeParse({
+        actualBalance: 320,
+        reason: "a".repeat(MONEY_ACCOUNT_NOTES_MAX_LENGTH + 1),
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects a Balance Adjustment with a backdated timestamp, signed difference, or extra fields", () => {
+    expect(
+      RecordBalanceAdjustmentSchema.safeParse({
+        actualBalance: 320,
+        reason: "Counted short",
+        occurredAt: "2026-01-01T00:00:00.000Z",
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordBalanceAdjustmentSchema.safeParse({
+        actualBalance: 320,
+        reason: "Counted short",
+        amount: -30.5,
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordBalanceAdjustmentSchema.safeParse({
+        actualBalance: 320,
+        reason: "Counted short",
+        trackedBalance: 350.5,
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordBalanceAdjustmentSchema.safeParse({
+        actualBalance: 320,
+        reason: "Counted short",
+        sourceKind: "balance_adjustment",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("Money Account Movement DTO records a signed Balance Adjustment without classifying it as a Deposit or Withdrawal", () => {
+    const positive = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: 25.5,
+      sourceKind: "balance_adjustment",
+      storeId: null,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: "Missed cash sales",
+      actualBalance: 375.5,
+    });
+    const negative = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: -30.5,
+      sourceKind: "balance_adjustment",
+      storeId,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: "Missed cash purchase",
+      actualBalance: 320,
+    });
+
+    expect(positive.success).toBe(true);
+    if (positive.success) {
+      expect(positive.data.sourceKind).toBe("balance_adjustment");
+      expect(positive.data.amount).toBe(25.5);
+      expect(positive.data.storeId).toBeNull();
+      expect(positive.data.note).toBe("Missed cash sales");
+      expect(positive.data.actualBalance).toBe(375.5);
+    }
+    expect(negative.success).toBe(true);
+    if (negative.success) {
+      expect(negative.data.sourceKind).toBe("balance_adjustment");
+      expect(negative.data.amount).toBe(-30.5);
+      expect(negative.data.actualBalance).toBe(320);
+    }
+  });
+
+  test("rejects a Balance Adjustment that is zero, lacks a reason, or reuses a Payment link", () => {
+    const adjustment = {
+      ...movementDto,
+      amount: -30.5,
+      sourceKind: "balance_adjustment" as const,
+      storeId: null,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: "Missed cash purchase",
+      actualBalance: 320,
+    };
+
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...adjustment, amount: 0 }).success).toBe(
+      false,
+    );
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...adjustment, note: null }).success).toBe(
+      false,
+    );
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...adjustment, note: "   " }).success).toBe(
+      false,
+    );
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...adjustment, actualBalance: undefined }).success,
+    ).toBe(false);
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...adjustment, paymentId }).success).toBe(
+      false,
+    );
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({
+        ...movementDto,
+        actualBalance: 320,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("account history includes a Balance Adjustment as a dedicated neutral entry with reason and counted balance", () => {
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        openingBalance: 100,
+        balance: 320,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 320,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "manual_deposit",
+          id: "30303030-3030-4030-8030-303030303030",
+          amount: 250.5,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId: null,
+          note: "Owner cash-in",
+        },
+        {
+          kind: "balance_adjustment",
+          id: movementId,
+          amount: -30.5,
+          occurredAt: "2026-08-31T13:00:00.000Z",
+          storeId: null,
+          reason: "Missed cash purchase",
+          actualBalance: 320,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.entries[1]?.kind).toBe("manual_deposit");
+      expect(result.data.entries[2]?.kind).toBe("balance_adjustment");
+      if (result.data.entries[2]?.kind === "balance_adjustment") {
+        expect(result.data.entries[2].amount).toBe(-30.5);
+        expect(result.data.entries[2].reason).toBe("Missed cash purchase");
+        expect(result.data.entries[2].actualBalance).toBe(320);
+        expect(result.data.entries[2].storeId).toBeNull();
       }
     }
   });

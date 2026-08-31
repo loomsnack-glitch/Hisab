@@ -173,9 +173,9 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Back to money accounts");
         expect(markup).toContain("Add money");
         expect(markup).toContain("Withdraw money");
+        expect(markup).toContain("Adjust balance");
         expect(markup).not.toContain("Add movement");
         expect(markup).not.toContain("Correct balance");
-        expect(markup).not.toContain("Adjust balance");
         expect(markup).not.toContain("Transfer money");
     });
 
@@ -432,6 +432,7 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("inactive");
         expect(markup).not.toContain("Add money");
         expect(markup).not.toContain("Withdraw money");
+        expect(markup).not.toContain("Adjust balance");
     });
 
     test("shows a loading spinner while history is fetched", () => {
@@ -506,5 +507,47 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("text-destructive");
         expect(markup).toContain("Add money");
         expect(markup).toContain("Withdraw money");
+        expect(markup).toContain("Adjust balance");
+    });
+
+    test("shows a Balance Adjustment as a neutral gray history row with reason and counted amount", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, openingBalance: 100, balance: 320 },
+            openingBalance: 100,
+            balance: 320,
+            entries: [
+                {
+                    kind: "manual_deposit",
+                    id: "14141414-1414-4141-8141-141414141414",
+                    amount: 250.5,
+                    occurredAt: now,
+                    storeId: null,
+                    note: "Owner cash-in",
+                },
+                {
+                    kind: "balance_adjustment",
+                    id: "15151515-1515-4151-8151-151515151515",
+                    amount: -30.5,
+                    occurredAt: now,
+                    storeId: null,
+                    reason: "Missed cash purchase",
+                    actualBalance: 320,
+                },
+            ],
+        });
+
+        expect(markup).toContain("Balance Adjustment");
+        expect(markup).toContain("Missed cash purchase");
+        expect(markup).toContain("Counted ₹320.00");
+        expect(markup).toContain("−₹30.50");
+        expect(markup).toContain("text-muted-foreground");
+        expect(markup).toContain("Deposit");
+        expect(markup).toContain("text-emerald-600");
+        expect(markup).toContain("Adjustment");
+        expect(markup).toContain("−₹0.00");
+        expect(markup).toContain("+₹250.50");
+        expect(markup).not.toContain("Transfer money");
+        expect(markup).not.toContain("Adajan");
+        expect(markup).not.toContain("View Bill");
     });
 });

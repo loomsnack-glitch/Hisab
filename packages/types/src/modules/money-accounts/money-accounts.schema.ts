@@ -227,6 +227,7 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS = [
   "outgoing_expense_void_reversal",
   "manual_deposit",
   "manual_withdrawal",
+  "balance_adjustment",
 ] as const;
 
 export const MoneyAccountMovementSourceKindSchema = z.enum(MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS);
@@ -245,6 +246,7 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS: Record<
   outgoing_expense_void_reversal: "Expense void reversal",
   manual_deposit: "Deposit",
   manual_withdrawal: "Withdrawal",
+  balance_adjustment: "Balance Adjustment",
 };
 
 export const moneyAccountMovementAmountSchema = z
@@ -284,6 +286,29 @@ export const RecordManualMoneyMovementSchema = z
   })
   .strict();
 
+export const moneyAccountActualBalanceSchema = z
+  .number({ error: "Actual balance is required" })
+  .min(0, "Actual balance must be 0 or more")
+  .refine(isAtMostTwoDecimalPlaces, {
+    message: "Actual balance must have at most two decimal places",
+  });
+
+export const moneyAccountBalanceAdjustmentReasonSchema = z
+  .string({ error: "Reason is required" })
+  .trim()
+  .min(1, "Reason is required")
+  .max(
+    MONEY_ACCOUNT_NOTES_MAX_LENGTH,
+    `Reason must be at most ${MONEY_ACCOUNT_NOTES_MAX_LENGTH} characters`,
+  );
+
+export const RecordBalanceAdjustmentSchema = z
+  .object({
+    actualBalance: moneyAccountActualBalanceSchema,
+    reason: moneyAccountBalanceAdjustmentReasonSchema,
+  })
+  .strict();
+
 export const UpsertMoneyAccountPaymentRouteSchema = z
   .object({
     paymentMethod: MoneyAccountPaymentRouteMethodSchema,
@@ -316,16 +341,66 @@ export const MoneyAccountMovementDTOSchema = z
     outgoingPaymentId: z.uuid("Invalid outgoing payment id").nullable(),
     reversedMovementId: z.uuid("Invalid reversed money account movement id").nullable(),
     note: z.string().nullable(),
+    actualBalance: moneyAccountActualBalanceSchema.nullable().optional(),
     createdAt: dtoDateSchema,
   })
   .superRefine((value, ctx) => {
-    const isManualMoneyMovement =
-      value.sourceKind === "manual_deposit" || value.sourceKind === "manual_withdrawal";
-    if (!isManualMoneyMovement && !value.storeId) {
+    const allowsNullableStoreAttribution =
+      value.sourceKind === "manual_deposit" ||
+      value.sourceKind === "manual_withdrawal" ||
+      value.sourceKind === "balance_adjustment";
+    if (!allowsNullableStoreAttribution && !value.storeId) {
       ctx.addIssue({
         code: "custom",
         path: ["storeId"],
         message: "A generated Money Account Movement must have Store attribution",
+      });
+    }
+
+    if (value.sourceKind === "balance_adjustment") {
+      if (!value.note || value.note.trim().length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["note"],
+          message: "A Balance Adjustment must include a reason",
+        });
+      }
+      if (value.actualBalance == null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["actualBalance"],
+          message: "A Balance Adjustment must include the counted actual balance",
+        });
+      }
+      if (value.paymentId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["paymentId"],
+          message: "A Balance Adjustment cannot reuse a POS Payment id",
+        });
+      }
+      if (value.outgoingPaymentId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["outgoingPaymentId"],
+          message: "A Balance Adjustment cannot reuse an Outgoing Payment id",
+        });
+      }
+      if (value.reversedMovementId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["reversedMovementId"],
+          message: "A Balance Adjustment cannot reverse another Movement",
+        });
+      }
+      return;
+    }
+
+    if (value.actualBalance != null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["actualBalance"],
+        message: "Only a Balance Adjustment can record a counted actual balance",
       });
     }
 
@@ -631,6 +706,16 @@ export const MoneyAccountHistoryManualWithdrawalEntrySchema = z.object({
   note: z.string().nullable(),
 });
 
+export const MoneyAccountHistoryBalanceAdjustmentEntrySchema = z.object({
+  kind: z.literal("balance_adjustment"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementSignedAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id").nullable(),
+  reason: z.string().min(1),
+  actualBalance: moneyAccountActualBalanceSchema,
+});
+
 export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryOpeningEntrySchema,
   MoneyAccountHistoryMovementEntrySchema,
@@ -643,6 +728,7 @@ export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryOutgoingExpenseVoidReversalEntrySchema,
   MoneyAccountHistoryManualDepositEntrySchema,
   MoneyAccountHistoryManualWithdrawalEntrySchema,
+  MoneyAccountHistoryBalanceAdjustmentEntrySchema,
 ]);
 
 export const MoneyAccountHistoryResponseSchema = z.object({

@@ -14,6 +14,7 @@ import type {
   MoneyAccountStatusSchema,
   MoneyAccountTypeSchema,
   OrganizationWideMoneyAccountTypeSchema,
+  RecordBalanceAdjustmentSchema,
   RecordManualMoneyMovementSchema,
   UpdateMoneyAccountSchema,
   UpsertMoneyAccountPaymentRouteSchema,
@@ -92,6 +93,8 @@ export type MoneyAccountMovementSourceKind = z.infer<typeof MoneyAccountMovement
 export type MoneyAccountMovementDTO = z.infer<typeof MoneyAccountMovementDTOSchema>;
 export type RecordManualMoneyMovementJSON = z.infer<typeof RecordManualMoneyMovementSchema>;
 export type RecordManualMoneyMovementSVC = RecordManualMoneyMovementJSON;
+export type RecordBalanceAdjustmentJSON = z.infer<typeof RecordBalanceAdjustmentSchema>;
+export type RecordBalanceAdjustmentSVC = RecordBalanceAdjustmentJSON;
 export type CreateMoneyAccountMovementREPO = Pick<
   MoneyAccountMovementDTO,
   | "id"
@@ -106,6 +109,7 @@ export type CreateMoneyAccountMovementREPO = Pick<
 > & {
   outgoingPaymentId?: string | null;
   note?: string | null;
+  actualBalance?: number | null;
 };
 
 export type MoneyAccountHistoryEntry = z.infer<typeof MoneyAccountHistoryEntrySchema>;
@@ -122,4 +126,5 @@ export type MoneyAccountHistoryMovementREPO = MoneyAccountMovementDTO & {
   vendorName: string | null;
   expenseId: string | null;
   expenseCategoryName: string | null;
+  actualBalance?: number | null;
 };

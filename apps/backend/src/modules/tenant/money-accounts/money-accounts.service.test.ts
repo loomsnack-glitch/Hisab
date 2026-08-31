@@ -1840,4 +1840,314 @@ describe("Organization Money Account service", () => {
         expect("backfillMoneyAccountMovements" in moneyAccountsService).toBe(false);
         expect("updateMoneyAccountBalance" in moneyAccountsService).toBe(false);
     });
+
+    test("records a positive Balance Adjustment from the locked current balance at reconciliation time", async () => {
+        lockMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 350.5,
+            hasMovements: true,
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            actualBalance: data.actualBalance ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { actualBalance: 375.5, reason: "  Missed cash sales  " },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.code).toBe(201);
+        expect(response.data?.moneyAccount.balance).toBe(375.5);
+        expect(lockMoneyAccountById).toHaveBeenCalledWith(organizationId, moneyAccountId, {});
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                organizationId,
+                moneyAccountId,
+                storeId: null,
+                amount: 25,
+                sourceKind: "balance_adjustment",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                note: "Missed cash sales",
+                actualBalance: 375.5,
+            }),
+            {},
+        );
+        const created = createMoneyAccountMovementRepo.mock.calls[0]?.[0] as {
+            occurredAt: Date;
+        };
+        expect(created.occurredAt).toBeInstanceOf(Date);
+    });
+
+    test("records a negative Balance Adjustment on a Store-scoped Money Account with that account's Store", async () => {
+        lockMoneyAccountById.mockResolvedValue({
+            ...adajanCashAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: true,
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            actualBalance: data.actualBalance ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            organizationId,
+            cashMoneyAccountId,
+            { actualBalance: 0, reason: "Till empty after missed payouts" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.balance).toBe(0);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                moneyAccountId: cashMoneyAccountId,
+                storeId,
+                amount: -100,
+                sourceKind: "balance_adjustment",
+                note: "Till empty after missed payouts",
+                actualBalance: 0,
+            }),
+            {},
+        );
+    });
+
+    test("does not append a Balance Adjustment when the counted amount matches the locked balance", async () => {
+        lockMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 350.5,
+            hasMovements: true,
+        });
+
+        const response = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { actualBalance: 350.5, reason: "Counted the till" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.code).toBe(200);
+        expect(response.message).toBe("No Balance Adjustment is needed");
+        expect(response.data?.moneyAccount.balance).toBe(350.5);
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("derives the Balance Adjustment from the locked current balance, not a stale client-tracked amount", async () => {
+        lockMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 90,
+            hasMovements: true,
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            actualBalance: data.actualBalance ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { actualBalance: 100, reason: "Counted after a concurrent withdrawal" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.balance).toBe(100);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                amount: 10,
+                actualBalance: 100,
+                sourceKind: "balance_adjustment",
+            }),
+            {},
+        );
+    });
+
+    test("a later competing Balance Adjustment uses the locked post-adjustment balance", async () => {
+        lockMoneyAccountById
+            .mockResolvedValueOnce({
+                ...hdfcBankAccount,
+                openingBalance: 80,
+                balance: 80,
+                hasMovements: true,
+            })
+            .mockResolvedValueOnce({
+                ...hdfcBankAccount,
+                openingBalance: 80,
+                balance: 100,
+                hasMovements: true,
+            });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            actualBalance: data.actualBalance ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const first = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { actualBalance: 100, reason: "First count" },
+        );
+        const second = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { actualBalance: 100, reason: "Second count of the same till" },
+        );
+
+        expect(first.status).toBe("success");
+        expect(first.code).toBe(201);
+        expect(first.data?.moneyAccount.balance).toBe(100);
+        expect(second.status).toBe("success");
+        expect(second.code).toBe(200);
+        expect(second.message).toBe("No Balance Adjustment is needed");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(1);
+        expect(lockMoneyAccountById).toHaveBeenCalledTimes(2);
+    });
+
+    test("includes a Balance Adjustment in history without changing existing automatic or Manual Money Movement rows", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: true,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([
+            hdfcUpiMovement,
+            {
+                ...hdfcUpiMovement,
+                id: "30303030-3030-4030-8030-303030303030",
+                amount: 80,
+                sourceKind: "manual_deposit",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                storeId: null,
+                note: "Owner cash-in",
+                actualBalance: null,
+                saleId: null,
+                saleNumber: null,
+                paymentMethod: null,
+            },
+            {
+                ...hdfcUpiMovement,
+                id: "32323232-3232-4323-8232-323232323232",
+                amount: -30.5,
+                sourceKind: "balance_adjustment",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                storeId: null,
+                note: "Missed cash purchase",
+                actualBalance: 400,
+                saleId: null,
+                saleNumber: null,
+                paymentMethod: null,
+            },
+        ]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.balance).toBe(400);
+        expect(response.data?.entries[1]).toMatchObject({
+            kind: "pos_payment",
+            amount: 250.5,
+            paymentId: hdfcUpiMovement.paymentId,
+            saleNumber: "12",
+        });
+        expect(response.data?.entries[2]).toEqual({
+            kind: "manual_deposit",
+            id: "30303030-3030-4030-8030-303030303030",
+            amount: 80,
+            occurredAt: hdfcUpiMovement.occurredAt,
+            storeId: null,
+            note: "Owner cash-in",
+        });
+        expect(response.data?.entries[3]).toEqual({
+            kind: "balance_adjustment",
+            id: "32323232-3232-4323-8232-323232323232",
+            amount: -30.5,
+            occurredAt: hdfcUpiMovement.occurredAt,
+            storeId: null,
+            reason: "Missed cash purchase",
+            actualBalance: 400,
+        });
+    });
+
+    test("rejects a Balance Adjustment for an inactive Money Account", async () => {
+        lockMoneyAccountById.mockResolvedValue(inactivePettyCashAccount);
+
+        const response = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            organizationId,
+            inactiveMoneyAccountId,
+            { actualBalance: 10, reason: "Counted inactive till" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("This Money Account is inactive");
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Balance Adjustment for a Money Account from another Organization", async () => {
+        lockMoneyAccountById.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { actualBalance: 10, reason: "Counted" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("denies a Balance Adjustment when the user is not a member of the Organization", async () => {
+        getOrganizationByIdForUser.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.recordMoneyAccountBalanceAdjustment(
+            userId,
+            otherOrganizationId,
+            moneyAccountId,
+            { actualBalance: 10, reason: "Counted" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(lockMoneyAccountById).not.toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
 });

@@ -13,6 +13,7 @@ import {
     type MoneyAccountType,
     type MoneyAccountsListResponse,
     type RecordManualMoneyMovementSVC,
+    type RecordBalanceAdjustmentSVC,
     type ServiceResponse,
     type UpdateMoneyAccountSVC,
     type UpsertMoneyAccountPaymentRouteSVC,
@@ -682,6 +683,25 @@ export const getMoneyAccountHistory = async (
                 ];
             }
 
+            if (movement.sourceKind === "balance_adjustment") {
+                const reason = movement.note?.trim();
+                const actualBalance = movement.actualBalance;
+                if (!reason || actualBalance == null || movement.amount === 0) {
+                    return [];
+                }
+                return [
+                    {
+                        kind: "balance_adjustment",
+                        id: movement.id,
+                        amount: movement.amount,
+                        occurredAt: movement.occurredAt,
+                        storeId: movement.storeId,
+                        reason,
+                        actualBalance,
+                    },
+                ];
+            }
+
             if (!movement.paymentId || !movement.saleId || !movement.paymentMethod || !movement.storeId) {
                 return [];
             }
@@ -793,6 +813,7 @@ const recordManualMoneyMovement = async (
                 outgoingPaymentId: null,
                 reversedMovementId: null,
                 note: normalizeNotes(movementData.note),
+                actualBalance: null,
             },
             tx,
         );
@@ -852,4 +873,92 @@ export const recordMoneyAccountWithdrawal = async (
         movementData,
         "manual_withdrawal",
     );
+
+export const recordMoneyAccountBalanceAdjustment = async (
+    userId: string,
+    organizationId: string,
+    moneyAccountId: string,
+    adjustmentData: RecordBalanceAdjustmentSVC,
+): Promise<ServiceResponse<MoneyAccountResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const result = await pg.begin(async (tx) => {
+        const locked = await moneyAccountsRepository.lockMoneyAccountById(
+            organizationId,
+            moneyAccountId,
+            tx,
+        );
+        if (!locked) {
+            return { ok: false as const, response: moneyAccountNotFound() };
+        }
+        if (locked.status !== "active") {
+            return { ok: false as const, response: moneyAccountInactive() };
+        }
+
+        const actualBalance = toMoneyAmount(adjustmentData.actualBalance);
+        const difference = toMoneyAmount(actualBalance - locked.balance);
+        if (difference === 0) {
+            return {
+                ok: true as const,
+                created: false as const,
+                moneyAccount: locked,
+            };
+        }
+
+        const reason = adjustmentData.reason.trim();
+        const movement = await moneyAccountsRepository.createMoneyAccountMovement(
+            {
+                id: crypto.randomUUID(),
+                organizationId,
+                moneyAccountId,
+                storeId: resolveManualMovementStoreId(locked),
+                amount: difference,
+                occurredAt: new Date(),
+                sourceKind: "balance_adjustment",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                note: reason,
+                actualBalance,
+            },
+            tx,
+        );
+        if (!movement) {
+            return { ok: false as const, response: failedToRecordMovement() };
+        }
+
+        return {
+            ok: true as const,
+            created: true as const,
+            moneyAccount: {
+                ...locked,
+                balance: actualBalance,
+                hasMovements: true,
+            },
+        };
+    });
+
+    if (!result.ok) {
+        return result.response;
+    }
+
+    if (!result.created) {
+        return {
+            status: "success",
+            data: { moneyAccount: result.moneyAccount },
+            message: "No Balance Adjustment is needed",
+            code: STATUS_CODES.SUCCESS,
+        };
+    }
+
+    return {
+        status: "success",
+        data: { moneyAccount: result.moneyAccount },
+        message: "Balance Adjustment recorded successfully",
+        code: STATUS_CODES.CREATED,
+    };
+};
 

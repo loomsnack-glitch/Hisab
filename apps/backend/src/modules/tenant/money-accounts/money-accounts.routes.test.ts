@@ -862,6 +862,119 @@ describe("Organization Money Account routes", () => {
         expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
     });
 
+    test("records a Balance Adjustment for an authenticated administrator", async () => {
+        harness.lockMoneyAccountById.mockResolvedValue({
+            ...harness.hdfcBankAccount,
+            openingBalance: 100,
+            balance: 350.5,
+            hasMovements: true,
+        });
+        harness.createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...harness.hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            actualBalance: data.actualBalance ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/balance-adjustments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ actualBalance: 320, reason: "Missed cash purchase" }),
+            },
+        );
+
+        expect(response.status).toBe(201);
+        const body = await response.json();
+        expect(body.data.moneyAccount.balance).toBe(320);
+        expect(harness.createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceKind: "balance_adjustment",
+                amount: -30.5,
+                actualBalance: 320,
+                note: "Missed cash purchase",
+                storeId: null,
+            }),
+            {},
+        );
+    });
+
+    test("does not append a zero-difference Balance Adjustment at the route seam", async () => {
+        harness.lockMoneyAccountById.mockResolvedValue({
+            ...harness.hdfcBankAccount,
+            openingBalance: 100,
+            balance: 350.5,
+            hasMovements: true,
+        });
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/balance-adjustments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ actualBalance: 350.5, reason: "Counted the till" }),
+            },
+        );
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.message).toBe("No Balance Adjustment is needed");
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects an unauthenticated Balance Adjustment", async () => {
+        const response = await unauthenticatedRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/balance-adjustments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ actualBalance: 10, reason: "Counted" }),
+            },
+        );
+
+        expect(response.status).toBe(401);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a negative actual balance, blank reason, or backdated Balance Adjustment at the route seam", async () => {
+        const negative = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/balance-adjustments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ actualBalance: -1, reason: "Counted" }),
+            },
+        );
+        const blankReason = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/balance-adjustments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ actualBalance: 10, reason: "   " }),
+            },
+        );
+        const backdated = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/balance-adjustments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    actualBalance: 10,
+                    reason: "Counted",
+                    occurredAt: "2026-01-01T00:00:00.000Z",
+                }),
+            },
+        );
+
+        expect(negative.status).toBe(400);
+        expect(blankReason.status).toBe(400);
+        expect(backdated.status).toBe(400);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
     test("rejects a Withdrawal that would make the Money Account Balance negative at the route seam", async () => {
         harness.lockMoneyAccountById.mockResolvedValue({
             ...harness.hdfcBankAccount,

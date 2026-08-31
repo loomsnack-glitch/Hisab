@@ -44,7 +44,7 @@ const mapMovement = (row: Record<string, unknown>): MoneyAccountMovementDTO => {
     return {
         ...(mapped as Omit<
             MoneyAccountMovementDTO,
-            "amount" | "paymentId" | "outgoingPaymentId" | "reversedMovementId" | "storeId" | "note"
+            "amount" | "paymentId" | "outgoingPaymentId" | "reversedMovementId" | "storeId" | "note" | "actualBalance"
         >),
         amount: toMoneyAmount(mapped.amount),
         storeId: typeof mapped.storeId === "string" ? mapped.storeId : null,
@@ -54,6 +54,8 @@ const mapMovement = (row: Record<string, unknown>): MoneyAccountMovementDTO => {
         reversedMovementId:
             typeof mapped.reversedMovementId === "string" ? mapped.reversedMovementId : null,
         note: typeof mapped.note === "string" ? mapped.note : null,
+        actualBalance:
+            mapped.actualBalance == null ? null : toMoneyAmount(mapped.actualBalance),
     };
 };
 
@@ -68,6 +70,7 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
             | "reversedMovementId"
             | "storeId"
             | "note"
+            | "actualBalance"
             | "saleId"
             | "paymentMethod"
             | "originalPaymentId"
@@ -85,6 +88,8 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
         reversedMovementId:
             typeof mapped.reversedMovementId === "string" ? mapped.reversedMovementId : null,
         note: typeof mapped.note === "string" ? mapped.note : null,
+        actualBalance:
+            mapped.actualBalance == null ? null : toMoneyAmount(mapped.actualBalance),
         saleId: typeof mapped.saleId === "string" ? mapped.saleId : null,
         paymentMethod:
             typeof mapped.paymentMethod === "string"
@@ -376,6 +381,7 @@ export const getMovementsByMoneyAccountId = async (
             movements.outgoing_payment_id,
             movements.reversed_movement_id,
             movements.note,
+            movements.actual_balance,
             movements.created_at,
             linked_payments.sale_id,
             COALESCE(linked_payments.method, outgoing_payments.payment_method) AS payment_method,
@@ -508,12 +514,14 @@ export const createMoneyAccountMovement = async (
     const db = tx || pg;
     if (
         movementData.sourceKind === "manual_deposit" ||
-        movementData.sourceKind === "manual_withdrawal"
+        movementData.sourceKind === "manual_withdrawal" ||
+        movementData.sourceKind === "balance_adjustment"
     ) {
         const [result] = await db`
             INSERT INTO money_account_movements ${camelToSnakeSql({
                 ...movementData,
                 note: movementData.note ?? null,
+                actualBalance: movementData.actualBalance ?? null,
             })}
             RETURNING *
         `;
