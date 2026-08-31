@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
 import {
+  CreateOutgoingPaymentSchema,
   OutgoingPaymentDTOSchema,
   VendorOutstandingDTOSchema,
   isOutgoingPaymentActive,
@@ -337,6 +338,12 @@ export const VoidPurchaseSchema = z
         PURCHASE_VOID_REASON_MAX_LENGTH,
         `Reason must be at most ${PURCHASE_VOID_REASON_MAX_LENGTH} characters`,
       ),
+  })
+  .strict();
+
+export const RecordPurchaseSchema = z
+  .object({
+    payment: CreateOutgoingPaymentSchema.optional(),
   })
   .strict();
 

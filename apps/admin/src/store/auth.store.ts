@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { AuthenticatedUserDTO } from "@repo/types";
+import { clearPurchaseFormPreferences } from "@/lib/purchase-form-preferences";
 
 type AuthState = {
     user: AuthenticatedUserDTO | null;
@@ -13,7 +14,10 @@ const useAuthStore = create<AuthState>()((set) => ({
     user: null,
     actions: {
         setUser: (user) => set({ user }),
-        clearUser: () => set({ user: null }),
+        clearUser: () => {
+            clearPurchaseFormPreferences();
+            set({ user: null });
+        },
     },
 }));
 

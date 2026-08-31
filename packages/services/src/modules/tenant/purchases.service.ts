@@ -3,6 +3,7 @@ import type {
     CreateOutgoingPaymentJSON,
     PurchaseResponse,
     PurchasesListResponse,
+    RecordPurchaseJSON,
     ReverseOutgoingPaymentJSON,
     ServiceResponse,
     UpdateDraftPurchaseJSON,
@@ -76,10 +77,12 @@ export const discardDraftPurchase = async (
 export const recordPurchase = async (
     organizationId: string,
     purchaseId: string,
+    data: RecordPurchaseJSON = {},
 ): Promise<ServiceResponse<PurchaseResponse | null>> => {
     try {
         const response = await api.post(
             `/organizations/${organizationId}/purchases/${purchaseId}/record`,
+            data,
         );
         return response.data;
     } catch (error) {

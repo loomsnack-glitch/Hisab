@@ -306,6 +306,46 @@ describe("Organization Purchase service", () => {
             }),
             expect.anything(),
         );
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("records a Draft Purchase paid in full with an immediate Outgoing Payment", async () => {
+        const response = await purchasesService.recordPurchase(userId, organizationId, purchaseId, {
+            payment: { amount: 106.5, paymentMethod: "cash" },
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.lifecycle).toBe("recorded");
+        expect(response.data?.purchase.payableStatus).toBe("paid");
+        expect(response.data?.purchase.paidTotal).toBe(106.5);
+        expect(response.data?.purchase.dueAmount).toBe(0);
+        expect(response.data?.purchase.outgoingPayments).toHaveLength(1);
+        expect(response.data?.purchase.outgoingPayments[0]?.paymentMethod).toBe("cash");
+        expect(createOutgoingPaymentRepo).toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("records a Draft Purchase with a partial Outgoing Payment", async () => {
+        const response = await purchasesService.recordPurchase(userId, organizationId, purchaseId, {
+            payment: { amount: 40, paymentMethod: "upi" },
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.payableStatus).toBe("partial");
+        expect(response.data?.purchase.paidTotal).toBe(40);
+        expect(response.data?.purchase.dueAmount).toBe(66.5);
+        expect(response.data?.purchase.outgoingPayments[0]?.paymentMethod).toBe("upi");
+    });
+
+    test("does not record a Draft Purchase when the immediate Outgoing Payment would overpay", async () => {
+        const response = await purchasesService.recordPurchase(userId, organizationId, purchaseId, {
+            payment: { amount: 200, paymentMethod: "cash" },
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toMatch(/cannot exceed the remaining due/i);
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
     });
 
     test("records a Draft Purchase by combining same-price lines for the same Vendor Item", async () => {

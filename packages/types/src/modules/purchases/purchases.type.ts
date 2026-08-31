@@ -7,6 +7,7 @@ import type {
   PurchaseLifecycleSchema,
   PurchaseLineDTOSchema,
   PurchaseLineInputSchema,
+  RecordPurchaseSchema,
   UpdateDraftPurchaseSchema,
   VoidPurchaseSchema,
 } from "./purchases.schema";
@@ -20,6 +21,8 @@ export type CreateDraftPurchaseJSON = z.infer<typeof CreateDraftPurchaseSchema>;
 export type CreateDraftPurchaseSVC = CreateDraftPurchaseJSON;
 export type UpdateDraftPurchaseJSON = z.infer<typeof UpdateDraftPurchaseSchema>;
 export type UpdateDraftPurchaseSVC = UpdateDraftPurchaseJSON;
+export type RecordPurchaseJSON = z.infer<typeof RecordPurchaseSchema>;
+export type RecordPurchaseSVC = RecordPurchaseJSON;
 export type VoidPurchaseJSON = z.infer<typeof VoidPurchaseSchema>;
 export type VoidPurchaseSVC = VoidPurchaseJSON;
 

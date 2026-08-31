@@ -4,6 +4,7 @@ import {
   PayableStatusSchema,
   PurchaseDTOSchema,
   PurchaseLifecycleSchema,
+  RecordPurchaseSchema,
   UpdateDraftPurchaseSchema,
   VoidPurchaseSchema,
   calculatePurchaseLineTotal,
@@ -226,6 +227,36 @@ describe("Draft Purchase contracts", () => {
       }).success,
     ).toBe(true);
     expect(UpdateDraftPurchaseSchema.safeParse({ adjustment: -4 }).success).toBe(true);
+  });
+
+  test("record Purchase accepts omitted payment for a due-only payable", () => {
+    expect(RecordPurchaseSchema.safeParse({}).success).toBe(true);
+    expect(RecordPurchaseSchema.safeParse({ payment: undefined }).success).toBe(true);
+  });
+
+  test("record Purchase accepts an Outgoing Payment for immediate settlement", () => {
+    const result = RecordPurchaseSchema.safeParse({
+      payment: { amount: 106.5, paymentMethod: "cash" },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.payment?.amount).toBe(106.5);
+      expect(result.data.payment?.paymentMethod).toBe("cash");
+    }
+  });
+
+  test("record Purchase rejects a zero or invalid Outgoing Payment", () => {
+    expect(
+      RecordPurchaseSchema.safeParse({
+        payment: { amount: 0, paymentMethod: "cash" },
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordPurchaseSchema.safeParse({
+        payment: { amount: 40, paymentMethod: "cheque" },
+      }).success,
+    ).toBe(false);
   });
 });
 
