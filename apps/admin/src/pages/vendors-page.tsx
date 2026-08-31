@@ -17,6 +17,7 @@ import UpsertVendorDialog from "@/components/vendors/upsert-vendor-dialog";
 import VendorItemsCatalogue from "@/components/vendors/vendor-items-catalogue";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { purchaseKeys, vendorKeys } from "@/lib/query-keys";
+import { adminWorkspacePageHeightClass } from "@/lib/workspace-page-layout";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
 const VendorsPage = () => {
@@ -181,14 +182,14 @@ const VendorsPage = () => {
 
         return (
             <>
-                <div className="hidden sm:block">
+                <div className="hidden sm:flex sm:min-h-0 sm:flex-1 sm:flex-col">
                     <PremiumTable
                         data={vendors}
                         columns={columns}
                         actions={renderActions}
                         rowIdKey="id"
                         defaultPageSize={20}
-                        fillAvailableViewport
+                        fullHeight
                         searchPlaceholder="Search vendors..."
                         searchKeys={[
                             (vendor) => vendor.name,
@@ -342,16 +343,16 @@ const VendorsPage = () => {
     };
 
     return (
-        <div className="space-y-6" data-testid="vendors-page">
+        <div className={adminWorkspacePageHeightClass} data-testid="vendors-page">
             <Tabs
                 value={activeTab}
                 onValueChange={(tab) => setSearchParams(tab === "vendors" ? {} : { tab })}
-                className="w-full space-y-6"
+                className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden"
             >
                 <TabsList
                     variant="line"
                     color="primary"
-                    className="h-auto w-full justify-start gap-6 border-b border-border/60 bg-transparent p-0 pb-px"
+                    className="h-auto w-full shrink-0 justify-start gap-6 border-b border-border/60 bg-transparent p-0 pb-px"
                     aria-label="Vendors navigation tabs"
                 >
                     <TabsTrigger
@@ -370,11 +371,19 @@ const VendorsPage = () => {
                     </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="vendors" className="focus-visible:outline-none" data-testid="vendors-directory">
+                <TabsContent
+                    value="vendors"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden focus-visible:outline-none"
+                    data-testid="vendors-directory"
+                >
                     {vendorsDirectory()}
                 </TabsContent>
 
-                <TabsContent value="items" className="focus-visible:outline-none" data-testid="vendor-items-catalogue-tab">
+                <TabsContent
+                    value="items"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden focus-visible:outline-none"
+                    data-testid="vendor-items-catalogue-tab"
+                >
                     <VendorItemsCatalogue organizationId={organizationId} />
                 </TabsContent>
             </Tabs>

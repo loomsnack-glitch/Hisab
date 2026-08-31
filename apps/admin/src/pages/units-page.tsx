@@ -16,6 +16,7 @@ import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertUnitDialog from "@/components/units/upsert-unit-dialog";
 import { formatDateTime } from "@/lib/format";
 import { unitKeys } from "@/lib/query-keys";
+import { adminWorkspacePageHeightClass } from "@/lib/workspace-page-layout";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
 const unitKindLabel: Record<UnitKind, string> = {
@@ -154,7 +155,10 @@ const UnitsPage = () => {
     }
 
     return (
-        <div className="space-y-4" data-testid="units-page">
+        <div
+            className={units.length === 0 ? "space-y-4" : adminWorkspacePageHeightClass}
+            data-testid="units-page"
+        >
             {units.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">
                     <CardContent className="pt-6">
@@ -176,14 +180,14 @@ const UnitsPage = () => {
                 </Card>
             ) : (
                 <>
-                    <div className="hidden sm:block">
+                    <div className="hidden sm:flex sm:min-h-0 sm:flex-1 sm:flex-col">
                         <PremiumTable
                             data={units}
                             columns={columns}
                             actions={renderActions}
                             rowIdKey="id"
                             defaultPageSize={20}
-                            fillAvailableViewport
+                            fullHeight
                             searchPlaceholder="Search units..."
                             searchKeys={[
                                 (unit) => unit.name,

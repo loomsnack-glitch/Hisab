@@ -80,6 +80,8 @@ describe("Admin Expenses page", () => {
         const markup = renderExpensesPage();
 
         expect(markup).toContain("data-testid=\"expenses-page\"");
+        expect(markup).toContain("Expenses");
+        expect(markup).toContain("Categories");
         expect(markup).toContain("Rent");
         expect(markup).toContain("Adajan");
         expect(markup).toContain("Draft");
@@ -98,7 +100,7 @@ describe("Admin Expenses page", () => {
         const markup = renderExpensesPage("pending");
 
         expect(markup).toContain("aria-label=\"Loading\"");
-        expect(markup).not.toContain("data-testid=\"expenses-page\"");
+        expect(markup).not.toContain("Add expense");
     });
 
     test("shows an error state when Expenses cannot be loaded", () => {

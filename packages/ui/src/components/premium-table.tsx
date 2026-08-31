@@ -49,6 +49,8 @@ interface PremiumTableProps<T> {
   fullHeight?: boolean;
   /** Use a taller viewport calc for pages without a page title block. */
   fillAvailableViewport?: boolean;
+  /** Account for page navigation tabs above the table when using fillAvailableViewport. */
+  withPageTabs?: boolean;
   onRefresh?: () => void;
   showColumnsToggle?: boolean;
   infoText?: string;
@@ -70,6 +72,7 @@ export function PremiumTable<T>({
   toolbarActions,
   fullHeight = false,
   fillAvailableViewport = false,
+  withPageTabs = false,
   onRefresh,
   showColumnsToggle = false,
   infoText,
@@ -449,7 +452,9 @@ export function PremiumTable<T>({
               fullHeight
                 ? "flex-1 min-h-0 max-h-none"
                 : fillAvailableViewport
-                  ? "max-h-[calc(100dvh-200px)] md:max-h-[calc(100dvh-220px)]"
+                  ? withPageTabs
+                    ? "max-h-[calc(100dvh-320px)] md:max-h-[calc(100dvh-340px)]"
+                    : "max-h-[calc(100dvh-200px)] md:max-h-[calc(100dvh-220px)]"
                   : "max-h-[calc(100dvh-240px)] md:max-h-[calc(100dvh-340px)]"
             )}
           >

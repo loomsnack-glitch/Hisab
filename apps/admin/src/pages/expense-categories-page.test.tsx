@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ExpenseCategoryDTO } from "@repo/types";
 
 import { expenseCategoryKeys } from "@/lib/query-keys";
-import ExpenseCategoriesPage from "@/pages/expense-categories-page";
+import ExpensesPage from "@/pages/expenses-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const now = new Date("2026-08-31T12:00:00.000Z");
@@ -36,7 +36,7 @@ const packaging: ExpenseCategoryDTO = {
     updatedAt: now,
 };
 
-const renderExpenseCategoriesPage = (
+const renderExpenseCategoriesTab = (
     result: "pending" | "success" | "error" | "empty" = "success",
     expenseCategories: ExpenseCategoryDTO[] = [rent, packaging],
 ) => {
@@ -54,23 +54,21 @@ const renderExpenseCategoriesPage = (
 
     return renderToStaticMarkup(
         <QueryClientProvider client={queryClient}>
-            <MemoryRouter initialEntries={[`/organizations/${organizationId}/expense-categories`]}>
+            <MemoryRouter initialEntries={[`/organizations/${organizationId}/expenses?tab=categories`]}>
                 <Routes>
-                    <Route
-                        path="/organizations/:organizationId/expense-categories"
-                        element={<ExpenseCategoriesPage />}
-                    />
+                    <Route path="/organizations/:organizationId/expenses" element={<ExpensesPage />} />
                 </Routes>
             </MemoryRouter>
         </QueryClientProvider>,
     );
 };
 
-describe("Admin Expense Categories page", () => {
+describe("Admin Expense Categories tab", () => {
     test("shows predefined and custom Expense Categories with availability and no delete command", () => {
-        const markup = renderExpenseCategoriesPage();
+        const markup = renderExpenseCategoriesTab();
 
-        expect(markup).toContain("data-testid=\"expense-categories-page\"");
+        expect(markup).toContain("data-testid=\"expense-categories-directory\"");
+        expect(markup).toContain("Categories");
         expect(markup).toContain("Rent");
         expect(markup).toContain("Standard");
         expect(markup).toContain("Packaging");
@@ -85,14 +83,14 @@ describe("Admin Expense Categories page", () => {
     });
 
     test("shows a loading spinner while Expense Categories are fetched", () => {
-        const markup = renderExpenseCategoriesPage("pending");
+        const markup = renderExpenseCategoriesTab("pending");
 
         expect(markup).toContain("aria-label=\"Loading\"");
-        expect(markup).not.toContain("data-testid=\"expense-categories-page\"");
+        expect(markup).not.toContain("data-testid=\"expense-categories-directory\"");
     });
 
     test("shows an error state when Expense Categories cannot be loaded", () => {
-        const markup = renderExpenseCategoriesPage("error");
+        const markup = renderExpenseCategoriesTab("error");
 
         expect(markup).toContain("Unable to load expense categories");
         expect(markup).toContain("Expense Categories could not be loaded right now.");
@@ -100,7 +98,7 @@ describe("Admin Expense Categories page", () => {
     });
 
     test("shows an empty state with a create action", () => {
-        const markup = renderExpenseCategoriesPage("empty");
+        const markup = renderExpenseCategoriesTab("empty");
 
         expect(markup).toContain("No expense categories yet");
         expect(markup).toContain("Add category");

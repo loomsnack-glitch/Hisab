@@ -195,8 +195,8 @@ const VendorItemsCatalogue = ({ organizationId }: VendorItemsCatalogueProps) => 
     }
 
     return (
-        <div className="space-y-4" data-testid="vendor-items-catalogue">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex h-full min-h-0 flex-col gap-4" data-testid="vendor-items-catalogue">
+            <div className="flex shrink-0 flex-col gap-4 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-3 flex-1">
                     <div className="relative w-full sm:w-[320px] max-w-xs group/search">
                         <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
@@ -324,7 +324,7 @@ const VendorItemsCatalogue = ({ organizationId }: VendorItemsCatalogueProps) => 
                     No vendor items match your filters.
                 </Card>
             ) : (
-                <div className="space-y-5">
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto">
                     {groups.map((group) => (
                         <section
                             key={group.vendor.id}

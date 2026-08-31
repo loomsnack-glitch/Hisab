@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav";
 import {
+    getVisibleAdminMainDestinations,
     getVisibleAdminPrimaryMobileDestinations,
     getVisibleAdminWorkspaceDestinations,
     isAdminMoreDestinationActive,
@@ -14,6 +15,27 @@ const withOrg = { organizationId, hasOrganization: true };
 const withoutOrg = { organizationId: "", hasOrganization: false };
 
 describe("Admin mobile navigation", () => {
+    test("orders main sidebar destinations as Organizations through Google Contacts", () => {
+        const mainIds = getVisibleAdminMainDestinations(withOrg).map((destination) => destination.id);
+
+        expect(mainIds).toEqual([
+            "organizations",
+            "stores",
+            "products",
+            "billing",
+            "reports",
+            "tables",
+            "customers",
+            "whatsapp",
+            "money-accounts",
+            "vendors",
+            "purchases",
+            "expenses",
+            "units",
+            "google-contacts",
+        ]);
+    });
+
     test("includes Units as an Organization-scoped workspace destination", () => {
         const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
         const units = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "units");
@@ -24,16 +46,11 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/units`, withOrg)).toBe(true);
     });
 
-    test("includes Expense Categories as an Organization-scoped workspace destination", () => {
+    test("does not include Expense Categories as a separate sidebar destination", () => {
         const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
-        const expenseCategories = getVisibleAdminWorkspaceDestinations(withOrg).find(
-            (destination) => destination.id === "expense-categories",
-        );
 
-        expect(workspaceIds).toContain("expense-categories");
-        expect(expenseCategories?.path).toBe(`/organizations/${organizationId}/expense-categories`);
-        expect(expenseCategories?.isActive(`/organizations/${organizationId}/expense-categories`)).toBe(true);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/expense-categories`, withOrg)).toBe(true);
+        expect(workspaceIds).not.toContain("expense-categories");
+        expect(workspaceIds).toContain("expenses");
     });
 
     test("includes Vendors as an Organization-scoped workspace destination", () => {

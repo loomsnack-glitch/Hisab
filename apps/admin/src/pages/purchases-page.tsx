@@ -23,6 +23,7 @@ import {
 import UpsertPurchaseDialog from "@/components/purchases/upsert-purchase-dialog";
 import { formatCurrency, formatDateOnly } from "@/lib/format";
 import { organizationKeys, purchaseKeys } from "@/lib/query-keys";
+import { adminWorkspacePageHeightClass } from "@/lib/workspace-page-layout";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
 const PurchasesPage = () => {
@@ -206,7 +207,10 @@ const PurchasesPage = () => {
     }
 
     return (
-        <div className="space-y-4" data-testid="purchases-page">
+        <div
+            className={purchases.length === 0 ? "space-y-4" : adminWorkspacePageHeightClass}
+            data-testid="purchases-page"
+        >
             {purchases.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">
                     <CardContent className="pt-6">
@@ -228,14 +232,14 @@ const PurchasesPage = () => {
                 </Card>
             ) : (
                 <>
-                    <div className="hidden sm:block">
+                    <div className="hidden sm:flex sm:min-h-0 sm:flex-1 sm:flex-col">
                         <PremiumTable
                             data={purchases}
                             columns={columns}
                             actions={renderActions}
                             rowIdKey="id"
                             defaultPageSize={20}
-                            fillAvailableViewport
+                            fullHeight
                             searchPlaceholder="Search purchases..."
                             searchKeys={[
                                 (purchase) => purchase.vendorName,
