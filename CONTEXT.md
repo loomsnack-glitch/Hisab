@@ -41,7 +41,7 @@ A Store-scoped record of goods acquired from one Vendor, including its effective
 _Avoid_: Supplier invoice, stock receipt, expense
 
 **Purchase Line**:
-A historical record of one Vendor Item acquired in a Purchase, including its item and unit snapshots, purchased quantity, and agreed unit price. Its total is calculated from the quantity and agreed unit price.
+A historical record of one Vendor Item acquired in a Purchase, including its item and unit snapshots, purchased quantity, and agreed unit price. Its total is calculated from the quantity and agreed unit price. The same Vendor Item at the same agreed unit price is one Purchase Line with combined quantity; a different agreed unit price remains a separate line.
 _Avoid_: Live Vendor Item lookup, inventory stock row
 
 **Purchase Adjustment**:

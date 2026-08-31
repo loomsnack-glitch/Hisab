@@ -36,6 +36,7 @@ import {
     restoreCreateMoneyAccountMovementRepo,
     storeId,
     tomatoItem,
+    tomatoLine,
     updatePurchaseRepo,
     userId,
     vendorId,
@@ -128,6 +129,45 @@ describe("Organization Purchase service", () => {
             }),
             expect.anything(),
         );
+    });
+
+    test("combines the same Vendor Item at the same agreed unit price into one Purchase Line", async () => {
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, {
+            ...createPayload,
+            adjustment: 0,
+            lines: [
+                { vendorItemId, quantity: 1, agreedUnitPrice: 12 },
+                { vendorItemId, quantity: 1, agreedUnitPrice: 12 },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.lines).toHaveLength(1);
+        expect(response.data?.purchase.lines[0]?.vendorItemId).toBe(vendorItemId);
+        expect(response.data?.purchase.lines[0]?.quantity).toBe(2);
+        expect(response.data?.purchase.lines[0]?.agreedUnitPrice).toBe(12);
+        expect(response.data?.purchase.lines[0]?.lineTotal).toBe(24);
+        expect(response.data?.purchase.linesTotal).toBe(24);
+        expect(response.data?.purchase.total).toBe(24);
+    });
+
+    test("keeps the same Vendor Item as separate Purchase Lines when agreed unit prices differ", async () => {
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, {
+            ...createPayload,
+            adjustment: 0,
+            lines: [
+                { vendorItemId, quantity: 1, agreedUnitPrice: 12 },
+                { vendorItemId, quantity: 1, agreedUnitPrice: 10 },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.lines).toHaveLength(2);
+        expect(response.data?.purchase.lines[0]?.agreedUnitPrice).toBe(12);
+        expect(response.data?.purchase.lines[0]?.quantity).toBe(1);
+        expect(response.data?.purchase.lines[1]?.agreedUnitPrice).toBe(10);
+        expect(response.data?.purchase.lines[1]?.quantity).toBe(1);
+        expect(response.data?.purchase.linesTotal).toBe(22);
     });
 
     test("prefills agreed unit price from the Vendor Item and snapshots names and Unit label", async () => {
@@ -266,6 +306,34 @@ describe("Organization Purchase service", () => {
             }),
             expect.anything(),
         );
+    });
+
+    test("records a Draft Purchase by combining same-price lines for the same Vendor Item", async () => {
+        resetStoredPurchase({
+            ...draftPurchase,
+            adjustment: 0,
+            linesTotal: 24,
+            total: 24,
+            lines: [
+                { ...tomatoLine, quantity: 1, agreedUnitPrice: 12, lineTotal: 12 },
+                {
+                    ...tomatoLine,
+                    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab",
+                    quantity: 1,
+                    agreedUnitPrice: 12,
+                    lineTotal: 12,
+                },
+            ],
+        });
+
+        const response = await purchasesService.recordPurchase(userId, organizationId, purchaseId);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.lines).toHaveLength(1);
+        expect(response.data?.purchase.lines[0]?.quantity).toBe(2);
+        expect(response.data?.purchase.lines[0]?.agreedUnitPrice).toBe(12);
+        expect(response.data?.purchase.lines[0]?.lineTotal).toBe(24);
+        expect(response.data?.purchase.total).toBe(24);
     });
 
     test("does not record a Draft Purchase without Purchase Lines", async () => {

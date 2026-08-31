@@ -1,5 +1,6 @@
 import {
     STATUS_CODES,
+    calculatePurchaseLineTotal,
     calculatePurchaseTotals,
     calculateVendorOutstanding,
     calendarDateInTimeZone,
@@ -10,6 +11,7 @@ import {
     isPurchaseEffectiveDateAllowed,
     isVendorItemSelectableForDraftPurchase,
     isVendorSelectableForDraftPurchase,
+    mergeSamePricePurchaseLines,
     roundOutgoingPaymentMoney,
     type CreateDraftPurchaseSVC,
     type CreateOutgoingPaymentSVC,
@@ -204,7 +206,12 @@ const resolveDraftLines = async (
         });
     }
 
-    return { ok: true, value: lines };
+    const merged = mergeSamePricePurchaseLines(lines).map((line) => ({
+        ...line,
+        lineTotal: calculatePurchaseLineTotal(line.quantity, line.agreedUnitPrice),
+    }));
+
+    return { ok: true, value: merged };
 };
 
 const toLineInputs = (purchase: PurchaseDTO): PurchaseLineInputJSON[] =>

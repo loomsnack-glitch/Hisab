@@ -39,6 +39,39 @@ const isAtMostThreeDecimalPlaces = (value: number): boolean => isAtMostDecimalPl
 
 export const roundMoney = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
+export const roundPurchaseQuantity = (value: number): number =>
+  Math.round((value + Number.EPSILON) * 1000) / 1000;
+
+export const mergeSamePricePurchaseLines = <
+  T extends { vendorItemId: string; quantity: number; agreedUnitPrice: number },
+>(
+  lines: T[],
+): T[] => {
+  const merged: T[] = [];
+
+  for (const line of lines) {
+    const agreedUnitPrice = roundMoney(line.agreedUnitPrice);
+    const existing = merged.find(
+      (candidate) =>
+        candidate.vendorItemId === line.vendorItemId &&
+        roundMoney(candidate.agreedUnitPrice) === agreedUnitPrice,
+    );
+
+    if (!existing) {
+      merged.push({
+        ...line,
+        quantity: roundPurchaseQuantity(line.quantity),
+        agreedUnitPrice,
+      });
+      continue;
+    }
+
+    existing.quantity = roundPurchaseQuantity(existing.quantity + line.quantity);
+  }
+
+  return merged;
+};
+
 export const purchaseQuantitySchema = z
   .number({ error: "Quantity is required" })
   .gt(0, "Quantity must be greater than 0")

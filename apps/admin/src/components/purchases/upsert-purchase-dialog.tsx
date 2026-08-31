@@ -17,6 +17,7 @@ import {
     calendarDateInTimeZone,
     isVendorItemSelectableForDraftPurchase,
     isVendorSelectableForDraftPurchase,
+    mergeSamePricePurchaseLines,
     type CreateDraftPurchaseJSON,
     type PurchaseDTO,
     type PurchaseLineInputJSON,
@@ -132,11 +133,13 @@ const toFormValues = (purchase: PurchaseDTO): UpsertPurchaseFormInput => ({
 });
 
 const toLinePayload = (lines: z.output<typeof UpsertPurchaseFormSchema>["lines"]): PurchaseLineInputJSON[] =>
-    lines.map((line) => ({
-        vendorItemId: line.vendorItemId,
-        quantity: line.quantity,
-        agreedUnitPrice: line.agreedUnitPrice,
-    }));
+    mergeSamePricePurchaseLines(
+        lines.map((line) => ({
+            vendorItemId: line.vendorItemId,
+            quantity: line.quantity,
+            agreedUnitPrice: line.agreedUnitPrice,
+        })),
+    );
 
 const UpsertPurchaseDialog = ({
     organizationId,

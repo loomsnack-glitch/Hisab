@@ -9,6 +9,7 @@ import {
   calculatePurchaseLineTotal,
   calculatePurchaseTotals,
   calculateVendorOutstanding,
+  mergeSamePricePurchaseLines,
   calendarDateInTimeZone,
   canAcceptOutgoingPayment,
   canReverseOutgoingPayment,
@@ -243,6 +244,28 @@ describe("Purchase totals and Payable Status", () => {
   test("line total is quantity multiplied by agreed unit price", () => {
     expect(calculatePurchaseLineTotal(2, 40.5)).toBe(81);
     expect(calculatePurchaseLineTotal(1.5, 20)).toBe(30);
+  });
+
+  test("same Vendor Item at the same agreed unit price becomes one Purchase Line with combined quantity", () => {
+    expect(
+      mergeSamePricePurchaseLines([
+        { vendorItemId, quantity: 1, agreedUnitPrice: 12 },
+        { vendorItemId, quantity: 1, agreedUnitPrice: 12 },
+      ]),
+    ).toEqual([{ vendorItemId, quantity: 2, agreedUnitPrice: 12 }]);
+  });
+
+  test("same Vendor Item stays as separate Purchase Lines when agreed unit prices differ", () => {
+    expect(
+      mergeSamePricePurchaseLines([
+        { vendorItemId, quantity: 1, agreedUnitPrice: 12 },
+        { vendorItemId, quantity: 1, agreedUnitPrice: 10 },
+        { vendorItemId, quantity: 2, agreedUnitPrice: 12 },
+      ]),
+    ).toEqual([
+      { vendorItemId, quantity: 3, agreedUnitPrice: 12 },
+      { vendorItemId, quantity: 1, agreedUnitPrice: 10 },
+    ]);
   });
 
   test("final total visibly adds a signed Purchase Adjustment to line totals", () => {
