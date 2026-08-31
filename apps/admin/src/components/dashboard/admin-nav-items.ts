@@ -8,6 +8,7 @@ import {
     ReceiptText,
     Ruler,
     Settings2,
+    ShoppingBag,
     Store,
     Tags,
     Truck,
@@ -71,6 +72,14 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         requiresOrganization: true,
         getPath: (organizationId) => `/organizations/${organizationId}/vendors`,
         isActive: (pathname) => /\/organizations\/[^/]+\/vendors(\/|$)/.test(pathname),
+    },
+    {
+        id: "purchases",
+        label: "Purchases",
+        icon: ShoppingBag,
+        requiresOrganization: true,
+        getPath: (organizationId) => `/organizations/${organizationId}/purchases`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/purchases(\/|$)/.test(pathname),
     },
     {
         id: "units",

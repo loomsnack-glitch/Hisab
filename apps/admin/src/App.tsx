@@ -29,6 +29,8 @@ import TablesPage from "@/pages/tables-page";
 import UnitsPage from "@/pages/units-page";
 import ExpenseCategoriesPage from "@/pages/expense-categories-page";
 import VendorsPage from "@/pages/vendors-page";
+import PurchasesPage from "@/pages/purchases-page";
+import PurchaseDetailPage from "@/pages/purchase-detail-page";
 import MoneyAccountsPage from "@/pages/money-accounts-page";
 import MoneyAccountDetailPage from "@/pages/money-account-detail-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
@@ -137,6 +139,8 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/units" element={<UnitsPage />} />
                                 <Route path="/organizations/:organizationId/expense-categories" element={<ExpenseCategoriesPage />} />
                                 <Route path="/organizations/:organizationId/vendors" element={<VendorsPage />} />
+                                <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
+                                <Route path="/organizations/:organizationId/purchases/:purchaseId" element={<PurchaseDetailPage />} />
                                 <Route path="/organizations/:organizationId/money-accounts" element={<MoneyAccountsPage />} />
                                 <Route path="/organizations/:organizationId/money-accounts/:moneyAccountId" element={<MoneyAccountDetailPage />} />
                                 <Route path="/organizations/:organizationId/whatsapp" element={<Navigate to="accounts" replace />} />

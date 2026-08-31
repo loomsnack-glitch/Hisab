@@ -157,6 +157,13 @@ export const vendorKeys = {
   items: (organizationId: string) => [...vendorKeys.all, organizationId, "items"] as const,
 };
 
+export const purchaseKeys = {
+  all: ["purchases"] as const,
+  list: (organizationId: string) => [...purchaseKeys.all, organizationId] as const,
+  detail: (organizationId: string, purchaseId: string) =>
+    [...purchaseKeys.all, organizationId, purchaseId] as const,
+};
+
 export const moneyAccountKeys = {
   all: ["money-accounts"] as const,
   list: (organizationId: string) => [...moneyAccountKeys.all, organizationId] as const,

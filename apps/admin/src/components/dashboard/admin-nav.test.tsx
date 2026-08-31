@@ -46,6 +46,18 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/vendors`, withOrg)).toBe(true);
     });
 
+    test("includes Purchases as an Organization-scoped workspace destination", () => {
+        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
+        const purchases = getVisibleAdminWorkspaceDestinations(withOrg).find(
+            (destination) => destination.id === "purchases",
+        );
+
+        expect(workspaceIds).toContain("purchases");
+        expect(purchases?.path).toBe(`/organizations/${organizationId}/purchases`);
+        expect(purchases?.isActive(`/organizations/${organizationId}/purchases`)).toBe(true);
+        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/purchases`, withOrg)).toBe(true);
+    });
+
     test("includes Money Accounts as an Organization-scoped workspace destination", () => {
         const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
         const moneyAccounts = getVisibleAdminWorkspaceDestinations(withOrg).find(

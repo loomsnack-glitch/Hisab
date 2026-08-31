@@ -8,4 +8,5 @@ export * from "./google-contacts.service";
 export * from "./units.service";
 export * from "./expense-categories.service";
 export * from "./vendors.service";
+export * from "./purchases.service";
 export * from "./money-accounts.service";
