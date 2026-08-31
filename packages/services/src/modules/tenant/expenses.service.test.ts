@@ -28,6 +28,9 @@ describe("Expenses client service", () => {
 
         await expensesService.getExpenses("org-id");
         await expensesService.getExpense("org-id", "expense-id");
+        await expensesService.recordExpense("org-id", "expense-id", {
+            payment: { amount: 10000, paymentMethod: "cash" },
+        });
         await expensesService.createOutgoingExpensePayment("org-id", "expense-id", {
             amount: 10000,
             paymentMethod: "cash",
@@ -42,6 +45,7 @@ describe("Expenses client service", () => {
         expect(requests).toEqual([
             "GET /organizations/org-id/expenses",
             "GET /organizations/org-id/expenses/expense-id",
+            "POST /organizations/org-id/expenses/expense-id/record",
             "POST /organizations/org-id/expenses/expense-id/payments",
             "POST /organizations/org-id/expenses/expense-id/payments/payment-id/reverse",
             "POST /organizations/org-id/expenses/expense-id/void",

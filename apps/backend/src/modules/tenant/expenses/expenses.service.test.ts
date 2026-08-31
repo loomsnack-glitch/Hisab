@@ -212,6 +212,46 @@ describe("Organization Expense service", () => {
                 dueAmount: 25000,
             }),
         );
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("records a Draft Expense paid in full with an immediate Outgoing Payment", async () => {
+        const response = await expensesService.recordExpense(userId, organizationId, expenseId, {
+            payment: { amount: 25000, paymentMethod: "cash" },
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.expense.lifecycle).toBe("recorded");
+        expect(response.data?.expense.payableStatus).toBe("paid");
+        expect(response.data?.expense.paidTotal).toBe(25000);
+        expect(response.data?.expense.dueAmount).toBe(0);
+        expect(response.data?.expense.outgoingPayments).toHaveLength(1);
+        expect(response.data?.expense.outgoingPayments[0]?.paymentMethod).toBe("cash");
+        expect(createOutgoingPaymentRepo).toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("records a Draft Expense with a partial Outgoing Payment", async () => {
+        const response = await expensesService.recordExpense(userId, organizationId, expenseId, {
+            payment: { amount: 10000, paymentMethod: "upi" },
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.expense.payableStatus).toBe("partial");
+        expect(response.data?.expense.paidTotal).toBe(10000);
+        expect(response.data?.expense.dueAmount).toBe(15000);
+        expect(response.data?.expense.outgoingPayments[0]?.paymentMethod).toBe("upi");
+    });
+
+    test("does not record a Draft Expense when the immediate Outgoing Payment would overpay", async () => {
+        const response = await expensesService.recordExpense(userId, organizationId, expenseId, {
+            payment: { amount: 25000.01, paymentMethod: "cash" },
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toMatch(/cannot exceed the remaining due/i);
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
     });
 
     test("does not record when the Expense Category is no longer active", async () => {

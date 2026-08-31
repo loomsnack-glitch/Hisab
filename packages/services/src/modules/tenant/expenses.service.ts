@@ -3,6 +3,7 @@ import type {
     CreateOutgoingPaymentJSON,
     ExpenseResponse,
     ExpensesListResponse,
+    RecordExpenseJSON,
     ReverseOutgoingPaymentJSON,
     ServiceResponse,
     UpdateDraftExpenseJSON,
@@ -76,10 +77,12 @@ export const discardDraftExpense = async (
 export const recordExpense = async (
     organizationId: string,
     expenseId: string,
+    data: RecordExpenseJSON = {},
 ): Promise<ServiceResponse<ExpenseResponse | null>> => {
     try {
         const response = await api.post(
             `/organizations/${organizationId}/expenses/${expenseId}/record`,
+            data,
         );
         return response.data;
     } catch (error) {

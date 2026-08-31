@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateDraftExpenseSchema, CreateOutgoingPaymentSchema, ReverseOutgoingPaymentSchema, STATUS_CODES, UpdateDraftExpenseSchema, VoidExpenseSchema } from "@repo/types";
+import { CreateDraftExpenseSchema, CreateOutgoingPaymentSchema, RecordExpenseSchema, ReverseOutgoingPaymentSchema, STATUS_CODES, UpdateDraftExpenseSchema, VoidExpenseSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -166,10 +166,30 @@ export const createExpensesRoutes = (
                 return c.json(invalidExpenseId, invalidExpenseId.code);
             }
 
+            let recordBody: unknown = {};
+            try {
+                recordBody = await c.req.json();
+            } catch {
+                recordBody = {};
+            }
+            const parsed = RecordExpenseSchema.safeParse(recordBody ?? {});
+            if (!parsed.success) {
+                return c.json(
+                    {
+                        status: "error",
+                        message: "Validation error",
+                        code: STATUS_CODES.BAD_REQUEST,
+                        errors: parsed.error.issues,
+                    },
+                    STATUS_CODES.BAD_REQUEST,
+                );
+            }
+
             const serviceResponse = await expensesService.recordExpense(
                 c.get("authUser").id,
                 organizationId,
                 expenseId,
+                parsed.data,
             );
             return handleServiceResponse(c, serviceResponse);
         } catch (error) {

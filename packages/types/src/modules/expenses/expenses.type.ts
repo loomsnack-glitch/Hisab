@@ -4,6 +4,7 @@ import type {
   ExpenseDTOSchema,
   ExpenseLifecycleSchema,
   ExpensePayableStatusSchema,
+  RecordExpenseSchema,
   UpdateDraftExpenseSchema,
   VoidExpenseSchema,
 } from "./expenses.schema";
@@ -18,6 +19,8 @@ export type UpdateDraftExpenseJSON = z.infer<typeof UpdateDraftExpenseSchema>;
 export type UpdateDraftExpenseSVC = UpdateDraftExpenseJSON;
 export type VoidExpenseJSON = z.infer<typeof VoidExpenseSchema>;
 export type VoidExpenseSVC = VoidExpenseJSON;
+export type RecordExpenseJSON = z.infer<typeof RecordExpenseSchema>;
+export type RecordExpenseSVC = RecordExpenseJSON;
 
 export type CreateExpenseREPO = Pick<
   ExpenseDTO,

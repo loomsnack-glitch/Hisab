@@ -4,6 +4,7 @@ import {
   ExpenseDTOSchema,
   ExpenseLifecycleSchema,
   ExpensePayableStatusSchema,
+  RecordExpenseSchema,
   UpdateDraftExpenseSchema,
   VoidExpenseSchema,
   canAcceptOutgoingExpensePayment,
@@ -176,6 +177,36 @@ describe("Draft Expense contracts", () => {
   test("update Draft Expense accepts total-only and notes-only changes", () => {
     expect(UpdateDraftExpenseSchema.safeParse({ total: 26000 }).success).toBe(true);
     expect(UpdateDraftExpenseSchema.safeParse({ notes: "Updated notes" }).success).toBe(true);
+  });
+
+  test("record Expense accepts omitted payment for a due-only payable", () => {
+    expect(RecordExpenseSchema.safeParse({}).success).toBe(true);
+    expect(RecordExpenseSchema.safeParse({ payment: undefined }).success).toBe(true);
+  });
+
+  test("record Expense accepts an Outgoing Payment for immediate settlement", () => {
+    const result = RecordExpenseSchema.safeParse({
+      payment: { amount: 25000, paymentMethod: "cash" },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.payment?.amount).toBe(25000);
+      expect(result.data.payment?.paymentMethod).toBe("cash");
+    }
+  });
+
+  test("record Expense rejects a zero or invalid Outgoing Payment", () => {
+    expect(
+      RecordExpenseSchema.safeParse({
+        payment: { amount: 0, paymentMethod: "cash" },
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordExpenseSchema.safeParse({
+        payment: { amount: 10000, paymentMethod: "cheque" },
+      }).success,
+    ).toBe(false);
   });
 });
 

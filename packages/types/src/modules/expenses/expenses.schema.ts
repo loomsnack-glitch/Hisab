@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
 import { isExpenseCategoryAvailableForAssignment } from "../expense-categories/expense-categories.schema";
-import { OutgoingPaymentDTOSchema } from "../outgoing-payments/outgoing-payments.schema";
+import {
+  CreateOutgoingPaymentSchema,
+  OutgoingPaymentDTOSchema,
+} from "../outgoing-payments/outgoing-payments.schema";
 import {
   PAYABLE_STATUS_LABELS,
   PURCHASE_VOID_REASON_MAX_LENGTH,
@@ -118,6 +121,12 @@ export const canAcceptOutgoingExpensePayment = (input: {
 export const canReverseOutgoingExpensePayment = canReverseOutgoingPayment;
 export const canVoidExpense = canVoidPurchase;
 export const VoidExpenseSchema = VoidPurchaseSchema;
+
+export const RecordExpenseSchema = z
+  .object({
+    payment: CreateOutgoingPaymentSchema.optional(),
+  })
+  .strict();
 
 export const isExpenseCategorySelectableForDraftExpense = isExpenseCategoryAvailableForAssignment;
 

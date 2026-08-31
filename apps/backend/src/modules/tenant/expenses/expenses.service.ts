@@ -16,6 +16,7 @@ import {
     type ExpenseDTO,
     type ExpenseResponse,
     type ExpensesListResponse,
+    type RecordExpenseSVC,
     type ReverseOutgoingPaymentSVC,
     type ServiceResponse,
     type StatusCode,
@@ -90,6 +91,149 @@ const normalizeOptionalText = (value: string | null | undefined): string | null 
 };
 
 type LookupResult<T> = { ok: true; value: T } | { ok: false; error: ServiceResponse<null> };
+
+const applyOutgoingExpensePaymentInTx = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        userId: string;
+        organizationId: string;
+        expense: ExpenseDTO;
+        paymentData: CreateOutgoingPaymentSVC;
+        paidAt?: Date;
+    },
+): Promise<ExpenseDTO> => {
+    const amount = roundOutgoingPaymentMoney(params.paymentData.amount);
+    const paidAt = params.paidAt ?? new Date();
+
+    if (params.expense.lifecycle !== "recorded") {
+        throw Object.assign(
+            new Error("Outgoing Payments can only be recorded against a recorded Expense"),
+            { code: STATUS_CODES.BAD_REQUEST, expose: true },
+        );
+    }
+
+    if (
+        !canAcceptOutgoingExpensePayment({
+            lifecycle: params.expense.lifecycle,
+            total: params.expense.total,
+            outgoingPayments: params.expense.outgoingPayments,
+            amount,
+        })
+    ) {
+        throw Object.assign(
+            new Error("Outgoing Payment cannot exceed the remaining due amount"),
+            { code: STATUS_CODES.CONFLICT, expose: true },
+        );
+    }
+
+    const funding = await resolveOutgoingPaymentFunding(tx, {
+        organizationId: params.organizationId,
+        storeId: params.expense.storeId,
+        payment: {
+            ...params.paymentData,
+            amount,
+        },
+    });
+
+    const createdPayment = await outgoingPaymentsRepository.createOutgoingPayment(
+        {
+            id: crypto.randomUUID(),
+            organizationId: params.organizationId,
+            purchaseId: null,
+            expenseId: params.expense.id,
+            amount,
+            paymentMethod: params.paymentData.paymentMethod,
+            moneyAccountId: funding.moneyAccount?.id ?? null,
+            reference: normalizeOptionalText(params.paymentData.reference),
+            notes: normalizeOptionalText(params.paymentData.notes),
+            paidAt,
+            reversedAt: null,
+            reversalReason: null,
+            reversalKind: null,
+            createdBy: params.userId,
+        },
+        tx,
+    );
+    if (!createdPayment) {
+        throw new Error("Failed to create Outgoing Payment");
+    }
+
+    if (funding.trackingActive && funding.moneyAccount) {
+        await createOutgoingExpensePaymentMovement(tx, {
+            organizationId: params.organizationId,
+            storeId: params.expense.storeId,
+            moneyAccount: funding.moneyAccount,
+            payment: createdPayment,
+        });
+    }
+
+    const settlement = deriveExpensePayableStateFromPayments({
+        lifecycle: "recorded",
+        total: params.expense.total,
+        outgoingPayments: [...params.expense.outgoingPayments, createdPayment],
+    });
+
+    const header: UpdateExpenseREPO = {
+        id: params.expense.id,
+        organizationId: params.organizationId,
+        storeId: params.expense.storeId,
+        expenseCategoryId: params.expense.expenseCategoryId,
+        expenseCategoryName: params.expense.expenseCategoryName,
+        lifecycle: "recorded",
+        payableStatus: settlement.payableStatus,
+        effectiveDate: params.expense.effectiveDate,
+        invoiceReference: params.expense.invoiceReference,
+        notes: params.expense.notes,
+        total: params.expense.total,
+        paidTotal: settlement.paidTotal,
+        dueAmount: settlement.dueAmount,
+        recordedAt: params.expense.recordedAt,
+        voidedAt: params.expense.voidedAt,
+        voidReason: params.expense.voidReason,
+        updatedBy: params.userId,
+    };
+    const updated = await expensesRepository.updateExpense(header, tx);
+    if (!updated) {
+        throw new Error("Failed to update Expense settlement");
+    }
+
+    return expensesRepository.getExpenseById(params.organizationId, params.expense.id, tx) ?? updated;
+};
+
+const outgoingPaymentErrorResponse = (
+    error: unknown,
+): ServiceResponse<null> | null => {
+    if (isOutgoingPaymentFundingError(error)) {
+        return {
+            status: "error",
+            message: error.message,
+            data: null,
+            code: error.code,
+        };
+    }
+    if (error instanceof Error && "expose" in error && error.expose === true) {
+        return {
+            status: "error",
+            message: error.message,
+            data: null,
+            code: (error as Error & { code?: StatusCode }).code ?? STATUS_CODES.BAD_REQUEST,
+        };
+    }
+    if (
+        error instanceof Error &&
+        (error.message === "Failed to create Outgoing Payment" ||
+            error.message === "Failed to create money account movement" ||
+            error.message === "Failed to update Expense settlement")
+    ) {
+        return {
+            status: "error",
+            message: "Failed to record Outgoing Payment",
+            data: null,
+            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        };
+    }
+    return null;
+};
 
 const requireStore = async (
     organizationId: string,
@@ -367,6 +511,7 @@ export const recordExpense = async (
     userId: string,
     organizationId: string,
     expenseId: string,
+    recordData: RecordExpenseSVC = {},
 ): Promise<ServiceResponse<ExpenseResponse | null>> => {
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
@@ -439,22 +584,53 @@ export const recordExpense = async (
         updatedBy: userId,
     };
 
-    const expense = await expensesRepository.updateExpense(header);
-    if (!expense) {
-        return {
-            status: "error",
-            message: "Failed to record Expense",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-        };
-    }
+    try {
+        const expense = recordData.payment
+            ? await pg.begin(async (tx) => {
+                const recorded = await expensesRepository.updateExpense(header, tx);
+                if (!recorded) {
+                    throw new Error("Failed to record Expense");
+                }
 
-    return {
-        status: "success",
-        data: { expense },
-        message: "Expense recorded successfully",
-        code: STATUS_CODES.SUCCESS,
-    };
+                return applyOutgoingExpensePaymentInTx(tx, {
+                    userId,
+                    organizationId,
+                    expense: recorded,
+                    paymentData: recordData.payment!,
+                });
+            })
+            : await expensesRepository.updateExpense(header);
+
+        if (!expense) {
+            return {
+                status: "error",
+                message: "Failed to record Expense",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+
+        return {
+            status: "success",
+            data: { expense },
+            message: "Expense recorded successfully",
+            code: STATUS_CODES.SUCCESS,
+        };
+    } catch (error) {
+        const paymentError = outgoingPaymentErrorResponse(error);
+        if (paymentError) {
+            return paymentError;
+        }
+        if (error instanceof Error && error.message === "Failed to record Expense") {
+            return {
+                status: "error",
+                message: "Failed to record Expense",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+        throw error;
+    }
 };
 
 export const createOutgoingExpensePayment = async (
@@ -468,9 +644,6 @@ export const createOutgoingExpensePayment = async (
         return organizationNotFound();
     }
 
-    const amount = roundOutgoingPaymentMoney(paymentData.amount);
-    const paidAt = new Date();
-
     try {
         const expense = await pg.begin(async (tx) => {
             const existing = await expensesRepository.lockExpenseById(
@@ -482,98 +655,12 @@ export const createOutgoingExpensePayment = async (
                 return null;
             }
 
-            if (existing.lifecycle !== "recorded") {
-                throw Object.assign(
-                    new Error("Outgoing Payments can only be recorded against a recorded Expense"),
-                    { code: STATUS_CODES.BAD_REQUEST, expose: true },
-                );
-            }
-
-            if (
-                !canAcceptOutgoingExpensePayment({
-                    lifecycle: existing.lifecycle,
-                    total: existing.total,
-                    outgoingPayments: existing.outgoingPayments,
-                    amount,
-                })
-            ) {
-                throw Object.assign(
-                    new Error("Outgoing Payment cannot exceed the remaining due amount"),
-                    { code: STATUS_CODES.CONFLICT, expose: true },
-                );
-            }
-
-            const funding = await resolveOutgoingPaymentFunding(tx, {
+            return applyOutgoingExpensePaymentInTx(tx, {
+                userId,
                 organizationId,
-                storeId: existing.storeId,
-                payment: {
-                    ...paymentData,
-                    amount,
-                },
+                expense: existing,
+                paymentData,
             });
-
-            const createdPayment = await outgoingPaymentsRepository.createOutgoingPayment(
-                {
-                    id: crypto.randomUUID(),
-                    organizationId,
-                    purchaseId: null,
-                    expenseId,
-                    amount,
-                    paymentMethod: paymentData.paymentMethod,
-                    moneyAccountId: funding.moneyAccount?.id ?? null,
-                    reference: normalizeOptionalText(paymentData.reference),
-                    notes: normalizeOptionalText(paymentData.notes),
-                    paidAt,
-                    reversedAt: null,
-                    reversalReason: null,
-                    reversalKind: null,
-                    createdBy: userId,
-                },
-                tx,
-            );
-            if (!createdPayment) {
-                throw new Error("Failed to create Outgoing Payment");
-            }
-
-            if (funding.trackingActive && funding.moneyAccount) {
-                await createOutgoingExpensePaymentMovement(tx, {
-                    organizationId,
-                    storeId: existing.storeId,
-                    moneyAccount: funding.moneyAccount,
-                    payment: createdPayment,
-                });
-            }
-
-            const settlement = deriveExpensePayableStateFromPayments({
-                lifecycle: "recorded",
-                total: existing.total,
-                outgoingPayments: [...existing.outgoingPayments, createdPayment],
-            });
-
-            const header: UpdateExpenseREPO = {
-                id: existing.id,
-                organizationId,
-                storeId: existing.storeId,
-                expenseCategoryId: existing.expenseCategoryId,
-                expenseCategoryName: existing.expenseCategoryName,
-                lifecycle: "recorded",
-                payableStatus: settlement.payableStatus,
-                effectiveDate: existing.effectiveDate,
-                invoiceReference: existing.invoiceReference,
-                notes: existing.notes,
-                total: existing.total,
-                paidTotal: settlement.paidTotal,
-                dueAmount: settlement.dueAmount,
-                recordedAt: existing.recordedAt,
-                voidedAt: existing.voidedAt,
-                voidReason: existing.voidReason,
-                updatedBy: userId,
-            };
-            const updated = await expensesRepository.updateExpense(header, tx);
-            if (!updated) {
-                throw new Error("Failed to update Expense settlement");
-            }
-            return updated;
         });
 
         if (!expense) {
@@ -587,34 +674,9 @@ export const createOutgoingExpensePayment = async (
             code: STATUS_CODES.CREATED,
         };
     } catch (error) {
-        if (isOutgoingPaymentFundingError(error)) {
-            return {
-                status: "error",
-                message: error.message,
-                data: null,
-                code: error.code,
-            };
-        }
-        if (error instanceof Error && "expose" in error && error.expose === true) {
-            return {
-                status: "error",
-                message: error.message,
-                data: null,
-                code: (error as Error & { code?: StatusCode }).code ?? STATUS_CODES.BAD_REQUEST,
-            };
-        }
-        if (
-            error instanceof Error &&
-            (error.message === "Failed to create Outgoing Payment" ||
-                error.message === "Failed to create money account movement" ||
-                error.message === "Failed to update Expense settlement")
-        ) {
-            return {
-                status: "error",
-                message: "Failed to record Outgoing Payment",
-                data: null,
-                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-            };
+        const paymentError = outgoingPaymentErrorResponse(error);
+        if (paymentError) {
+            return paymentError;
         }
         throw error;
     }

@@ -176,6 +176,23 @@ describe("Organization Expense routes", () => {
         expect(body.data.expense.dueAmount).toBe(25000);
     });
 
+    test("records a Draft Expense with an immediate Outgoing Payment", async () => {
+        const response = await expensesRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/record`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ payment: { amount: 10000, paymentMethod: "cash" } }),
+            },
+        );
+
+        expect(response.status).toBe(200);
+        const body = await readBody(response);
+        expect(body.data.expense.payableStatus).toBe("partial");
+        expect(body.data.expense.paidTotal).toBe(10000);
+        expect(harness.createOutgoingPaymentRepo).toHaveBeenCalled();
+    });
+
     test("denies Expense access when the user is not a member of the Organization", async () => {
         harness.getOrganizationByIdForUser.mockResolvedValue(null);
 
