@@ -116,6 +116,33 @@ describe("Admin Purchase detail page", () => {
         expect(markup).toContain("Back to purchases");
     });
 
+    test("formats purchase lines with separate qty and unit labels", () => {
+        const customUnitPurchase: PurchaseDTO = {
+            ...recordedPurchase,
+            lines: [
+                {
+                    ...draftPurchase.lines[0],
+                    vendorItemName: "cheese",
+                    unitLabel: "5 kg",
+                    quantity: 3,
+                    agreedUnitPrice: 1500,
+                    lineTotal: 4500,
+                },
+            ],
+            linesTotal: 4500,
+            total: 4500,
+            dueAmount: 4500,
+        };
+        const markup = renderDetailPage("success", customUnitPurchase);
+
+        expect(markup).toContain("cheese");
+        expect(markup).toContain("5 kg");
+        expect(markup).toContain(">Qty<");
+        expect(markup).toContain(">Unit<");
+        expect(markup).not.toContain("3 5 kg");
+        expect(markup).toContain(formatCurrency(4500));
+    });
+
     test("shows due-only recorded Purchase without draft mutation actions", () => {
         const markup = renderDetailPage("success", recordedPurchase);
 

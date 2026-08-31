@@ -293,22 +293,57 @@ const PurchaseDetailPage = () => {
                                 This Draft Purchase has no lines yet.
                             </p>
                         ) : (
-                            <div className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/60">
-                                {purchase.lines.map((line) => (
-                                    <div key={line.id} className="flex items-start justify-between gap-3 px-4 py-3">
-                                        <div className="min-w-0">
-                                            <p className="font-medium text-foreground">{line.vendorItemName}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {line.quantity} {line.unitLabel}
-                                                {" · "}
-                                                {formatCurrency(line.agreedUnitPrice)} each
-                                            </p>
+                            <div className="overflow-hidden rounded-xl border border-border/60">
+                                <div className="hidden gap-3 border-b border-border/50 bg-muted/20 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.4fr)_4.5rem_minmax(4.5rem,6rem)_6.5rem_6.5rem]">
+                                    <span>Item</span>
+                                    <span>Qty</span>
+                                    <span>Unit</span>
+                                    <span>Unit price</span>
+                                    <span className="text-right">Line total</span>
+                                </div>
+                                <div className="divide-y divide-border/50">
+                                    {purchase.lines.map((line) => (
+                                        <div key={line.id} className="px-4 py-3">
+                                            <div className="space-y-3 sm:hidden">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <p className="font-medium text-foreground">{line.vendorItemName}</p>
+                                                    <p className="shrink-0 text-sm font-semibold tabular-nums">
+                                                        {formatCurrency(line.lineTotal)}
+                                                    </p>
+                                                </div>
+                                                <dl className="grid grid-cols-3 gap-3 text-xs">
+                                                    <div>
+                                                        <dt className="text-muted-foreground">Qty</dt>
+                                                        <dd className="mt-0.5 font-medium tabular-nums text-foreground">
+                                                            {line.quantity}
+                                                        </dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt className="text-muted-foreground">Unit</dt>
+                                                        <dd className="mt-0.5 font-medium text-foreground">{line.unitLabel}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt className="text-muted-foreground">Unit price</dt>
+                                                        <dd className="mt-0.5 font-medium tabular-nums text-foreground">
+                                                            {formatCurrency(line.agreedUnitPrice)}
+                                                        </dd>
+                                                    </div>
+                                                </dl>
+                                            </div>
+                                            <div className="hidden gap-3 sm:grid sm:grid-cols-[minmax(0,1.4fr)_4.5rem_minmax(4.5rem,6rem)_6.5rem_6.5rem] sm:items-start">
+                                                <p className="font-medium text-foreground">{line.vendorItemName}</p>
+                                                <p className="text-sm tabular-nums text-foreground">{line.quantity}</p>
+                                                <p className="text-sm text-foreground">{line.unitLabel}</p>
+                                                <p className="text-sm tabular-nums text-foreground">
+                                                    {formatCurrency(line.agreedUnitPrice)}
+                                                </p>
+                                                <p className="text-right text-sm font-semibold tabular-nums text-foreground">
+                                                    {formatCurrency(line.lineTotal)}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <p className="shrink-0 text-sm font-semibold tabular-nums">
-                                            {formatCurrency(line.lineTotal)}
-                                        </p>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>

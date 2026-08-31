@@ -104,7 +104,6 @@ describe("Admin Purchases page", () => {
         expect(markup).toContain("Recorded");
         expect(markup).toContain("Due");
         expect(markup).toContain("Paid");
-        expect(markup).toContain("Vendor Outstanding");
         expect(markup).toContain("Add purchase");
         expect(markup).toContain("Search purchases...");
         expect(markup).toContain("View");

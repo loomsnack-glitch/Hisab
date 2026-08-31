@@ -743,7 +743,7 @@ const UpsertPurchaseDialog = ({
                                     return (
                                         <div
                                             key={field.id}
-                                            className="grid gap-3 rounded-xl border border-border/60 bg-card/60 p-3 sm:grid-cols-[minmax(0,1.4fr)_5.5rem_7rem_auto_auto]"
+                                            className="grid items-start gap-3 rounded-xl border border-border/60 bg-card/60 p-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(5.5rem,7rem)_7rem_auto_auto]"
                                         >
                                             <Controller
                                                 control={form.control}
@@ -773,17 +773,20 @@ const UpsertPurchaseDialog = ({
                                                                 classNames={{ control: () => "!min-h-11 rounded-xl" }}
                                                             />
                                                             <FieldError errors={[fieldState.error]} />
-                                                            {selectedItem ? (
-                                                                <p className="text-[11px] text-muted-foreground">
-                                                                    Unit {unitLabelById.get(selectedItem.unitId) ?? "—"}
-                                                                </p>
-                                                            ) : null}
                                                         </FieldContent>
                                                     </Field>
                                                 )}
                                             />
                                             <Field data-invalid={!!form.formState.errors.lines?.[index]?.quantity}>
-                                                <FieldLabel required>Qty</FieldLabel>
+                                                <FieldLabel required>
+                                                    Qty
+                                                    {selectedItem ? (
+                                                        <span className="font-normal text-muted-foreground">
+                                                            {" "}
+                                                            ({unitLabelById.get(selectedItem.unitId) ?? "—"})
+                                                        </span>
+                                                    ) : null}
+                                                </FieldLabel>
                                                 <FieldContent>
                                                     <Input
                                                         className="h-11 rounded-xl"
@@ -812,22 +815,31 @@ const UpsertPurchaseDialog = ({
                                                     <FieldError errors={[form.formState.errors.lines?.[index]?.agreedUnitPrice]} />
                                                 </FieldContent>
                                             </Field>
-                                            <div className="flex flex-col justify-end pb-1">
-                                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Line total</p>
-                                                <p className="text-sm font-semibold tabular-nums">{formatCurrency(lineTotal)}</p>
-                                            </div>
-                                            <div className="flex items-end justify-end pb-1">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="rounded-full text-muted-foreground"
-                                                    onClick={() => remove(index)}
-                                                    aria-label="Remove line"
-                                                >
-                                                    <Trash2 className="size-4" />
-                                                </Button>
-                                            </div>
+                                            <Field className="w-auto">
+                                                <FieldLabel>Line total</FieldLabel>
+                                                <FieldContent>
+                                                    <p className="flex h-11 items-center text-sm font-semibold tabular-nums">
+                                                        {formatCurrency(lineTotal)}
+                                                    </p>
+                                                </FieldContent>
+                                            </Field>
+                                            <Field className="w-auto">
+                                                <FieldLabel className="sr-only">Remove line</FieldLabel>
+                                                <FieldContent>
+                                                    <div className="flex h-11 items-center justify-end">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="rounded-full text-muted-foreground"
+                                                            onClick={() => remove(index)}
+                                                            aria-label="Remove line"
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                </FieldContent>
+                                            </Field>
                                         </div>
                                     );
                                 })}
