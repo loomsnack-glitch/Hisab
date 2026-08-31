@@ -470,6 +470,15 @@ mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getStoreById: mock(async () => store),
 }));
 
+mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
+    getPosPaymentMovementsBySaleId: mock(async () => []),
+    createMoneyAccountMovement: mock(async () => null),
+    lockActiveStoreCashAccount: mock(async () => null),
+    lockPaymentRouteByStoreAndMethod: mock(async () => null),
+    lockMoneyAccountById: mock(async () => null),
+    getMovementByPaymentId: mock(async () => null),
+}));
+
 mock.module("./billing.repository", () => ({
     createSale,
     createSaleItem,

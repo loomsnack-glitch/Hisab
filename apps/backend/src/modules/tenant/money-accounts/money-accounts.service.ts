@@ -502,17 +502,47 @@ export const getMoneyAccountHistory = async (
         amount: moneyAccount.openingBalance,
         occurredAt: moneyAccount.createdAt,
     };
-    const movementEntries: MoneyAccountHistoryEntry[] = movements.map((movement) => ({
-        kind: "pos_payment",
-        id: movement.id,
-        amount: movement.amount,
-        occurredAt: movement.occurredAt,
-        storeId: movement.storeId,
-        paymentId: movement.paymentId,
-        saleId: movement.saleId,
-        saleNumber: movement.saleNumber,
-        paymentMethod: movement.paymentMethod,
-    }));
+    const movementEntries: MoneyAccountHistoryEntry[] = movements.flatMap(
+        (movement): MoneyAccountHistoryEntry[] => {
+            if (movement.sourceKind === "sale_replacement_reversal") {
+                if (!movement.reversedMovementId) {
+                    return [];
+                }
+                return [
+                    {
+                        kind: "sale_replacement_reversal",
+                        id: movement.id,
+                        amount: movement.amount,
+                        occurredAt: movement.occurredAt,
+                        storeId: movement.storeId,
+                        reversedMovementId: movement.reversedMovementId,
+                        originalPaymentId: movement.originalPaymentId ?? movement.paymentId,
+                        saleId: movement.saleId,
+                        saleNumber: movement.saleNumber,
+                        paymentMethod: movement.paymentMethod,
+                    },
+                ];
+            }
+
+            if (!movement.paymentId || !movement.saleId || !movement.paymentMethod) {
+                return [];
+            }
+
+            return [
+                {
+                    kind: "pos_payment",
+                    id: movement.id,
+                    amount: movement.amount,
+                    occurredAt: movement.occurredAt,
+                    storeId: movement.storeId,
+                    paymentId: movement.paymentId,
+                    saleId: movement.saleId,
+                    saleNumber: movement.saleNumber,
+                    paymentMethod: movement.paymentMethod,
+                },
+            ];
+        },
+    );
 
     return {
         status: "success",

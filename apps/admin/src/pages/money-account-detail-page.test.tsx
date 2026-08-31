@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { MoneyAccountDTO, MoneyAccountHistoryResponse } from "@repo/types";
 
 import { moneyAccountKeys } from "@/lib/query-keys";
+import { formatCurrency } from "@/lib/format";
 import MoneyAccountDetailPage from "@/pages/money-account-detail-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -102,7 +103,7 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Opening Balance");
         expect(markup).toContain("Calculated balance");
         expect(markup).toContain("Starting amount");
-        expect(markup).toContain("Opening Balance plus tracked Payments");
+        expect(markup).toContain("Opening Balance plus signed Movements");
         expect(markup).toContain("POS Payment");
         expect(markup).toContain("UPI");
         expect(markup).toContain("Sale 12");
@@ -112,6 +113,65 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Back to money accounts");
         expect(markup).not.toContain("Add movement");
         expect(markup).not.toContain("Correct balance");
+    });
+
+    test("shows a bill-edit reversal as a dedicated negative history entry", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, openingBalance: 5, balance: 50 },
+            openingBalance: 5,
+            balance: 50,
+            entries: [
+                {
+                    kind: "opening_balance",
+                    amount: 5,
+                    occurredAt: now,
+                },
+                {
+                    kind: "pos_payment",
+                    id: "14141414-1414-4141-8141-141414141414",
+                    amount: 90,
+                    occurredAt: now,
+                    storeId,
+                    paymentId: "16161616-1616-4161-8161-161616161616",
+                    saleId: "18181818-1818-4181-8181-181818181818",
+                    saleNumber: "12",
+                    paymentMethod: "cash",
+                },
+                {
+                    kind: "sale_replacement_reversal",
+                    id: "20202020-2020-4020-8020-202020202020",
+                    amount: -90,
+                    occurredAt: now,
+                    storeId,
+                    reversedMovementId: "14141414-1414-4141-8141-141414141414",
+                    originalPaymentId: "16161616-1616-4161-8161-161616161616",
+                    saleId: "18181818-1818-4181-8181-181818181818",
+                    saleNumber: "12",
+                    paymentMethod: "cash",
+                },
+                {
+                    kind: "pos_payment",
+                    id: "21212121-2121-4121-8121-212121212121",
+                    amount: 45,
+                    occurredAt: now,
+                    storeId,
+                    paymentId: "23232323-2323-4232-8232-232323232323",
+                    saleId: "24242424-2424-4242-8242-242424242424",
+                    saleNumber: "13",
+                    paymentMethod: "cash",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Bill edit reversal");
+        expect(markup).toContain("Sale 12");
+        expect(markup).toContain("Sale 13");
+        expect(markup).toContain("POS Payment");
+        expect(markup).toContain("Cash");
+        expect(markup).toContain("Automatic reversal of the original tracked Payment");
+        expect(markup).toContain(formatCurrency(-90));
+        expect(markup).toContain(formatCurrency(45));
+        expect(markup).not.toContain("No tracked POS Payments yet.");
     });
 
     test("shows an empty tracked-payments state with Opening Balance", () => {

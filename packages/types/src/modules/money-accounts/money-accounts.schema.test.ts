@@ -741,6 +741,7 @@ describe("Money Account Movement and history contracts", () => {
     occurredAt: "2026-08-31T12:00:00.000Z",
     sourceKind: "pos_payment" as const,
     paymentId,
+    reversedMovementId: null,
     createdAt: "2026-08-31T12:00:00.000Z",
   };
 
@@ -773,10 +774,51 @@ describe("Money Account Movement and history contracts", () => {
     const { paymentId: _paymentId, ...withoutPayment } = movementDto;
     expect(MoneyAccountMovementDTOSchema.safeParse(withoutPayment).success).toBe(false);
     expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...movementDto, paymentId: null }).success,
+    ).toBe(false);
+    expect(
       MoneyAccountMovementDTOSchema.safeParse({ ...movementDto, sourceKind: "manual" }).success,
     ).toBe(false);
     expect(
       MoneyAccountMovementDTOSchema.safeParse({ ...movementDto, paymentId: "not-a-uuid" }).success,
+    ).toBe(false);
+  });
+
+  test("Money Account Movement DTO records a negative bill-edit reversal linked to the original Movement", () => {
+    const result = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: -250.5,
+      sourceKind: "sale_replacement_reversal",
+      paymentId: null,
+      reversedMovementId: movementId,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(-250.5);
+      expect(result.data.sourceKind).toBe("sale_replacement_reversal");
+      expect(result.data.paymentId).toBeNull();
+      expect(result.data.reversedMovementId).toBe(movementId);
+    }
+  });
+
+  test("rejects a bill-edit reversal that is positive, reuses a Payment id, or omits the original Movement", () => {
+    const reversal = {
+      ...movementDto,
+      amount: -250.5,
+      sourceKind: "sale_replacement_reversal" as const,
+      paymentId: null,
+      reversedMovementId: movementId,
+    };
+
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...reversal, amount: 250.5 }).success).toBe(
+      false,
+    );
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...reversal, paymentId }).success,
+    ).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...reversal, reversedMovementId: null }).success,
     ).toBe(false);
   });
 
@@ -822,6 +864,72 @@ describe("Money Account Movement and history contracts", () => {
         expect(result.data.entries[1].paymentMethod).toBe("upi");
         expect(result.data.entries[1].paymentId).toBe(paymentId);
         expect(result.data.entries[1].saleId).toBe(saleId);
+      }
+    }
+  });
+
+  test("account history includes a bill-edit reversal as a dedicated negative entry", () => {
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        openingBalance: 5,
+        balance: 50,
+        hasMovements: true,
+      },
+      openingBalance: 5,
+      balance: 50,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 5,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "pos_payment",
+          id: movementId,
+          amount: 90,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId,
+          paymentId,
+          saleId,
+          saleNumber: "12",
+          paymentMethod: "cash",
+        },
+        {
+          kind: "sale_replacement_reversal",
+          id: "88888888-8888-4888-8888-888888888888",
+          amount: -90,
+          occurredAt: "2026-08-31T12:05:00.000Z",
+          storeId,
+          reversedMovementId: movementId,
+          originalPaymentId: paymentId,
+          saleId,
+          saleNumber: "12",
+          paymentMethod: "cash",
+        },
+        {
+          kind: "pos_payment",
+          id: "77777777-7777-4777-8777-777777777777",
+          amount: 45,
+          occurredAt: "2026-08-31T12:05:00.000Z",
+          storeId,
+          paymentId: "66666666-6666-4666-8666-666666666666",
+          saleId: "55555555-5555-4555-8555-555555555555",
+          saleNumber: "13",
+          paymentMethod: "cash",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.balance).toBe(50);
+      expect(result.data.entries[2]?.kind).toBe("sale_replacement_reversal");
+      if (result.data.entries[2]?.kind === "sale_replacement_reversal") {
+        expect(result.data.entries[2].amount).toBe(-90);
+        expect(result.data.entries[2].reversedMovementId).toBe(movementId);
+        expect(result.data.entries[2].originalPaymentId).toBe(paymentId);
+        expect(result.data.entries[2].saleNumber).toBe("12");
       }
     }
   });

@@ -11,9 +11,11 @@ import type {
     CommitSaleSVC,
     CompleteSaleSVC,
     CreateDraftSaleSVC,
+    DeviceSessionDTO,
     MoneyAccountDTO,
     MoneyAccountMovementDTO,
     MoneyAccountPaymentRouteDTO,
+    ReplaceSaleSVC,
 } from "@repo/types";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -251,22 +253,56 @@ const lockMoneyAccountById = mock(async (_organizationId: string, moneyAccountId
     }
     return hdfcBankAccount;
 });
-const createMoneyAccountMovement = mock(
-    async (data: Record<string, unknown>): Promise<MoneyAccountMovementDTO> => {
-        const movement = {
-            id: crypto.randomUUID(),
-            ...data,
-            createdAt: now,
-        } as MoneyAccountMovementDTO;
-        createdMovements.push(movement);
-        return movement;
-    },
-);
+const persistMoneyAccountMovement = async (
+    data: Record<string, unknown>,
+): Promise<MoneyAccountMovementDTO> => {
+    if (data.sourceKind === "sale_replacement_reversal" && data.reversedMovementId) {
+        const existingReversal = createdMovements.find(
+            (movement) => movement.reversedMovementId === data.reversedMovementId,
+        );
+        if (existingReversal) {
+            return existingReversal as MoneyAccountMovementDTO;
+        }
+    }
+    if (typeof data.paymentId === "string") {
+        const existingPaymentMovement = createdMovements.find(
+            (movement) => movement.paymentId === data.paymentId,
+        );
+        if (existingPaymentMovement) {
+            return existingPaymentMovement as MoneyAccountMovementDTO;
+        }
+    }
+
+    const movement = {
+        id: crypto.randomUUID(),
+        reversedMovementId: null,
+        paymentId: null,
+        ...data,
+        createdAt: now,
+    } as MoneyAccountMovementDTO;
+    createdMovements.push(movement);
+    return movement;
+};
+
+const createMoneyAccountMovement = mock(persistMoneyAccountMovement);
 const getMovementByPaymentId = mock(async (_organizationId: string, paymentId: string) =>
     (createdMovements.find((movement) => movement.paymentId === paymentId) as
         | MoneyAccountMovementDTO
         | undefined) ?? null,
 );
+const getPosPaymentMovementsBySaleId = mock(async (_organizationId: string, saleId: string) => {
+    const paymentIds = new Set(
+        createdPayments
+            .filter((payment) => payment.saleId === saleId)
+            .map((payment) => payment.id as string),
+    );
+    return createdMovements.filter(
+        (movement) =>
+            movement.sourceKind === "pos_payment" &&
+            typeof movement.paymentId === "string" &&
+            paymentIds.has(movement.paymentId),
+    ) as MoneyAccountMovementDTO[];
+});
 
 mock.module("@/config/db", () => ({
     pg: {
@@ -357,6 +393,7 @@ mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => (
     lockMoneyAccountById,
     createMoneyAccountMovement,
     getMovementByPaymentId,
+    getPosPaymentMovementsBySaleId,
 }));
 
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
@@ -370,6 +407,26 @@ const completeSalePayload = (overrides: Partial<CompleteSaleSVC> = {}): Complete
     payments: [{ amount: 90, method: "cash" }],
     ...overrides,
 });
+
+const deviceSession = {
+    organization: { id: organizationId },
+    store: { id: storeId },
+    device: { id: "66666666-6666-4666-8666-666666666666" },
+} as DeviceSessionDTO;
+
+const replacePaidSalePayload = (overrides: Partial<ReplaceSaleSVC> = {}): ReplaceSaleSVC => ({
+    requestId: crypto.randomUUID(),
+    serviceMode: "dine_in",
+    generateKot: false,
+    items: [{ productId, quantity: 1, addOns: noAddOns }],
+    orderDiscountAmount: 45,
+    payments: [{ amount: 45, method: "cash" }],
+    replacementReason: "Corrected amount",
+    ...overrides,
+});
+
+const movementNetTotal = () =>
+    createdMovements.reduce((sum, movement) => sum + Number(movement.amount ?? 0), 0);
 
 describe("Atomic POS Payment Money Account Tracking", () => {
     let getProductByIdSpy: ReturnType<typeof spyOn>;
@@ -410,16 +467,9 @@ describe("Atomic POS Payment Money Account Tracking", () => {
             return hdfcBankAccount;
         });
         createMoneyAccountMovement.mockClear();
-        createMoneyAccountMovement.mockImplementation(async (data: Record<string, unknown>) => {
-            const movement = {
-                id: crypto.randomUUID(),
-                ...data,
-                createdAt: now,
-            } as MoneyAccountMovementDTO;
-            createdMovements.push(movement);
-            return movement;
-        });
+        createMoneyAccountMovement.mockImplementation(persistMoneyAccountMovement);
         getMovementByPaymentId.mockClear();
+        getPosPaymentMovementsBySaleId.mockClear();
         createSale.mockClear();
         createSaleItem.mockClear();
         getSaleById.mockClear();
@@ -818,5 +868,167 @@ describe("Atomic POS Payment Money Account Tracking", () => {
         expect(createdMovements).toHaveLength(1);
         expect(createdMovements[0]?.paymentId).toBe(createdPayments[1]?.id);
         expect(createdMovements.some((movement) => movement.paymentId === earlierPaymentId)).toBe(false);
+    });
+
+    test("replacing a tracked paid Cash Sale writes one reversal and one replacement Movement", async () => {
+        const checkout = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            completeSalePayload(),
+        );
+        expect(checkout.status).toBe("success");
+        const originalSaleId = checkout.data?.sale.id as string;
+        const originalPaymentId = createdPayments[0]?.id as string;
+        const originalMovementId = createdMovements[0]?.id as string;
+        const replacementRequestId = "abababab-abab-4aba-8aba-abababababab";
+
+        const replaced = await billingService.replaceSaleForDevice(
+            deviceSession,
+            originalSaleId,
+            replacePaidSalePayload({ requestId: replacementRequestId }),
+        );
+
+        expect(replaced.status).toBe("success");
+        expect(createdSales.find((sale) => sale.id === originalSaleId)?.status).toBe("voided");
+        expect(createdMovements).toHaveLength(3);
+        const originalMovement = createdMovements.find((movement) => movement.id === originalMovementId);
+        const reversal = createdMovements.find(
+            (movement) => movement.sourceKind === "sale_replacement_reversal",
+        );
+        const replacementMovement = createdMovements.find(
+            (movement) => movement.sourceKind === "pos_payment" && movement.id !== originalMovementId,
+        );
+        expect(originalMovement?.amount).toBe(90);
+        expect(originalMovement?.paymentId).toBe(originalPaymentId);
+        expect(reversal).toMatchObject({
+            amount: -90,
+            reversedMovementId: originalMovementId,
+            paymentId: null,
+            moneyAccountId: cashAccountId,
+            storeId,
+        });
+        expect(replacementMovement?.amount).toBe(45);
+        expect(replacementMovement?.paymentId).not.toBe(originalPaymentId);
+        expect(replacementMovement?.moneyAccountId).toBe(cashAccountId);
+        expect(movementNetTotal()).toBe(45);
+
+        const retried = await billingService.replaceSaleForDevice(
+            deviceSession,
+            originalSaleId,
+            replacePaidSalePayload({ requestId: replacementRequestId }),
+        );
+
+        expect(retried.status).toBe("success");
+        expect(retried.data?.sale.id).toBe(replaced.data?.sale.id);
+        expect(createdMovements).toHaveLength(3);
+        expect(
+            createdMovements.filter((movement) => movement.sourceKind === "sale_replacement_reversal"),
+        ).toHaveLength(1);
+        expect(movementNetTotal()).toBe(45);
+    });
+
+    test("reverses each original Movement onto its own Money Account, including mixed methods", async () => {
+        const checkout = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            completeSalePayload({
+                payments: [
+                    { amount: 30, method: "cash" },
+                    { amount: 30, method: "upi" },
+                    { amount: 30, method: "card" },
+                ],
+            }),
+        );
+        expect(checkout.status).toBe("success");
+        const originalSaleId = checkout.data?.sale.id as string;
+        const originalMovements = createdMovements.map((movement) => ({ ...movement }));
+
+        const replaced = await billingService.replaceSaleForDevice(
+            deviceSession,
+            originalSaleId,
+            replacePaidSalePayload(),
+        );
+
+        expect(replaced.status).toBe("success");
+        const reversals = createdMovements.filter(
+            (movement) => movement.sourceKind === "sale_replacement_reversal",
+        );
+        expect(reversals).toHaveLength(3);
+        expect(
+            reversals.map((reversal) => [
+                reversal.moneyAccountId,
+                Number(reversal.amount),
+                reversal.reversedMovementId,
+            ]),
+        ).toEqual(
+            originalMovements.map((movement) => [
+                movement.moneyAccountId,
+                -Number(movement.amount),
+                movement.id,
+            ]),
+        );
+        expect(new Set(reversals.map((reversal) => reversal.reversedMovementId)).size).toBe(3);
+        expect(reversals.every((reversal) => reversal.paymentId == null)).toBe(true);
+        expect(createdMovements.filter((movement) => movement.sourceKind === "pos_payment")).toHaveLength(4);
+        expect(movementNetTotal()).toBe(45);
+    });
+
+    test("still reverses original Movements when tracking is no longer active for the Store", async () => {
+        const checkout = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            completeSalePayload(),
+        );
+        expect(checkout.status).toBe("success");
+        store.moneyAccountTrackingEnabled = false;
+        const originalMovementId = createdMovements[0]?.id as string;
+
+        const replaced = await billingService.replaceSaleForDevice(
+            deviceSession,
+            checkout.data?.sale.id as string,
+            replacePaidSalePayload(),
+        );
+
+        expect(replaced.status).toBe("success");
+        expect(createdMovements).toHaveLength(2);
+        expect(createdMovements[1]?.sourceKind).toBe("sale_replacement_reversal");
+        expect(createdMovements[1]?.reversedMovementId).toBe(originalMovementId);
+        expect(createdMovements[1]?.amount).toBe(-90);
+        expect(movementNetTotal()).toBe(0);
+    });
+
+    test("rolls back the replacement Sale when reversal persistence fails", async () => {
+        const checkout = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            completeSalePayload(),
+        );
+        expect(checkout.status).toBe("success");
+        const snapshotAfterCheckout = snapshotState();
+        createMoneyAccountMovement.mockImplementation(async (data: Record<string, unknown>) => {
+            if (data.sourceKind === "sale_replacement_reversal") {
+                throw new Error("reversal write failed");
+            }
+            return persistMoneyAccountMovement(data);
+        });
+
+        await expect(
+            billingService.replaceSaleForDevice(
+                deviceSession,
+                checkout.data?.sale.id as string,
+                replacePaidSalePayload(),
+            ),
+        ).rejects.toThrow("reversal write failed");
+
+        expect(createdSales).toEqual(snapshotAfterCheckout.sales);
+        expect(createdPayments).toEqual(snapshotAfterCheckout.payments);
+        expect(createdMovements).toEqual(snapshotAfterCheckout.movements);
+        expect(createdSales[0]?.status).toBe("completed");
+        expect(createdMovements).toHaveLength(1);
+        expect(createdMovements[0]?.amount).toBe(90);
     });
 });

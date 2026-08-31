@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getMoneyAccountHistory, getOrganizationDetails } from "@repo/services";
 import {
+    MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS,
     MONEY_ACCOUNT_SCOPE_LABELS,
     MONEY_ACCOUNT_TYPE_LABELS,
     type MoneyAccountHistoryEntry,
@@ -41,10 +42,35 @@ const HistoryEntry = ({ entry }: { entry: MoneyAccountHistoryEntry }) => {
         );
     }
 
+    if (entry.kind === "sale_replacement_reversal") {
+        return (
+            <div className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                        {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.sale_replacement_reversal}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        {entry.paymentMethod ? `${paymentMethodLabel(entry.paymentMethod)} · ` : ""}
+                        {entry.saleNumber ? `Sale ${entry.saleNumber} · ` : ""}
+                        {formatDateTime(entry.occurredAt)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        Automatic reversal of the original tracked Payment. This entry cannot be edited.
+                    </p>
+                </div>
+                <p className="shrink-0 text-sm font-semibold tabular-nums text-destructive">
+                    {formatCurrency(entry.amount)}
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="flex items-start justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
-                <p className="font-medium text-foreground">POS Payment</p>
+                <p className="font-medium text-foreground">
+                    {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.pos_payment}
+                </p>
                 <p className="text-xs text-muted-foreground">
                     {paymentMethodLabel(entry.paymentMethod)}
                     {entry.saleNumber ? ` · Sale ${entry.saleNumber}` : ""}
@@ -120,7 +146,7 @@ const MoneyAccountDetailPage = () => {
     const storeName = moneyAccount.storeId
         ? stores.find((store) => store.id === moneyAccount.storeId)?.name
         : null;
-    const movementEntries = entries.filter((entry) => entry.kind === "pos_payment");
+    const movementEntries = entries.filter((entry) => entry.kind !== "opening_balance");
 
     return (
         <div className="space-y-4" data-testid="money-account-history-page">
@@ -173,7 +199,7 @@ const MoneyAccountDetailPage = () => {
                                         {formatCurrency(balance)}
                                     </p>
                                     <p className="text-xs text-muted-foreground">
-                                        Opening Balance plus tracked Payments
+                                        Opening Balance plus signed Movements
                                     </p>
                                 </div>
                             </div>
@@ -193,8 +219,9 @@ const MoneyAccountDetailPage = () => {
                 <CardHeader>
                     <CardTitle className="font-display text-xl">Immutable history</CardTitle>
                     <CardDescription>
-                        Opening Balance followed by linked POS Payments. These entries cannot be edited, and changing a
-                        route later does not move earlier collections.
+                        Opening Balance followed by linked POS Payments and automatic bill-edit reversals.
+                        These entries cannot be edited, and changing a route later does not move earlier
+                        collections.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">

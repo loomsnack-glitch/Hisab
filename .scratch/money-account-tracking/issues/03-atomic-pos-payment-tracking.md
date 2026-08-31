@@ -12,5 +12,6 @@
 - [x] Bank Transfer and Other Payments remain accepted exactly as today and do not create Movements.
 - [x] Disabled or unavailable tracking creates no Movement and does not impose routing requirements.
 - [x] Replayed/retried payment requests never create duplicate Payments or Movements, and a route replacement cannot race into an invalid destination.
-- [x] Billing/POS service tests cover successful and rejected paths, atomic rollback, method scope, partial/later collections, and idempotency at the existing public seams.
+- [x] Replacing a tracked paid Sale appends one negative `sale_replacement_reversal` per original Movement in the same transaction as the replacement Payments and original void, without deleting or mutating the original Movement; retries do not duplicate reversals, and a reversal write failure rolls back the replacement.
+- [x] Billing/POS service tests cover successful and rejected paths, atomic rollback, method scope, partial/later collections, sale-replacement reversals, and idempotency at the existing public seams.
 

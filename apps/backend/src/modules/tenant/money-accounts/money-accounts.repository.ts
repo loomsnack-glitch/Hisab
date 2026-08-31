@@ -42,16 +42,32 @@ const mapPaymentRoute = (row: Record<string, unknown>): MoneyAccountPaymentRoute
 const mapMovement = (row: Record<string, unknown>): MoneyAccountMovementDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     return {
-        ...(mapped as Omit<MoneyAccountMovementDTO, "amount">),
+        ...(mapped as Omit<MoneyAccountMovementDTO, "amount" | "paymentId" | "reversedMovementId">),
         amount: toMoneyAmount(mapped.amount),
+        paymentId: typeof mapped.paymentId === "string" ? mapped.paymentId : null,
+        reversedMovementId:
+            typeof mapped.reversedMovementId === "string" ? mapped.reversedMovementId : null,
     };
 };
 
 const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMovementREPO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     return {
-        ...(mapped as Omit<MoneyAccountHistoryMovementREPO, "amount">),
+        ...(mapped as Omit<
+            MoneyAccountHistoryMovementREPO,
+            "amount" | "paymentId" | "reversedMovementId" | "saleId" | "paymentMethod" | "originalPaymentId"
+        >),
         amount: toMoneyAmount(mapped.amount),
+        paymentId: typeof mapped.paymentId === "string" ? mapped.paymentId : null,
+        reversedMovementId:
+            typeof mapped.reversedMovementId === "string" ? mapped.reversedMovementId : null,
+        saleId: typeof mapped.saleId === "string" ? mapped.saleId : null,
+        paymentMethod:
+            typeof mapped.paymentMethod === "string"
+                ? (mapped.paymentMethod as MoneyAccountHistoryMovementREPO["paymentMethod"])
+                : null,
+        originalPaymentId:
+            typeof mapped.originalPaymentId === "string" ? mapped.originalPaymentId : null,
     };
 };
 
@@ -318,18 +334,28 @@ export const getMovementsByMoneyAccountId = async (
             movements.occurred_at,
             movements.source_kind,
             movements.payment_id,
+            movements.reversed_movement_id,
             movements.created_at,
-            payments.sale_id,
-            payments.method AS payment_method,
-            sales.sale_number
+            linked_payments.sale_id,
+            linked_payments.method AS payment_method,
+            sales.sale_number,
+            original_movements.payment_id AS original_payment_id
         FROM money_account_movements AS movements
-        INNER JOIN payments
-            ON payments.id = movements.payment_id
-        INNER JOIN sales
-            ON sales.id = payments.sale_id
+        LEFT JOIN money_account_movements AS original_movements
+            ON original_movements.id = movements.reversed_movement_id
+        LEFT JOIN payments AS linked_payments
+            ON linked_payments.id = COALESCE(movements.payment_id, original_movements.payment_id)
+        LEFT JOIN sales
+            ON sales.id = linked_payments.sale_id
         WHERE movements.organization_id = ${organizationId}
           AND movements.money_account_id = ${moneyAccountId}
-        ORDER BY movements.occurred_at ASC, movements.id ASC
+        ORDER BY
+            movements.occurred_at ASC,
+            CASE movements.source_kind
+                WHEN 'sale_replacement_reversal' THEN 0
+                ELSE 1
+            END ASC,
+            movements.id ASC
     `;
 
     return results.map((result: Record<string, unknown>) => mapHistoryMovement(result));
@@ -351,11 +377,82 @@ export const getMovementByPaymentId = async (
     return result ? mapMovement(result) : null;
 };
 
+export const getMovementByReversedMovementId = async (
+    organizationId: string,
+    reversedMovementId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<MoneyAccountMovementDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM money_account_movements
+        WHERE organization_id = ${organizationId}
+          AND reversed_movement_id = ${reversedMovementId}
+    `;
+
+    return result ? mapMovement(result) : null;
+};
+
+export const getPosPaymentMovementsBySaleId = async (
+    organizationId: string,
+    saleId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<MoneyAccountMovementDTO[]> => {
+    const results = tx
+        ? await tx`
+            SELECT movements.*
+            FROM money_account_movements AS movements
+            INNER JOIN payments
+                ON payments.id = movements.payment_id
+            WHERE movements.organization_id = ${organizationId}
+              AND payments.sale_id = ${saleId}
+              AND movements.source_kind = 'pos_payment'
+            ORDER BY movements.occurred_at ASC, movements.id ASC
+            FOR UPDATE OF movements
+        `
+        : await pg`
+            SELECT movements.*
+            FROM money_account_movements AS movements
+            INNER JOIN payments
+                ON payments.id = movements.payment_id
+            WHERE movements.organization_id = ${organizationId}
+              AND payments.sale_id = ${saleId}
+              AND movements.source_kind = 'pos_payment'
+            ORDER BY movements.occurred_at ASC, movements.id ASC
+        `;
+
+    return results.map((result: Record<string, unknown>) => mapMovement(result));
+};
+
 export const createMoneyAccountMovement = async (
     movementData: CreateMoneyAccountMovementREPO,
     tx?: Bun.TransactionSQL,
 ): Promise<MoneyAccountMovementDTO | null> => {
     const db = tx || pg;
+    if (movementData.sourceKind === "sale_replacement_reversal") {
+        const reversedMovementId = movementData.reversedMovementId;
+        if (!reversedMovementId) {
+            return null;
+        }
+
+        const [result] = await db`
+            INSERT INTO money_account_movements ${camelToSnakeSql(movementData)}
+            ON CONFLICT (reversed_movement_id) DO NOTHING
+            RETURNING *
+        `;
+
+        if (result) {
+            return mapMovement(result);
+        }
+
+        return getMovementByReversedMovementId(movementData.organizationId, reversedMovementId, tx);
+    }
+
+    const paymentId = movementData.paymentId;
+    if (!paymentId) {
+        return null;
+    }
+
     const [result] = await db`
         INSERT INTO money_account_movements ${camelToSnakeSql(movementData)}
         ON CONFLICT (payment_id) DO NOTHING
@@ -366,5 +463,5 @@ export const createMoneyAccountMovement = async (
         return mapMovement(result);
     }
 
-    return getMovementByPaymentId(movementData.organizationId, movementData.paymentId, tx);
+    return getMovementByPaymentId(movementData.organizationId, paymentId, tx);
 };

@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [x] Money Account list and detail views clearly distinguish Opening Balance, calculated current Balance, and immutable payment-linked history on desktop and mobile.
+- [x] Money Account list and detail views clearly distinguish Opening Balance, calculated current Balance, and immutable payment-linked history on desktop and mobile, including automatic bill-edit reversals shown as negative dedicated entries.
 - [x] Store Settings explains the effect of enabling/disabling tracking, shows configuration readiness, and keeps retained history readable when the Store is disabled or later unavailable.
 - [x] Deactivating a route destination explains that future use of the affected Cash/UPI/Card method is blocked until the administrator repairs the configuration; historic Movements remain visible.
 - [x] All user-facing validation and POS errors explain the missing Store Cash Account or UPI/Card route without exposing account configuration controls to a device user.

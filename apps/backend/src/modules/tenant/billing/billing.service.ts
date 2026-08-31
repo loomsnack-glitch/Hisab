@@ -48,6 +48,7 @@ import {
   createPosPaymentMoneyAccountMovement,
   isMoneyAccountTrackingSetupError,
   resolvePosPaymentMoneyAccount,
+  reverseSaleReplacementMoneyAccountMovements,
 } from "@/modules/tenant/money-accounts/money-account-pos-payment";
 import { decodeSalesCursor } from "./sales-pagination";
 import { DEFAULT_SALE_NUMBER_TIMEZONE } from "./sale-numbering";
@@ -3496,6 +3497,12 @@ const replaceSaleInStore = async (
           saleData.serviceMode,
           originalSale.serviceMode,
         ),
+      });
+
+      await reverseSaleReplacementMoneyAccountMovements(tx, {
+        organizationId,
+        originalSaleId,
+        occurredAt: committedAt,
       });
 
       const updatedOriginal = await billingRepository.updateSale(

@@ -98,13 +98,15 @@ export type CreateMoneyAccountMovementREPO = Pick<
   | "occurredAt"
   | "sourceKind"
   | "paymentId"
+  | "reversedMovementId"
 >;
 
 export type MoneyAccountHistoryEntry = z.infer<typeof MoneyAccountHistoryEntrySchema>;
 export type MoneyAccountHistoryResponse = z.infer<typeof MoneyAccountHistoryResponseSchema>;
 
 export type MoneyAccountHistoryMovementREPO = MoneyAccountMovementDTO & {
-  saleId: string;
+  saleId: string | null;
   saleNumber: string | null;
-  paymentMethod: PaymentMethod;
+  paymentMethod: PaymentMethod | null;
+  originalPaymentId: string | null;
 };

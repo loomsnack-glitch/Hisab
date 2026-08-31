@@ -10,7 +10,7 @@
 - [x] A route accepts only an active eligible Money Account: Organization-wide or Store-scoped to that exact Store. It rejects cross-Organization, another-Store, inactive, invalid-method, and invalid-ID selections.
 - [x] A route change affects only future Payments; prior Movements retain their original Money Account relationship.
 - [x] The system has append-only Movement records linked uniquely to a POS Payment, with Organization, Store, amount, timestamp, and source metadata sufficient for Admin history.
-- [x] Money Account balance is derived from Opening Balance and Movement totals, and account history returns a stable Opening Balance entry plus payment-linked Movement entries.
-- [x] Admin exposes UPI/Card route configuration and a read-only Money Account history/detail view with balance, source Sale/Payment information, loading, empty, and error states.
+- [x] Money Account balance is derived from Opening Balance and the signed Movement total, and account history returns a stable Opening Balance entry plus payment-linked Movement entries and automatic bill-edit reversals.
+- [x] Admin exposes UPI/Card route configuration and a read-only Money Account history/detail view with balance, source Sale/Payment information, bill-edit reversals, loading, empty, and error states.
 - [x] Contracts, persistence constraints, authorization, tenant isolation, future-only routing, shared-destination behavior, and history totals are tested.
 

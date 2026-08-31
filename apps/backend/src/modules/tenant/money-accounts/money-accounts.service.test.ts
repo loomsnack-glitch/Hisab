@@ -1053,8 +1053,8 @@ describe("Organization Money Account service", () => {
                 amount: 250.5,
                 occurredAt: hdfcUpiMovement.occurredAt,
                 storeId,
-                paymentId: hdfcUpiMovement.paymentId,
-                saleId: hdfcUpiMovement.saleId,
+                paymentId: hdfcUpiMovement.paymentId as string,
+                saleId: hdfcUpiMovement.saleId as string,
                 saleNumber: "12",
                 paymentMethod: "upi",
             },
@@ -1206,6 +1206,70 @@ describe("Organization Money Account service", () => {
             kind: "pos_payment",
             amount: 100,
             paymentMethod: "card",
+            saleNumber: "13",
+        });
+    });
+
+    test("includes bill-edit reversals in history and uses the signed Movement total for Balance", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 5,
+            balance: 5,
+            hasMovements: false,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([
+            {
+                ...hdfcUpiMovement,
+                amount: 90,
+                paymentMethod: "cash",
+                saleNumber: "12",
+            },
+            {
+                ...hdfcUpiMovement,
+                id: "20202020-2020-4020-8020-202020202020",
+                amount: -90,
+                sourceKind: "sale_replacement_reversal",
+                paymentId: null,
+                reversedMovementId: hdfcUpiMovement.id,
+                originalPaymentId: hdfcUpiMovement.paymentId,
+                paymentMethod: "cash",
+                saleNumber: "12",
+            },
+            {
+                ...hdfcCardMovement,
+                amount: 45,
+                paymentMethod: "cash",
+                saleNumber: "13",
+            },
+        ]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.openingBalance).toBe(5);
+        expect(response.data?.balance).toBe(50);
+        expect(response.data?.moneyAccount.balance).toBe(50);
+        expect(response.data?.entries).toHaveLength(4);
+        expect(response.data?.entries[1]).toMatchObject({
+            kind: "pos_payment",
+            amount: 90,
+            paymentId: hdfcUpiMovement.paymentId,
+        });
+        expect(response.data?.entries[2]).toMatchObject({
+            kind: "sale_replacement_reversal",
+            amount: -90,
+            reversedMovementId: hdfcUpiMovement.id,
+            originalPaymentId: hdfcUpiMovement.paymentId,
+            saleNumber: "12",
+            paymentMethod: "cash",
+        });
+        expect(response.data?.entries[3]).toMatchObject({
+            kind: "pos_payment",
+            amount: 45,
             saleNumber: "13",
         });
     });

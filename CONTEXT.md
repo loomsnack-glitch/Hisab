@@ -172,11 +172,11 @@ The amount already held in a Money Account immediately before Hisab starts track
 _Avoid_: Editable current balance, balance correction
 
 **Money Account Balance**:
-The amount currently held in a Money Account, calculated from its Opening Balance and its recorded money changes. It is not directly overwritten.
+The amount currently held in a Money Account, calculated from its Opening Balance plus the signed total of its Money Account Movements. It is not directly overwritten.
 _Avoid_: Manual balance field, payment-method total
 
 **Money Account Movement**:
-An immutable recorded increase or decrease that changes one Money Account Balance. In the initial tracking release, only Cash, UPI, and Card POS Payments create linked positive Money Account Movements, including partial or later-collected Payments.
+An immutable recorded increase or decrease that changes one Money Account Balance. Cash, UPI, and Card POS Payments create linked positive Money Account Movements, including partial or later-collected Payments. When a tracked paid Sale is replaced, each original Movement stays unchanged and an automatic negative sale-replacement reversal is appended in the same Money Account.
 _Avoid_: Editable balance, payment-method summary
 
 **Payment Routing Rule**:
@@ -184,7 +184,7 @@ An Organization configuration that directs future UPI or Card Payments received 
 _Avoid_: Cashier-selected account, payment-method account type
 
 **Money Account Tracking**:
-An optional Store feature that records Cash, UPI, and Card POS Payments as Money Account Movements and makes Money Account Balances available. Tracking begins when it is enabled and does not backfill earlier Payments; when it is disabled or unavailable, the Store continues recording POS Payments without creating Money Account Movements, while its prior routes, balances, and movement history are retained for administrators.
+An optional Store feature that records Cash, UPI, and Card POS Payments as Money Account Movements and makes Money Account Balances available. Tracking begins when it is enabled and does not backfill earlier Payments; when it is disabled or unavailable, the Store continues recording POS Payments without creating Money Account Movements, while its prior routes, balances, and movement history are retained for administrators. Replacing a Sale that already has Money Account Movements still appends automatic reversals so those historical balances stay correct.
 _Avoid_: General ledger, mandatory POS payment feature
 
 **Feature Entitlement**:

@@ -216,13 +216,40 @@ export const MONEY_ACCOUNT_PAYMENT_ROUTE_METHOD_LABELS: Record<
   card: "Card",
 };
 
-export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS = ["pos_payment"] as const;
+export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS = [
+  "pos_payment",
+  "sale_replacement_reversal",
+] as const;
 
 export const MoneyAccountMovementSourceKindSchema = z.enum(MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS);
+
+export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS: Record<
+  z.infer<typeof MoneyAccountMovementSourceKindSchema>,
+  string
+> = {
+  pos_payment: "POS Payment",
+  sale_replacement_reversal: "Bill edit reversal",
+};
 
 export const moneyAccountMovementAmountSchema = z
   .number({ error: "Amount is required" })
   .gt(0, "Amount must be greater than 0")
+  .refine(isAtMostTwoDecimalPlaces, {
+    message: "Amount must have at most two decimal places",
+  });
+
+export const moneyAccountMovementSignedAmountSchema = z
+  .number({ error: "Amount is required" })
+  .refine((value) => value !== 0, {
+    message: "Amount cannot be zero",
+  })
+  .refine(isAtMostTwoDecimalPlaces, {
+    message: "Amount must have at most two decimal places",
+  });
+
+export const moneyAccountMovementReversalAmountSchema = z
+  .number({ error: "Amount is required" })
+  .lt(0, "Reversal amount must be less than 0")
   .refine(isAtMostTwoDecimalPlaces, {
     message: "Amount must have at most two decimal places",
   });
@@ -246,17 +273,67 @@ export const MoneyAccountPaymentRouteDTOSchema = z.object({
   updatedAt: dtoDateSchema,
 });
 
-export const MoneyAccountMovementDTOSchema = z.object({
-  id: z.uuid("Invalid money account movement id"),
-  organizationId: z.uuid("Invalid organization id"),
-  moneyAccountId: z.uuid("Invalid money account id"),
-  storeId: z.uuid("Invalid store id"),
-  amount: moneyAccountMovementAmountSchema,
-  occurredAt: dtoDateSchema,
-  sourceKind: MoneyAccountMovementSourceKindSchema,
-  paymentId: z.uuid("Invalid payment id"),
-  createdAt: dtoDateSchema,
-});
+export const MoneyAccountMovementDTOSchema = z
+  .object({
+    id: z.uuid("Invalid money account movement id"),
+    organizationId: z.uuid("Invalid organization id"),
+    moneyAccountId: z.uuid("Invalid money account id"),
+    storeId: z.uuid("Invalid store id"),
+    amount: moneyAccountMovementSignedAmountSchema,
+    occurredAt: dtoDateSchema,
+    sourceKind: MoneyAccountMovementSourceKindSchema,
+    paymentId: z.uuid("Invalid payment id").nullable(),
+    reversedMovementId: z.uuid("Invalid reversed money account movement id").nullable(),
+    createdAt: dtoDateSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.sourceKind === "pos_payment") {
+      if (!(value.amount > 0)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["amount"],
+          message: "Amount must be greater than 0",
+        });
+      }
+      if (!value.paymentId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["paymentId"],
+          message: "A POS Payment Movement must link a Payment",
+        });
+      }
+      if (value.reversedMovementId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["reversedMovementId"],
+          message: "A POS Payment Movement cannot reverse another Movement",
+        });
+      }
+      return;
+    }
+
+    if (!(value.amount < 0)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amount"],
+        message: "Reversal amount must be less than 0",
+      });
+    }
+    if (value.paymentId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["paymentId"],
+        message: "A bill-edit reversal cannot reuse a Payment id",
+      });
+    }
+    if (!value.reversedMovementId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["reversedMovementId"],
+        message: "A bill-edit reversal must reference the original Movement",
+      });
+    }
+  });
 
 export const MoneyAccountHistoryOpeningEntrySchema = z.object({
   kind: z.literal("opening_balance"),
@@ -276,9 +353,23 @@ export const MoneyAccountHistoryMovementEntrySchema = z.object({
   paymentMethod: PaymentMethodSchema,
 });
 
+export const MoneyAccountHistoryReversalEntrySchema = z.object({
+  kind: z.literal("sale_replacement_reversal"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementReversalAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id"),
+  reversedMovementId: z.uuid("Invalid reversed money account movement id"),
+  originalPaymentId: z.uuid("Invalid payment id").nullable(),
+  saleId: z.uuid("Invalid sale id").nullable(),
+  saleNumber: z.string().nullable(),
+  paymentMethod: PaymentMethodSchema.nullable(),
+});
+
 export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryOpeningEntrySchema,
   MoneyAccountHistoryMovementEntrySchema,
+  MoneyAccountHistoryReversalEntrySchema,
 ]);
 
 export const MoneyAccountHistoryResponseSchema = z.object({

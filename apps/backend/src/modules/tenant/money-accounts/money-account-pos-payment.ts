@@ -150,11 +150,48 @@ export const createPosPaymentMoneyAccountMovement = async (
             occurredAt: params.payment.collectedAt,
             sourceKind: "pos_payment",
             paymentId: params.payment.id,
+            reversedMovementId: null,
         },
         tx,
     );
 
     if (!movement) {
         throw new Error("Failed to create money account movement");
+    }
+};
+
+export const reverseSaleReplacementMoneyAccountMovements = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        organizationId: string;
+        originalSaleId: string;
+        occurredAt: Date;
+    },
+): Promise<void> => {
+    const originalMovements = await moneyAccountsRepository.getPosPaymentMovementsBySaleId(
+        params.organizationId,
+        params.originalSaleId,
+        tx,
+    );
+
+    for (const originalMovement of originalMovements) {
+        const reversal = await moneyAccountsRepository.createMoneyAccountMovement(
+            {
+                id: crypto.randomUUID(),
+                organizationId: params.organizationId,
+                moneyAccountId: originalMovement.moneyAccountId,
+                storeId: originalMovement.storeId,
+                amount: -originalMovement.amount,
+                occurredAt: params.occurredAt,
+                sourceKind: "sale_replacement_reversal",
+                paymentId: null,
+                reversedMovementId: originalMovement.id,
+            },
+            tx,
+        );
+
+        if (!reversal) {
+            throw new Error("Failed to create sale replacement reversal");
+        }
     }
 };

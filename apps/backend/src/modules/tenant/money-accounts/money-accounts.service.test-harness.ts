@@ -190,10 +190,12 @@ export const hdfcUpiMovement: MoneyAccountHistoryMovementREPO = {
     occurredAt: now,
     sourceKind: "pos_payment",
     paymentId,
+    reversedMovementId: null,
     createdAt: now,
     saleId,
     saleNumber: "12",
     paymentMethod: "upi",
+    originalPaymentId: null,
 };
 
 export const hdfcCardMovement: MoneyAccountHistoryMovementREPO = {
@@ -205,10 +207,12 @@ export const hdfcCardMovement: MoneyAccountHistoryMovementREPO = {
     occurredAt: new Date("2026-08-31T13:00:00.000Z"),
     sourceKind: "pos_payment",
     paymentId: laterPaymentId,
+    reversedMovementId: null,
     createdAt: new Date("2026-08-31T13:00:00.000Z"),
     saleId: laterSaleId,
     saleNumber: "13",
     paymentMethod: "card",
+    originalPaymentId: null,
 };
 
 export const activeCashUniqueViolation = () =>
@@ -306,6 +310,7 @@ export const deletePaymentRouteRepo = mock(async () => true);
 export const getMovementsByMoneyAccountId = mock(async () => [] as MoneyAccountHistoryMovementREPO[]);
 export const createMoneyAccountMovementRepo = mock(async () => hdfcUpiMovement);
 export const getMovementByPaymentId = mock(async () => null);
+export const getPosPaymentMovementsBySaleId = mock(async () => [] as never[]);
 export const lockActiveStoreCashAccount = mock(async () => adajanCashAccount);
 export const lockPaymentRouteByStoreAndMethod = mock(async () => null);
 export const lockMoneyAccountById = mock(async () => hdfcBankAccount);
@@ -327,6 +332,7 @@ mock.module("./money-accounts.repository", () => ({
     getMovementsByMoneyAccountId,
     createMoneyAccountMovement: createMoneyAccountMovementRepo,
     getMovementByPaymentId,
+    getPosPaymentMovementsBySaleId,
     lockActiveStoreCashAccount,
     lockPaymentRouteByStoreAndMethod,
     lockMoneyAccountById,
