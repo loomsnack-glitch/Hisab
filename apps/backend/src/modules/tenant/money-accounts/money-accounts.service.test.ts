@@ -20,14 +20,16 @@ import {
     hdfcCardMovement,
     hdfcUpiMovement,
     inactiveAdajanCashAccount,
+    laterMovementId,
+    lockActiveStoreCashAccount,
     inactiveCashMoneyAccountId,
     inactiveMoneyAccountId,
     inactivePettyCashAccount,
-    lockActiveStoreCashAccount,
     lockMoneyAccountById,
     lockPaymentRouteByStoreAndMethod,
     moneyAccountId,
     moneyAccountsService,
+    movementId,
     organization,
     organizationId,
     otherOrganizationId,
@@ -1311,6 +1313,98 @@ describe("Organization Money Account service", () => {
             purchaseId: "88888888-8888-4888-8888-888888888888",
             vendorName: "Fresh Farms",
             paymentMethod: "cash",
+        });
+    });
+
+    test("includes Purchase payment reversals as positive entries distinct from Purchase void reversals", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: false,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([
+            {
+                ...hdfcUpiMovement,
+                amount: -40,
+                sourceKind: "outgoing_purchase_payment",
+                paymentId: null,
+                outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                purchaseId: "88888888-8888-4888-8888-888888888888",
+                vendorName: "Fresh Farms",
+                paymentMethod: "cash",
+                saleId: null,
+                saleNumber: null,
+            },
+            {
+                ...hdfcUpiMovement,
+                id: laterMovementId,
+                amount: 40,
+                sourceKind: "outgoing_purchase_payment_reversal",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: movementId,
+                originalOutgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                purchaseId: "88888888-8888-4888-8888-888888888888",
+                vendorName: "Fresh Farms",
+                paymentMethod: "cash",
+                saleId: null,
+                saleNumber: null,
+            },
+        ]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.balance).toBe(100);
+        expect(response.data?.entries[2]).toMatchObject({
+            kind: "outgoing_purchase_payment_reversal",
+            amount: 40,
+            reversedMovementId: movementId,
+            originalOutgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+            vendorName: "Fresh Farms",
+        });
+    });
+
+    test("includes Purchase void reversals as positive dedicated history entries", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: false,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([
+            {
+                ...hdfcUpiMovement,
+                amount: 40,
+                sourceKind: "outgoing_purchase_void_reversal",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: movementId,
+                originalOutgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                purchaseId: "88888888-8888-4888-8888-888888888888",
+                vendorName: "Fresh Farms",
+                paymentMethod: "cash",
+                saleId: null,
+                saleNumber: null,
+            },
+        ]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.entries[1]).toMatchObject({
+            kind: "outgoing_purchase_void_reversal",
+            amount: 40,
+            vendorName: "Fresh Farms",
         });
     });
 

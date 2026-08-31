@@ -898,6 +898,75 @@ describe("Money Account Movement and history contracts", () => {
     ).toBe(false);
   });
 
+  test("Money Account Movement DTO records a positive Purchase payment reversal linked to the original Movement", () => {
+    const result = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: 40,
+      sourceKind: "outgoing_purchase_payment_reversal",
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: movementId,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(40);
+      expect(result.data.sourceKind).toBe("outgoing_purchase_payment_reversal");
+      expect(result.data.reversedMovementId).toBe(movementId);
+      expect(result.data.outgoingPaymentId).toBeNull();
+      expect(result.data.paymentId).toBeNull();
+    }
+  });
+
+  test("Money Account Movement DTO records a positive Purchase void reversal linked to the original Movement", () => {
+    const result = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: 40,
+      sourceKind: "outgoing_purchase_void_reversal",
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: movementId,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sourceKind).toBe("outgoing_purchase_void_reversal");
+      expect(result.data.amount).toBe(40);
+      expect(result.data.reversedMovementId).toBe(movementId);
+    }
+  });
+
+  test("rejects a Purchase payment or void reversal that is negative, reuses a payment id, or omits the original Movement", () => {
+    const reversal = {
+      ...movementDto,
+      amount: 40,
+      sourceKind: "outgoing_purchase_payment_reversal" as const,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: movementId,
+    };
+
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...reversal, amount: -40 }).success).toBe(
+      false,
+    );
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({
+        ...reversal,
+        outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+      }).success,
+    ).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...reversal, reversedMovementId: null }).success,
+    ).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({
+        ...reversal,
+        sourceKind: "outgoing_purchase_void_reversal",
+        amount: -40,
+      }).success,
+    ).toBe(false);
+  });
+
   test("account history includes a stable Opening Balance entry plus payment-linked Movement entries", () => {
     const result = MoneyAccountHistoryResponseSchema.safeParse({
       moneyAccount: {
@@ -1094,6 +1163,102 @@ describe("Money Account Movement and history contracts", () => {
         expect(result.data.entries[1].outgoingPaymentId).toBe(outgoingPaymentId);
         expect(result.data.entries[1].expenseCategoryName).toBe("Rent");
         expect(result.data.entries[1].paymentMethod).toBe("cash");
+      }
+    }
+  });
+
+  test("account history includes a Purchase payment reversal as a dedicated positive entry linked to the original Movement", () => {
+    const outgoingPaymentId = "12121212-1212-4121-8121-121212121212";
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        openingBalance: 100,
+        balance: 100,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 100,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "outgoing_purchase_payment",
+          id: movementId,
+          amount: -40,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId,
+          outgoingPaymentId,
+          purchaseId: "88888888-8888-4888-8888-888888888888",
+          vendorName: "Fresh Farms",
+          paymentMethod: "cash",
+        },
+        {
+          kind: "outgoing_purchase_payment_reversal",
+          id: "15151515-1515-4151-8151-151515151515",
+          amount: 40,
+          occurredAt: "2026-08-31T13:00:00.000Z",
+          storeId,
+          reversedMovementId: movementId,
+          originalOutgoingPaymentId: outgoingPaymentId,
+          purchaseId: "88888888-8888-4888-8888-888888888888",
+          vendorName: "Fresh Farms",
+          paymentMethod: "cash",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.entries[2]?.kind).toBe("outgoing_purchase_payment_reversal");
+      if (result.data.entries[2]?.kind === "outgoing_purchase_payment_reversal") {
+        expect(result.data.entries[2].amount).toBe(40);
+        expect(result.data.entries[2].reversedMovementId).toBe(movementId);
+        expect(result.data.entries[2].originalOutgoingPaymentId).toBe(outgoingPaymentId);
+      }
+    }
+  });
+
+  test("account history includes a Purchase void reversal as a dedicated positive entry distinct from an individual reversal", () => {
+    const outgoingPaymentId = "12121212-1212-4121-8121-121212121212";
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        openingBalance: 100,
+        balance: 100,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 100,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "outgoing_purchase_void_reversal",
+          id: "15151515-1515-4151-8151-151515151515",
+          amount: 40,
+          occurredAt: "2026-08-31T13:00:00.000Z",
+          storeId,
+          reversedMovementId: movementId,
+          originalOutgoingPaymentId: outgoingPaymentId,
+          purchaseId: "88888888-8888-4888-8888-888888888888",
+          vendorName: "Fresh Farms",
+          paymentMethod: "cash",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.entries[1]?.kind).toBe("outgoing_purchase_void_reversal");
+      if (result.data.entries[1]?.kind === "outgoing_purchase_void_reversal") {
+        expect(result.data.entries[1].amount).toBe(40);
+        expect(result.data.entries[1].vendorName).toBe("Fresh Farms");
       }
     }
   });

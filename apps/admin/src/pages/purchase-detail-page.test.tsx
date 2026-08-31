@@ -35,6 +35,8 @@ const draftPurchase: PurchaseDTO = {
     paidTotal: 0,
     dueAmount: null,
     recordedAt: null,
+    voidedAt: null,
+    voidReason: null,
     lines: [
         {
             id: "99999999-9999-4999-8999-999999999999",
@@ -149,6 +151,8 @@ describe("Admin Purchase detail page", () => {
                     notes: null,
                     paidAt: now,
                     reversedAt: null,
+                    reversalReason: null,
+                    reversalKind: null,
                     createdBy: userId,
                     createdAt: now,
                 },
@@ -163,6 +167,50 @@ describe("Admin Purchase detail page", () => {
         expect(markup).toContain(formatCurrency(40));
         expect(markup).toContain(formatCurrency(66.5));
         expect(markup).not.toContain("No Outgoing Payments recorded yet.");
+        expect(markup).toContain("Reverse payment");
+        expect(markup).toContain("Void purchase");
+    });
+
+    test("shows a voided Purchase without settlement or discard, and offers a replacement", () => {
+        const voidedPurchase: PurchaseDTO = {
+            ...recordedPurchase,
+            lifecycle: "voided",
+            payableStatus: null,
+            paidTotal: 0,
+            dueAmount: null,
+            voidedAt: now,
+            voidReason: "Entered against the wrong Vendor",
+            outgoingPayments: [
+                {
+                    id: "12121212-1212-4121-8121-121212121212",
+                    organizationId,
+                    purchaseId,
+                    expenseId: null,
+                    amount: 40,
+                    paymentMethod: "cash",
+                    moneyAccountId: null,
+                    moneyAccountName: null,
+                    reference: "CASH-1",
+                    notes: null,
+                    paidAt: now,
+                    reversedAt: now,
+                    reversalReason: "Entered against the wrong Vendor",
+                    reversalKind: "payable_void",
+                    createdBy: userId,
+                    createdAt: now,
+                },
+            ],
+        };
+        const markup = renderDetailPage("success", voidedPurchase);
+
+        expect(markup).toContain("Voided");
+        expect(markup).toContain("Entered against the wrong Vendor");
+        expect(markup).toContain("Payable Void reversal");
+        expect(markup).toContain("Create replacement");
+        expect(markup).not.toContain("Record payment");
+        expect(markup).not.toContain("Discard draft");
+        expect(markup).not.toContain("Reverse payment");
+        expect(markup).not.toContain("Void purchase");
     });
 
     test("shows a loading spinner while the Purchase is fetched", () => {

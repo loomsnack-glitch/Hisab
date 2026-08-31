@@ -5,11 +5,14 @@ import {
   PurchaseDTOSchema,
   PurchaseLifecycleSchema,
   UpdateDraftPurchaseSchema,
+  VoidPurchaseSchema,
   calculatePurchaseLineTotal,
   calculatePurchaseTotals,
   calculateVendorOutstanding,
   calendarDateInTimeZone,
   canAcceptOutgoingPayment,
+  canReverseOutgoingPayment,
+  canVoidPurchase,
   derivePurchasePayableState,
   isPurchaseEffectiveDateAllowed,
   isVendorItemSelectableForDraftPurchase,
@@ -294,12 +297,51 @@ describe("Purchase totals and Payable Status", () => {
     ).toBe(false);
     expect(
       canAcceptOutgoingPayment({
-        lifecycle: "draft",
+        lifecycle: "voided",
         total: 100,
         outgoingPayments: [],
         amount: 10,
       }),
     ).toBe(false);
+  });
+
+  test("an individual Outgoing Payment can be reversed only while the Purchase is recorded and the payment is still active", () => {
+    expect(
+      canReverseOutgoingPayment({
+        lifecycle: "recorded",
+        payment: { reversedAt: null },
+      }),
+    ).toBe(true);
+    expect(
+      canReverseOutgoingPayment({
+        lifecycle: "recorded",
+        payment: { reversedAt: "2026-08-31T13:00:00.000Z" },
+      }),
+    ).toBe(false);
+    expect(
+      canReverseOutgoingPayment({
+        lifecycle: "draft",
+        payment: { reversedAt: null },
+      }),
+    ).toBe(false);
+    expect(
+      canReverseOutgoingPayment({
+        lifecycle: "voided",
+        payment: { reversedAt: null },
+      }),
+    ).toBe(false);
+  });
+
+  test("a recorded Purchase can be voided, while drafts and already-voided Purchases cannot", () => {
+    expect(canVoidPurchase("recorded")).toBe(true);
+    expect(canVoidPurchase("draft")).toBe(false);
+    expect(canVoidPurchase("voided")).toBe(false);
+  });
+
+  test("a voided Purchase has no Payable Status or due amount", () => {
+    expect(
+      derivePurchasePayableState({ lifecycle: "voided", total: 106.5, paidTotal: 0 }),
+    ).toEqual({ payableStatus: null, dueAmount: null });
   });
 
   test("Vendor Outstanding sums remaining due from recorded Purchases only", () => {
@@ -322,6 +364,12 @@ describe("Purchase totals and Payable Status", () => {
           vendorName: "Fresh Farms",
           lifecycle: "recorded",
           dueAmount: 0,
+        },
+        {
+          vendorId,
+          vendorName: "Fresh Farms",
+          lifecycle: "voided",
+          dueAmount: null,
         },
         {
           vendorId: "22222222-2222-4222-8222-222222222222",
@@ -403,6 +451,8 @@ describe("Purchase DTO", () => {
       paidTotal: 0,
       dueAmount: 106.5,
       recordedAt: "2026-08-31T12:00:00.000Z",
+      voidedAt: null,
+      voidReason: null,
       lines: [
         {
           id: lineId,
@@ -454,6 +504,8 @@ describe("Purchase DTO", () => {
       paidTotal: 0,
       dueAmount: null,
       recordedAt: null,
+      voidedAt: null,
+      voidReason: null,
       lines: [],
       outgoingPayments: [],
       createdBy: userId,
@@ -489,6 +541,8 @@ describe("Purchase DTO", () => {
       paidTotal: 0,
       dueAmount: null,
       recordedAt: null,
+      voidedAt: null,
+      voidReason: null,
       lines: [],
       outgoingPayments: [],
       createdBy: userId,
@@ -502,5 +556,72 @@ describe("Purchase DTO", () => {
 
   test("Purchase lifecycle includes draft, recorded, and voided", () => {
     expect(PurchaseLifecycleSchema.options).toEqual(["draft", "recorded", "voided"]);
+  });
+
+  test("void Purchase requires a trimmed reason and rejects a blank or missing reason", () => {
+    const accepted = VoidPurchaseSchema.safeParse({ reason: "  Wrong Vendor  " });
+    expect(accepted.success).toBe(true);
+    if (accepted.success) {
+      expect(accepted.data.reason).toBe("Wrong Vendor");
+    }
+
+    expect(VoidPurchaseSchema.safeParse({ reason: "" }).success).toBe(false);
+    expect(VoidPurchaseSchema.safeParse({ reason: "   " }).success).toBe(false);
+    expect(VoidPurchaseSchema.safeParse({}).success).toBe(false);
+    expect(
+      VoidPurchaseSchema.safeParse({ reason: "Wrong Vendor", lifecycle: "voided" }).success,
+    ).toBe(false);
+  });
+
+  test("a voided Purchase DTO cancels remaining due and keeps historical lines", () => {
+    const result = PurchaseDTOSchema.safeParse({
+      id: purchaseId,
+      organizationId,
+      storeId,
+      storeName: "Main Store",
+      vendorId,
+      vendorName: "Fresh Farms",
+      lifecycle: "voided",
+      payableStatus: null,
+      effectiveDate: "2026-08-30",
+      invoiceReference: "INV-104",
+      notes: "Weekly produce",
+      adjustment: 25.5,
+      linesTotal: 81,
+      total: 106.5,
+      paidTotal: 0,
+      dueAmount: null,
+      recordedAt: "2026-08-31T12:00:00.000Z",
+      voidedAt: "2026-08-31T13:00:00.000Z",
+      voidReason: "Entered against the wrong Vendor",
+      lines: [
+        {
+          id: lineId,
+          organizationId,
+          purchaseId,
+          vendorItemId,
+          vendorItemName: "Tomato",
+          unitId,
+          unitLabel: "kg",
+          quantity: 2,
+          agreedUnitPrice: 40.5,
+          lineTotal: 81,
+        },
+      ],
+      outgoingPayments: [],
+      createdBy: userId,
+      updatedBy: userId,
+      createdAt: "2026-08-31T12:00:00.000Z",
+      updatedAt: "2026-08-31T13:00:00.000Z",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.lifecycle).toBe("voided");
+      expect(result.data.payableStatus).toBeNull();
+      expect(result.data.dueAmount).toBeNull();
+      expect(result.data.voidReason).toBe("Entered against the wrong Vendor");
+      expect(result.data.lines[0]?.vendorItemName).toBe("Tomato");
+    }
   });
 });

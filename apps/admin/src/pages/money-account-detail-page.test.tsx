@@ -207,6 +207,80 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain(formatCurrency(-40));
     });
 
+    test("shows a Purchase payment reversal as a positive history entry distinct from a Purchase void reversal", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, balance: 100 },
+            openingBalance: 100,
+            balance: 100,
+            entries: [
+                {
+                    kind: "opening_balance",
+                    amount: 100,
+                    occurredAt: now,
+                },
+                {
+                    kind: "outgoing_purchase_payment",
+                    id: "14141414-1414-4141-8141-141414141414",
+                    amount: -40,
+                    occurredAt: now,
+                    storeId,
+                    outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                    purchaseId: "88888888-8888-4888-8888-888888888888",
+                    vendorName: "Fresh Farms",
+                    paymentMethod: "cash",
+                },
+                {
+                    kind: "outgoing_purchase_payment_reversal",
+                    id: "15151515-1515-4151-8151-151515151515",
+                    amount: 40,
+                    occurredAt: now,
+                    storeId,
+                    reversedMovementId: "14141414-1414-4141-8141-141414141414",
+                    originalOutgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                    purchaseId: "88888888-8888-4888-8888-888888888888",
+                    vendorName: "Fresh Farms",
+                    paymentMethod: "cash",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Purchase payment reversal");
+        expect(markup).toContain("Compensating reversal of a Purchase payment");
+        expect(markup).toContain(formatCurrency(40));
+        expect(markup).toContain("View Purchase");
+    });
+
+    test("shows a Purchase void reversal as a dedicated positive history entry", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, balance: 100 },
+            openingBalance: 100,
+            balance: 100,
+            entries: [
+                {
+                    kind: "opening_balance",
+                    amount: 100,
+                    occurredAt: now,
+                },
+                {
+                    kind: "outgoing_purchase_void_reversal",
+                    id: "15151515-1515-4151-8151-151515151515",
+                    amount: 40,
+                    occurredAt: now,
+                    storeId,
+                    reversedMovementId: "14141414-1414-4141-8141-141414141414",
+                    originalOutgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                    purchaseId: "88888888-8888-4888-8888-888888888888",
+                    vendorName: "Fresh Farms",
+                    paymentMethod: "cash",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Purchase void reversal");
+        expect(markup).toContain("Compensating reversal from a Purchase void");
+        expect(markup).toContain("Fresh Farms");
+    });
+
     test("shows an Expense payment as a negative history entry linked to the Expense", () => {
         const markup = renderHistoryPage("success", {
             moneyAccount: { ...moneyAccount, balance: 60 },

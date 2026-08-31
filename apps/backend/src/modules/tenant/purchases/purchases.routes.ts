@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateDraftPurchaseSchema, CreateOutgoingPaymentSchema, STATUS_CODES, UpdateDraftPurchaseSchema } from "@repo/types";
+import { CreateDraftPurchaseSchema, CreateOutgoingPaymentSchema, ReverseOutgoingPaymentSchema, STATUS_CODES, UpdateDraftPurchaseSchema, VoidPurchaseSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -205,6 +205,76 @@ export const createPurchasesRoutes = (
                 return handleServiceResponse(c, serviceResponse);
             } catch (error) {
                 return handleError(FILE_NAME, "createOutgoingPurchasePayment", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/:organizationId/purchases/:purchaseId/payments/:paymentId/reverse",
+        validateSchema("json", ReverseOutgoingPaymentSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const purchaseId = c.req.param("purchaseId");
+                const paymentId = c.req.param("paymentId");
+                const invalidOrganizationId = validateUuidParam(
+                    organizationId,
+                    "Invalid organization id",
+                );
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidPurchaseId = validateUuidParam(purchaseId, "Invalid purchase id");
+                if (invalidPurchaseId) {
+                    return c.json(invalidPurchaseId, invalidPurchaseId.code);
+                }
+                const invalidPaymentId = validateUuidParam(paymentId, "Invalid outgoing payment id");
+                if (invalidPaymentId) {
+                    return c.json(invalidPaymentId, invalidPaymentId.code);
+                }
+
+                const serviceResponse = await purchasesService.reverseOutgoingPurchasePayment(
+                    c.get("authUser").id,
+                    organizationId,
+                    purchaseId,
+                    paymentId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "reverseOutgoingPurchasePayment", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/:organizationId/purchases/:purchaseId/void",
+        validateSchema("json", VoidPurchaseSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const purchaseId = c.req.param("purchaseId");
+                const invalidOrganizationId = validateUuidParam(
+                    organizationId,
+                    "Invalid organization id",
+                );
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidPurchaseId = validateUuidParam(purchaseId, "Invalid purchase id");
+                if (invalidPurchaseId) {
+                    return c.json(invalidPurchaseId, invalidPurchaseId.code);
+                }
+
+                const serviceResponse = await purchasesService.voidPurchase(
+                    c.get("authUser").id,
+                    organizationId,
+                    purchaseId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "voidPurchase", c, error);
             }
         },
     );

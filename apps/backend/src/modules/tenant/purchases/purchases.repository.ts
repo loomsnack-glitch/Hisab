@@ -68,6 +68,7 @@ const mapPurchaseHeader = (row: Record<string, unknown>): Omit<PurchaseDTO, "lin
         total: toMoneyAmount(mapped.total),
         paidTotal: toMoneyAmount(mapped.paidTotal),
         dueAmount: mapped.dueAmount === null ? null : toMoneyAmount(mapped.dueAmount),
+        voidReason: typeof mapped.voidReason === "string" ? mapped.voidReason : null,
     };
 };
 
@@ -117,6 +118,8 @@ const purchaseSelect = `
     purchases.paid_total,
     purchases.due_amount,
     purchases.recorded_at,
+    purchases.voided_at,
+    purchases.void_reason,
     purchases.created_by,
     purchases.updated_by,
     purchases.created_at,
@@ -270,6 +273,8 @@ export const updatePurchase = async (
             paid_total = ${purchaseData.paidTotal},
             due_amount = ${purchaseData.dueAmount},
             recorded_at = ${purchaseData.recordedAt},
+            voided_at = ${purchaseData.voidedAt},
+            void_reason = ${purchaseData.voidReason},
             updated_by = ${purchaseData.updatedBy},
             updated_at = NOW()
         WHERE id = ${purchaseData.id}

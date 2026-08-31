@@ -64,6 +64,7 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
             | "saleId"
             | "paymentMethod"
             | "originalPaymentId"
+            | "originalOutgoingPaymentId"
             | "purchaseId"
             | "vendorName"
             | "expenseId"
@@ -82,6 +83,10 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
                 : null,
         originalPaymentId:
             typeof mapped.originalPaymentId === "string" ? mapped.originalPaymentId : null,
+        originalOutgoingPaymentId:
+            typeof mapped.originalOutgoingPaymentId === "string"
+                ? mapped.originalOutgoingPaymentId
+                : null,
         purchaseId: typeof mapped.purchaseId === "string" ? mapped.purchaseId : null,
         vendorName: typeof mapped.vendorName === "string" ? mapped.vendorName : null,
         expenseId: typeof mapped.expenseId === "string" ? mapped.expenseId : null,
@@ -360,6 +365,7 @@ export const getMovementsByMoneyAccountId = async (
             COALESCE(linked_payments.method, outgoing_payments.payment_method) AS payment_method,
             sales.sale_number,
             original_movements.payment_id AS original_payment_id,
+            COALESCE(movements.outgoing_payment_id, original_movements.outgoing_payment_id) AS original_outgoing_payment_id,
             outgoing_payments.purchase_id,
             purchases.vendor_name,
             outgoing_payments.expense_id,
@@ -372,7 +378,7 @@ export const getMovementsByMoneyAccountId = async (
         LEFT JOIN sales
             ON sales.id = linked_payments.sale_id
         LEFT JOIN outgoing_payments
-            ON outgoing_payments.id = movements.outgoing_payment_id
+            ON outgoing_payments.id = COALESCE(movements.outgoing_payment_id, original_movements.outgoing_payment_id)
            AND outgoing_payments.organization_id = movements.organization_id
         LEFT JOIN purchases
             ON purchases.id = outgoing_payments.purchase_id
@@ -386,6 +392,8 @@ export const getMovementsByMoneyAccountId = async (
             movements.occurred_at ASC,
             CASE movements.source_kind
                 WHEN 'sale_replacement_reversal' THEN 0
+                WHEN 'outgoing_purchase_payment_reversal' THEN 0
+                WHEN 'outgoing_purchase_void_reversal' THEN 0
                 ELSE 1
             END ASC,
             movements.id ASC
@@ -478,7 +486,11 @@ export const createMoneyAccountMovement = async (
     tx?: Bun.TransactionSQL,
 ): Promise<MoneyAccountMovementDTO | null> => {
     const db = tx || pg;
-    if (movementData.sourceKind === "sale_replacement_reversal") {
+    if (
+        movementData.sourceKind === "sale_replacement_reversal" ||
+        movementData.sourceKind === "outgoing_purchase_payment_reversal" ||
+        movementData.sourceKind === "outgoing_purchase_void_reversal"
+    ) {
         const reversedMovementId = movementData.reversedMovementId;
         if (!reversedMovementId) {
             return null;

@@ -220,6 +220,8 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS = [
   "pos_payment",
   "sale_replacement_reversal",
   "outgoing_purchase_payment",
+  "outgoing_purchase_payment_reversal",
+  "outgoing_purchase_void_reversal",
   "outgoing_expense_payment",
 ] as const;
 
@@ -232,6 +234,8 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS: Record<
   pos_payment: "POS Payment",
   sale_replacement_reversal: "Bill edit reversal",
   outgoing_purchase_payment: "Purchase payment",
+  outgoing_purchase_payment_reversal: "Purchase payment reversal",
+  outgoing_purchase_void_reversal: "Purchase void reversal",
   outgoing_expense_payment: "Expense payment",
 };
 
@@ -254,6 +258,13 @@ export const moneyAccountMovementSignedAmountSchema = z
 export const moneyAccountMovementReversalAmountSchema = z
   .number({ error: "Amount is required" })
   .lt(0, "Reversal amount must be less than 0")
+  .refine(isAtMostTwoDecimalPlaces, {
+    message: "Amount must have at most two decimal places",
+  });
+
+export const moneyAccountMovementCompensatingAmountSchema = z
+  .number({ error: "Amount is required" })
+  .gt(0, "Compensating reversal amount must be greater than 0")
   .refine(isAtMostTwoDecimalPlaces, {
     message: "Amount must have at most two decimal places",
   });
@@ -361,6 +372,45 @@ export const MoneyAccountMovementDTOSchema = z
       return;
     }
 
+    if (
+      value.sourceKind === "outgoing_purchase_payment_reversal" ||
+      value.sourceKind === "outgoing_purchase_void_reversal"
+    ) {
+      const label =
+        value.sourceKind === "outgoing_purchase_payment_reversal"
+          ? "Purchase payment reversal"
+          : "Purchase void reversal";
+      if (!(value.amount > 0)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["amount"],
+          message: `A ${label} Movement must be positive`,
+        });
+      }
+      if (value.paymentId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["paymentId"],
+          message: `A ${label} cannot reuse a POS Payment id`,
+        });
+      }
+      if (value.outgoingPaymentId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["outgoingPaymentId"],
+          message: `A ${label} cannot reuse an Outgoing Payment id`,
+        });
+      }
+      if (!value.reversedMovementId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["reversedMovementId"],
+          message: `A ${label} must reference the original Movement`,
+        });
+      }
+      return;
+    }
+
     if (!(value.amount < 0)) {
       ctx.addIssue({
         code: "custom",
@@ -446,12 +496,40 @@ export const MoneyAccountHistoryOutgoingExpensePaymentEntrySchema = z.object({
   paymentMethod: PaymentMethodSchema,
 });
 
+export const MoneyAccountHistoryOutgoingPurchasePaymentReversalEntrySchema = z.object({
+  kind: z.literal("outgoing_purchase_payment_reversal"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementCompensatingAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id"),
+  reversedMovementId: z.uuid("Invalid reversed money account movement id"),
+  originalOutgoingPaymentId: z.uuid("Invalid outgoing payment id"),
+  purchaseId: z.uuid("Invalid purchase id"),
+  vendorName: z.string().min(1),
+  paymentMethod: PaymentMethodSchema,
+});
+
+export const MoneyAccountHistoryOutgoingPurchaseVoidReversalEntrySchema = z.object({
+  kind: z.literal("outgoing_purchase_void_reversal"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementCompensatingAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id"),
+  reversedMovementId: z.uuid("Invalid reversed money account movement id"),
+  originalOutgoingPaymentId: z.uuid("Invalid outgoing payment id"),
+  purchaseId: z.uuid("Invalid purchase id"),
+  vendorName: z.string().min(1),
+  paymentMethod: PaymentMethodSchema,
+});
+
 export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryOpeningEntrySchema,
   MoneyAccountHistoryMovementEntrySchema,
   MoneyAccountHistoryReversalEntrySchema,
   MoneyAccountHistoryOutgoingPurchasePaymentEntrySchema,
   MoneyAccountHistoryOutgoingExpensePaymentEntrySchema,
+  MoneyAccountHistoryOutgoingPurchasePaymentReversalEntrySchema,
+  MoneyAccountHistoryOutgoingPurchaseVoidReversalEntrySchema,
 ]);
 
 export const MoneyAccountHistoryResponseSchema = z.object({

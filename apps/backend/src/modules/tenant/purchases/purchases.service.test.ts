@@ -4,6 +4,7 @@ import {
     cashMoneyAccountId,
     createMoneyAccountMovementRepo,
     createOutgoingPaymentRepo,
+    reverseOutgoingPaymentRepo,
     createPurchaseRepo,
     deletePurchaseRepo,
     draftPurchase,
@@ -11,6 +12,7 @@ import {
     getOrganizationByIdForUser,
     getPurchaseById,
     getPurchasesByOrganizationId,
+    getMovementByOutgoingPaymentId,
     getStoreById,
     getUnitById,
     getVendorById,
@@ -25,11 +27,13 @@ import {
     onionItemId,
     organizationId,
     otherOrganizationId,
+    outgoingPaymentId,
     purchaseId,
     purchasesService,
     recordedPurchase,
     replacePurchaseLinesRepo,
     resetStoredPurchase,
+    restoreCreateMoneyAccountMovementRepo,
     storeId,
     tomatoItem,
     updatePurchaseRepo,
@@ -63,7 +67,10 @@ describe("Organization Purchase service", () => {
         deletePurchaseRepo.mockClear();
         lockPurchaseById.mockClear();
         createOutgoingPaymentRepo.mockClear();
+        reverseOutgoingPaymentRepo.mockClear();
         createMoneyAccountMovementRepo.mockClear();
+        restoreCreateMoneyAccountMovementRepo();
+        getMovementByOutgoingPaymentId.mockClear();
         lockMoneyAccountById.mockClear();
         lockPaymentRouteByStoreAndMethod.mockClear();
         isMoneyAccountTrackingActive.mockClear();
@@ -72,19 +79,6 @@ describe("Organization Purchase service", () => {
         getStoreById.mockResolvedValue({ id: storeId, organizationId, name: "Adajan" });
         isMoneyAccountTrackingActive.mockResolvedValue(false);
         lockMoneyAccountById.mockResolvedValue(adajanCashAccount);
-        createMoneyAccountMovementRepo.mockResolvedValue({
-            id: "14141414-1414-4141-8141-141414141414",
-            organizationId,
-            moneyAccountId: cashMoneyAccountId,
-            storeId,
-            amount: -40,
-            occurredAt: new Date("2026-08-31T12:00:00.000Z"),
-            sourceKind: "outgoing_purchase_payment" as const,
-            paymentId: null,
-            outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
-            reversedMovementId: null,
-            createdAt: new Date("2026-08-31T12:00:00.000Z"),
-        });
         resetStoredPurchase(draftPurchase);
         getPurchasesByOrganizationId.mockResolvedValue([draftPurchase]);
     });
@@ -544,7 +538,7 @@ describe("Organization Purchase service", () => {
     test("rolls back Purchase settlement when the Money Account Movement cannot be created", async () => {
         resetStoredPurchase(recordedPurchase);
         isMoneyAccountTrackingActive.mockResolvedValue(true);
-        createMoneyAccountMovementRepo.mockResolvedValue(null);
+        createMoneyAccountMovementRepo.mockResolvedValueOnce(null);
 
         const response = await purchasesService.createOutgoingPurchasePayment(
             userId,
@@ -571,6 +565,318 @@ describe("Organization Purchase service", () => {
         expect(response.status).toBe("error");
         expect(response.code).toBe(404);
         expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+        expect(lockPurchaseById).not.toHaveBeenCalled();
+    });
+
+    test("reverses an untracked Outgoing Payment with a reason and recalculates Payable Status", async () => {
+        resetStoredPurchase(recordedPurchase);
+        const created = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+        const paymentId = created.data?.purchase.outgoingPayments[0]?.id;
+        expect(paymentId).toBeDefined();
+
+        const response = await purchasesService.reverseOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            paymentId as string,
+            { reason: "Wrong amount" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.payableStatus).toBe("due");
+        expect(response.data?.purchase.paidTotal).toBe(0);
+        expect(response.data?.purchase.dueAmount).toBe(106.5);
+        expect(response.data?.purchase.outgoingPayments[0]?.amount).toBe(40);
+        expect(response.data?.purchase.outgoingPayments[0]?.reversedAt).not.toBeNull();
+        expect(response.data?.purchase.outgoingPayments[0]?.reversalReason).toBe("Wrong amount");
+        expect(response.data?.purchase.outgoingPayments[0]?.reversalKind).toBe("payment_reversal");
+        expect(createMoneyAccountMovementRepo.mock.calls.some((call) => {
+            const movement = call[0] as { sourceKind?: string };
+            return movement.sourceKind === "outgoing_purchase_payment_reversal";
+        })).toBe(false);
+    });
+
+    test("retries of an already reversed payment are idempotent and do not write another reversal", async () => {
+        resetStoredPurchase(recordedPurchase);
+        const created = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+        const paymentId = created.data?.purchase.outgoingPayments[0]?.id as string;
+
+        const first = await purchasesService.reverseOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            paymentId,
+            { reason: "Wrong amount" },
+        );
+        reverseOutgoingPaymentRepo.mockClear();
+        const second = await purchasesService.reverseOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            paymentId,
+            { reason: "Wrong amount" },
+        );
+
+        expect(first.status).toBe("success");
+        expect(second.status).toBe("success");
+        expect(second.data?.purchase.outgoingPayments).toHaveLength(1);
+        expect(reverseOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("a tracked payment reversal writes one positive compensating Movement in the original account", async () => {
+        resetStoredPurchase(recordedPurchase);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+
+        const created = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+        const paymentId = created.data?.purchase.outgoingPayments[0]?.id as string;
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(1);
+
+        const response = await purchasesService.reverseOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            paymentId,
+            { reason: "Paid from the wrong till" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.payableStatus).toBe("due");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(2);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                moneyAccountId: cashMoneyAccountId,
+                amount: 40,
+                sourceKind: "outgoing_purchase_payment_reversal",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: expect.any(String),
+            }),
+            expect.anything(),
+        );
+    });
+
+    test("a tracked payment reversal still credits the original account after tracking is turned off", async () => {
+        resetStoredPurchase(recordedPurchase);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        const created = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+        const paymentId = created.data?.purchase.outgoingPayments[0]?.id as string;
+        isMoneyAccountTrackingActive.mockResolvedValue(false);
+
+        const response = await purchasesService.reverseOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            paymentId,
+            { reason: "Paid from the wrong till" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                moneyAccountId: cashMoneyAccountId,
+                amount: 40,
+                sourceKind: "outgoing_purchase_payment_reversal",
+            }),
+            expect.anything(),
+        );
+    });
+
+    test("rolls back payment reversal when the compensating Movement cannot be created", async () => {
+        resetStoredPurchase(recordedPurchase);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        const created = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+        const paymentId = created.data?.purchase.outgoingPayments[0]?.id as string;
+        createMoneyAccountMovementRepo.mockResolvedValueOnce(null);
+        updatePurchaseRepo.mockClear();
+
+        const response = await purchasesService.reverseOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            paymentId,
+            { reason: "Wrong amount" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(updatePurchaseRepo).not.toHaveBeenCalled();
+    });
+
+    test("voids a recorded Purchase with a reason, cancels remaining due, and reverses only active payments once", async () => {
+        resetStoredPurchase(recordedPurchase);
+        await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+
+        const response = await purchasesService.voidPurchase(userId, organizationId, purchaseId, {
+            reason: "Entered against the wrong Vendor",
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.lifecycle).toBe("voided");
+        expect(response.data?.purchase.payableStatus).toBeNull();
+        expect(response.data?.purchase.dueAmount).toBeNull();
+        expect(response.data?.purchase.paidTotal).toBe(0);
+        expect(response.data?.purchase.voidReason).toBe("Entered against the wrong Vendor");
+        expect(response.data?.purchase.outgoingPayments[0]?.reversalKind).toBe("payable_void");
+        expect(response.data?.purchase.outgoingPayments[0]?.amount).toBe(40);
+        expect(response.data?.purchase.total).toBe(106.5);
+    });
+
+    test("a Purchase void reverses mixed tracked and untracked payments without duplicating already reversed payments", async () => {
+        resetStoredPurchase(recordedPurchase);
+        const untracked = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        const tracked = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 20, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+        const untrackedId = untracked.data?.purchase.outgoingPayments[0]?.id as string;
+        await purchasesService.reverseOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            untrackedId,
+            { reason: "Wrong amount" },
+        );
+        reverseOutgoingPaymentRepo.mockClear();
+        createMoneyAccountMovementRepo.mockClear();
+
+        const response = await purchasesService.voidPurchase(userId, organizationId, purchaseId, {
+            reason: "Duplicate purchase",
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.lifecycle).toBe("voided");
+        expect(reverseOutgoingPaymentRepo).toHaveBeenCalledTimes(1);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceKind: "outgoing_purchase_void_reversal",
+                amount: 20,
+            }),
+            expect.anything(),
+        );
+        const remaining = response.data?.purchase.outgoingPayments ?? [];
+        expect(remaining.find((payment) => payment.id === untrackedId)?.reversalKind).toBe(
+            "payment_reversal",
+        );
+        const trackedPaymentId = tracked.data?.purchase.outgoingPayments.find(
+            (payment) => payment.amount === 20,
+        )?.id;
+        expect(remaining.find((payment) => payment.id === trackedPaymentId)?.reversalKind).toBe(
+            "payable_void",
+        );
+    });
+
+    test("retrying a void is idempotent and does not reverse payments again", async () => {
+        resetStoredPurchase(recordedPurchase);
+        await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+        await purchasesService.voidPurchase(userId, organizationId, purchaseId, {
+            reason: "Entered against the wrong Vendor",
+        });
+        reverseOutgoingPaymentRepo.mockClear();
+
+        const retry = await purchasesService.voidPurchase(userId, organizationId, purchaseId, {
+            reason: "Entered against the wrong Vendor",
+        });
+
+        expect(retry.status).toBe("success");
+        expect(retry.data?.purchase.lifecycle).toBe("voided");
+        expect(reverseOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not void a Draft Purchase and keeps discard available", async () => {
+        const response = await purchasesService.voidPurchase(userId, organizationId, purchaseId, {
+            reason: "Not needed",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(reverseOutgoingPaymentRepo).not.toHaveBeenCalled();
+
+        const discard = await purchasesService.discardDraftPurchase(userId, organizationId, purchaseId);
+        expect(discard.status).toBe("success");
+    });
+
+    test("does not accept further Outgoing Payments on a voided Purchase", async () => {
+        resetStoredPurchase(recordedPurchase);
+        await purchasesService.voidPurchase(userId, organizationId, purchaseId, {
+            reason: "Entered against the wrong Vendor",
+        });
+        createOutgoingPaymentRepo.mockClear();
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 10, paymentMethod: "cash" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("denies payment reversal and void when the user is not a member of the Organization", async () => {
+        getOrganizationByIdForUser.mockResolvedValue(null);
+        resetStoredPurchase(recordedPurchase);
+
+        const reverse = await purchasesService.reverseOutgoingPurchasePayment(
+            userId,
+            otherOrganizationId,
+            purchaseId,
+            outgoingPaymentId,
+            { reason: "Wrong amount" },
+        );
+        const voided = await purchasesService.voidPurchase(
+            userId,
+            otherOrganizationId,
+            purchaseId,
+            { reason: "Wrong Vendor" },
+        );
+
+        expect(reverse.status).toBe("error");
+        expect(reverse.code).toBe(404);
+        expect(voided.status).toBe("error");
+        expect(voided.code).toBe(404);
         expect(lockPurchaseById).not.toHaveBeenCalled();
     });
 });

@@ -3,6 +3,7 @@ import {
   CreateOutgoingPaymentSchema,
   OUTGOING_PAYMENT_METHODS,
   OutgoingPaymentDTOSchema,
+  ReverseOutgoingPaymentSchema,
   TRACKED_OUTGOING_PAYMENT_METHODS,
   UNTRACKED_OUTGOING_PAYMENT_METHODS,
   isMoneyAccountAvailableToStore,
@@ -149,6 +150,8 @@ describe("Outgoing Payment contracts", () => {
       notes: "Partial settlement",
       paidAt: "2026-08-31T12:00:00.000Z",
       reversedAt: null,
+      reversalReason: null,
+      reversalKind: null,
       createdBy: userId,
       createdAt: "2026-08-31T12:00:00.000Z",
     });
@@ -177,6 +180,8 @@ describe("Outgoing Payment contracts", () => {
       notes: null,
       paidAt: "2026-08-31T12:00:00.000Z",
       reversedAt: null,
+      reversalReason: null,
+      reversalKind: null,
       createdBy: userId,
       createdAt: "2026-08-31T12:00:00.000Z",
     });
@@ -200,6 +205,8 @@ describe("Outgoing Payment contracts", () => {
       notes: null,
       paidAt: "2026-08-31T12:00:00.000Z",
       reversedAt: null,
+      reversalReason: null,
+      reversalKind: null,
       createdBy: userId,
       createdAt: "2026-08-31T12:00:00.000Z",
     };
@@ -216,6 +223,112 @@ describe("Outgoing Payment contracts", () => {
         ...base,
         purchaseId: null,
         expenseId: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("create reversal requires a trimmed reason and rejects a blank or missing reason", () => {
+    const accepted = ReverseOutgoingPaymentSchema.safeParse({ reason: "  Wrong amount  " });
+    expect(accepted.success).toBe(true);
+    if (accepted.success) {
+      expect(accepted.data.reason).toBe("Wrong amount");
+    }
+
+    expect(ReverseOutgoingPaymentSchema.safeParse({ reason: "" }).success).toBe(false);
+    expect(ReverseOutgoingPaymentSchema.safeParse({ reason: "   " }).success).toBe(false);
+    expect(ReverseOutgoingPaymentSchema.safeParse({}).success).toBe(false);
+    expect(
+      ReverseOutgoingPaymentSchema.safeParse({ reason: "Wrong amount", reversedAt: null }).success,
+    ).toBe(false);
+  });
+
+  test("Outgoing Payment DTO records an individual reversal relationship without changing the original amount", () => {
+    const result = OutgoingPaymentDTOSchema.safeParse({
+      id: paymentId,
+      organizationId,
+      purchaseId,
+      expenseId: null,
+      amount: 40,
+      paymentMethod: "cash",
+      moneyAccountId: null,
+      moneyAccountName: null,
+      reference: "CASH-1",
+      notes: null,
+      paidAt: "2026-08-31T12:00:00.000Z",
+      reversedAt: "2026-08-31T13:00:00.000Z",
+      reversalReason: "Wrong amount",
+      reversalKind: "payment_reversal",
+      createdBy: userId,
+      createdAt: "2026-08-31T12:00:00.000Z",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(40);
+      expect(result.data.reversedAt).toBe("2026-08-31T13:00:00.000Z");
+      expect(result.data.reversalReason).toBe("Wrong amount");
+      expect(result.data.reversalKind).toBe("payment_reversal");
+    }
+  });
+
+  test("Outgoing Payment DTO records a Payable Void reversal kind separately from an individual reversal", () => {
+    const result = OutgoingPaymentDTOSchema.safeParse({
+      id: paymentId,
+      organizationId,
+      purchaseId,
+      expenseId: null,
+      amount: 40,
+      paymentMethod: "cash",
+      moneyAccountId: null,
+      moneyAccountName: null,
+      reference: null,
+      notes: null,
+      paidAt: "2026-08-31T12:00:00.000Z",
+      reversedAt: "2026-08-31T13:00:00.000Z",
+      reversalReason: "Entered against the wrong Vendor",
+      reversalKind: "payable_void",
+      createdBy: userId,
+      createdAt: "2026-08-31T12:00:00.000Z",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.reversalKind).toBe("payable_void");
+    }
+  });
+
+  test("rejects a reversed Outgoing Payment without a reason or reversal kind, and an active payment with either", () => {
+    const reversed = {
+      id: paymentId,
+      organizationId,
+      purchaseId,
+      expenseId: null,
+      amount: 40,
+      paymentMethod: "cash" as const,
+      moneyAccountId: null,
+      moneyAccountName: null,
+      reference: null,
+      notes: null,
+      paidAt: "2026-08-31T12:00:00.000Z",
+      reversedAt: "2026-08-31T13:00:00.000Z",
+      reversalReason: "Wrong amount",
+      reversalKind: "payment_reversal" as const,
+      createdBy: userId,
+      createdAt: "2026-08-31T12:00:00.000Z",
+    };
+
+    expect(
+      OutgoingPaymentDTOSchema.safeParse({ ...reversed, reversalReason: null }).success,
+    ).toBe(false);
+    expect(
+      OutgoingPaymentDTOSchema.safeParse({ ...reversed, reversalKind: null }).success,
+    ).toBe(false);
+    expect(
+      OutgoingPaymentDTOSchema.safeParse({
+        ...reversed,
+        reversedAt: null,
+        reversalReason: "Wrong amount",
+        reversalKind: null,
       }).success,
     ).toBe(false);
   });

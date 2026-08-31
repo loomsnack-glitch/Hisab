@@ -211,6 +211,8 @@ export const createOutgoingPaymentRepo = mock(async (data: CreateOutgoingPayment
         notes: data.notes,
         paidAt: data.paidAt,
         reversedAt: data.reversedAt,
+        reversalReason: data.reversalReason ?? null,
+        reversalKind: data.reversalKind ?? null,
         createdBy: data.createdBy,
         createdAt: now,
     };
@@ -223,6 +225,8 @@ export const createOutgoingPaymentRepo = mock(async (data: CreateOutgoingPayment
     }
     return payment;
 });
+
+export const reverseOutgoingPaymentRepo = mock(async () => storedOutgoingPayments[0] ?? null);
 
 export const getOutgoingPaymentsByExpenseIds = mock(async () => storedOutgoingPayments);
 
@@ -252,6 +256,7 @@ mock.module("./expenses.repository", () => ({
 
 mock.module("@/modules/tenant/outgoing-payments/outgoing-payments.repository", () => ({
     createOutgoingPayment: createOutgoingPaymentRepo,
+    reverseOutgoingPayment: reverseOutgoingPaymentRepo,
     getOutgoingPaymentsByExpenseIds,
     getOutgoingPaymentById: mock(async () => storedOutgoingPayments[0] ?? null),
 }));
@@ -263,6 +268,7 @@ mock.module("@/modules/tenant/money-accounts/money-account-tracking", () => ({
 mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
     lockMoneyAccountById,
     createMoneyAccountMovement: createMoneyAccountMovementRepo,
+    getMovementByOutgoingPaymentId: mock(async () => null),
     lockPaymentRouteByStoreAndMethod,
 }));
 

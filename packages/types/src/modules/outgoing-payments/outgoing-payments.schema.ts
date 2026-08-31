@@ -4,6 +4,18 @@ import type { MoneyAccountType } from "../money-accounts/money-accounts.type";
 
 export const OUTGOING_PAYMENT_REFERENCE_MAX_LENGTH = 255;
 export const OUTGOING_PAYMENT_NOTES_MAX_LENGTH = 1000;
+export const OUTGOING_PAYMENT_REVERSAL_REASON_MAX_LENGTH = 1000;
+
+export const OUTGOING_PAYMENT_REVERSAL_KINDS = ["payment_reversal", "payable_void"] as const;
+export const OutgoingPaymentReversalKindSchema = z.enum(OUTGOING_PAYMENT_REVERSAL_KINDS);
+
+export const OUTGOING_PAYMENT_REVERSAL_KIND_LABELS: Record<
+  z.infer<typeof OutgoingPaymentReversalKindSchema>,
+  string
+> = {
+  payment_reversal: "Payment reversal",
+  payable_void: "Payable Void reversal",
+};
 
 export const UNTRACKED_OUTGOING_PAYMENT_METHODS = ["cash", "upi", "card"] as const;
 export const TRACKED_OUTGOING_PAYMENT_METHODS = [
@@ -90,6 +102,21 @@ export const CreateOutgoingPaymentSchema = z
   })
   .strict();
 
+const correctionReasonSchema = z
+  .string({ error: "Reason is required" })
+  .trim()
+  .min(1, "Reason is required")
+  .max(
+    OUTGOING_PAYMENT_REVERSAL_REASON_MAX_LENGTH,
+    `Reason must be at most ${OUTGOING_PAYMENT_REVERSAL_REASON_MAX_LENGTH} characters`,
+  );
+
+export const ReverseOutgoingPaymentSchema = z
+  .object({
+    reason: correctionReasonSchema,
+  })
+  .strict();
+
 export const OutgoingPaymentDTOSchema = z
   .object({
     id: z.uuid("Invalid outgoing payment id"),
@@ -104,6 +131,8 @@ export const OutgoingPaymentDTOSchema = z
     notes: z.string().nullable(),
     paidAt: dtoDateSchema,
     reversedAt: dtoDateSchema.nullable(),
+    reversalReason: z.string().nullable(),
+    reversalKind: OutgoingPaymentReversalKindSchema.nullable(),
     createdBy: z.uuid("Invalid creator id"),
     createdAt: dtoDateSchema,
   })
@@ -115,6 +144,40 @@ export const OutgoingPaymentDTOSchema = z
         code: "custom",
         path: hasPurchase ? ["expenseId"] : ["purchaseId"],
         message: "An Outgoing Payment must belong to exactly one Purchase or Expense",
+      });
+    }
+
+    const isReversed = value.reversedAt != null;
+    if (isReversed) {
+      if (!value.reversalReason) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["reversalReason"],
+          message: "A reversed Outgoing Payment must include a reason",
+        });
+      }
+      if (!value.reversalKind) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["reversalKind"],
+          message: "A reversed Outgoing Payment must record whether it was reversed individually or by Payable Void",
+        });
+      }
+      return;
+    }
+
+    if (value.reversalReason) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["reversalReason"],
+        message: "An active Outgoing Payment cannot have a reversal reason",
+      });
+    }
+    if (value.reversalKind) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["reversalKind"],
+        message: "An active Outgoing Payment cannot have a reversal kind",
       });
     }
   });

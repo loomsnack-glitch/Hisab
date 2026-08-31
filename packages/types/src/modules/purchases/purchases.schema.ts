@@ -11,6 +11,7 @@ import { VendorItemStatusSchema, VendorStatusSchema } from "../vendors/vendors.s
 
 export const PURCHASE_INVOICE_REFERENCE_MAX_LENGTH = 255;
 export const PURCHASE_NOTES_MAX_LENGTH = 1000;
+export const PURCHASE_VOID_REASON_MAX_LENGTH = 1000;
 export const PURCHASE_EFFECTIVE_DATE_TIME_ZONE = "Asia/Kolkata";
 
 export const PurchaseLifecycleSchema = z.enum(["draft", "recorded", "voided"]);
@@ -226,6 +227,14 @@ export const canAcceptOutgoingPayment = (input: {
   return dueAmount != null && roundOutgoingPaymentMoney(input.amount) <= dueAmount;
 };
 
+export const canReverseOutgoingPayment = (input: {
+  lifecycle: z.infer<typeof PurchaseLifecycleSchema>;
+  payment: { reversedAt: Date | string | null };
+}): boolean => input.lifecycle === "recorded" && isOutgoingPaymentActive(input.payment);
+
+export const canVoidPurchase = (lifecycle: z.infer<typeof PurchaseLifecycleSchema>): boolean =>
+  lifecycle === "recorded";
+
 export { isOutgoingPaymentActive, sumActiveOutgoingPayments };
 
 export const isVendorSelectableForDraftPurchase = (vendor: {
@@ -285,6 +294,19 @@ export const UpdateDraftPurchaseSchema = z
     { message: "At least one field is required" },
   );
 
+export const VoidPurchaseSchema = z
+  .object({
+    reason: z
+      .string({ error: "Reason is required" })
+      .trim()
+      .min(1, "Reason is required")
+      .max(
+        PURCHASE_VOID_REASON_MAX_LENGTH,
+        `Reason must be at most ${PURCHASE_VOID_REASON_MAX_LENGTH} characters`,
+      ),
+  })
+  .strict();
+
 export const PurchaseLineDTOSchema = z.object({
   id: z.uuid("Invalid purchase line id"),
   organizationId: z.uuid("Invalid organization id"),
@@ -316,6 +338,8 @@ export const PurchaseDTOSchema = z.object({
   paidTotal: purchaseMoneySchema,
   dueAmount: purchaseMoneySchema.nullable(),
   recordedAt: dtoDateSchema.nullable(),
+  voidedAt: dtoDateSchema.nullable(),
+  voidReason: z.string().nullable(),
   lines: z.array(PurchaseLineDTOSchema),
   outgoingPayments: z.array(OutgoingPaymentDTOSchema),
   createdBy: z.uuid("Invalid creator id"),

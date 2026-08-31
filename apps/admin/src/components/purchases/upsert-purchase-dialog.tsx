@@ -43,6 +43,7 @@ import { organizationKeys, purchaseKeys, unitKeys, vendorKeys } from "@/lib/quer
 type UpsertPurchaseDialogProps = {
     organizationId: string;
     purchase?: PurchaseDTO;
+    copyFrom?: PurchaseDTO;
     trigger?: ReactElement;
     onRecorded?: (purchase: PurchaseDTO) => void;
 };
@@ -140,6 +141,7 @@ const toLinePayload = (lines: z.output<typeof UpsertPurchaseFormSchema>["lines"]
 const UpsertPurchaseDialog = ({
     organizationId,
     purchase,
+    copyFrom,
     trigger,
     onRecorded,
 }: UpsertPurchaseDialogProps) => {
@@ -147,6 +149,7 @@ const UpsertPurchaseDialog = ({
     const [pendingAction, setPendingAction] = useState<"draft" | "record" | null>(null);
     const queryClient = useQueryClient();
     const isEditMode = Boolean(purchase);
+    const sourcePurchase = purchase ?? copyFrom;
 
     const form = useForm<UpsertPurchaseFormInput, unknown, z.output<typeof UpsertPurchaseFormSchema>>({
         resolver: zodResolver(UpsertPurchaseFormSchema),
@@ -194,7 +197,7 @@ const UpsertPurchaseDialog = ({
 
     const selectableVendors = vendors.filter(
         (vendor) =>
-            isVendorSelectableForDraftPurchase(vendor) || vendor.id === purchase?.vendorId,
+            isVendorSelectableForDraftPurchase(vendor) || vendor.id === sourcePurchase?.vendorId,
     );
     const selectableItems = vendorItems.filter((item) =>
         selectedVendor
@@ -209,10 +212,10 @@ const UpsertPurchaseDialog = ({
 
     useEffect(() => {
         if (!open) {
-            form.reset(purchase ? toFormValues(purchase) : defaultValues());
+            form.reset(sourcePurchase ? toFormValues(sourcePurchase) : defaultValues());
             setPendingAction(null);
         }
-    }, [form, open, purchase]);
+    }, [form, open, sourcePurchase]);
 
     const previewTotals = useMemo(() => {
         const parsedLines = watchedLines.flatMap((line) => {
@@ -279,7 +282,7 @@ const UpsertPurchaseDialog = ({
             if (response.status === "success" && response.data && "purchase" in response.data) {
                 toast.success(response.message);
                 void invalidatePurchases(response.data.purchase);
-                if (variables.record) {
+                if (variables.record || copyFrom) {
                     onRecorded?.(response.data.purchase);
                 }
                 setOpen(false);
@@ -327,8 +330,8 @@ const UpsertPurchaseDialog = ({
                 render={
                     trigger ?? (
                         <Button variant={isEditMode ? "outline" : "default"} className="rounded-full">
-                            {isEditMode ? <Pencil className="size-4" /> : <Plus className="size-4" />}
-                            {isEditMode ? "Edit draft" : "Add purchase"}
+                            {isEditMode ? <Pencil className="size-4" /> : copyFrom ? <PlusCircle className="size-4" /> : <Plus className="size-4" />}
+                            {isEditMode ? "Edit draft" : copyFrom ? "Create replacement" : "Add purchase"}
                         </Button>
                     )
                 }
@@ -336,7 +339,13 @@ const UpsertPurchaseDialog = ({
             <DialogContent className="sm:max-w-3xl">
                 <DialogHeader
                     icon={<ShoppingBag className="size-5" />}
-                    title={isEditMode ? "Edit Draft Purchase" : "Create Draft Purchase"}
+                    title={
+                        isEditMode
+                            ? "Edit Draft Purchase"
+                            : copyFrom
+                              ? "Create replacement Purchase"
+                              : "Create Draft Purchase"
+                    }
                 />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(handleDraft)}>

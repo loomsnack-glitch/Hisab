@@ -15,7 +15,7 @@ describe("Purchases client service", () => {
         api.delete = originalDelete;
     });
 
-    test("reads Purchases and records an Outgoing Payment through administrator endpoints", async () => {
+    test("reads Purchases and records, reverses, and voids Outgoing Payments through administrator endpoints", async () => {
         const requests: string[] = [];
         api.get = (async (url: string) => {
             requests.push(`GET ${url}`);
@@ -32,11 +32,19 @@ describe("Purchases client service", () => {
             amount: 40,
             paymentMethod: "cash",
         });
+        await purchasesService.reverseOutgoingPurchasePayment("org-id", "purchase-id", "payment-id", {
+            reason: "Wrong amount",
+        });
+        await purchasesService.voidPurchase("org-id", "purchase-id", {
+            reason: "Entered against the wrong Vendor",
+        });
 
         expect(requests).toEqual([
             "GET /organizations/org-id/purchases",
             "GET /organizations/org-id/purchases/purchase-id",
             "POST /organizations/org-id/purchases/purchase-id/payments",
+            "POST /organizations/org-id/purchases/purchase-id/payments/payment-id/reverse",
+            "POST /organizations/org-id/purchases/purchase-id/void",
         ]);
     });
 });

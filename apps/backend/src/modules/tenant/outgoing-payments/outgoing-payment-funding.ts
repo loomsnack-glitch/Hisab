@@ -6,6 +6,7 @@ import {
     roundOutgoingPaymentMoney,
     type CreateOutgoingPaymentSVC,
     type MoneyAccountDTO,
+    type MoneyAccountMovementDTO,
     type OutgoingPaymentDTO,
     type StatusCode,
 } from "@repo/types";
@@ -178,6 +179,36 @@ const createOutgoingPaymentMovement = async (
             paymentId: null,
             outgoingPaymentId: params.payment.id,
             reversedMovementId: null,
+        },
+        tx,
+    );
+
+    if (!movement) {
+        throw new Error("Failed to create money account movement");
+    }
+};
+
+export const createOutgoingPurchasePaymentReversalMovement = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        organizationId: string;
+        originalMovement: MoneyAccountMovementDTO;
+        sourceKind: "outgoing_purchase_payment_reversal" | "outgoing_purchase_void_reversal";
+        occurredAt: Date;
+    },
+): Promise<void> => {
+    const movement = await moneyAccountsRepository.createMoneyAccountMovement(
+        {
+            id: crypto.randomUUID(),
+            organizationId: params.organizationId,
+            moneyAccountId: params.originalMovement.moneyAccountId,
+            storeId: params.originalMovement.storeId,
+            amount: roundOutgoingPaymentMoney(Math.abs(params.originalMovement.amount)),
+            occurredAt: params.occurredAt,
+            sourceKind: params.sourceKind,
+            paymentId: null,
+            outgoingPaymentId: null,
+            reversedMovementId: params.originalMovement.id,
         },
         tx,
     );

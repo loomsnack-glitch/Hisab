@@ -3,8 +3,10 @@ import type {
     CreateOutgoingPaymentJSON,
     PurchaseResponse,
     PurchasesListResponse,
+    ReverseOutgoingPaymentJSON,
     ServiceResponse,
     UpdateDraftPurchaseJSON,
+    VoidPurchaseJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -93,6 +95,39 @@ export const createOutgoingPurchasePayment = async (
     try {
         const response = await api.post(
             `/organizations/${organizationId}/purchases/${purchaseId}/payments`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const reverseOutgoingPurchasePayment = async (
+    organizationId: string,
+    purchaseId: string,
+    paymentId: string,
+    data: ReverseOutgoingPaymentJSON,
+): Promise<ServiceResponse<PurchaseResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/purchases/${purchaseId}/payments/${paymentId}/reverse`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const voidPurchase = async (
+    organizationId: string,
+    purchaseId: string,
+    data: VoidPurchaseJSON,
+): Promise<ServiceResponse<PurchaseResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/purchases/${purchaseId}/void`,
             data,
         );
         return response.data;

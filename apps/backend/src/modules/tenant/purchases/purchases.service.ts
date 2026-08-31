@@ -6,6 +6,7 @@ import {
     canAcceptOutgoingPayment,
     derivePurchasePayableState,
     derivePurchasePayableStateFromPayments,
+    isOutgoingPaymentActive,
     isPurchaseEffectiveDateAllowed,
     isVendorItemSelectableForDraftPurchase,
     isVendorSelectableForDraftPurchase,
@@ -18,11 +19,13 @@ import {
     type PurchaseLineInputJSON,
     type PurchaseResponse,
     type PurchasesListResponse,
+    type ReverseOutgoingPaymentSVC,
     type ServiceResponse,
     type StatusCode,
     type UpdateDraftPurchaseSVC,
     type UpdatePurchaseREPO,
     type VendorDTO,
+    type VoidPurchaseSVC,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
@@ -30,9 +33,11 @@ import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as vendorsRepository from "@/modules/tenant/vendors/vendors.repository";
 import {
     createOutgoingPurchasePaymentMovement,
+    createOutgoingPurchasePaymentReversalMovement,
     isOutgoingPaymentFundingError,
     resolveOutgoingPaymentFunding,
 } from "@/modules/tenant/outgoing-payments/outgoing-payment-funding";
+import * as moneyAccountsRepository from "@/modules/tenant/money-accounts/money-accounts.repository";
 import * as outgoingPaymentsRepository from "@/modules/tenant/outgoing-payments/outgoing-payments.repository";
 import * as purchasesRepository from "./purchases.repository";
 
@@ -484,6 +489,8 @@ export const updateDraftPurchase = async (
             paidTotal: 0,
             dueAmount: payable.dueAmount,
             recordedAt: null,
+            voidedAt: null,
+            voidReason: null,
             updatedBy: userId,
         };
         const purchase = await persistPurchase({
@@ -661,6 +668,8 @@ export const recordPurchase = async (
             paidTotal: 0,
             dueAmount: payable.dueAmount,
             recordedAt,
+            voidedAt: null,
+            voidReason: null,
             updatedBy: userId,
         };
         const purchase = await persistPurchase({
@@ -766,6 +775,8 @@ export const createOutgoingPurchasePayment = async (
                     notes: normalizeOptionalText(paymentData.notes),
                     paidAt,
                     reversedAt: null,
+                    reversalReason: null,
+                    reversalKind: null,
                     createdBy: userId,
                 },
                 tx,
@@ -806,6 +817,8 @@ export const createOutgoingPurchasePayment = async (
                 paidTotal: settlement.paidTotal,
                 dueAmount: settlement.dueAmount,
                 recordedAt: existing.recordedAt,
+                voidedAt: existing.voidedAt,
+                voidReason: existing.voidReason,
                 updatedBy: userId,
             };
             const updated = await purchasesRepository.updatePurchase(header, tx);
@@ -858,6 +871,305 @@ export const createOutgoingPurchasePayment = async (
             return {
                 status: "error",
                 message: "Failed to record Outgoing Payment",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+        throw error;
+    }
+};
+
+const reverseActivePurchasePayment = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        organizationId: string;
+        payment: PurchaseDTO["outgoingPayments"][number];
+        reason: string;
+        reversalKind: "payment_reversal" | "payable_void";
+        reversedAt: Date;
+    },
+): Promise<PurchaseDTO["outgoingPayments"][number]> => {
+    if (!isOutgoingPaymentActive(params.payment)) {
+        return params.payment;
+    }
+
+    const reversed = await outgoingPaymentsRepository.reverseOutgoingPayment(
+        {
+            id: params.payment.id,
+            organizationId: params.organizationId,
+            reversedAt: params.reversedAt,
+            reversalReason: params.reason,
+            reversalKind: params.reversalKind,
+        },
+        tx,
+    );
+    if (!reversed) {
+        throw new Error("Failed to reverse Outgoing Payment");
+    }
+
+    const originalMovement = await moneyAccountsRepository.getMovementByOutgoingPaymentId(
+        params.organizationId,
+        params.payment.id,
+        tx,
+    );
+    if (originalMovement) {
+        await createOutgoingPurchasePaymentReversalMovement(tx, {
+            organizationId: params.organizationId,
+            originalMovement,
+            sourceKind:
+                params.reversalKind === "payable_void"
+                    ? "outgoing_purchase_void_reversal"
+                    : "outgoing_purchase_payment_reversal",
+            occurredAt: params.reversedAt,
+        });
+    }
+
+    return reversed;
+};
+
+const toRecordedSettlementHeader = (
+    purchase: PurchaseDTO,
+    organizationId: string,
+    userId: string,
+    outgoingPayments: PurchaseDTO["outgoingPayments"],
+): UpdatePurchaseREPO => {
+    const settlement = derivePurchasePayableStateFromPayments({
+        lifecycle: "recorded",
+        total: purchase.total,
+        outgoingPayments,
+    });
+
+    return {
+        id: purchase.id,
+        organizationId,
+        storeId: purchase.storeId,
+        vendorId: purchase.vendorId,
+        vendorName: purchase.vendorName,
+        lifecycle: "recorded",
+        payableStatus: settlement.payableStatus,
+        effectiveDate: purchase.effectiveDate,
+        invoiceReference: purchase.invoiceReference,
+        notes: purchase.notes,
+        adjustment: purchase.adjustment,
+        linesTotal: purchase.linesTotal,
+        total: purchase.total,
+        paidTotal: settlement.paidTotal,
+        dueAmount: settlement.dueAmount,
+        recordedAt: purchase.recordedAt,
+        voidedAt: purchase.voidedAt,
+        voidReason: purchase.voidReason,
+        updatedBy: userId,
+    };
+};
+
+export const reverseOutgoingPurchasePayment = async (
+    userId: string,
+    organizationId: string,
+    purchaseId: string,
+    paymentId: string,
+    reversalData: ReverseOutgoingPaymentSVC,
+): Promise<ServiceResponse<PurchaseResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const reason = reversalData.reason.trim();
+    const reversedAt = new Date();
+
+    try {
+        const purchase = await pg.begin(async (tx) => {
+            const existing = await purchasesRepository.lockPurchaseById(
+                organizationId,
+                purchaseId,
+                tx,
+            );
+            if (!existing) {
+                return null;
+            }
+
+            const payment = existing.outgoingPayments.find((item) => item.id === paymentId);
+            if (!payment) {
+                throw Object.assign(new Error("Outgoing Payment not found"), {
+                    code: STATUS_CODES.NOT_FOUND,
+                    expose: true,
+                });
+            }
+
+            if (!isOutgoingPaymentActive(payment)) {
+                return existing;
+            }
+
+            if (existing.lifecycle !== "recorded") {
+                throw Object.assign(
+                    new Error("Outgoing Payments can only be reversed on a recorded Purchase"),
+                    { code: STATUS_CODES.BAD_REQUEST, expose: true },
+                );
+            }
+
+            const reversed = await reverseActivePurchasePayment(tx, {
+                organizationId,
+                payment,
+                reason,
+                reversalKind: "payment_reversal",
+                reversedAt,
+            });
+
+            const nextPayments = existing.outgoingPayments.map((item) =>
+                item.id === reversed.id ? reversed : item,
+            );
+            const updated = await purchasesRepository.updatePurchase(
+                toRecordedSettlementHeader(existing, organizationId, userId, nextPayments),
+                tx,
+            );
+            if (!updated) {
+                throw new Error("Failed to update Purchase settlement");
+            }
+            return updated;
+        });
+
+        if (!purchase) {
+            return purchaseNotFound();
+        }
+
+        return {
+            status: "success",
+            data: { purchase },
+            message: "Outgoing Payment reversed successfully",
+            code: STATUS_CODES.SUCCESS,
+        };
+    } catch (error) {
+        if (error instanceof Error && "expose" in error && error.expose === true) {
+            return {
+                status: "error",
+                message: error.message,
+                data: null,
+                code: (error as Error & { code?: StatusCode }).code ?? STATUS_CODES.BAD_REQUEST,
+            };
+        }
+        if (
+            error instanceof Error &&
+            (error.message === "Failed to reverse Outgoing Payment" ||
+                error.message === "Failed to create money account movement" ||
+                error.message === "Failed to update Purchase settlement")
+        ) {
+            return {
+                status: "error",
+                message: "Failed to reverse Outgoing Payment",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+        throw error;
+    }
+};
+
+export const voidPurchase = async (
+    userId: string,
+    organizationId: string,
+    purchaseId: string,
+    voidData: VoidPurchaseSVC,
+): Promise<ServiceResponse<PurchaseResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const reason = voidData.reason.trim();
+    const voidedAt = new Date();
+
+    try {
+        const purchase = await pg.begin(async (tx) => {
+            const existing = await purchasesRepository.lockPurchaseById(
+                organizationId,
+                purchaseId,
+                tx,
+            );
+            if (!existing) {
+                return null;
+            }
+
+            if (existing.lifecycle === "voided") {
+                return existing;
+            }
+
+            if (existing.lifecycle !== "recorded") {
+                throw Object.assign(new Error("Only a recorded Purchase can be voided"), {
+                    code: STATUS_CODES.BAD_REQUEST,
+                    expose: true,
+                });
+            }
+
+            const nextPayments = [...existing.outgoingPayments];
+            for (const [index, payment] of existing.outgoingPayments.entries()) {
+                if (!isOutgoingPaymentActive(payment)) {
+                    continue;
+                }
+                nextPayments[index] = await reverseActivePurchasePayment(tx, {
+                    organizationId,
+                    payment,
+                    reason,
+                    reversalKind: "payable_void",
+                    reversedAt: voidedAt,
+                });
+            }
+
+            const header: UpdatePurchaseREPO = {
+                id: existing.id,
+                organizationId,
+                storeId: existing.storeId,
+                vendorId: existing.vendorId,
+                vendorName: existing.vendorName,
+                lifecycle: "voided",
+                payableStatus: null,
+                effectiveDate: existing.effectiveDate,
+                invoiceReference: existing.invoiceReference,
+                notes: existing.notes,
+                adjustment: existing.adjustment,
+                linesTotal: existing.linesTotal,
+                total: existing.total,
+                paidTotal: 0,
+                dueAmount: null,
+                recordedAt: existing.recordedAt,
+                voidedAt,
+                voidReason: reason,
+                updatedBy: userId,
+            };
+            const updated = await purchasesRepository.updatePurchase(header, tx);
+            if (!updated) {
+                throw new Error("Failed to void Purchase");
+            }
+            return updated;
+        });
+
+        if (!purchase) {
+            return purchaseNotFound();
+        }
+
+        return {
+            status: "success",
+            data: { purchase },
+            message: "Purchase voided successfully",
+            code: STATUS_CODES.SUCCESS,
+        };
+    } catch (error) {
+        if (error instanceof Error && "expose" in error && error.expose === true) {
+            return {
+                status: "error",
+                message: error.message,
+                data: null,
+                code: (error as Error & { code?: StatusCode }).code ?? STATUS_CODES.BAD_REQUEST,
+            };
+        }
+        if (
+            error instanceof Error &&
+            (error.message === "Failed to reverse Outgoing Payment" ||
+                error.message === "Failed to create money account movement" ||
+                error.message === "Failed to void Purchase")
+        ) {
+            return {
+                status: "error",
+                message: "Failed to void Purchase",
                 data: null,
                 code: STATUS_CODES.INTERNAL_SERVER_ERROR,
             };

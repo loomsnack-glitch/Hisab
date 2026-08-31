@@ -8,6 +8,7 @@ import type {
   PurchaseLineDTOSchema,
   PurchaseLineInputSchema,
   UpdateDraftPurchaseSchema,
+  VoidPurchaseSchema,
 } from "./purchases.schema";
 export type PurchaseLifecycle = z.infer<typeof PurchaseLifecycleSchema>;
 export type PayableStatus = z.infer<typeof PayableStatusSchema>;
@@ -19,6 +20,8 @@ export type CreateDraftPurchaseJSON = z.infer<typeof CreateDraftPurchaseSchema>;
 export type CreateDraftPurchaseSVC = CreateDraftPurchaseJSON;
 export type UpdateDraftPurchaseJSON = z.infer<typeof UpdateDraftPurchaseSchema>;
 export type UpdateDraftPurchaseSVC = UpdateDraftPurchaseJSON;
+export type VoidPurchaseJSON = z.infer<typeof VoidPurchaseSchema>;
+export type VoidPurchaseSVC = VoidPurchaseJSON;
 
 export type CreatePurchaseLineREPO = Pick<
   PurchaseLineDTO,
@@ -55,6 +58,8 @@ export type CreatePurchaseREPO = Pick<
   | "createdBy"
 > & {
   updatedBy?: string | null;
+  voidedAt?: Date | string | null;
+  voidReason?: string | null;
 };
 
 export type UpdatePurchaseREPO = Pick<
@@ -75,6 +80,8 @@ export type UpdatePurchaseREPO = Pick<
   | "paidTotal"
   | "dueAmount"
   | "recordedAt"
+  | "voidedAt"
+  | "voidReason"
   | "updatedBy"
 >;
 

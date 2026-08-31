@@ -515,6 +515,8 @@ export const createOutgoingExpensePayment = async (
                     notes: normalizeOptionalText(paymentData.notes),
                     paidAt,
                     reversedAt: null,
+                    reversalReason: null,
+                    reversalKind: null,
                     createdBy: userId,
                 },
                 tx,

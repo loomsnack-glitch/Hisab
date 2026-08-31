@@ -111,6 +111,7 @@ export type MoneyAccountHistoryMovementREPO = MoneyAccountMovementDTO & {
   saleNumber: string | null;
   paymentMethod: PaymentMethod | null;
   originalPaymentId: string | null;
+  originalOutgoingPaymentId: string | null;
   purchaseId: string | null;
   vendorName: string | null;
   expenseId: string | null;

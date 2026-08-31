@@ -33,6 +33,8 @@ const draftPurchase: PurchaseDTO = {
     paidTotal: 0,
     dueAmount: null,
     recordedAt: null,
+    voidedAt: null,
+    voidReason: null,
     lines: [
         {
             id: "99999999-9999-4999-8999-999999999999",

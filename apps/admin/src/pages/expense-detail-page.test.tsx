@@ -128,6 +128,8 @@ describe("Admin Expense detail page", () => {
                     notes: null,
                     paidAt: now,
                     reversedAt: null,
+                    reversalReason: null,
+                    reversalKind: null,
                     createdBy: userId,
                     createdAt: now,
                 },
