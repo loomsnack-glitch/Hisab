@@ -603,6 +603,37 @@ export const getMoneyAccountHistory = async (
                 ];
             }
 
+            if (
+                movement.sourceKind === "outgoing_expense_payment_reversal" ||
+                movement.sourceKind === "outgoing_expense_void_reversal"
+            ) {
+                const originalOutgoingPaymentId =
+                    movement.originalOutgoingPaymentId ?? movement.outgoingPaymentId;
+                if (
+                    !movement.reversedMovementId ||
+                    !originalOutgoingPaymentId ||
+                    !movement.expenseId ||
+                    !movement.expenseCategoryName ||
+                    !movement.paymentMethod
+                ) {
+                    return [];
+                }
+                return [
+                    {
+                        kind: movement.sourceKind,
+                        id: movement.id,
+                        amount: movement.amount,
+                        occurredAt: movement.occurredAt,
+                        storeId: movement.storeId,
+                        reversedMovementId: movement.reversedMovementId,
+                        originalOutgoingPaymentId,
+                        expenseId: movement.expenseId,
+                        expenseCategoryName: movement.expenseCategoryName,
+                        paymentMethod: movement.paymentMethod,
+                    },
+                ];
+            }
+
             if (!movement.paymentId || !movement.saleId || !movement.paymentMethod) {
                 return [];
             }

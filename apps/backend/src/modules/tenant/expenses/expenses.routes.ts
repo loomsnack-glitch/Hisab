@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateDraftExpenseSchema, CreateOutgoingPaymentSchema, STATUS_CODES, UpdateDraftExpenseSchema } from "@repo/types";
+import { CreateDraftExpenseSchema, CreateOutgoingPaymentSchema, ReverseOutgoingPaymentSchema, STATUS_CODES, UpdateDraftExpenseSchema, VoidExpenseSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -205,6 +205,76 @@ export const createExpensesRoutes = (
                 return handleServiceResponse(c, serviceResponse);
             } catch (error) {
                 return handleError(FILE_NAME, "createOutgoingExpensePayment", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/:organizationId/expenses/:expenseId/payments/:paymentId/reverse",
+        validateSchema("json", ReverseOutgoingPaymentSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const expenseId = c.req.param("expenseId");
+                const paymentId = c.req.param("paymentId");
+                const invalidOrganizationId = validateUuidParam(
+                    organizationId,
+                    "Invalid organization id",
+                );
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidExpenseId = validateUuidParam(expenseId, "Invalid expense id");
+                if (invalidExpenseId) {
+                    return c.json(invalidExpenseId, invalidExpenseId.code);
+                }
+                const invalidPaymentId = validateUuidParam(paymentId, "Invalid outgoing payment id");
+                if (invalidPaymentId) {
+                    return c.json(invalidPaymentId, invalidPaymentId.code);
+                }
+
+                const serviceResponse = await expensesService.reverseOutgoingExpensePayment(
+                    c.get("authUser").id,
+                    organizationId,
+                    expenseId,
+                    paymentId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "reverseOutgoingExpensePayment", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/:organizationId/expenses/:expenseId/void",
+        validateSchema("json", VoidExpenseSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const expenseId = c.req.param("expenseId");
+                const invalidOrganizationId = validateUuidParam(
+                    organizationId,
+                    "Invalid organization id",
+                );
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidExpenseId = validateUuidParam(expenseId, "Invalid expense id");
+                if (invalidExpenseId) {
+                    return c.json(invalidExpenseId, invalidExpenseId.code);
+                }
+
+                const serviceResponse = await expensesService.voidExpense(
+                    c.get("authUser").id,
+                    organizationId,
+                    expenseId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "voidExpense", c, error);
             }
         },
     );

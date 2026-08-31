@@ -4,10 +4,14 @@ import { isExpenseCategoryAvailableForAssignment } from "../expense-categories/e
 import { OutgoingPaymentDTOSchema } from "../outgoing-payments/outgoing-payments.schema";
 import {
   PAYABLE_STATUS_LABELS,
+  PURCHASE_VOID_REASON_MAX_LENGTH,
   PayableStatusSchema,
   PurchaseLifecycleSchema,
+  VoidPurchaseSchema,
   calendarDateInTimeZone,
   canAcceptOutgoingPayment,
+  canReverseOutgoingPayment,
+  canVoidPurchase,
   derivePurchasePayableState,
   derivePurchasePayableStateFromPayments,
   isPurchaseEffectiveDateAllowed,
@@ -17,6 +21,7 @@ import {
 
 export const EXPENSE_INVOICE_REFERENCE_MAX_LENGTH = 255;
 export const EXPENSE_NOTES_MAX_LENGTH = 1000;
+export const EXPENSE_VOID_REASON_MAX_LENGTH = PURCHASE_VOID_REASON_MAX_LENGTH;
 export const EXPENSE_EFFECTIVE_DATE_TIME_ZONE = "Asia/Kolkata";
 
 export const ExpenseLifecycleSchema = PurchaseLifecycleSchema;
@@ -110,6 +115,10 @@ export const canAcceptOutgoingExpensePayment = (input: {
   amount: number;
 }): boolean => canAcceptOutgoingPayment(input);
 
+export const canReverseOutgoingExpensePayment = canReverseOutgoingPayment;
+export const canVoidExpense = canVoidPurchase;
+export const VoidExpenseSchema = VoidPurchaseSchema;
+
 export const isExpenseCategorySelectableForDraftExpense = isExpenseCategoryAvailableForAssignment;
 
 export const CreateDraftExpenseSchema = z
@@ -160,6 +169,8 @@ export const ExpenseDTOSchema = z.object({
   paidTotal: expenseMoneySchema,
   dueAmount: expenseMoneySchema.nullable(),
   recordedAt: dtoDateSchema.nullable(),
+  voidedAt: dtoDateSchema.nullable(),
+  voidReason: z.string().nullable(),
   outgoingPayments: z.array(OutgoingPaymentDTOSchema),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),

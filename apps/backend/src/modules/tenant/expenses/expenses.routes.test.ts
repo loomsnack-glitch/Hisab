@@ -36,6 +36,7 @@ describe("Organization Expense routes", () => {
         harness.deleteExpenseRepo.mockClear();
         harness.lockExpenseById.mockClear();
         harness.createOutgoingPaymentRepo.mockClear();
+        harness.reverseOutgoingPaymentRepo.mockClear();
         harness.createMoneyAccountMovementRepo.mockClear();
         harness.lockPaymentRouteByStoreAndMethod.mockClear();
         harness.isMoneyAccountTrackingActive.mockClear();
@@ -242,5 +243,107 @@ describe("Organization Expense routes", () => {
         );
 
         expect(response.status).toBe(401);
+    });
+
+    test("reverses an Outgoing Payment with a required reason", async () => {
+        harness.resetStoredExpense(harness.recordedExpense);
+        const created = await expensesRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/payments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 10000, paymentMethod: "cash" }),
+            },
+        );
+        const createdBody = await readBody(created);
+        const paymentId = createdBody.data.expense.outgoingPayments[0].id;
+
+        const response = await expensesRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/payments/${paymentId}/reverse`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reason: "Wrong amount" }),
+            },
+        );
+
+        expect(response.status).toBe(200);
+        const body = await readBody(response);
+        expect(body.data.expense.payableStatus).toBe("due");
+        expect(body.data.expense.outgoingPayments[0].reversalKind).toBe("payment_reversal");
+        expect(harness.reverseOutgoingPaymentRepo).toHaveBeenCalled();
+    });
+
+    test("rejects a blank reversal reason at the route seam", async () => {
+        harness.resetStoredExpense(harness.recordedExpense);
+
+        const response = await expensesRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/payments/${harness.outgoingPaymentId}/reverse`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reason: "   " }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.reverseOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("voids a recorded Expense with a required reason", async () => {
+        harness.resetStoredExpense(harness.recordedExpense);
+
+        const response = await expensesRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/void`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reason: "Entered against the wrong category" }),
+            },
+        );
+
+        expect(response.status).toBe(200);
+        const body = await readBody(response);
+        expect(body.data.expense.lifecycle).toBe("voided");
+        expect(body.data.expense.dueAmount).toBeNull();
+        expect(body.data.expense.voidReason).toBe("Entered against the wrong category");
+        expect(body.data.expense.expenseCategoryName).toBe("Rent");
+    });
+
+    test("rejects a blank void reason at the route seam", async () => {
+        harness.resetStoredExpense(harness.recordedExpense);
+
+        const response = await expensesRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/void`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reason: "" }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+    });
+
+    test("rejects unauthenticated Expense void and payment reversal", async () => {
+        const voidResponse = await unauthenticatedRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/void`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reason: "Wrong category" }),
+            },
+        );
+        const reverseResponse = await unauthenticatedRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/payments/${harness.outgoingPaymentId}/reverse`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reason: "Wrong amount" }),
+            },
+        );
+
+        expect(voidResponse.status).toBe(401);
+        expect(reverseResponse.status).toBe(401);
     });
 });

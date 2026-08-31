@@ -197,6 +197,34 @@ export const createOutgoingPurchasePaymentReversalMovement = async (
         occurredAt: Date;
     },
 ): Promise<void> => {
+    await createOutgoingPaymentReversalMovement(tx, params);
+};
+
+export const createOutgoingExpensePaymentReversalMovement = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        organizationId: string;
+        originalMovement: MoneyAccountMovementDTO;
+        sourceKind: "outgoing_expense_payment_reversal" | "outgoing_expense_void_reversal";
+        occurredAt: Date;
+    },
+): Promise<void> => {
+    await createOutgoingPaymentReversalMovement(tx, params);
+};
+
+const createOutgoingPaymentReversalMovement = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        organizationId: string;
+        originalMovement: MoneyAccountMovementDTO;
+        sourceKind:
+            | "outgoing_purchase_payment_reversal"
+            | "outgoing_purchase_void_reversal"
+            | "outgoing_expense_payment_reversal"
+            | "outgoing_expense_void_reversal";
+        occurredAt: Date;
+    },
+): Promise<void> => {
     const movement = await moneyAccountsRepository.createMoneyAccountMovement(
         {
             id: crypto.randomUUID(),

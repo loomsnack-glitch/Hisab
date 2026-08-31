@@ -223,6 +223,8 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS = [
   "outgoing_purchase_payment_reversal",
   "outgoing_purchase_void_reversal",
   "outgoing_expense_payment",
+  "outgoing_expense_payment_reversal",
+  "outgoing_expense_void_reversal",
 ] as const;
 
 export const MoneyAccountMovementSourceKindSchema = z.enum(MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS);
@@ -237,6 +239,8 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS: Record<
   outgoing_purchase_payment_reversal: "Purchase payment reversal",
   outgoing_purchase_void_reversal: "Purchase void reversal",
   outgoing_expense_payment: "Expense payment",
+  outgoing_expense_payment_reversal: "Expense payment reversal",
+  outgoing_expense_void_reversal: "Expense void reversal",
 };
 
 export const moneyAccountMovementAmountSchema = z
@@ -374,12 +378,11 @@ export const MoneyAccountMovementDTOSchema = z
 
     if (
       value.sourceKind === "outgoing_purchase_payment_reversal" ||
-      value.sourceKind === "outgoing_purchase_void_reversal"
+      value.sourceKind === "outgoing_purchase_void_reversal" ||
+      value.sourceKind === "outgoing_expense_payment_reversal" ||
+      value.sourceKind === "outgoing_expense_void_reversal"
     ) {
-      const label =
-        value.sourceKind === "outgoing_purchase_payment_reversal"
-          ? "Purchase payment reversal"
-          : "Purchase void reversal";
+      const label = MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[value.sourceKind];
       if (!(value.amount > 0)) {
         ctx.addIssue({
           code: "custom",
@@ -522,6 +525,32 @@ export const MoneyAccountHistoryOutgoingPurchaseVoidReversalEntrySchema = z.obje
   paymentMethod: PaymentMethodSchema,
 });
 
+export const MoneyAccountHistoryOutgoingExpensePaymentReversalEntrySchema = z.object({
+  kind: z.literal("outgoing_expense_payment_reversal"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementCompensatingAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id"),
+  reversedMovementId: z.uuid("Invalid reversed money account movement id"),
+  originalOutgoingPaymentId: z.uuid("Invalid outgoing payment id"),
+  expenseId: z.uuid("Invalid expense id"),
+  expenseCategoryName: z.string().min(1),
+  paymentMethod: PaymentMethodSchema,
+});
+
+export const MoneyAccountHistoryOutgoingExpenseVoidReversalEntrySchema = z.object({
+  kind: z.literal("outgoing_expense_void_reversal"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementCompensatingAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id"),
+  reversedMovementId: z.uuid("Invalid reversed money account movement id"),
+  originalOutgoingPaymentId: z.uuid("Invalid outgoing payment id"),
+  expenseId: z.uuid("Invalid expense id"),
+  expenseCategoryName: z.string().min(1),
+  paymentMethod: PaymentMethodSchema,
+});
+
 export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryOpeningEntrySchema,
   MoneyAccountHistoryMovementEntrySchema,
@@ -530,6 +559,8 @@ export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryOutgoingExpensePaymentEntrySchema,
   MoneyAccountHistoryOutgoingPurchasePaymentReversalEntrySchema,
   MoneyAccountHistoryOutgoingPurchaseVoidReversalEntrySchema,
+  MoneyAccountHistoryOutgoingExpensePaymentReversalEntrySchema,
+  MoneyAccountHistoryOutgoingExpenseVoidReversalEntrySchema,
 ]);
 
 export const MoneyAccountHistoryResponseSchema = z.object({

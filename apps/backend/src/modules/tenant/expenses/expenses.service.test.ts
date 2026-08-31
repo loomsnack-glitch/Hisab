@@ -13,6 +13,7 @@ import {
     getExpenseById,
     getExpenseCategoryById,
     getExpensesByOrganizationId,
+    getMovementByOutgoingPaymentId,
     getOrganizationByIdForUser,
     getStoreById,
     hdfcBankAccount,
@@ -23,9 +24,12 @@ import {
     lockPaymentRouteByStoreAndMethod,
     organizationId,
     otherOrganizationId,
+    outgoingPaymentId,
     recordedExpense,
     rentCategory,
     resetStoredExpense,
+    restoreCreateMoneyAccountMovementRepo,
+    reverseOutgoingPaymentRepo,
     storeId,
     updateExpenseRepo,
     userId,
@@ -52,7 +56,10 @@ describe("Organization Expense service", () => {
         deleteExpenseRepo.mockClear();
         lockExpenseById.mockClear();
         createOutgoingPaymentRepo.mockClear();
+        reverseOutgoingPaymentRepo.mockClear();
         createMoneyAccountMovementRepo.mockClear();
+        restoreCreateMoneyAccountMovementRepo();
+        getMovementByOutgoingPaymentId.mockClear();
         lockMoneyAccountById.mockClear();
         lockPaymentRouteByStoreAndMethod.mockClear();
         isMoneyAccountTrackingActive.mockClear();
@@ -61,19 +68,6 @@ describe("Organization Expense service", () => {
         getStoreById.mockResolvedValue({ id: storeId, organizationId, name: "Adajan" });
         isMoneyAccountTrackingActive.mockResolvedValue(false);
         lockMoneyAccountById.mockResolvedValue(adajanCashAccount);
-        createMoneyAccountMovementRepo.mockResolvedValue({
-            id: "14141414-1414-4141-8141-141414141414",
-            organizationId,
-            moneyAccountId: cashMoneyAccountId,
-            storeId,
-            amount: -10000,
-            occurredAt: new Date("2026-08-31T12:00:00.000Z"),
-            sourceKind: "outgoing_expense_payment" as const,
-            paymentId: null,
-            outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
-            reversedMovementId: null,
-            createdAt: new Date("2026-08-31T12:00:00.000Z"),
-        });
         resetStoredExpense(draftExpense);
         getExpensesByOrganizationId.mockResolvedValue([draftExpense]);
     });
@@ -490,6 +484,319 @@ describe("Organization Expense service", () => {
         expect(response.status).toBe("error");
         expect(response.code).toBe(404);
         expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+        expect(lockExpenseById).not.toHaveBeenCalled();
+    });
+
+    test("reverses an untracked Outgoing Payment with a reason and recalculates Payable Status", async () => {
+        resetStoredExpense(recordedExpense);
+        const created = await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10000, paymentMethod: "cash" },
+        );
+        const paymentId = created.data?.expense.outgoingPayments[0]?.id;
+        expect(paymentId).toBeDefined();
+
+        const response = await expensesService.reverseOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            paymentId as string,
+            { reason: "Wrong amount" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.expense.payableStatus).toBe("due");
+        expect(response.data?.expense.paidTotal).toBe(0);
+        expect(response.data?.expense.dueAmount).toBe(25000);
+        expect(response.data?.expense.outgoingPayments[0]?.amount).toBe(10000);
+        expect(response.data?.expense.outgoingPayments[0]?.reversedAt).not.toBeNull();
+        expect(response.data?.expense.outgoingPayments[0]?.reversalReason).toBe("Wrong amount");
+        expect(response.data?.expense.outgoingPayments[0]?.reversalKind).toBe("payment_reversal");
+        expect(createMoneyAccountMovementRepo.mock.calls.some((call) => {
+            const movement = call[0] as { sourceKind?: string };
+            return movement.sourceKind === "outgoing_expense_payment_reversal";
+        })).toBe(false);
+    });
+
+    test("retries of an already reversed payment are idempotent and do not write another reversal", async () => {
+        resetStoredExpense(recordedExpense);
+        const created = await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10000, paymentMethod: "cash" },
+        );
+        const paymentId = created.data?.expense.outgoingPayments[0]?.id as string;
+
+        const first = await expensesService.reverseOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            paymentId,
+            { reason: "Wrong amount" },
+        );
+        reverseOutgoingPaymentRepo.mockClear();
+        const second = await expensesService.reverseOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            paymentId,
+            { reason: "Wrong amount" },
+        );
+
+        expect(first.status).toBe("success");
+        expect(second.status).toBe("success");
+        expect(second.data?.expense.outgoingPayments).toHaveLength(1);
+        expect(reverseOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("a tracked payment reversal writes one positive compensating Movement in the original account", async () => {
+        resetStoredExpense(recordedExpense);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+
+        const created = await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10000, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+        const paymentId = created.data?.expense.outgoingPayments[0]?.id as string;
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(1);
+
+        const response = await expensesService.reverseOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            paymentId,
+            { reason: "Paid from the wrong till" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.expense.payableStatus).toBe("due");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(2);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                moneyAccountId: cashMoneyAccountId,
+                amount: 10000,
+                sourceKind: "outgoing_expense_payment_reversal",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: expect.any(String),
+            }),
+            expect.anything(),
+        );
+    });
+
+    test("a tracked payment reversal still credits the original account after tracking is turned off", async () => {
+        resetStoredExpense(recordedExpense);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        const created = await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10000, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+        const paymentId = created.data?.expense.outgoingPayments[0]?.id as string;
+        isMoneyAccountTrackingActive.mockResolvedValue(false);
+
+        const response = await expensesService.reverseOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            paymentId,
+            { reason: "Paid from the wrong till" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                moneyAccountId: cashMoneyAccountId,
+                amount: 10000,
+                sourceKind: "outgoing_expense_payment_reversal",
+            }),
+            expect.anything(),
+        );
+    });
+
+    test("rolls back payment reversal when the compensating Movement cannot be created", async () => {
+        resetStoredExpense(recordedExpense);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        const created = await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10000, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+        const paymentId = created.data?.expense.outgoingPayments[0]?.id as string;
+        createMoneyAccountMovementRepo.mockResolvedValueOnce(null);
+        updateExpenseRepo.mockClear();
+
+        const response = await expensesService.reverseOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            paymentId,
+            { reason: "Wrong amount" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(updateExpenseRepo).not.toHaveBeenCalled();
+    });
+
+    test("voids a recorded Expense with a reason, cancels remaining due, and reverses only active payments once", async () => {
+        resetStoredExpense(recordedExpense);
+        await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10000, paymentMethod: "cash" },
+        );
+
+        const response = await expensesService.voidExpense(userId, organizationId, expenseId, {
+            reason: "Entered against the wrong category",
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.expense.lifecycle).toBe("voided");
+        expect(response.data?.expense.payableStatus).toBeNull();
+        expect(response.data?.expense.dueAmount).toBeNull();
+        expect(response.data?.expense.paidTotal).toBe(0);
+        expect(response.data?.expense.voidReason).toBe("Entered against the wrong category");
+        expect(response.data?.expense.outgoingPayments[0]?.reversalKind).toBe("payable_void");
+        expect(response.data?.expense.outgoingPayments[0]?.amount).toBe(10000);
+        expect(response.data?.expense.total).toBe(25000);
+        expect(response.data?.expense.expenseCategoryName).toBe("Rent");
+    });
+
+    test("an Expense void reverses mixed tracked and untracked payments without duplicating already reversed payments", async () => {
+        resetStoredExpense(recordedExpense);
+        const untracked = await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10000, paymentMethod: "cash" },
+        );
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        const tracked = await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 5000, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+        const untrackedId = untracked.data?.expense.outgoingPayments[0]?.id as string;
+        await expensesService.reverseOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            untrackedId,
+            { reason: "Wrong amount" },
+        );
+        reverseOutgoingPaymentRepo.mockClear();
+        createMoneyAccountMovementRepo.mockClear();
+
+        const response = await expensesService.voidExpense(userId, organizationId, expenseId, {
+            reason: "Duplicate expense",
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.expense.lifecycle).toBe("voided");
+        expect(reverseOutgoingPaymentRepo).toHaveBeenCalledTimes(1);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceKind: "outgoing_expense_void_reversal",
+                amount: 5000,
+            }),
+            expect.anything(),
+        );
+        const remaining = response.data?.expense.outgoingPayments ?? [];
+        expect(remaining.find((payment) => payment.id === untrackedId)?.reversalKind).toBe(
+            "payment_reversal",
+        );
+        const trackedPaymentId = tracked.data?.expense.outgoingPayments.find(
+            (payment) => payment.amount === 5000,
+        )?.id;
+        expect(remaining.find((payment) => payment.id === trackedPaymentId)?.reversalKind).toBe(
+            "payable_void",
+        );
+    });
+
+    test("retrying a void is idempotent and does not reverse payments again", async () => {
+        resetStoredExpense(recordedExpense);
+        await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10000, paymentMethod: "cash" },
+        );
+        await expensesService.voidExpense(userId, organizationId, expenseId, {
+            reason: "Entered against the wrong category",
+        });
+        reverseOutgoingPaymentRepo.mockClear();
+
+        const retry = await expensesService.voidExpense(userId, organizationId, expenseId, {
+            reason: "Entered against the wrong category",
+        });
+
+        expect(retry.status).toBe("success");
+        expect(retry.data?.expense.lifecycle).toBe("voided");
+        expect(reverseOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not void a Draft Expense and keeps discard available", async () => {
+        const response = await expensesService.voidExpense(userId, organizationId, expenseId, {
+            reason: "Not needed",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(reverseOutgoingPaymentRepo).not.toHaveBeenCalled();
+
+        const discard = await expensesService.discardDraftExpense(userId, organizationId, expenseId);
+        expect(discard.status).toBe("success");
+    });
+
+    test("does not accept further Outgoing Payments on a voided Expense", async () => {
+        resetStoredExpense(recordedExpense);
+        await expensesService.voidExpense(userId, organizationId, expenseId, {
+            reason: "Entered against the wrong category",
+        });
+        createOutgoingPaymentRepo.mockClear();
+
+        const response = await expensesService.createOutgoingExpensePayment(
+            userId,
+            organizationId,
+            expenseId,
+            { amount: 10, paymentMethod: "cash" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("denies payment reversal and void when the user is not a member of the Organization", async () => {
+        getOrganizationByIdForUser.mockResolvedValue(null);
+        resetStoredExpense(recordedExpense);
+
+        const reverse = await expensesService.reverseOutgoingExpensePayment(
+            userId,
+            otherOrganizationId,
+            expenseId,
+            outgoingPaymentId,
+            { reason: "Wrong amount" },
+        );
+        const voided = await expensesService.voidExpense(
+            userId,
+            otherOrganizationId,
+            expenseId,
+            { reason: "Wrong category" },
+        );
+
+        expect(reverse.status).toBe("error");
+        expect(reverse.code).toBe(404);
+        expect(voided.status).toBe("error");
+        expect(voided.code).toBe(404);
         expect(lockExpenseById).not.toHaveBeenCalled();
     });
 });

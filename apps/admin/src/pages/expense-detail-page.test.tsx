@@ -31,6 +31,8 @@ const draftExpense: ExpenseDTO = {
     paidTotal: 0,
     dueAmount: null,
     recordedAt: null,
+    voidedAt: null,
+    voidReason: null,
     outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,
@@ -144,6 +146,51 @@ describe("Admin Expense detail page", () => {
         expect(markup).toContain(formatCurrency(10000));
         expect(markup).toContain(formatCurrency(15000));
         expect(markup).not.toContain("No Outgoing Payments recorded yet.");
+        expect(markup).toContain("Reverse payment");
+        expect(markup).toContain("Void expense");
+    });
+
+    test("shows a voided Expense without settlement or discard, and offers a replacement", () => {
+        const voidedExpense: ExpenseDTO = {
+            ...recordedExpense,
+            lifecycle: "voided",
+            payableStatus: null,
+            paidTotal: 0,
+            dueAmount: null,
+            voidedAt: now,
+            voidReason: "Entered against the wrong category",
+            outgoingPayments: [
+                {
+                    id: "12121212-1212-4121-8121-121212121212",
+                    organizationId,
+                    purchaseId: null,
+                    expenseId,
+                    amount: 10000,
+                    paymentMethod: "cash",
+                    moneyAccountId: null,
+                    moneyAccountName: null,
+                    reference: "CASH-1",
+                    notes: null,
+                    paidAt: now,
+                    reversedAt: now,
+                    reversalReason: "Entered against the wrong category",
+                    reversalKind: "payable_void",
+                    createdBy: userId,
+                    createdAt: now,
+                },
+            ],
+        };
+        const markup = renderDetailPage("success", voidedExpense);
+
+        expect(markup).toContain("Voided");
+        expect(markup).toContain("Entered against the wrong category");
+        expect(markup).toContain("Payable Void reversal");
+        expect(markup).toContain("Create replacement");
+        expect(markup).toContain("Rent");
+        expect(markup).not.toContain("Record payment");
+        expect(markup).not.toContain("Discard draft");
+        expect(markup).not.toContain("Reverse payment");
+        expect(markup).not.toContain("Void expense");
     });
 
     test("shows a loading spinner while the Expense is fetched", () => {

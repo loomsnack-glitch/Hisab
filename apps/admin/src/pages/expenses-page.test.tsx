@@ -29,6 +29,8 @@ const draftExpense: ExpenseDTO = {
     paidTotal: 0,
     dueAmount: null,
     recordedAt: null,
+    voidedAt: null,
+    voidReason: null,
     outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,

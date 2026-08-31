@@ -138,6 +138,42 @@ const HistoryEntry = ({
         );
     }
 
+    if (
+        entry.kind === "outgoing_expense_payment_reversal" ||
+        entry.kind === "outgoing_expense_void_reversal"
+    ) {
+        return (
+            <div className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                        {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[entry.kind]}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        {paymentMethodLabel(entry.paymentMethod)}
+                        {" · "}
+                        {entry.expenseCategoryName}
+                        {" · "}
+                        {formatDateTime(entry.occurredAt)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        {entry.kind === "outgoing_expense_void_reversal"
+                            ? "Compensating reversal from an Expense void. This entry cannot be edited."
+                            : "Compensating reversal of an Expense payment. This entry cannot be edited."}
+                    </p>
+                    <Link
+                        className="mt-1 inline-flex text-xs text-primary hover:underline"
+                        to={`/organizations/${organizationId}/expenses/${entry.expenseId}`}
+                    >
+                        View Expense
+                    </Link>
+                </div>
+                <p className="shrink-0 text-sm font-semibold tabular-nums">
+                    {formatCurrency(entry.amount)}
+                </p>
+            </div>
+        );
+    }
+
     if (entry.kind === "outgoing_expense_payment") {
         return (
             <div className="flex items-start justify-between gap-3 px-4 py-3">

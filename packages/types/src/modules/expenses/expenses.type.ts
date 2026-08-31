@@ -5,6 +5,7 @@ import type {
   ExpenseLifecycleSchema,
   ExpensePayableStatusSchema,
   UpdateDraftExpenseSchema,
+  VoidExpenseSchema,
 } from "./expenses.schema";
 
 export type ExpenseLifecycle = z.infer<typeof ExpenseLifecycleSchema>;
@@ -15,6 +16,8 @@ export type CreateDraftExpenseJSON = z.infer<typeof CreateDraftExpenseSchema>;
 export type CreateDraftExpenseSVC = CreateDraftExpenseJSON;
 export type UpdateDraftExpenseJSON = z.infer<typeof UpdateDraftExpenseSchema>;
 export type UpdateDraftExpenseSVC = UpdateDraftExpenseJSON;
+export type VoidExpenseJSON = z.infer<typeof VoidExpenseSchema>;
+export type VoidExpenseSVC = VoidExpenseJSON;
 
 export type CreateExpenseREPO = Pick<
   ExpenseDTO,
@@ -35,6 +38,8 @@ export type CreateExpenseREPO = Pick<
   | "createdBy"
 > & {
   updatedBy?: string | null;
+  voidedAt?: Date | string | null;
+  voidReason?: string | null;
 };
 
 export type UpdateExpenseREPO = Pick<
@@ -53,6 +58,8 @@ export type UpdateExpenseREPO = Pick<
   | "paidTotal"
   | "dueAmount"
   | "recordedAt"
+  | "voidedAt"
+  | "voidReason"
   | "updatedBy"
 >;
 

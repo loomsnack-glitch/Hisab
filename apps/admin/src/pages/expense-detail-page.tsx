@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { discardDraftExpense, getExpense, recordExpense, createOutgoingExpensePayment } from "@repo/services";
+import { discardDraftExpense, getExpense, recordExpense, createOutgoingExpensePayment, reverseOutgoingExpensePayment, voidExpense } from "@repo/services";
 import {
     OUTGOING_PAYMENT_METHOD_LABELS,
+    OUTGOING_PAYMENT_REVERSAL_KIND_LABELS,
+    isOutgoingPaymentActive,
 } from "@repo/types";
 import {
     AlertDialog,
@@ -28,14 +30,17 @@ import {
 } from "@/components/expenses/expense-status-badges";
 import UpsertExpenseDialog from "@/components/expenses/upsert-expense-dialog";
 import RecordOutgoingPaymentDialog from "@/components/purchases/record-outgoing-payment-dialog";
+import PayableReasonDialog from "@/components/purchases/payable-reason-dialog";
 import { formatCurrency, formatDateOnly, formatDateTime } from "@/lib/format";
-import { expenseKeys } from "@/lib/query-keys";
+import { expenseKeys, moneyAccountKeys } from "@/lib/query-keys";
 
 const ExpenseDetailPage = () => {
     const { organizationId = "", expenseId = "" } = useParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [discardOpen, setDiscardOpen] = useState(false);
+    const [voidOpen, setVoidOpen] = useState(false);
+    const [reversePaymentId, setReversePaymentId] = useState<string | null>(null);
 
     const expenseQuery = useQuery({
         queryKey: expenseKeys.detail(organizationId, expenseId),
@@ -46,6 +51,7 @@ const ExpenseDetailPage = () => {
     const invalidate = async () => {
         await queryClient.invalidateQueries({ queryKey: expenseKeys.list(organizationId) });
         await queryClient.invalidateQueries({ queryKey: expenseKeys.detail(organizationId, expenseId) });
+        await queryClient.invalidateQueries({ queryKey: moneyAccountKeys.all });
     };
 
     const recordMutation = useMutation({
@@ -76,6 +82,44 @@ const ExpenseDetailPage = () => {
         },
         onError: (error: { message?: string }) => {
             toast.error(error.message ?? "Failed to discard Expense");
+        },
+    });
+
+    const reverseMutation = useMutation({
+        mutationFn: (reason: string) =>
+            reverseOutgoingExpensePayment(
+                organizationId,
+                expenseId,
+                reversePaymentId as string,
+                { reason },
+            ),
+        onSuccess: (response) => {
+            if (response.status === "success") {
+                toast.success(response.message);
+                setReversePaymentId(null);
+                void invalidate();
+                return;
+            }
+            toast.error(response.message);
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error.message ?? "Failed to reverse Outgoing Payment");
+        },
+    });
+
+    const voidMutation = useMutation({
+        mutationFn: (reason: string) => voidExpense(organizationId, expenseId, { reason }),
+        onSuccess: (response) => {
+            if (response.status === "success") {
+                toast.success(response.message);
+                setVoidOpen(false);
+                void invalidate();
+                return;
+            }
+            toast.error(response.message);
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error.message ?? "Failed to void Expense");
         },
     });
 
@@ -172,18 +216,37 @@ const ExpenseDetailPage = () => {
                                     Discard draft
                                 </Button>
                             </div>
-                        ) : canSettle ? (
-                            <RecordOutgoingPaymentDialog
+                        ) : expense.lifecycle === "recorded" ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                {canSettle ? (
+                                    <RecordOutgoingPaymentDialog
+                                        organizationId={organizationId}
+                                        storeId={expense.storeId}
+                                        payableLabel={expense.expenseCategoryName}
+                                        dueAmount={expense.dueAmount}
+                                        recordPayment={(data) =>
+                                            createOutgoingExpensePayment(organizationId, expense.id, data)
+                                        }
+                                        onRecorded={invalidate}
+                                    />
+                                ) : null}
+                                <Button
+                                    variant="outline"
+                                    className="rounded-full text-destructive"
+                                    onClick={() => setVoidOpen(true)}
+                                >
+                                    Void expense
+                                </Button>
+                            </div>
+                        ) : (
+                            <UpsertExpenseDialog
                                 organizationId={organizationId}
-                                storeId={expense.storeId}
-                                payableLabel={expense.expenseCategoryName}
-                                dueAmount={expense.dueAmount}
-                                recordPayment={(data) =>
-                                    createOutgoingExpensePayment(organizationId, expense.id, data)
-                                }
-                                onRecorded={invalidate}
+                                copyFrom={expense}
+                                onRecorded={(created) => {
+                                    navigate(`/organizations/${organizationId}/expenses/${created.id}`);
+                                }}
                             />
-                        ) : null}
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -203,6 +266,13 @@ const ExpenseDetailPage = () => {
                             </p>
                         </div>
                     </div>
+
+                    {expense.voidReason ? (
+                        <p className="text-sm text-muted-foreground">
+                            Voided{expense.voidedAt ? ` ${formatDateTime(expense.voidedAt)}` : ""}
+                            {`: ${expense.voidReason}`}
+                        </p>
+                    ) : null}
 
                     {expense.notes ? (
                         <p className="text-sm text-muted-foreground">{expense.notes}</p>
@@ -229,10 +299,30 @@ const ExpenseDetailPage = () => {
                                                 {formatDateTime(payment.paidAt)}
                                                 {payment.reference ? ` · ${payment.reference}` : ""}
                                             </p>
+                                            {payment.reversedAt ? (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    {payment.reversalKind
+                                                        ? OUTGOING_PAYMENT_REVERSAL_KIND_LABELS[payment.reversalKind]
+                                                        : "Reversed"}
+                                                    {`: ${payment.reversalReason}`}
+                                                </p>
+                                            ) : null}
                                         </div>
-                                        <p className="shrink-0 text-sm font-semibold tabular-nums">
-                                            {formatCurrency(payment.amount)}
-                                        </p>
+                                        <div className="flex shrink-0 flex-col items-end gap-2">
+                                            <p className="text-sm font-semibold tabular-nums">
+                                                {formatCurrency(payment.amount)}
+                                            </p>
+                                            {expense.lifecycle === "recorded" && isOutgoingPaymentActive(payment) ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="rounded-full text-destructive"
+                                                    onClick={() => setReversePaymentId(payment.id)}
+                                                >
+                                                    Reverse payment
+                                                </Button>
+                                            ) : null}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -269,6 +359,34 @@ const ExpenseDetailPage = () => {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <PayableReasonDialog
+                open={voidOpen}
+                title="Void this Expense?"
+                description="Remaining due is cancelled and every still-active Outgoing Payment is reversed. Historical records stay in place."
+                confirmLabel="Void expense"
+                pendingLabel="Voiding..."
+                placeholder="Why is this Expense being voided?"
+                pending={voidMutation.isPending}
+                onOpenChange={setVoidOpen}
+                onConfirm={(reason) => voidMutation.mutate(reason)}
+            />
+
+            <PayableReasonDialog
+                open={reversePaymentId != null}
+                title="Reverse this Outgoing Payment?"
+                description="The original payment stays on the Expense. Totals are recalculated and any tracked Money Account debit is compensated."
+                confirmLabel="Reverse payment"
+                pendingLabel="Reversing..."
+                placeholder="Why is this Outgoing Payment being reversed?"
+                pending={reverseMutation.isPending}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setReversePaymentId(null);
+                    }
+                }}
+                onConfirm={(reason) => reverseMutation.mutate(reason)}
+            />
         </div>
     );
 };

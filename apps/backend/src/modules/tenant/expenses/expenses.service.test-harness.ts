@@ -64,6 +64,8 @@ export const draftExpense: ExpenseDTO = {
     paidTotal: 0,
     dueAmount: null,
     recordedAt: null,
+    voidedAt: null,
+    voidReason: null,
     outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,
@@ -120,12 +122,14 @@ export const hdfcBankAccount: MoneyAccountDTO = {
 
 let storedExpense: ExpenseDTO | null = draftExpense;
 let storedOutgoingPayments: OutgoingPaymentDTO[] = [];
+let storedMovements: MoneyAccountMovementDTO[] = [];
 
 export const resetStoredExpense = (expense: ExpenseDTO | null) => {
     storedExpense = expense
         ? { ...expense, outgoingPayments: [...expense.outgoingPayments] }
         : null;
     storedOutgoingPayments = expense ? [...expense.outgoingPayments] : [];
+    storedMovements = [];
 };
 
 export const getOrganizationByIdForUser = mock(
@@ -187,10 +191,40 @@ export const lockExpenseById = mock(async (_organizationId: string, id: string) 
 
 export const isMoneyAccountTrackingActive = mock(async () => false);
 export const lockMoneyAccountById = mock(async () => adajanCashAccount);
-export const createMoneyAccountMovementRepo = mock(
-    async (): Promise<MoneyAccountMovementDTO | null> => null,
-);
+
+const createMoneyAccountMovementImpl = async (
+    data: MoneyAccountMovementDTO,
+): Promise<MoneyAccountMovementDTO | null> => {
+    if (data.reversedMovementId) {
+        const existing = storedMovements.find(
+            (movement) => movement.reversedMovementId === data.reversedMovementId,
+        );
+        if (existing) {
+            return existing;
+        }
+    }
+    const movement: MoneyAccountMovementDTO = {
+        ...data,
+        createdAt: now,
+    };
+    storedMovements = [...storedMovements, movement];
+    return movement;
+};
+
+export const createMoneyAccountMovementRepo = mock(createMoneyAccountMovementImpl);
+
+export const restoreCreateMoneyAccountMovementRepo = () => {
+    createMoneyAccountMovementRepo.mockImplementation(createMoneyAccountMovementImpl);
+};
 export const lockPaymentRouteByStoreAndMethod = mock(async () => null);
+
+export const getMovementByOutgoingPaymentId = mock(
+    async (_organizationId: string, outgoingPaymentId: string) =>
+        storedMovements.find(
+            (movement) =>
+                movement.outgoingPaymentId === outgoingPaymentId && movement.reversedMovementId == null,
+        ) ?? null,
+);
 
 export const createOutgoingPaymentRepo = mock(async (data: CreateOutgoingPaymentREPO) => {
     const payment: OutgoingPaymentDTO = {
@@ -226,7 +260,43 @@ export const createOutgoingPaymentRepo = mock(async (data: CreateOutgoingPayment
     return payment;
 });
 
-export const reverseOutgoingPaymentRepo = mock(async () => storedOutgoingPayments[0] ?? null);
+export const reverseOutgoingPaymentRepo = mock(
+    async (data: {
+        id: string;
+        organizationId: string;
+        reversedAt: Date;
+        reversalReason: string;
+        reversalKind: OutgoingPaymentDTO["reversalKind"];
+    }) => {
+        const index = storedOutgoingPayments.findIndex((payment) => payment.id === data.id);
+        if (index < 0) {
+            return storedOutgoingPayments.find((payment) => payment.id === data.id) ?? null;
+        }
+        const current = storedOutgoingPayments[index];
+        if (!current) {
+            return null;
+        }
+        if (current.reversedAt) {
+            return current;
+        }
+        const reversed: OutgoingPaymentDTO = {
+            ...current,
+            reversedAt: data.reversedAt,
+            reversalReason: data.reversalReason,
+            reversalKind: data.reversalKind,
+        };
+        storedOutgoingPayments = storedOutgoingPayments.map((payment, paymentIndex) =>
+            paymentIndex === index ? reversed : payment,
+        );
+        if (storedExpense) {
+            storedExpense = {
+                ...storedExpense,
+                outgoingPayments: storedOutgoingPayments,
+            };
+        }
+        return reversed;
+    },
+);
 
 export const getOutgoingPaymentsByExpenseIds = mock(async () => storedOutgoingPayments);
 
@@ -268,7 +338,7 @@ mock.module("@/modules/tenant/money-accounts/money-account-tracking", () => ({
 mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
     lockMoneyAccountById,
     createMoneyAccountMovement: createMoneyAccountMovementRepo,
-    getMovementByOutgoingPaymentId: mock(async () => null),
+    getMovementByOutgoingPaymentId,
     lockPaymentRouteByStoreAndMethod,
 }));
 

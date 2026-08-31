@@ -28,7 +28,7 @@ import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
-import { Banknote, Pencil, Plus } from "lucide-react";
+import { Banknote, Pencil, Plus, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { expenseCategoryKeys, expenseKeys, organizationKeys } from "@/lib/query-keys";
@@ -36,6 +36,7 @@ import { expenseCategoryKeys, expenseKeys, organizationKeys } from "@/lib/query-
 type UpsertExpenseDialogProps = {
     organizationId: string;
     expense?: ExpenseDTO;
+    copyFrom?: ExpenseDTO;
     trigger?: ReactElement;
     onRecorded?: (expense: ExpenseDTO) => void;
 };
@@ -88,6 +89,7 @@ const toFormValues = (expense: ExpenseDTO): UpsertExpenseFormInput => ({
 const UpsertExpenseDialog = ({
     organizationId,
     expense,
+    copyFrom,
     trigger,
     onRecorded,
 }: UpsertExpenseDialogProps) => {
@@ -95,6 +97,7 @@ const UpsertExpenseDialog = ({
     const [pendingAction, setPendingAction] = useState<"draft" | "record" | null>(null);
     const queryClient = useQueryClient();
     const isEditMode = Boolean(expense);
+    const sourceExpense = expense ?? copyFrom;
 
     const form = useForm<UpsertExpenseFormInput, unknown, z.output<typeof UpsertExpenseFormSchema>>({
         resolver: zodResolver(UpsertExpenseFormSchema),
@@ -123,15 +126,15 @@ const UpsertExpenseDialog = ({
     const selectableCategories = categories.filter(
         (category) =>
             isExpenseCategorySelectableForDraftExpense(category)
-            || category.id === expense?.expenseCategoryId,
+            || category.id === sourceExpense?.expenseCategoryId,
     );
 
     useEffect(() => {
         if (!open) {
-            form.reset(expense ? toFormValues(expense) : defaultValues());
+            form.reset(sourceExpense ? toFormValues(sourceExpense) : defaultValues());
             setPendingAction(null);
         }
-    }, [form, open, expense]);
+    }, [form, open, sourceExpense]);
 
     const invalidateExpenses = async (saved?: ExpenseDTO) => {
         await queryClient.invalidateQueries({ queryKey: expenseKeys.list(organizationId) });
@@ -180,7 +183,7 @@ const UpsertExpenseDialog = ({
             if (response.status === "success" && response.data && "expense" in response.data) {
                 toast.success(response.message);
                 void invalidateExpenses(response.data.expense);
-                if (variables.record) {
+                if (variables.record || copyFrom) {
                     onRecorded?.(response.data.expense);
                 }
                 setOpen(false);
@@ -222,8 +225,8 @@ const UpsertExpenseDialog = ({
                 render={
                     trigger ?? (
                         <Button variant={isEditMode ? "outline" : "default"} className="rounded-full">
-                            {isEditMode ? <Pencil className="size-4" /> : <Plus className="size-4" />}
-                            {isEditMode ? "Edit draft" : "Add expense"}
+                            {isEditMode ? <Pencil className="size-4" /> : copyFrom ? <PlusCircle className="size-4" /> : <Plus className="size-4" />}
+                            {isEditMode ? "Edit draft" : copyFrom ? "Create replacement" : "Add expense"}
                         </Button>
                     )
                 }
@@ -231,7 +234,13 @@ const UpsertExpenseDialog = ({
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader
                     icon={<Banknote className="size-5" />}
-                    title={isEditMode ? "Edit Draft Expense" : "Create Draft Expense"}
+                    title={
+                        isEditMode
+                            ? "Edit Draft Expense"
+                            : copyFrom
+                              ? "Create replacement Expense"
+                              : "Create Draft Expense"
+                    }
                 />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(handleDraft)}>

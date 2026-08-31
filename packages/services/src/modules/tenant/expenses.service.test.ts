@@ -15,7 +15,7 @@ describe("Expenses client service", () => {
         api.delete = originalDelete;
     });
 
-    test("reads Expenses and records an Outgoing Payment through administrator endpoints", async () => {
+    test("reads Expenses and records, reverses, and voids Outgoing Payments through administrator endpoints", async () => {
         const requests: string[] = [];
         api.get = (async (url: string) => {
             requests.push(`GET ${url}`);
@@ -32,11 +32,19 @@ describe("Expenses client service", () => {
             amount: 10000,
             paymentMethod: "cash",
         });
+        await expensesService.reverseOutgoingExpensePayment("org-id", "expense-id", "payment-id", {
+            reason: "Wrong amount",
+        });
+        await expensesService.voidExpense("org-id", "expense-id", {
+            reason: "Entered against the wrong category",
+        });
 
         expect(requests).toEqual([
             "GET /organizations/org-id/expenses",
             "GET /organizations/org-id/expenses/expense-id",
             "POST /organizations/org-id/expenses/expense-id/payments",
+            "POST /organizations/org-id/expenses/expense-id/payments/payment-id/reverse",
+            "POST /organizations/org-id/expenses/expense-id/void",
         ]);
     });
 });

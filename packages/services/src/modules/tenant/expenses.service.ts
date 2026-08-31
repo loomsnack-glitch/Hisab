@@ -3,8 +3,10 @@ import type {
     CreateOutgoingPaymentJSON,
     ExpenseResponse,
     ExpensesListResponse,
+    ReverseOutgoingPaymentJSON,
     ServiceResponse,
     UpdateDraftExpenseJSON,
+    VoidExpenseJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -93,6 +95,39 @@ export const createOutgoingExpensePayment = async (
     try {
         const response = await api.post(
             `/organizations/${organizationId}/expenses/${expenseId}/payments`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const reverseOutgoingExpensePayment = async (
+    organizationId: string,
+    expenseId: string,
+    paymentId: string,
+    data: ReverseOutgoingPaymentJSON,
+): Promise<ServiceResponse<ExpenseResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/expenses/${expenseId}/payments/${paymentId}/reverse`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const voidExpense = async (
+    organizationId: string,
+    expenseId: string,
+    data: VoidExpenseJSON,
+): Promise<ServiceResponse<ExpenseResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/expenses/${expenseId}/void`,
             data,
         );
         return response.data;

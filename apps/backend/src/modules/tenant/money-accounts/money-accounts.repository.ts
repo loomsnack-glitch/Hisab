@@ -394,6 +394,8 @@ export const getMovementsByMoneyAccountId = async (
                 WHEN 'sale_replacement_reversal' THEN 0
                 WHEN 'outgoing_purchase_payment_reversal' THEN 0
                 WHEN 'outgoing_purchase_void_reversal' THEN 0
+                WHEN 'outgoing_expense_payment_reversal' THEN 0
+                WHEN 'outgoing_expense_void_reversal' THEN 0
                 ELSE 1
             END ASC,
             movements.id ASC
@@ -489,7 +491,9 @@ export const createMoneyAccountMovement = async (
     if (
         movementData.sourceKind === "sale_replacement_reversal" ||
         movementData.sourceKind === "outgoing_purchase_payment_reversal" ||
-        movementData.sourceKind === "outgoing_purchase_void_reversal"
+        movementData.sourceKind === "outgoing_purchase_void_reversal" ||
+        movementData.sourceKind === "outgoing_expense_payment_reversal" ||
+        movementData.sourceKind === "outgoing_expense_void_reversal"
     ) {
         const reversedMovementId = movementData.reversedMovementId;
         if (!reversedMovementId) {

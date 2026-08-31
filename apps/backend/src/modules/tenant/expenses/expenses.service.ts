@@ -6,18 +6,22 @@ import {
     deriveExpensePayableStateFromPayments,
     isExpenseCategorySelectableForDraftExpense,
     isExpenseEffectiveDateAllowed,
+    isOutgoingPaymentActive,
     roundExpenseMoney,
     roundOutgoingPaymentMoney,
     type CreateDraftExpenseSVC,
     type CreateExpenseREPO,
     type CreateOutgoingPaymentSVC,
     type ExpenseCategoryDTO,
+    type ExpenseDTO,
     type ExpenseResponse,
     type ExpensesListResponse,
+    type ReverseOutgoingPaymentSVC,
     type ServiceResponse,
     type StatusCode,
     type UpdateDraftExpenseSVC,
     type UpdateExpenseREPO,
+    type VoidExpenseSVC,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
@@ -25,9 +29,11 @@ import * as expenseCategoriesRepository from "@/modules/tenant/expense-categorie
 import * as outgoingPaymentsRepository from "@/modules/tenant/outgoing-payments/outgoing-payments.repository";
 import {
     createOutgoingExpensePaymentMovement,
+    createOutgoingExpensePaymentReversalMovement,
     isOutgoingPaymentFundingError,
     resolveOutgoingPaymentFunding,
 } from "@/modules/tenant/outgoing-payments/outgoing-payment-funding";
+import * as moneyAccountsRepository from "@/modules/tenant/money-accounts/money-accounts.repository";
 import * as expensesRepository from "./expenses.repository";
 
 const getOrganizationForUser = async (organizationId: string, userId: string) =>
@@ -292,6 +298,8 @@ export const updateDraftExpense = async (
         paidTotal: 0,
         dueAmount: payable.dueAmount,
         recordedAt: null,
+        voidedAt: null,
+        voidReason: null,
         updatedBy: userId,
     };
 
@@ -426,6 +434,8 @@ export const recordExpense = async (
         paidTotal: 0,
         dueAmount: payable.dueAmount,
         recordedAt: new Date(),
+        voidedAt: null,
+        voidReason: null,
         updatedBy: userId,
     };
 
@@ -555,6 +565,8 @@ export const createOutgoingExpensePayment = async (
                 paidTotal: settlement.paidTotal,
                 dueAmount: settlement.dueAmount,
                 recordedAt: existing.recordedAt,
+                voidedAt: existing.voidedAt,
+                voidReason: existing.voidReason,
                 updatedBy: userId,
             };
             const updated = await expensesRepository.updateExpense(header, tx);
@@ -600,6 +612,301 @@ export const createOutgoingExpensePayment = async (
             return {
                 status: "error",
                 message: "Failed to record Outgoing Payment",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+        throw error;
+    }
+};
+
+const reverseActiveExpensePayment = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        organizationId: string;
+        payment: ExpenseDTO["outgoingPayments"][number];
+        reason: string;
+        reversalKind: "payment_reversal" | "payable_void";
+        reversedAt: Date;
+    },
+): Promise<ExpenseDTO["outgoingPayments"][number]> => {
+    if (!isOutgoingPaymentActive(params.payment)) {
+        return params.payment;
+    }
+
+    const reversed = await outgoingPaymentsRepository.reverseOutgoingPayment(
+        {
+            id: params.payment.id,
+            organizationId: params.organizationId,
+            reversedAt: params.reversedAt,
+            reversalReason: params.reason,
+            reversalKind: params.reversalKind,
+        },
+        tx,
+    );
+    if (!reversed) {
+        throw new Error("Failed to reverse Outgoing Payment");
+    }
+
+    const originalMovement = await moneyAccountsRepository.getMovementByOutgoingPaymentId(
+        params.organizationId,
+        params.payment.id,
+        tx,
+    );
+    if (originalMovement) {
+        await createOutgoingExpensePaymentReversalMovement(tx, {
+            organizationId: params.organizationId,
+            originalMovement,
+            sourceKind:
+                params.reversalKind === "payable_void"
+                    ? "outgoing_expense_void_reversal"
+                    : "outgoing_expense_payment_reversal",
+            occurredAt: params.reversedAt,
+        });
+    }
+
+    return reversed;
+};
+
+const toRecordedSettlementHeader = (
+    expense: ExpenseDTO,
+    organizationId: string,
+    userId: string,
+    outgoingPayments: ExpenseDTO["outgoingPayments"],
+): UpdateExpenseREPO => {
+    const settlement = deriveExpensePayableStateFromPayments({
+        lifecycle: "recorded",
+        total: expense.total,
+        outgoingPayments,
+    });
+
+    return {
+        id: expense.id,
+        organizationId,
+        storeId: expense.storeId,
+        expenseCategoryId: expense.expenseCategoryId,
+        expenseCategoryName: expense.expenseCategoryName,
+        lifecycle: "recorded",
+        payableStatus: settlement.payableStatus,
+        effectiveDate: expense.effectiveDate,
+        invoiceReference: expense.invoiceReference,
+        notes: expense.notes,
+        total: expense.total,
+        paidTotal: settlement.paidTotal,
+        dueAmount: settlement.dueAmount,
+        recordedAt: expense.recordedAt,
+        voidedAt: expense.voidedAt,
+        voidReason: expense.voidReason,
+        updatedBy: userId,
+    };
+};
+
+export const reverseOutgoingExpensePayment = async (
+    userId: string,
+    organizationId: string,
+    expenseId: string,
+    paymentId: string,
+    reversalData: ReverseOutgoingPaymentSVC,
+): Promise<ServiceResponse<ExpenseResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const reason = reversalData.reason.trim();
+    const reversedAt = new Date();
+
+    try {
+        const expense = await pg.begin(async (tx) => {
+            const existing = await expensesRepository.lockExpenseById(
+                organizationId,
+                expenseId,
+                tx,
+            );
+            if (!existing) {
+                return null;
+            }
+
+            const payment = existing.outgoingPayments.find((item) => item.id === paymentId);
+            if (!payment) {
+                throw Object.assign(new Error("Outgoing Payment not found"), {
+                    code: STATUS_CODES.NOT_FOUND,
+                    expose: true,
+                });
+            }
+
+            if (!isOutgoingPaymentActive(payment)) {
+                return existing;
+            }
+
+            if (existing.lifecycle !== "recorded") {
+                throw Object.assign(
+                    new Error("Outgoing Payments can only be reversed on a recorded Expense"),
+                    { code: STATUS_CODES.BAD_REQUEST, expose: true },
+                );
+            }
+
+            const reversed = await reverseActiveExpensePayment(tx, {
+                organizationId,
+                payment,
+                reason,
+                reversalKind: "payment_reversal",
+                reversedAt,
+            });
+
+            const nextPayments = existing.outgoingPayments.map((item) =>
+                item.id === reversed.id ? reversed : item,
+            );
+            const updated = await expensesRepository.updateExpense(
+                toRecordedSettlementHeader(existing, organizationId, userId, nextPayments),
+                tx,
+            );
+            if (!updated) {
+                throw new Error("Failed to update Expense settlement");
+            }
+            return updated;
+        });
+
+        if (!expense) {
+            return expenseNotFound();
+        }
+
+        return {
+            status: "success",
+            data: { expense },
+            message: "Outgoing Payment reversed successfully",
+            code: STATUS_CODES.SUCCESS,
+        };
+    } catch (error) {
+        if (error instanceof Error && "expose" in error && error.expose === true) {
+            return {
+                status: "error",
+                message: error.message,
+                data: null,
+                code: (error as Error & { code?: StatusCode }).code ?? STATUS_CODES.BAD_REQUEST,
+            };
+        }
+        if (
+            error instanceof Error &&
+            (error.message === "Failed to reverse Outgoing Payment" ||
+                error.message === "Failed to create money account movement" ||
+                error.message === "Failed to update Expense settlement")
+        ) {
+            return {
+                status: "error",
+                message: "Failed to reverse Outgoing Payment",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+        throw error;
+    }
+};
+
+export const voidExpense = async (
+    userId: string,
+    organizationId: string,
+    expenseId: string,
+    voidData: VoidExpenseSVC,
+): Promise<ServiceResponse<ExpenseResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const reason = voidData.reason.trim();
+    const voidedAt = new Date();
+
+    try {
+        const expense = await pg.begin(async (tx) => {
+            const existing = await expensesRepository.lockExpenseById(
+                organizationId,
+                expenseId,
+                tx,
+            );
+            if (!existing) {
+                return null;
+            }
+
+            if (existing.lifecycle === "voided") {
+                return existing;
+            }
+
+            if (existing.lifecycle !== "recorded") {
+                throw Object.assign(new Error("Only a recorded Expense can be voided"), {
+                    code: STATUS_CODES.BAD_REQUEST,
+                    expose: true,
+                });
+            }
+
+            const nextPayments = [...existing.outgoingPayments];
+            for (const [index, payment] of existing.outgoingPayments.entries()) {
+                if (!isOutgoingPaymentActive(payment)) {
+                    continue;
+                }
+                nextPayments[index] = await reverseActiveExpensePayment(tx, {
+                    organizationId,
+                    payment,
+                    reason,
+                    reversalKind: "payable_void",
+                    reversedAt: voidedAt,
+                });
+            }
+
+            const header: UpdateExpenseREPO = {
+                id: existing.id,
+                organizationId,
+                storeId: existing.storeId,
+                expenseCategoryId: existing.expenseCategoryId,
+                expenseCategoryName: existing.expenseCategoryName,
+                lifecycle: "voided",
+                payableStatus: null,
+                effectiveDate: existing.effectiveDate,
+                invoiceReference: existing.invoiceReference,
+                notes: existing.notes,
+                total: existing.total,
+                paidTotal: 0,
+                dueAmount: null,
+                recordedAt: existing.recordedAt,
+                voidedAt,
+                voidReason: reason,
+                updatedBy: userId,
+            };
+            const updated = await expensesRepository.updateExpense(header, tx);
+            if (!updated) {
+                throw new Error("Failed to void Expense");
+            }
+            return updated;
+        });
+
+        if (!expense) {
+            return expenseNotFound();
+        }
+
+        return {
+            status: "success",
+            data: { expense },
+            message: "Expense voided successfully",
+            code: STATUS_CODES.SUCCESS,
+        };
+    } catch (error) {
+        if (error instanceof Error && "expose" in error && error.expose === true) {
+            return {
+                status: "error",
+                message: error.message,
+                data: null,
+                code: (error as Error & { code?: StatusCode }).code ?? STATUS_CODES.BAD_REQUEST,
+            };
+        }
+        if (
+            error instanceof Error &&
+            (error.message === "Failed to reverse Outgoing Payment" ||
+                error.message === "Failed to create money account movement" ||
+                error.message === "Failed to void Expense")
+        ) {
+            return {
+                status: "error",
+                message: "Failed to void Expense",
                 data: null,
                 code: STATUS_CODES.INTERNAL_SERVER_ERROR,
             };

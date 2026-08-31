@@ -5,7 +5,10 @@ import {
   ExpenseLifecycleSchema,
   ExpensePayableStatusSchema,
   UpdateDraftExpenseSchema,
+  VoidExpenseSchema,
   canAcceptOutgoingExpensePayment,
+  canReverseOutgoingExpensePayment,
+  canVoidExpense,
   expenseCalendarDateInTimeZone,
   deriveExpensePayableState,
   deriveExpensePayableStateFromPayments,
@@ -243,6 +246,53 @@ describe("Expense totals and Payable Status", () => {
         amount: 10,
       }),
     ).toBe(false);
+    expect(
+      canAcceptOutgoingExpensePayment({
+        lifecycle: "voided",
+        total: 100,
+        outgoingPayments: [],
+        amount: 10,
+      }),
+    ).toBe(false);
+  });
+
+  test("an individual Outgoing Payment can be reversed only while the Expense is recorded and the payment is still active", () => {
+    expect(
+      canReverseOutgoingExpensePayment({
+        lifecycle: "recorded",
+        payment: { reversedAt: null },
+      }),
+    ).toBe(true);
+    expect(
+      canReverseOutgoingExpensePayment({
+        lifecycle: "recorded",
+        payment: { reversedAt: "2026-08-31T13:00:00.000Z" },
+      }),
+    ).toBe(false);
+    expect(
+      canReverseOutgoingExpensePayment({
+        lifecycle: "draft",
+        payment: { reversedAt: null },
+      }),
+    ).toBe(false);
+    expect(
+      canReverseOutgoingExpensePayment({
+        lifecycle: "voided",
+        payment: { reversedAt: null },
+      }),
+    ).toBe(false);
+  });
+
+  test("a recorded Expense can be voided, while drafts and already-voided Expenses cannot", () => {
+    expect(canVoidExpense("recorded")).toBe(true);
+    expect(canVoidExpense("draft")).toBe(false);
+    expect(canVoidExpense("voided")).toBe(false);
+  });
+
+  test("a voided Expense has no Payable Status or due amount", () => {
+    expect(
+      deriveExpensePayableState({ lifecycle: "voided", total: 25000, paidTotal: 0 }),
+    ).toEqual({ payableStatus: null, dueAmount: null });
   });
 });
 
@@ -271,6 +321,8 @@ describe("Expense DTO", () => {
       paidTotal: 0,
       dueAmount: 25000,
       recordedAt: "2026-08-31T12:00:00.000Z",
+      voidedAt: null,
+      voidReason: null,
       outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
@@ -305,6 +357,8 @@ describe("Expense DTO", () => {
       paidTotal: 0,
       dueAmount: null,
       recordedAt: null,
+      voidedAt: null,
+      voidReason: null,
       outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
@@ -338,6 +392,8 @@ describe("Expense DTO", () => {
       paidTotal: 0,
       dueAmount: null,
       recordedAt: null,
+      voidedAt: null,
+      voidReason: null,
       outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
@@ -350,5 +406,56 @@ describe("Expense DTO", () => {
 
   test("Expense lifecycle includes draft, recorded, and voided", () => {
     expect(ExpenseLifecycleSchema.options).toEqual(["draft", "recorded", "voided"]);
+  });
+
+  test("void Expense requires a trimmed reason and rejects a blank or missing reason", () => {
+    const accepted = VoidExpenseSchema.safeParse({ reason: "  Wrong category  " });
+    expect(accepted.success).toBe(true);
+    if (accepted.success) {
+      expect(accepted.data.reason).toBe("Wrong category");
+    }
+
+    expect(VoidExpenseSchema.safeParse({ reason: "" }).success).toBe(false);
+    expect(VoidExpenseSchema.safeParse({ reason: "   " }).success).toBe(false);
+    expect(VoidExpenseSchema.safeParse({}).success).toBe(false);
+    expect(
+      VoidExpenseSchema.safeParse({ reason: "Wrong category", lifecycle: "voided" }).success,
+    ).toBe(false);
+  });
+
+  test("a voided Expense DTO cancels remaining due and keeps the Expense Category snapshot", () => {
+    const result = ExpenseDTOSchema.safeParse({
+      id: expenseId,
+      organizationId,
+      storeId,
+      storeName: "Adajan",
+      expenseCategoryId,
+      expenseCategoryName: "Rent",
+      lifecycle: "voided",
+      payableStatus: null,
+      effectiveDate: "2026-08-30",
+      invoiceReference: "RENT-AUG",
+      notes: "Shop rent for August",
+      total: 25000,
+      paidTotal: 0,
+      dueAmount: null,
+      recordedAt: "2026-08-31T12:00:00.000Z",
+      voidedAt: "2026-08-31T13:00:00.000Z",
+      voidReason: "Entered against the wrong category",
+      outgoingPayments: [],
+      createdBy: userId,
+      updatedBy: userId,
+      createdAt: "2026-08-31T12:00:00.000Z",
+      updatedAt: "2026-08-31T13:00:00.000Z",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.lifecycle).toBe("voided");
+      expect(result.data.payableStatus).toBeNull();
+      expect(result.data.dueAmount).toBeNull();
+      expect(result.data.voidReason).toBe("Entered against the wrong category");
+      expect(result.data.expenseCategoryName).toBe("Rent");
+    }
   });
 });

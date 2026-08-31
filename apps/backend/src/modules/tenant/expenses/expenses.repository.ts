@@ -30,6 +30,7 @@ const mapExpenseHeader = (row: Record<string, unknown>): Omit<ExpenseDTO, "outgo
         total: toMoneyAmount(mapped.total),
         paidTotal: toMoneyAmount(mapped.paidTotal),
         dueAmount: mapped.dueAmount === null ? null : toMoneyAmount(mapped.dueAmount),
+        voidReason: typeof mapped.voidReason === "string" ? mapped.voidReason : null,
     };
 };
 
@@ -69,6 +70,8 @@ const expenseSelect = `
     expenses.paid_total,
     expenses.due_amount,
     expenses.recorded_at,
+    expenses.voided_at,
+    expenses.void_reason,
     expenses.created_by,
     expenses.updated_by,
     expenses.created_at,
@@ -199,6 +202,8 @@ export const updateExpense = async (
             paid_total = ${expenseData.paidTotal},
             due_amount = ${expenseData.dueAmount},
             recorded_at = ${expenseData.recordedAt},
+            voided_at = ${expenseData.voidedAt},
+            void_reason = ${expenseData.voidReason},
             updated_by = ${expenseData.updatedBy},
             updated_at = NOW()
         WHERE id = ${expenseData.id}

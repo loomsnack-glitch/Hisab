@@ -314,6 +314,80 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain(formatCurrency(-40));
     });
 
+    test("shows an Expense payment reversal as a positive history entry distinct from an Expense void reversal", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, balance: 100 },
+            openingBalance: 100,
+            balance: 100,
+            entries: [
+                {
+                    kind: "opening_balance",
+                    amount: 100,
+                    occurredAt: now,
+                },
+                {
+                    kind: "outgoing_expense_payment",
+                    id: "14141414-1414-4141-8141-141414141414",
+                    amount: -40,
+                    occurredAt: now,
+                    storeId,
+                    outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                    expenseId: "77777777-7777-4777-8777-777777777777",
+                    expenseCategoryName: "Rent",
+                    paymentMethod: "cash",
+                },
+                {
+                    kind: "outgoing_expense_payment_reversal",
+                    id: "15151515-1515-4151-8151-151515151515",
+                    amount: 40,
+                    occurredAt: now,
+                    storeId,
+                    reversedMovementId: "14141414-1414-4141-8141-141414141414",
+                    originalOutgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                    expenseId: "77777777-7777-4777-8777-777777777777",
+                    expenseCategoryName: "Rent",
+                    paymentMethod: "cash",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Expense payment reversal");
+        expect(markup).toContain("Compensating reversal of an Expense payment");
+        expect(markup).toContain(formatCurrency(40));
+        expect(markup).toContain("View Expense");
+    });
+
+    test("shows an Expense void reversal as a dedicated positive history entry", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, balance: 100 },
+            openingBalance: 100,
+            balance: 100,
+            entries: [
+                {
+                    kind: "opening_balance",
+                    amount: 100,
+                    occurredAt: now,
+                },
+                {
+                    kind: "outgoing_expense_void_reversal",
+                    id: "15151515-1515-4151-8151-151515151515",
+                    amount: 40,
+                    occurredAt: now,
+                    storeId,
+                    reversedMovementId: "14141414-1414-4141-8141-141414141414",
+                    originalOutgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                    expenseId: "77777777-7777-4777-8777-777777777777",
+                    expenseCategoryName: "Rent",
+                    paymentMethod: "cash",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Expense void reversal");
+        expect(markup).toContain("Compensating reversal from an Expense void");
+        expect(markup).toContain("Rent");
+    });
+
     test("shows an empty tracked-payments state with Opening Balance", () => {
         const markup = renderHistoryPage("empty");
 
