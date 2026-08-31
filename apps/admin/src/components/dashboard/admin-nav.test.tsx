@@ -24,6 +24,18 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/units`, withOrg)).toBe(true);
     });
 
+    test("includes Expense Categories as an Organization-scoped workspace destination", () => {
+        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
+        const expenseCategories = getVisibleAdminWorkspaceDestinations(withOrg).find(
+            (destination) => destination.id === "expense-categories",
+        );
+
+        expect(workspaceIds).toContain("expense-categories");
+        expect(expenseCategories?.path).toBe(`/organizations/${organizationId}/expense-categories`);
+        expect(expenseCategories?.isActive(`/organizations/${organizationId}/expense-categories`)).toBe(true);
+        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/expense-categories`, withOrg)).toBe(true);
+    });
+
     test("includes Vendors as an Organization-scoped workspace destination", () => {
         const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
         const vendors = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "vendors");

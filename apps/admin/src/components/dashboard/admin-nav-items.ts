@@ -9,6 +9,7 @@ import {
     Ruler,
     Settings2,
     Store,
+    Tags,
     Truck,
     Users,
     Wallet,
@@ -78,6 +79,14 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         requiresOrganization: true,
         getPath: (organizationId) => `/organizations/${organizationId}/units`,
         isActive: (pathname) => /\/organizations\/[^/]+\/units(\/|$)/.test(pathname),
+    },
+    {
+        id: "expense-categories",
+        label: "Expense Categories",
+        icon: Tags,
+        requiresOrganization: true,
+        getPath: (organizationId) => `/organizations/${organizationId}/expense-categories`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/expense-categories(\/|$)/.test(pathname),
     },
     {
         id: "money-accounts",

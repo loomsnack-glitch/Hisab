@@ -27,6 +27,7 @@ import ReportsPage from "@/pages/reports-page";
 import AppearancePage from "@/pages/appearance-page";
 import TablesPage from "@/pages/tables-page";
 import UnitsPage from "@/pages/units-page";
+import ExpenseCategoriesPage from "@/pages/expense-categories-page";
 import VendorsPage from "@/pages/vendors-page";
 import MoneyAccountsPage from "@/pages/money-accounts-page";
 import MoneyAccountDetailPage from "@/pages/money-account-detail-page";
@@ -134,6 +135,7 @@ const App = () => {
                                 <Route path="/google-contacts/oauth/callback" element={<GoogleContactsOAuthCallbackPage />} />
                                 <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
                                 <Route path="/organizations/:organizationId/units" element={<UnitsPage />} />
+                                <Route path="/organizations/:organizationId/expense-categories" element={<ExpenseCategoriesPage />} />
                                 <Route path="/organizations/:organizationId/vendors" element={<VendorsPage />} />
                                 <Route path="/organizations/:organizationId/money-accounts" element={<MoneyAccountsPage />} />
                                 <Route path="/organizations/:organizationId/money-accounts/:moneyAccountId" element={<MoneyAccountDetailPage />} />

@@ -29,6 +29,7 @@ import {
 } from "@/helpers/deviceSecret.helper";
 import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
+import * as expenseCategoriesRepository from "@/modules/tenant/expense-categories/expense-categories.repository";
 import * as organizationRepository from "./organization.repository";
 
 const normalizeOptionalText = (value?: string) => {
@@ -161,6 +162,15 @@ export const createOrganization = async (
     );
     if (units.length === 0) {
       throw new Error("Failed to seed Units");
+    }
+
+    const expenseCategories = await expenseCategoriesRepository.seedDefaultExpenseCategories(
+      organization.id,
+      userId,
+      tx,
+    );
+    if (expenseCategories.length === 0) {
+      throw new Error("Failed to seed Expense Categories");
     }
   });
 

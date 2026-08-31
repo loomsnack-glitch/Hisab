@@ -146,6 +146,11 @@ export const unitKeys = {
   list: (organizationId: string) => [...unitKeys.all, organizationId] as const,
 };
 
+export const expenseCategoryKeys = {
+  all: ["expense-categories"] as const,
+  list: (organizationId: string) => [...expenseCategoryKeys.all, organizationId] as const,
+};
+
 export const vendorKeys = {
   all: ["vendors"] as const,
   list: (organizationId: string) => [...vendorKeys.all, organizationId] as const,

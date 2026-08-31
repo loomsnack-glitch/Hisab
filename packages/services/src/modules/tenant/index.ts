@@ -6,5 +6,6 @@ export * from "./whatsapp.service";
 export * from "./table-service.service";
 export * from "./google-contacts.service";
 export * from "./units.service";
+export * from "./expense-categories.service";
 export * from "./vendors.service";
 export * from "./money-accounts.service";
