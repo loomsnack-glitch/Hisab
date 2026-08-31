@@ -1,15 +1,25 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Window } from "happy-dom";
 import {
     MONEY_ACCOUNT_SCOPE_LABELS,
     MONEY_ACCOUNT_TYPE_LABELS,
     type MoneyAccountDTO,
 } from "@repo/types";
 
+import { LIST_VIEW_PREFERENCES_STORAGE_PREFIX } from "@/lib/list-view-preferences";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 import MoneyAccountsPage from "@/pages/money-accounts-page";
+
+const testWindow = new Window({ url: "http://localhost" });
+Object.assign(globalThis, {
+    window: testWindow,
+    localStorage: testWindow.localStorage,
+});
+
+const moneyAccountsListViewKey = `${LIST_VIEW_PREFERENCES_STORAGE_PREFIX}money-accounts`;
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -217,12 +227,15 @@ const renderMoneyAccountsPage = (
 };
 
 describe("Admin Money Accounts page", () => {
-    test("shows Organization-wide and Store-scoped Money Accounts with type, scope, Store, status, search, and no delete command", () => {
+    afterEach(() => {
+        testWindow.localStorage.clear();
+    });
+
+    test("shows Organization-wide and Store-scoped Money Accounts in card view with search and no delete command", () => {
         const markup = renderMoneyAccountsPage();
 
         expect(markup).toContain("data-testid=\"money-accounts-page\"");
         expect(markup).toContain("HDFC Current");
-        expect(markup).toContain("Main operating account");
         expect(markup).toContain("Shared UPI QR");
         expect(markup).toContain("Card machine settlement");
         expect(markup).toContain("Office petty cash");
@@ -237,27 +250,34 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.petty_cash);
         expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.other);
         expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.cash);
-        expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.organization_wide);
-        expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.store_scoped);
         expect(markup).toContain("Every store");
-        expect(markup).toContain("Opening Balance");
-        expect(markup).toContain("Calculated balance");
+        expect(markup).toContain("Balance");
+        expect(markup).not.toContain("Opening Balance");
+        expect(markup).not.toContain("Calculated balance");
         expect(markup).toContain("Add money account");
         expect(markup).toContain("Search money accounts...");
-        expect(markup).toContain("Status");
-        expect(markup).toContain("Type");
-        expect(markup).toContain("Scope");
-        expect(markup).toContain("Store");
         expect(markup).toContain("active");
         expect(markup).toContain("inactive");
         expect(markup).toContain("Edit");
         expect(markup).toContain("View history");
+        expect(markup).toContain("aria-label=\"Card view\"");
+        expect(markup).toContain("aria-label=\"Table view\"");
         expect(markup).not.toContain("Delete");
         expect(markup).not.toContain("bank account number");
         expect(markup).not.toContain("UPI ID");
     });
 
-    test("shows Opening Balance, calculated Balance, and lock state after Movements", () => {
+    test("restores the saved table view from local storage", () => {
+        testWindow.localStorage.setItem(moneyAccountsListViewKey, "table");
+        const markup = renderMoneyAccountsPage();
+
+        expect(markup).toContain("Status");
+        expect(markup).toContain("Type");
+        expect(markup).toContain("Scope");
+        expect(markup).toContain("Store");
+    });
+
+    test("shows balance in card view and detailed columns in table view after Movements", () => {
         const lockedBank: MoneyAccountDTO = {
             ...hdfcBank,
             openingBalance: 500,
@@ -265,15 +285,23 @@ describe("Admin Money Accounts page", () => {
             hasMovements: true,
             status: "inactive",
         };
-        const markup = renderMoneyAccountsPage("success", [lockedBank]);
+        const cardMarkup = renderMoneyAccountsPage("success", [lockedBank]);
 
-        expect(markup).toContain("Opening Balance");
-        expect(markup).toContain("Calculated balance");
-        expect(markup).toContain("Starting amount");
-        expect(markup).toContain("Opening plus tracked Payments");
-        expect(markup).toContain("Type, availability, Store, and Opening Balance are locked");
-        expect(markup).toContain("Inactive. Historic Movements remain visible.");
-        expect(markup).not.toContain("current balance");
+        expect(cardMarkup).toContain("Balance");
+        expect(cardMarkup).toContain("₹750.00");
+        expect(cardMarkup).not.toContain("Opening Balance");
+        expect(cardMarkup).not.toContain("Type, availability, Store, and Opening Balance are locked");
+
+        testWindow.localStorage.setItem(moneyAccountsListViewKey, "table");
+        const tableMarkup = renderMoneyAccountsPage("success", [lockedBank]);
+
+        expect(tableMarkup).toContain("Opening Balance");
+        expect(tableMarkup).toContain("Calculated balance");
+        expect(tableMarkup).toContain("Starting amount");
+        expect(tableMarkup).toContain("Opening plus tracked Payments");
+        expect(tableMarkup).toContain("Type, availability, Store, and Opening Balance are locked");
+        expect(tableMarkup).toContain("Inactive. Historic Movements remain visible.");
+        expect(tableMarkup).not.toContain("current balance");
     });
 
     test("shows a loading spinner while Money Accounts are fetched", () => {

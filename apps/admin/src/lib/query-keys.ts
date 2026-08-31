@@ -174,8 +174,8 @@ export const purchaseKeys = {
 export const moneyAccountKeys = {
   all: ["money-accounts"] as const,
   list: (organizationId: string) => [...moneyAccountKeys.all, organizationId] as const,
-  history: (organizationId: string, moneyAccountId: string) =>
-    [...moneyAccountKeys.all, organizationId, moneyAccountId, "history"] as const,
+  history: (organizationId: string, moneyAccountId: string, query: Record<string, string | undefined> = {}) =>
+    [...moneyAccountKeys.all, organizationId, moneyAccountId, "history", query] as const,
   paymentRoutes: (organizationId: string, storeId: string) =>
     [...moneyAccountKeys.all, organizationId, "stores", storeId, "payment-routes"] as const,
 };

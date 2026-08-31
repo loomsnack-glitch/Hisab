@@ -569,3 +569,8 @@ export const MoneyAccountHistoryResponseSchema = z.object({
   balance: moneyAccountBalanceSchema,
   entries: z.array(MoneyAccountHistoryEntrySchema),
 });
+
+export const MoneyAccountHistoryQuerySchema = z.object({
+  occurredFrom: z.iso.datetime().optional(),
+  occurredTo: z.iso.datetime().optional(),
+});

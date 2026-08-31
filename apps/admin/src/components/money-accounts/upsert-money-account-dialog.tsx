@@ -212,10 +212,12 @@ const UpsertMoneyAccountDialog = ({
                     )
                 }
             />
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader icon={<Wallet className="size-5" />} title={title} />
+            <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:max-w-md">
+                <DialogHeader className="shrink-0 px-4 pt-4" icon={<Wallet className="size-5" />} title={title} />
 
-                <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="flex min-h-0 flex-1 flex-col" onSubmit={form.handleSubmit(onSubmit)}>
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                        <div className="space-y-5 px-4 pt-2">
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Account name</FieldLabel>
                         <FieldContent>
@@ -411,7 +413,10 @@ const UpsertMoneyAccountDialog = ({
                         )}
                     />
 
-                    <DialogFooter>
+                        </div>
+                    </div>
+
+                    <DialogFooter className="mx-0 mb-0 shrink-0">
                         <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
                             Cancel
                         </Button>

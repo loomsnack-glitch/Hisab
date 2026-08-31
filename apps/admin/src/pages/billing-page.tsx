@@ -502,6 +502,7 @@ const BillingPage = ({
     const [receiptToPrint, setReceiptToPrint] = useState<SaleDetailDTO | null>(null);
     const salesScrollContainerRef = useRef<HTMLDivElement | null>(null);
     const salesLoadMoreRef = useRef<HTMLDivElement | null>(null);
+    const consumedDeepLinkSaleIdRef = useRef<string | null>(null);
     const completionRequestRef = useRef<{
         requestId: string;
         fingerprint: string;
@@ -1079,6 +1080,22 @@ const BillingPage = ({
             setSearchParams({ storeId: nextStoreId });
         });
     }, [isDeviceMode, organization, selectedStoreId, setSearchParams]);
+
+    const deepLinkSaleId = searchParams.get("saleId");
+
+    useEffect(() => {
+        if (isDeviceMode || !deepLinkSaleId || !selectedStoreId) {
+            return;
+        }
+
+        if (consumedDeepLinkSaleIdRef.current === deepLinkSaleId) {
+            return;
+        }
+
+        consumedDeepLinkSaleIdRef.current = deepLinkSaleId;
+        setSelectedSaleId(deepLinkSaleId);
+        setSaleDialogOpen(true);
+    }, [deepLinkSaleId, isDeviceMode, selectedStoreId]);
 
     const activeProducts = products.filter((product) => product.status === "active");
     const filteredProducts = activeProducts.filter((product) => {

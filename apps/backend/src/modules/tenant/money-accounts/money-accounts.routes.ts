@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateMoneyAccountSchema, MoneyAccountPaymentRouteMethodSchema, STATUS_CODES, UpdateMoneyAccountSchema, UpsertMoneyAccountPaymentRouteSchema } from "@repo/types";
+import { CreateMoneyAccountSchema, MoneyAccountHistoryQuerySchema, MoneyAccountPaymentRouteMethodSchema, STATUS_CODES, UpdateMoneyAccountSchema, UpsertMoneyAccountPaymentRouteSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -123,7 +123,10 @@ export const createMoneyAccountsRoutes = (
         },
     );
 
-    router.get("/:organizationId/money-accounts/:moneyAccountId/history", async (c) => {
+    router.get(
+        "/:organizationId/money-accounts/:moneyAccountId/history",
+        validateSchema("query", MoneyAccountHistoryQuerySchema),
+        async (c) => {
         try {
             const organizationId = c.req.param("organizationId");
             const moneyAccountId = c.req.param("moneyAccountId");
@@ -140,12 +143,14 @@ export const createMoneyAccountsRoutes = (
                 c.get("authUser").id,
                 organizationId,
                 moneyAccountId,
+                c.req.valid("query"),
             );
             return handleServiceResponse(c, serviceResponse);
         } catch (error) {
             return handleError(FILE_NAME, "getMoneyAccountHistory", c, error);
         }
-    });
+    },
+    );
 
     router.get("/:organizationId/stores/:storeId/money-account-payment-routes", async (c) => {
         try {

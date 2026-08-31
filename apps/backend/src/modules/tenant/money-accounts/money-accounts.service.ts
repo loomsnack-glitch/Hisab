@@ -3,6 +3,7 @@ import {
     type CreateMoneyAccountSVC,
     type MoneyAccountDTO,
     type MoneyAccountHistoryEntry,
+    type MoneyAccountHistoryQuery,
     type MoneyAccountHistoryResponse,
     type MoneyAccountPaymentRouteMethod,
     type MoneyAccountPaymentRouteResponse,
@@ -477,6 +478,7 @@ export const getMoneyAccountHistory = async (
     userId: string,
     organizationId: string,
     moneyAccountId: string,
+    query: MoneyAccountHistoryQuery = {},
 ): Promise<ServiceResponse<MoneyAccountHistoryResponse | null>> => {
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
@@ -491,11 +493,19 @@ export const getMoneyAccountHistory = async (
         return moneyAccountNotFound();
     }
 
+    const occurredFrom = query.occurredFrom ? new Date(query.occurredFrom) : null;
+    const occurredTo = query.occurredTo ? new Date(query.occurredTo) : null;
+    const hasDateFilter = Boolean(occurredFrom || occurredTo);
+
     const movements = await moneyAccountsRepository.getMovementsByMoneyAccountId(
         organizationId,
         moneyAccountId,
+        { occurredFrom, occurredTo },
     );
-    const movementTotal = movements.reduce((sum, movement) => sum + movement.amount, 0);
+    const allMovements = hasDateFilter
+        ? await moneyAccountsRepository.getMovementsByMoneyAccountId(organizationId, moneyAccountId)
+        : movements;
+    const movementTotal = allMovements.reduce((sum, movement) => sum + movement.amount, 0);
     const balance = toMoneyAmount(moneyAccount.openingBalance + movementTotal);
     const openingEntry: MoneyAccountHistoryEntry = {
         kind: "opening_balance",
@@ -660,11 +670,11 @@ export const getMoneyAccountHistory = async (
             moneyAccount: {
                 ...moneyAccount,
                 balance,
-                hasMovements: movements.length > 0,
+                hasMovements: allMovements.length > 0,
             },
             openingBalance: moneyAccount.openingBalance,
             balance,
-            entries: [openingEntry, ...movementEntries],
+            entries: hasDateFilter ? movementEntries : [openingEntry, ...movementEntries],
         },
         message: "Money Account history fetched successfully",
         code: STATUS_CODES.SUCCESS,

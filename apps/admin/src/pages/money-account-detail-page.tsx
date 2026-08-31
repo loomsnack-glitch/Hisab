@@ -1,20 +1,35 @@
+import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getMoneyAccountHistory, getOrganizationDetails } from "@repo/services";
 import {
     MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS,
-    MONEY_ACCOUNT_SCOPE_LABELS,
     MONEY_ACCOUNT_TYPE_LABELS,
     type MoneyAccountHistoryEntry,
+    type MoneyAccountHistoryQuery,
 } from "@repo/types";
-import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Card, CardContent, CardHeader } from "@repo/ui/components/card";
+import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
-import { ArrowLeft, RefreshCw, Wallet } from "lucide-react";
+import { cn } from "@repo/ui/lib/utils";
+import {
+    ArrowDownLeft,
+    ArrowLeft,
+    ArrowUpRight,
+    Calendar,
+    Landmark,
+    RefreshCw,
+    RotateCcw,
+    ShoppingBag,
+    Truck,
+    Wallet,
+} from "lucide-react";
 
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
+import HistoryDateToolbar from "@/components/common/history-date-toolbar";
+import { getDefaultHistoryQuery } from "@/lib/date-range-filter";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 
@@ -27,47 +42,218 @@ const paymentMethodLabel = (method: string) => {
     return method;
 };
 
+const resolveStoreName = (storeId: string, storeNameById: Record<string, string>) =>
+    storeNameById[storeId] ?? "Store";
+
+const buildBillHref = (organizationId: string, storeId: string, saleId: string) =>
+    `/organizations/${organizationId}/billing?storeId=${storeId}&saleId=${saleId}`;
+
+type MovementTone = "inflow" | "outflow" | "neutral";
+
+const MOVEMENT_TONE_STYLES: Record<
+    MovementTone,
+    { iconWrap: string; icon: string; amount: string }
+> = {
+    inflow: {
+        iconWrap: "bg-emerald-500/10 ring-emerald-500/15",
+        icon: "text-emerald-600 dark:text-emerald-400",
+        amount: "text-emerald-600 dark:text-emerald-400",
+    },
+    outflow: {
+        iconWrap: "bg-destructive/10 ring-destructive/15",
+        icon: "text-destructive",
+        amount: "text-destructive",
+    },
+    neutral: {
+        iconWrap: "bg-muted ring-border/50",
+        icon: "text-muted-foreground",
+        amount: "text-foreground",
+    },
+};
+
+const movementToneForAmount = (amount: number): MovementTone => {
+    if (amount > 0) return "inflow";
+    if (amount < 0) return "outflow";
+    return "neutral";
+};
+
+const formatSignedAmount = (amount: number) => {
+    if (amount > 0) {
+        return `+${formatCurrency(amount)}`;
+    }
+
+    if (amount < 0) {
+        return `−${formatCurrency(Math.abs(amount))}`;
+    }
+
+    return formatCurrency(0);
+};
+
+const MetaBadge = ({
+    children,
+    variant = "default",
+}: {
+    children: ReactNode;
+    variant?: "default" | "store" | "payment";
+}) => (
+    <span
+        className={cn(
+            "inline-flex max-w-full items-center truncate rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+            variant === "store" &&
+                "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-400",
+            variant === "payment" && "border-border/60 bg-background text-muted-foreground",
+            variant === "default" && "border-border/60 bg-muted/40 text-foreground/80",
+        )}
+    >
+        {children}
+    </span>
+);
+
+const MovementActionLink = ({ to, label }: { to: string; label: string }) => (
+    <Link
+        className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-primary/80"
+        to={to}
+    >
+        {label}
+        <ArrowUpRight className="size-3 shrink-0" aria-hidden="true" />
+    </Link>
+);
+
+const MovementRow = ({
+    title,
+    amount,
+    occurredAt,
+    icon: Icon,
+    entityLabel,
+    entityIcon: EntityIcon,
+    paymentMethod,
+    storeName,
+    action,
+}: {
+    title: string;
+    amount: number;
+    occurredAt: Date | string;
+    icon: ComponentType<{ className?: string }>;
+    entityLabel?: string | null;
+    entityIcon?: ComponentType<{ className?: string }>;
+    paymentMethod?: string | null;
+    storeName?: string | null;
+    action?: ReactNode;
+}) => {
+    const tone = movementToneForAmount(amount);
+    const styles = MOVEMENT_TONE_STYLES[tone];
+
+    return (
+        <div className="group mx-1.5 flex gap-3 rounded-xl border border-transparent px-3 py-3 transition-colors hover:border-border/50 hover:bg-muted/25 sm:mx-2">
+            <div
+                className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 ring-inset",
+                    styles.iconWrap,
+                )}
+            >
+                <Icon className={cn("size-4", styles.icon)} aria-hidden="true" />
+            </div>
+
+            <div className="flex min-w-0 flex-1 items-start gap-4">
+                <div className="min-w-0 flex-1">
+                    <p className="font-medium leading-snug text-foreground">{title}</p>
+
+                    {entityLabel ? (
+                        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground/90">
+                            {EntityIcon ? (
+                                <EntityIcon
+                                    className="size-3.5 shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                />
+                            ) : null}
+                            <span className="truncate">{entityLabel}</span>
+                        </p>
+                    ) : null}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {paymentMethod ? (
+                            <MetaBadge variant="payment">{paymentMethodLabel(paymentMethod)}</MetaBadge>
+                        ) : null}
+                        {storeName ? <MetaBadge variant="store">{storeName}</MetaBadge> : null}
+                        <time
+                            className="text-[11px] text-muted-foreground"
+                            dateTime={new Date(occurredAt).toISOString()}
+                        >
+                            {formatDateTime(occurredAt)}
+                        </time>
+                    </div>
+                </div>
+
+                <div className="flex shrink-0 flex-col items-end gap-2 text-right">
+                    <p className={cn("text-sm font-semibold tabular-nums", styles.amount)}>
+                        {formatSignedAmount(amount)}
+                    </p>
+                    {action}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const HistoryEntry = ({
     entry,
     organizationId,
+    storeNameById,
 }: {
     entry: MoneyAccountHistoryEntry;
     organizationId: string;
+    storeNameById: Record<string, string>;
 }) => {
     if (entry.kind === "opening_balance") {
+        const styles = MOVEMENT_TONE_STYLES.neutral;
+
         return (
-            <div className="flex items-start justify-between gap-3 bg-muted/20 px-4 py-3">
-                <div className="min-w-0">
-                    <p className="font-medium text-foreground">Opening Balance</p>
-                    <p className="text-xs text-muted-foreground">
-                        Starting amount before tracked Payments · {formatDateTime(entry.occurredAt)}
-                    </p>
+            <div className="mx-1.5 flex gap-3 rounded-xl border border-border/40 bg-muted/15 px-3 py-3 sm:mx-2">
+                <div
+                    className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 ring-inset",
+                        styles.iconWrap,
+                    )}
+                >
+                    <Landmark className={cn("size-4", styles.icon)} aria-hidden="true" />
                 </div>
-                <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(entry.amount)}</p>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                        <p className="font-medium text-foreground">Opening Balance</p>
+                        <p className={cn("shrink-0 text-sm font-semibold tabular-nums", styles.amount)}>
+                            {formatCurrency(entry.amount)}
+                        </p>
+                    </div>
+                    <time
+                        className="mt-1 block text-[11px] text-muted-foreground"
+                        dateTime={new Date(entry.occurredAt).toISOString()}
+                    >
+                        {formatDateTime(entry.occurredAt)}
+                    </time>
+                </div>
             </div>
         );
     }
 
     if (entry.kind === "sale_replacement_reversal") {
         return (
-            <div className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                        {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.sale_replacement_reversal}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {entry.paymentMethod ? `${paymentMethodLabel(entry.paymentMethod)} · ` : ""}
-                        {entry.saleNumber ? `Sale ${entry.saleNumber} · ` : ""}
-                        {formatDateTime(entry.occurredAt)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        Automatic reversal of the original tracked Payment. This entry cannot be edited.
-                    </p>
-                </div>
-                <p className="shrink-0 text-sm font-semibold tabular-nums text-destructive">
-                    {formatCurrency(entry.amount)}
-                </p>
-            </div>
+            <MovementRow
+                title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.sale_replacement_reversal}
+                amount={entry.amount}
+                occurredAt={entry.occurredAt}
+                icon={RotateCcw}
+                entityLabel={entry.saleNumber ? `Bill #${entry.saleNumber}` : null}
+                paymentMethod={entry.paymentMethod}
+                storeName={resolveStoreName(entry.storeId, storeNameById)}
+                action={
+                    entry.saleId ? (
+                        <MovementActionLink
+                            label="View Bill"
+                            to={buildBillHref(organizationId, entry.storeId, entry.saleId)}
+                        />
+                    ) : null
+                }
+            />
         );
     }
 
@@ -76,65 +262,43 @@ const HistoryEntry = ({
         entry.kind === "outgoing_purchase_void_reversal"
     ) {
         return (
-            <div className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                        {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[entry.kind]}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {paymentMethodLabel(entry.paymentMethod)}
-                        {" · "}
-                        {entry.vendorName}
-                        {" · "}
-                        {formatDateTime(entry.occurredAt)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {entry.kind === "outgoing_purchase_void_reversal"
-                            ? "Compensating reversal from a Purchase void. This entry cannot be edited."
-                            : "Compensating reversal of a Purchase payment. This entry cannot be edited."}
-                    </p>
-                    <Link
-                        className="mt-1 inline-flex text-xs text-primary hover:underline"
+            <MovementRow
+                title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[entry.kind]}
+                amount={entry.amount}
+                occurredAt={entry.occurredAt}
+                icon={ShoppingBag}
+                entityLabel={entry.vendorName}
+                entityIcon={Truck}
+                paymentMethod={entry.paymentMethod}
+                storeName={resolveStoreName(entry.storeId, storeNameById)}
+                action={
+                    <MovementActionLink
+                        label="View Purchase"
                         to={`/organizations/${organizationId}/purchases/${entry.purchaseId}`}
-                    >
-                        View Purchase
-                    </Link>
-                </div>
-                <p className="shrink-0 text-sm font-semibold tabular-nums">
-                    {formatCurrency(entry.amount)}
-                </p>
-            </div>
+                    />
+                }
+            />
         );
     }
 
     if (entry.kind === "outgoing_purchase_payment") {
         return (
-            <div className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                        {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.outgoing_purchase_payment}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {paymentMethodLabel(entry.paymentMethod)}
-                        {" · "}
-                        {entry.vendorName}
-                        {" · "}
-                        {formatDateTime(entry.occurredAt)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        Linked Purchase payment. This entry cannot be edited.
-                    </p>
-                    <Link
-                        className="mt-1 inline-flex text-xs text-primary hover:underline"
+            <MovementRow
+                title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.outgoing_purchase_payment}
+                amount={entry.amount}
+                occurredAt={entry.occurredAt}
+                icon={ShoppingBag}
+                entityLabel={entry.vendorName}
+                entityIcon={Truck}
+                paymentMethod={entry.paymentMethod}
+                storeName={resolveStoreName(entry.storeId, storeNameById)}
+                action={
+                    <MovementActionLink
+                        label="View Purchase"
                         to={`/organizations/${organizationId}/purchases/${entry.purchaseId}`}
-                    >
-                        View Purchase
-                    </Link>
-                </div>
-                <p className="shrink-0 text-sm font-semibold tabular-nums text-destructive">
-                    {formatCurrency(entry.amount)}
-                </p>
-            </div>
+                    />
+                }
+            />
         );
     }
 
@@ -143,94 +307,125 @@ const HistoryEntry = ({
         entry.kind === "outgoing_expense_void_reversal"
     ) {
         return (
-            <div className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                        {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[entry.kind]}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {paymentMethodLabel(entry.paymentMethod)}
-                        {" · "}
-                        {entry.expenseCategoryName}
-                        {" · "}
-                        {formatDateTime(entry.occurredAt)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {entry.kind === "outgoing_expense_void_reversal"
-                            ? "Compensating reversal from an Expense void. This entry cannot be edited."
-                            : "Compensating reversal of an Expense payment. This entry cannot be edited."}
-                    </p>
-                    <Link
-                        className="mt-1 inline-flex text-xs text-primary hover:underline"
+            <MovementRow
+                title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[entry.kind]}
+                amount={entry.amount}
+                occurredAt={entry.occurredAt}
+                icon={Wallet}
+                entityLabel={entry.expenseCategoryName}
+                paymentMethod={entry.paymentMethod}
+                storeName={resolveStoreName(entry.storeId, storeNameById)}
+                action={
+                    <MovementActionLink
+                        label="View Expense"
                         to={`/organizations/${organizationId}/expenses/${entry.expenseId}`}
-                    >
-                        View Expense
-                    </Link>
-                </div>
-                <p className="shrink-0 text-sm font-semibold tabular-nums">
-                    {formatCurrency(entry.amount)}
-                </p>
-            </div>
+                    />
+                }
+            />
         );
     }
 
     if (entry.kind === "outgoing_expense_payment") {
         return (
-            <div className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                        {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.outgoing_expense_payment}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {paymentMethodLabel(entry.paymentMethod)}
-                        {" · "}
-                        {entry.expenseCategoryName}
-                        {" · "}
-                        {formatDateTime(entry.occurredAt)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        Linked Expense payment. This entry cannot be edited.
-                    </p>
-                    <Link
-                        className="mt-1 inline-flex text-xs text-primary hover:underline"
+            <MovementRow
+                title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.outgoing_expense_payment}
+                amount={entry.amount}
+                occurredAt={entry.occurredAt}
+                icon={Wallet}
+                entityLabel={entry.expenseCategoryName}
+                paymentMethod={entry.paymentMethod}
+                storeName={resolveStoreName(entry.storeId, storeNameById)}
+                action={
+                    <MovementActionLink
+                        label="View Expense"
                         to={`/organizations/${organizationId}/expenses/${entry.expenseId}`}
-                    >
-                        View Expense
-                    </Link>
-                </div>
-                <p className="shrink-0 text-sm font-semibold tabular-nums text-destructive">
-                    {formatCurrency(entry.amount)}
-                </p>
-            </div>
+                    />
+                }
+            />
         );
     }
 
     return (
-        <div className="flex items-start justify-between gap-3 px-4 py-3">
-            <div className="min-w-0">
-                <p className="font-medium text-foreground">
-                    {MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.pos_payment}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                    {paymentMethodLabel(entry.paymentMethod)}
-                    {entry.saleNumber ? ` · Sale ${entry.saleNumber}` : ""}
-                    {" · "}
-                    {formatDateTime(entry.occurredAt)}
-                </p>
-                <p className="text-xs text-muted-foreground">Linked Payment. This entry cannot be edited.</p>
+        <MovementRow
+            title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.pos_payment}
+            amount={entry.amount}
+            occurredAt={entry.occurredAt}
+            icon={ArrowDownLeft}
+            entityLabel={entry.saleNumber ? `Bill #${entry.saleNumber}` : null}
+            paymentMethod={entry.paymentMethod}
+            storeName={resolveStoreName(entry.storeId, storeNameById)}
+            action={
+                <MovementActionLink
+                    label="View Bill"
+                    to={buildBillHref(organizationId, entry.storeId, entry.saleId)}
+                />
+            }
+        />
+    );
+};
+
+const MovementSummaryBar = ({ entries }: { entries: MoneyAccountHistoryEntry[] }) => {
+    const movementEntries = entries.filter((entry) => entry.kind !== "opening_balance");
+    const moneyIn = movementEntries.reduce((sum, entry) => (entry.amount > 0 ? sum + entry.amount : sum), 0);
+    const moneyOut = movementEntries.reduce(
+        (sum, entry) => (entry.amount < 0 ? sum + Math.abs(entry.amount) : sum),
+        0,
+    );
+    const net = movementEntries.reduce((sum, entry) => sum + entry.amount, 0);
+
+    return (
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/50 bg-border/50 sm:grid-cols-4">
+            <div className="min-w-0 bg-card/80 px-3 py-2.5">
+                <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Count</p>
+                <p className="whitespace-nowrap text-sm font-semibold sm:text-base">{movementEntries.length}</p>
             </div>
-            <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(entry.amount)}</p>
+            <div className="min-w-0 bg-card/80 px-3 py-2.5">
+                <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">In</p>
+                <p className="whitespace-nowrap text-sm font-semibold text-emerald-600 dark:text-emerald-400 sm:text-base">
+                    +{formatCurrency(moneyIn)}
+                </p>
+            </div>
+            <div className="min-w-0 bg-card/80 px-3 py-2.5">
+                <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Out</p>
+                <p className="whitespace-nowrap text-sm font-semibold text-destructive sm:text-base">
+                    −{formatCurrency(moneyOut)}
+                </p>
+            </div>
+            <div className="min-w-0 bg-card/80 px-3 py-2.5">
+                <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Net</p>
+                <p
+                    className={cn(
+                        "whitespace-nowrap text-sm font-bold sm:text-base",
+                        net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+                    )}
+                >
+                    {formatSignedAmount(net)}
+                </p>
+            </div>
         </div>
     );
 };
 
 const MoneyAccountDetailPage = () => {
     const { organizationId = "", moneyAccountId = "" } = useParams();
+    const [historyQuery, setHistoryQuery] = useState<MoneyAccountHistoryQuery>(() => getDefaultHistoryQuery());
+    const [selectedStoreIds, setSelectedStoreIds] = useState<Set<string>>(() => new Set());
+    const dateRangeNeedsInput =
+        (historyQuery.occurredFrom !== undefined && historyQuery.occurredTo === undefined) ||
+        (historyQuery.occurredTo !== undefined && historyQuery.occurredFrom === undefined);
 
-    const historyQuery = useQuery({
-        queryKey: moneyAccountKeys.history(organizationId, moneyAccountId),
-        queryFn: () => getMoneyAccountHistory(organizationId, moneyAccountId),
-        enabled: Boolean(organizationId && moneyAccountId),
+    const historyQueryKey = useMemo(
+        () => ({
+            occurredFrom: historyQuery.occurredFrom,
+            occurredTo: historyQuery.occurredTo,
+        }),
+        [historyQuery.occurredFrom, historyQuery.occurredTo],
+    );
+
+    const historyQueryResult = useQuery({
+        queryKey: moneyAccountKeys.history(organizationId, moneyAccountId, historyQueryKey),
+        queryFn: () => getMoneyAccountHistory(organizationId, moneyAccountId, historyQuery),
+        enabled: Boolean(organizationId && moneyAccountId) && !dateRangeNeedsInput,
     });
 
     const organizationQuery = useQuery({
@@ -239,7 +434,7 @@ const MoneyAccountDetailPage = () => {
         enabled: Boolean(organizationId),
     });
 
-    if (historyQuery.isPending) {
+    if (historyQueryResult.isPending) {
         return (
             <div className="flex min-h-[30vh] items-center justify-center">
                 <Spinner className="size-6 text-primary" />
@@ -247,7 +442,7 @@ const MoneyAccountDetailPage = () => {
         );
     }
 
-    if (historyQuery.isError || historyQuery.data?.status === "error" || !historyQuery.data?.data) {
+    if (historyQueryResult.isError || historyQueryResult.data?.status === "error" || !historyQueryResult.data?.data) {
         return (
             <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
                 <CardContent className="p-0">
@@ -258,8 +453,8 @@ const MoneyAccountDetailPage = () => {
                             </EmptyMedia>
                             <EmptyTitle>Unable to load account history</EmptyTitle>
                             <EmptyDescription>
-                                {(historyQuery.error as { message?: string })?.message ??
-                                    historyQuery.data?.message ??
+                                {(historyQueryResult.error as { message?: string })?.message ??
+                                    historyQueryResult.data?.message ??
                                     "Money Account history could not be loaded right now."}
                             </EmptyDescription>
                         </EmptyHeader>
@@ -267,7 +462,7 @@ const MoneyAccountDetailPage = () => {
                             <Button
                                 variant="outline"
                                 className="rounded-full"
-                                onClick={() => historyQuery.refetch()}
+                                onClick={() => historyQueryResult.refetch()}
                             >
                                 Try again
                             </Button>
@@ -278,7 +473,7 @@ const MoneyAccountDetailPage = () => {
         );
     }
 
-    const { moneyAccount, openingBalance, balance, entries } = historyQuery.data.data;
+    const { moneyAccount, balance, entries } = historyQueryResult.data.data;
     const stores =
         organizationQuery.data?.status === "success"
             ? organizationQuery.data.data?.organization.stores ?? []
@@ -286,106 +481,112 @@ const MoneyAccountDetailPage = () => {
     const storeName = moneyAccount.storeId
         ? stores.find((store) => store.id === moneyAccount.storeId)?.name
         : null;
-    const movementEntries = entries.filter((entry) => entry.kind !== "opening_balance");
+    const storeLabel =
+        moneyAccount.scope === "store_scoped"
+            ? (storeName || "Store")
+            : "Every store";
+    const storeNameById = Object.fromEntries(stores.map((store) => [store.id, store.name]));
+    const storeFilterOptions = stores.map((store) => ({ label: store.name, value: store.id }));
+    const filteredEntries =
+        selectedStoreIds.size === 0
+            ? entries
+            : entries.filter((entry) => entry.kind !== "opening_balance" && selectedStoreIds.has(entry.storeId));
+    const movementEntries = filteredEntries.filter((entry) => entry.kind !== "opening_balance");
+    const showingAllDates = !historyQuery.occurredFrom && !historyQuery.occurredTo;
 
     return (
-        <div className="space-y-4" data-testid="money-account-history-page">
+        <div className="space-y-3" data-testid="money-account-history-page">
             <Button
                 variant="ghost"
-                className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                size="sm"
+                className="h-8 rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
                 render={<Link to={`/organizations/${organizationId}/money-accounts`} />}
             >
                 <ArrowLeft className="size-4" />
                 Back to money accounts
             </Button>
 
-            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardHeader>
-                    <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Card className="border-border/60 bg-card/80 shadow-md">
+                <div className="flex items-center justify-between gap-3 border-b border-border/40 px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                             <Wallet className="size-4" />
                         </div>
-                        <div className="min-w-0 space-y-2">
-                            <CardTitle className="font-display text-2xl">{moneyAccount.name}</CardTitle>
-                            <CardDescription>
-                                {MONEY_ACCOUNT_TYPE_LABELS[moneyAccount.type]}
-                                {" · "}
-                                {MONEY_ACCOUNT_SCOPE_LABELS[moneyAccount.scope]}
-                                {storeName ? ` · ${storeName}` : ""}
-                            </CardDescription>
+                        <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                                <ProductStatusBadge status={moneyAccount.status} />
-                                {moneyAccount.hasMovements ? (
-                                    <Badge variant="outline" className="rounded-full">
-                                        Identity locked after Movement
-                                    </Badge>
+                                <h1 className="font-display text-base font-semibold text-foreground truncate">
+                                    {moneyAccount.name}
+                                </h1>
+                                {moneyAccount.status === "inactive" ? (
+                                    <ProductStatusBadge status={moneyAccount.status} />
                                 ) : null}
                             </div>
-                            <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2">
-                                <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
-                                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                        Opening Balance
-                                    </p>
-                                    <p className="mt-1 text-lg font-semibold tabular-nums">
-                                        {formatCurrency(openingBalance)}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">Starting amount</p>
-                                </div>
-                                <div className="rounded-xl border border-border/60 bg-background px-3 py-2.5">
-                                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                        Calculated balance
-                                    </p>
-                                    <p className="mt-1 text-lg font-semibold tabular-nums">
-                                        {formatCurrency(balance)}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Opening Balance plus signed Movements
-                                    </p>
-                                </div>
-                            </div>
-                            {moneyAccount.status === "inactive" ? (
-                                <p className="text-sm text-muted-foreground">
-                                    This Money Account is inactive. Historic Movements remain visible. If it is used for
-                                    Cash, UPI, or Card at a tracking-enabled Store, those payments stay blocked until an
-                                    administrator repairs the configuration.
-                                </p>
-                            ) : null}
+                            <p className="text-xs text-muted-foreground truncate">
+                                {MONEY_ACCOUNT_TYPE_LABELS[moneyAccount.type]}
+                                {" · "}
+                                {storeLabel}
+                            </p>
                         </div>
                     </div>
-                </CardHeader>
-            </Card>
+                    <div className="shrink-0 text-right">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Balance</p>
+                        <p className="text-lg font-semibold tabular-nums text-foreground">{formatCurrency(balance)}</p>
+                    </div>
+                </div>
 
-            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardHeader>
-                    <CardTitle className="font-display text-xl">Immutable history</CardTitle>
-                    <CardDescription>
-                        Opening Balance followed by linked POS collections, Purchase payments,
-                        Purchase payment reversals, Purchase void reversals, and automatic bill-edit
-                        reversals. These entries cannot be edited, and changing a route later does not
-                        move earlier collections.
-                    </CardDescription>
+                <CardHeader className="gap-3 space-y-0 px-4 py-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                        <HistoryDateToolbar onQueryChange={setHistoryQuery} />
+                        {storeFilterOptions.length > 1 ? (
+                            <DataTableFacetedFilter
+                                title="Store"
+                                options={storeFilterOptions}
+                                selectedValues={selectedStoreIds}
+                                onSelectedValuesChange={setSelectedStoreIds}
+                            />
+                        ) : null}
+                    </div>
+                    {!dateRangeNeedsInput && filteredEntries.length > 0 ? (
+                        <MovementSummaryBar entries={filteredEntries} />
+                    ) : null}
                 </CardHeader>
                 <CardContent className="p-0">
-                    {movementEntries.length === 0 ? (
-                        <div className="divide-y divide-border/60">
-                            {entries.map((entry) => (
-                                <HistoryEntry
-                                    key={entry.kind === "opening_balance" ? "opening-balance" : entry.id}
-                                    entry={entry}
-                                    organizationId={organizationId}
-                                />
-                            ))}
-                            <p className="px-4 py-4 text-sm text-muted-foreground">
-                                No tracked POS Payments yet.
+                    {dateRangeNeedsInput ? (
+                        <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/40 p-5 text-center">
+                            <Calendar className="size-8 text-muted-foreground/50" />
+                            <p className="mt-3 font-medium text-foreground">Choose a date range</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Select both a From date and To date to view matching movements.
+                            </p>
+                        </div>
+                    ) : movementEntries.length === 0 ? (
+                        <div className="px-4 py-8 text-center">
+                            {showingAllDates && filteredEntries.some((entry) => entry.kind === "opening_balance") ? (
+                                <div className="mb-4 space-y-1.5 px-3 text-left">
+                                    {filteredEntries.map((entry) => (
+                                        <HistoryEntry
+                                            key={entry.kind === "opening_balance" ? "opening-balance" : entry.id}
+                                            entry={entry}
+                                            organizationId={organizationId}
+                                            storeNameById={storeNameById}
+                                        />
+                                    ))}
+                                </div>
+                            ) : null}
+                            <p className="text-sm text-muted-foreground">
+                                {showingAllDates
+                                    ? "No tracked Movements yet."
+                                    : "No movements for this period."}
                             </p>
                         </div>
                     ) : (
-                        <div className="divide-y divide-border/60">
-                            {entries.map((entry) => (
+                        <div className="space-y-1.5 px-3 pb-4">
+                            {filteredEntries.map((entry) => (
                                 <HistoryEntry
                                     key={entry.kind === "opening_balance" ? "opening-balance" : entry.id}
                                     entry={entry}
                                     organizationId={organizationId}
+                                    storeNameById={storeNameById}
                                 />
                             ))}
                         </div>

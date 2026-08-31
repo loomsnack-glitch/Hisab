@@ -1,5 +1,6 @@
 import type {
     CreateMoneyAccountJSON,
+    MoneyAccountHistoryQuery,
     MoneyAccountHistoryResponse,
     MoneyAccountPaymentRouteMethod,
     MoneyAccountPaymentRouteResponse,
@@ -111,10 +112,12 @@ export const clearMoneyAccountPaymentRoute = async (
 export const getMoneyAccountHistory = async (
     organizationId: string,
     moneyAccountId: string,
+    query: MoneyAccountHistoryQuery = {},
 ): Promise<ServiceResponse<MoneyAccountHistoryResponse | null>> => {
     try {
         const response = await api.get(
             `/organizations/${organizationId}/money-accounts/${moneyAccountId}/history`,
+            { params: query },
         );
         return response.data;
     } catch (error) {

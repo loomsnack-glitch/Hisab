@@ -1,10 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { MoneyAccountDTO, MoneyAccountHistoryResponse } from "@repo/types";
 
-import { moneyAccountKeys } from "@/lib/query-keys";
+import { getDefaultHistoryQuery } from "@/lib/date-range-filter";
+import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 import { formatCurrency } from "@/lib/format";
 import MoneyAccountDetailPage from "@/pages/money-account-detail-page";
 
@@ -13,6 +14,23 @@ const moneyAccountId = "11111111-1111-4111-8111-111111111111";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const now = new Date("2026-08-31T12:00:00.000Z");
 const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const OriginalDate = globalThis.Date;
+
+const withFixedNow = () => {
+    globalThis.Date = class extends OriginalDate {
+        constructor(...args: ConstructorParameters<typeof OriginalDate>) {
+            if (args.length === 0) {
+                super(now);
+                return;
+            }
+            super(...args);
+        }
+
+        static now() {
+            return now.getTime();
+        }
+    } as typeof OriginalDate;
+};
 
 const moneyAccount: MoneyAccountDTO = {
     id: moneyAccountId,
@@ -38,11 +56,6 @@ const historyWithPayments: MoneyAccountHistoryResponse = {
     balance: 350.5,
     entries: [
         {
-            kind: "opening_balance",
-            amount: 100,
-            occurredAt: now,
-        },
-        {
             kind: "pos_payment",
             id: "14141414-1414-4141-8141-141414141414",
             amount: 250.5,
@@ -56,20 +69,58 @@ const historyWithPayments: MoneyAccountHistoryResponse = {
     ],
 };
 
+const seedOrganizationDetails = (queryClient: QueryClient) => {
+    queryClient.setQueryData(organizationKeys.detail(organizationId), {
+        status: "success",
+        data: {
+            organization: {
+                id: organizationId,
+                name: "Demo Org",
+                username: "demo",
+                tagline: null,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+                stores: [
+                    {
+                        id: storeId,
+                        organizationId,
+                        name: "Adajan",
+                        address: null,
+                        devices: [],
+                        createdBy: userId,
+                        createdAt: now,
+                        updatedAt: now,
+                    },
+                ],
+            },
+        },
+        message: "Organization fetched successfully",
+        code: 200,
+    });
+};
+
 const renderHistoryPage = (
     result: "pending" | "success" | "error" | "empty" = "success",
     history: MoneyAccountHistoryResponse = historyWithPayments,
 ) => {
     const queryClient = new QueryClient();
+    const historyQuery = getDefaultHistoryQuery();
+    const historyQueryKey = {
+        occurredFrom: historyQuery.occurredFrom,
+        occurredTo: historyQuery.occurredTo,
+    };
+    seedOrganizationDetails(queryClient);
     if (result !== "pending") {
-        queryClient.setQueryData(moneyAccountKeys.history(organizationId, moneyAccountId), {
+        queryClient.setQueryData(moneyAccountKeys.history(organizationId, moneyAccountId, historyQueryKey), {
             status: result === "error" ? "error" : "success",
             data: result === "error" ? null : result === "empty"
                 ? {
                     ...history,
                     balance: history.openingBalance,
                     moneyAccount: { ...history.moneyAccount, balance: history.openingBalance, hasMovements: false },
-                    entries: [history.entries[0]],
+                    entries: [],
                 }
                 : history,
             message:
@@ -95,21 +146,30 @@ const renderHistoryPage = (
 };
 
 describe("Admin Money Account history page", () => {
-    test("shows Opening Balance, calculated Balance, and linked Sale/Payment history", () => {
+    beforeEach(() => {
+        withFixedNow();
+    });
+
+    afterEach(() => {
+        globalThis.Date = OriginalDate;
+    });
+
+    test("shows Balance and linked Sale/Payment history for today by default", () => {
         const markup = renderHistoryPage();
 
         expect(markup).toContain("data-testid=\"money-account-history-page\"");
         expect(markup).toContain("HDFC Current");
-        expect(markup).toContain("Opening Balance");
-        expect(markup).toContain("Calculated balance");
-        expect(markup).toContain("Starting amount");
-        expect(markup).toContain("Opening Balance plus signed Movements");
+        expect(markup).toContain("Balance");
+        expect(markup).toContain("Count");
         expect(markup).toContain("POS Payment");
         expect(markup).toContain("UPI");
-        expect(markup).toContain("Sale 12");
-        expect(markup).toContain("Immutable history");
-        expect(markup).toContain("cannot be edited");
-        expect(markup).toContain("Identity locked after Movement");
+        expect(markup).toContain("Adajan");
+        expect(markup).toContain("Bill #12");
+        expect(markup).toContain("+₹250.50");
+        expect(markup).toContain("View Bill");
+        expect(markup).toContain(`billing?storeId=${storeId}`);
+        expect(markup).toContain("saleId=18181818-1818-4181-8181-181818181818");
+        expect(markup).toContain("Date");
         expect(markup).toContain("Back to money accounts");
         expect(markup).not.toContain("Add movement");
         expect(markup).not.toContain("Correct balance");
@@ -121,11 +181,6 @@ describe("Admin Money Account history page", () => {
             openingBalance: 5,
             balance: 50,
             entries: [
-                {
-                    kind: "opening_balance",
-                    amount: 5,
-                    occurredAt: now,
-                },
                 {
                     kind: "pos_payment",
                     id: "14141414-1414-4141-8141-141414141414",
@@ -164,14 +219,13 @@ describe("Admin Money Account history page", () => {
         });
 
         expect(markup).toContain("Bill edit reversal");
-        expect(markup).toContain("Sale 12");
-        expect(markup).toContain("Sale 13");
+        expect(markup).toContain("Bill #12");
+        expect(markup).toContain("Bill #13");
         expect(markup).toContain("POS Payment");
         expect(markup).toContain("Cash");
-        expect(markup).toContain("Automatic reversal of the original tracked Payment");
-        expect(markup).toContain(formatCurrency(-90));
-        expect(markup).toContain(formatCurrency(45));
-        expect(markup).not.toContain("No tracked POS Payments yet.");
+        expect(markup).toContain("−₹90.00");
+        expect(markup).toContain("+₹45.00");
+        expect(markup).not.toContain("No tracked Movements yet.");
     });
 
     test("shows a Purchase payment as a negative history entry linked to the Purchase", () => {
@@ -180,11 +234,6 @@ describe("Admin Money Account history page", () => {
             openingBalance: 100,
             balance: 60,
             entries: [
-                {
-                    kind: "opening_balance",
-                    amount: 100,
-                    occurredAt: now,
-                },
                 {
                     kind: "outgoing_purchase_payment",
                     id: "14141414-1414-4141-8141-141414141414",
@@ -201,10 +250,11 @@ describe("Admin Money Account history page", () => {
 
         expect(markup).toContain("Purchase payment");
         expect(markup).toContain("Fresh Farms");
+        expect(markup).toContain("Adajan");
         expect(markup).toContain("Cash");
         expect(markup).toContain("View Purchase");
         expect(markup).toContain(`/organizations/${organizationId}/purchases/88888888-8888-4888-8888-888888888888`);
-        expect(markup).toContain(formatCurrency(-40));
+        expect(markup).toContain("−₹40.00");
     });
 
     test("shows a Purchase payment reversal as a positive history entry distinct from a Purchase void reversal", () => {
@@ -213,11 +263,6 @@ describe("Admin Money Account history page", () => {
             openingBalance: 100,
             balance: 100,
             entries: [
-                {
-                    kind: "opening_balance",
-                    amount: 100,
-                    occurredAt: now,
-                },
                 {
                     kind: "outgoing_purchase_payment",
                     id: "14141414-1414-4141-8141-141414141414",
@@ -245,7 +290,6 @@ describe("Admin Money Account history page", () => {
         });
 
         expect(markup).toContain("Purchase payment reversal");
-        expect(markup).toContain("Compensating reversal of a Purchase payment");
         expect(markup).toContain(formatCurrency(40));
         expect(markup).toContain("View Purchase");
     });
@@ -256,11 +300,6 @@ describe("Admin Money Account history page", () => {
             openingBalance: 100,
             balance: 100,
             entries: [
-                {
-                    kind: "opening_balance",
-                    amount: 100,
-                    occurredAt: now,
-                },
                 {
                     kind: "outgoing_purchase_void_reversal",
                     id: "15151515-1515-4151-8151-151515151515",
@@ -277,7 +316,6 @@ describe("Admin Money Account history page", () => {
         });
 
         expect(markup).toContain("Purchase void reversal");
-        expect(markup).toContain("Compensating reversal from a Purchase void");
         expect(markup).toContain("Fresh Farms");
     });
 
@@ -287,11 +325,6 @@ describe("Admin Money Account history page", () => {
             openingBalance: 100,
             balance: 60,
             entries: [
-                {
-                    kind: "opening_balance",
-                    amount: 100,
-                    occurredAt: now,
-                },
                 {
                     kind: "outgoing_expense_payment",
                     id: "14141414-1414-4141-8141-141414141414",
@@ -311,7 +344,7 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Cash");
         expect(markup).toContain("View Expense");
         expect(markup).toContain(`/organizations/${organizationId}/expenses/77777777-7777-4777-8777-777777777777`);
-        expect(markup).toContain(formatCurrency(-40));
+        expect(markup).toContain("−₹40.00");
     });
 
     test("shows an Expense payment reversal as a positive history entry distinct from an Expense void reversal", () => {
@@ -320,11 +353,6 @@ describe("Admin Money Account history page", () => {
             openingBalance: 100,
             balance: 100,
             entries: [
-                {
-                    kind: "opening_balance",
-                    amount: 100,
-                    occurredAt: now,
-                },
                 {
                     kind: "outgoing_expense_payment",
                     id: "14141414-1414-4141-8141-141414141414",
@@ -352,7 +380,6 @@ describe("Admin Money Account history page", () => {
         });
 
         expect(markup).toContain("Expense payment reversal");
-        expect(markup).toContain("Compensating reversal of an Expense payment");
         expect(markup).toContain(formatCurrency(40));
         expect(markup).toContain("View Expense");
     });
@@ -363,11 +390,6 @@ describe("Admin Money Account history page", () => {
             openingBalance: 100,
             balance: 100,
             entries: [
-                {
-                    kind: "opening_balance",
-                    amount: 100,
-                    occurredAt: now,
-                },
                 {
                     kind: "outgoing_expense_void_reversal",
                     id: "15151515-1515-4151-8151-151515151515",
@@ -384,15 +406,13 @@ describe("Admin Money Account history page", () => {
         });
 
         expect(markup).toContain("Expense void reversal");
-        expect(markup).toContain("Compensating reversal from an Expense void");
         expect(markup).toContain("Rent");
     });
 
-    test("shows an empty tracked-payments state with Opening Balance", () => {
+    test("shows an empty movements state for today when only Opening Balance exists", () => {
         const markup = renderHistoryPage("empty");
 
-        expect(markup).toContain("Opening Balance");
-        expect(markup).toContain("No tracked POS Payments yet.");
+        expect(markup).toContain("No movements for this period.");
         expect(markup).not.toContain("Sale 12");
     });
 
@@ -402,11 +422,10 @@ describe("Admin Money Account history page", () => {
             moneyAccount: { ...moneyAccount, status: "inactive" },
         });
 
-        expect(markup).toContain("This Money Account is inactive. Historic Movements remain visible.");
-        expect(markup).toContain("those payments stay blocked until an administrator repairs the configuration");
         expect(markup).toContain("POS Payment");
-        expect(markup).toContain("Sale 12");
-        expect(markup).toContain("Immutable history");
+        expect(markup).toContain("Bill #12");
+        expect(markup).toContain("Count");
+        expect(markup).toContain("inactive");
     });
 
     test("shows a loading spinner while history is fetched", () => {

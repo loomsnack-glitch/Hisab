@@ -345,9 +345,15 @@ export const deletePaymentRoute = async (
 export const getMovementsByMoneyAccountId = async (
     organizationId: string,
     moneyAccountId: string,
+    query: {
+        occurredFrom?: Date | null;
+        occurredTo?: Date | null;
+    } = {},
     tx?: Bun.TransactionSQL,
 ): Promise<MoneyAccountHistoryMovementREPO[]> => {
     const db = tx || pg;
+    const occurredFrom = query.occurredFrom?.toISOString() ?? null;
+    const occurredTo = query.occurredTo?.toISOString() ?? null;
     const results = await db`
         SELECT
             movements.id,
@@ -388,6 +394,8 @@ export const getMovementsByMoneyAccountId = async (
            AND expenses.organization_id = movements.organization_id
         WHERE movements.organization_id = ${organizationId}
           AND movements.money_account_id = ${moneyAccountId}
+          AND (${occurredFrom}::timestamptz IS NULL OR movements.occurred_at >= ${occurredFrom}::timestamptz)
+          AND (${occurredTo}::timestamptz IS NULL OR movements.occurred_at < ${occurredTo}::timestamptz)
         ORDER BY
             movements.occurred_at ASC,
             CASE movements.source_kind

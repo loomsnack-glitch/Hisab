@@ -4,6 +4,7 @@ import type {
   CreateMoneyAccountSchema,
   MoneyAccountDTOSchema,
   MoneyAccountHistoryEntrySchema,
+  MoneyAccountHistoryQuerySchema,
   MoneyAccountHistoryResponseSchema,
   MoneyAccountMovementDTOSchema,
   MoneyAccountMovementSourceKindSchema,
@@ -105,6 +106,7 @@ export type CreateMoneyAccountMovementREPO = Pick<
 
 export type MoneyAccountHistoryEntry = z.infer<typeof MoneyAccountHistoryEntrySchema>;
 export type MoneyAccountHistoryResponse = z.infer<typeof MoneyAccountHistoryResponseSchema>;
+export type MoneyAccountHistoryQuery = z.infer<typeof MoneyAccountHistoryQuerySchema>;
 
 export type MoneyAccountHistoryMovementREPO = MoneyAccountMovementDTO & {
   saleId: string | null;
