@@ -29,6 +29,7 @@ const draftExpense: ExpenseDTO = {
     paidTotal: 0,
     dueAmount: null,
     recordedAt: null,
+    outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -82,6 +83,7 @@ describe("Admin Expenses page", () => {
         expect(markup).toContain("Draft");
         expect(markup).toContain("Recorded");
         expect(markup).toContain("Due");
+        expect(markup).toContain("Paid");
         expect(markup).toContain("Add expense");
         expect(markup).toContain("Search expenses...");
         expect(markup).toContain("View");

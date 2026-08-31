@@ -31,6 +31,7 @@ const draftExpense: ExpenseDTO = {
     paidTotal: 0,
     dueAmount: null,
     recordedAt: null,
+    outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -102,6 +103,45 @@ describe("Admin Expense detail page", () => {
         expect(markup).not.toContain("Edit draft");
         expect(markup).not.toContain("Discard draft");
         expect(markup).not.toContain(">Record expense<");
+        expect(markup).toContain("Record payment");
+        expect(markup).toContain("Outgoing Payments");
+        expect(markup).toContain("No Outgoing Payments recorded yet.");
+    });
+
+    test("shows a recorded Expense with later settlement actions and payment history", () => {
+        const partialExpense: ExpenseDTO = {
+            ...recordedExpense,
+            payableStatus: "partial",
+            paidTotal: 10000,
+            dueAmount: 15000,
+            outgoingPayments: [
+                {
+                    id: "12121212-1212-4121-8121-121212121212",
+                    organizationId,
+                    purchaseId: null,
+                    expenseId,
+                    amount: 10000,
+                    paymentMethod: "cash",
+                    moneyAccountId: null,
+                    moneyAccountName: null,
+                    reference: "CASH-1",
+                    notes: null,
+                    paidAt: now,
+                    reversedAt: null,
+                    createdBy: userId,
+                    createdAt: now,
+                },
+            ],
+        };
+        const markup = renderDetailPage("success", partialExpense);
+
+        expect(markup).toContain("Partial");
+        expect(markup).toContain("Record payment");
+        expect(markup).toContain("Cash");
+        expect(markup).toContain("CASH-1");
+        expect(markup).toContain(formatCurrency(10000));
+        expect(markup).toContain(formatCurrency(15000));
+        expect(markup).not.toContain("No Outgoing Payments recorded yet.");
     });
 
     test("shows a loading spinner while the Expense is fetched", () => {

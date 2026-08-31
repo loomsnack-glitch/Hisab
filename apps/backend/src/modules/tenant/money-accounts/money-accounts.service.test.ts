@@ -1314,6 +1314,48 @@ describe("Organization Money Account service", () => {
         });
     });
 
+    test("includes Expense payments in history as negative entries linked to the Expense", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: false,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([
+            {
+                ...hdfcUpiMovement,
+                amount: -40,
+                sourceKind: "outgoing_expense_payment",
+                paymentId: null,
+                outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                purchaseId: null,
+                vendorName: null,
+                expenseId: "77777777-7777-4777-8777-777777777777",
+                expenseCategoryName: "Rent",
+                paymentMethod: "cash",
+                saleId: null,
+                saleNumber: null,
+            },
+        ]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.balance).toBe(60);
+        expect(response.data?.entries[1]).toMatchObject({
+            kind: "outgoing_expense_payment",
+            amount: -40,
+            outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+            expenseId: "77777777-7777-4777-8777-777777777777",
+            expenseCategoryName: "Rent",
+            paymentMethod: "cash",
+        });
+    });
+
     test("returns only the Opening Balance entry when a Money Account has no Movements", async () => {
         getMoneyAccountById.mockResolvedValue({
             ...hdfcBankAccount,

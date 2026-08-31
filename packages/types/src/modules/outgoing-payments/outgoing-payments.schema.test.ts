@@ -14,6 +14,7 @@ import {
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const purchaseId = "88888888-8888-4888-8888-888888888888";
+const expenseId = "77777777-7777-4777-8777-777777777777";
 const paymentId = "12121212-1212-4121-8121-121212121212";
 const moneyAccountId = "11111111-1111-4111-8111-111111111111";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -139,6 +140,7 @@ describe("Outgoing Payment contracts", () => {
       id: paymentId,
       organizationId,
       purchaseId,
+      expenseId: null,
       amount: 40,
       paymentMethod: "upi",
       moneyAccountId,
@@ -156,7 +158,66 @@ describe("Outgoing Payment contracts", () => {
       expect(result.data.paymentMethod).toBe("upi");
       expect(result.data.moneyAccountId).toBe(moneyAccountId);
       expect(result.data.reversedAt).toBeNull();
+      expect(result.data.purchaseId).toBe(purchaseId);
+      expect(result.data.expenseId).toBeNull();
     }
+  });
+
+  test("Outgoing Payment DTO can belong to an Expense instead of a Purchase", () => {
+    const result = OutgoingPaymentDTOSchema.safeParse({
+      id: paymentId,
+      organizationId,
+      purchaseId: null,
+      expenseId,
+      amount: 40,
+      paymentMethod: "cash",
+      moneyAccountId: null,
+      moneyAccountName: null,
+      reference: null,
+      notes: null,
+      paidAt: "2026-08-31T12:00:00.000Z",
+      reversedAt: null,
+      createdBy: userId,
+      createdAt: "2026-08-31T12:00:00.000Z",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.expenseId).toBe(expenseId);
+      expect(result.data.purchaseId).toBeNull();
+    }
+  });
+
+  test("Outgoing Payment DTO rejects a payment linked to both a Purchase and an Expense, or to neither", () => {
+    const base = {
+      id: paymentId,
+      organizationId,
+      amount: 40,
+      paymentMethod: "cash" as const,
+      moneyAccountId: null,
+      moneyAccountName: null,
+      reference: null,
+      notes: null,
+      paidAt: "2026-08-31T12:00:00.000Z",
+      reversedAt: null,
+      createdBy: userId,
+      createdAt: "2026-08-31T12:00:00.000Z",
+    };
+
+    expect(
+      OutgoingPaymentDTOSchema.safeParse({
+        ...base,
+        purchaseId,
+        expenseId,
+      }).success,
+    ).toBe(false);
+    expect(
+      OutgoingPaymentDTOSchema.safeParse({
+        ...base,
+        purchaseId: null,
+        expenseId: null,
+      }).success,
+    ).toBe(false);
   });
 });
 

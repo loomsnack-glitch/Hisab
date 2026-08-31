@@ -128,6 +128,37 @@ export const createOutgoingPurchasePaymentMovement = async (
         payment: Pick<OutgoingPaymentDTO, "id" | "amount" | "paidAt">;
     },
 ): Promise<void> => {
+    await createOutgoingPaymentMovement(tx, {
+        ...params,
+        sourceKind: "outgoing_purchase_payment",
+    });
+};
+
+export const createOutgoingExpensePaymentMovement = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        organizationId: string;
+        storeId: string;
+        moneyAccount: MoneyAccountDTO;
+        payment: Pick<OutgoingPaymentDTO, "id" | "amount" | "paidAt">;
+    },
+): Promise<void> => {
+    await createOutgoingPaymentMovement(tx, {
+        ...params,
+        sourceKind: "outgoing_expense_payment",
+    });
+};
+
+const createOutgoingPaymentMovement = async (
+    tx: Bun.TransactionSQL,
+    params: {
+        organizationId: string;
+        storeId: string;
+        moneyAccount: MoneyAccountDTO;
+        payment: Pick<OutgoingPaymentDTO, "id" | "amount" | "paidAt">;
+        sourceKind: "outgoing_purchase_payment" | "outgoing_expense_payment";
+    },
+): Promise<void> => {
     const nextBalance = roundOutgoingPaymentMoney(
         params.moneyAccount.balance - params.payment.amount,
     );
@@ -143,7 +174,7 @@ export const createOutgoingPurchasePaymentMovement = async (
             storeId: params.storeId,
             amount: roundOutgoingPaymentMoney(-params.payment.amount),
             occurredAt: params.payment.paidAt,
-            sourceKind: "outgoing_purchase_payment",
+            sourceKind: params.sourceKind,
             paymentId: null,
             outgoingPaymentId: params.payment.id,
             reversedMovementId: null,

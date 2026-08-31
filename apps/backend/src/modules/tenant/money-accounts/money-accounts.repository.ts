@@ -66,6 +66,8 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
             | "originalPaymentId"
             | "purchaseId"
             | "vendorName"
+            | "expenseId"
+            | "expenseCategoryName"
         >),
         amount: toMoneyAmount(mapped.amount),
         paymentId: typeof mapped.paymentId === "string" ? mapped.paymentId : null,
@@ -82,6 +84,9 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
             typeof mapped.originalPaymentId === "string" ? mapped.originalPaymentId : null,
         purchaseId: typeof mapped.purchaseId === "string" ? mapped.purchaseId : null,
         vendorName: typeof mapped.vendorName === "string" ? mapped.vendorName : null,
+        expenseId: typeof mapped.expenseId === "string" ? mapped.expenseId : null,
+        expenseCategoryName:
+            typeof mapped.expenseCategoryName === "string" ? mapped.expenseCategoryName : null,
     };
 };
 
@@ -356,7 +361,9 @@ export const getMovementsByMoneyAccountId = async (
             sales.sale_number,
             original_movements.payment_id AS original_payment_id,
             outgoing_payments.purchase_id,
-            purchases.vendor_name
+            purchases.vendor_name,
+            outgoing_payments.expense_id,
+            expenses.expense_category_name
         FROM money_account_movements AS movements
         LEFT JOIN money_account_movements AS original_movements
             ON original_movements.id = movements.reversed_movement_id
@@ -370,6 +377,9 @@ export const getMovementsByMoneyAccountId = async (
         LEFT JOIN purchases
             ON purchases.id = outgoing_payments.purchase_id
            AND purchases.organization_id = movements.organization_id
+        LEFT JOIN expenses
+            ON expenses.id = outgoing_payments.expense_id
+           AND expenses.organization_id = movements.organization_id
         WHERE movements.organization_id = ${organizationId}
           AND movements.money_account_id = ${moneyAccountId}
         ORDER BY
@@ -487,7 +497,10 @@ export const createMoneyAccountMovement = async (
         return getMovementByReversedMovementId(movementData.organizationId, reversedMovementId, tx);
     }
 
-    if (movementData.sourceKind === "outgoing_purchase_payment") {
+    if (
+        movementData.sourceKind === "outgoing_purchase_payment" ||
+        movementData.sourceKind === "outgoing_expense_payment"
+    ) {
         const outgoingPaymentId = movementData.outgoingPaymentId;
         if (!outgoingPaymentId) {
             return null;

@@ -1,12 +1,15 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
 import { isExpenseCategoryAvailableForAssignment } from "../expense-categories/expense-categories.schema";
+import { OutgoingPaymentDTOSchema } from "../outgoing-payments/outgoing-payments.schema";
 import {
   PAYABLE_STATUS_LABELS,
   PayableStatusSchema,
   PurchaseLifecycleSchema,
   calendarDateInTimeZone,
+  canAcceptOutgoingPayment,
   derivePurchasePayableState,
+  derivePurchasePayableStateFromPayments,
   isPurchaseEffectiveDateAllowed,
   purchaseEffectiveDateSchema,
   roundMoney,
@@ -90,6 +93,23 @@ export const deriveExpensePayableState = (input: {
   dueAmount: number | null;
 } => derivePurchasePayableState(input);
 
+export const deriveExpensePayableStateFromPayments = (input: {
+  lifecycle: z.infer<typeof ExpenseLifecycleSchema>;
+  total: number;
+  outgoingPayments: Array<{ amount: number; reversedAt: Date | string | null }>;
+}): {
+  payableStatus: z.infer<typeof ExpensePayableStatusSchema> | null;
+  paidTotal: number;
+  dueAmount: number | null;
+} => derivePurchasePayableStateFromPayments(input);
+
+export const canAcceptOutgoingExpensePayment = (input: {
+  lifecycle: z.infer<typeof ExpenseLifecycleSchema>;
+  total: number;
+  outgoingPayments: Array<{ amount: number; reversedAt: Date | string | null }>;
+  amount: number;
+}): boolean => canAcceptOutgoingPayment(input);
+
 export const isExpenseCategorySelectableForDraftExpense = isExpenseCategoryAvailableForAssignment;
 
 export const CreateDraftExpenseSchema = z
@@ -140,6 +160,7 @@ export const ExpenseDTOSchema = z.object({
   paidTotal: expenseMoneySchema,
   dueAmount: expenseMoneySchema.nullable(),
   recordedAt: dtoDateSchema.nullable(),
+  outgoingPayments: z.array(OutgoingPaymentDTOSchema),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,

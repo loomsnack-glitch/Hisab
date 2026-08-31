@@ -3,7 +3,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import {
-    createOutgoingPurchasePayment,
     getMoneyAccounts,
     getOrganizationDetails,
 } from "@repo/services";
@@ -16,7 +15,7 @@ import {
     isMoneyAccountEligibleForOutgoingMethod,
     type CreateOutgoingPaymentJSON,
     type OutgoingPaymentMethod,
-    type PurchaseDTO,
+    type ServiceResponse,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -34,11 +33,15 @@ import { Banknote } from "lucide-react";
 import { toast } from "sonner";
 
 import { formatCurrency } from "@/lib/format";
-import { moneyAccountKeys, organizationKeys, purchaseKeys } from "@/lib/query-keys";
+import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 
 type RecordOutgoingPaymentDialogProps = {
     organizationId: string;
-    purchase: PurchaseDTO;
+    storeId: string;
+    payableLabel: string;
+    dueAmount: number | null;
+    recordPayment: (values: CreateOutgoingPaymentJSON) => Promise<ServiceResponse<unknown>>;
+    onRecorded: () => Promise<void>;
 };
 
 const sanitizeTwoDecimalInput = (value: string) => {
@@ -50,10 +53,17 @@ const sanitizeTwoDecimalInput = (value: string) => {
     return digitsAndDot.slice(0, dotIndex + 1) + digitsAndDot.slice(dotIndex + 1).replace(/\./g, "").slice(0, 2);
 };
 
-const RecordOutgoingPaymentDialog = ({ organizationId, purchase }: RecordOutgoingPaymentDialogProps) => {
+const RecordOutgoingPaymentDialog = ({
+    organizationId,
+    storeId,
+    payableLabel,
+    dueAmount,
+    recordPayment,
+    onRecorded,
+}: RecordOutgoingPaymentDialogProps) => {
     const [open, setOpen] = useState(false);
     const queryClient = useQueryClient();
-    const remainingDue = purchase.dueAmount ?? 0;
+    const remainingDue = dueAmount ?? 0;
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -70,7 +80,7 @@ const RecordOutgoingPaymentDialog = ({ organizationId, purchase }: RecordOutgoin
         organizationQuery.data?.status === "success"
             ? organizationQuery.data.data?.organization.stores ?? []
             : [];
-    const store = stores.find((candidate) => candidate.id === purchase.storeId);
+    const store = stores.find((candidate) => candidate.id === storeId);
     const trackingActive = Boolean(store?.moneyAccountTrackingEnabled);
     const moneyAccounts =
         moneyAccountsQuery.data?.status === "success"
@@ -104,10 +114,10 @@ const RecordOutgoingPaymentDialog = ({ organizationId, purchase }: RecordOutgoin
         }
         return moneyAccounts.filter(
             (account) =>
-                isMoneyAccountAvailableToStore(account, purchase.storeId) &&
+                isMoneyAccountAvailableToStore(account, storeId) &&
                 isMoneyAccountEligibleForOutgoingMethod(account, paymentMethod),
         );
-    }, [moneyAccounts, paymentMethod, purchase.storeId, trackingActive]);
+    }, [moneyAccounts, paymentMethod, storeId, trackingActive]);
 
     const accountOptions = eligibleAccounts.map((account) => ({
         label: `${account.name} · ${formatCurrency(account.balance)}`,
@@ -117,7 +127,7 @@ const RecordOutgoingPaymentDialog = ({ organizationId, purchase }: RecordOutgoin
 
     const mutation = useMutation({
         mutationFn: (values: CreateOutgoingPaymentJSON) =>
-            createOutgoingPurchasePayment(organizationId, purchase.id, {
+            recordPayment({
                 amount: values.amount,
                 paymentMethod: values.paymentMethod,
                 moneyAccountId: trackingActive ? values.moneyAccountId : null,
@@ -127,10 +137,7 @@ const RecordOutgoingPaymentDialog = ({ organizationId, purchase }: RecordOutgoin
         onSuccess: async (response) => {
             if (response.status === "success") {
                 toast.success(response.message);
-                await queryClient.invalidateQueries({ queryKey: purchaseKeys.list(organizationId) });
-                await queryClient.invalidateQueries({
-                    queryKey: purchaseKeys.detail(organizationId, purchase.id),
-                });
+                await onRecorded();
                 await queryClient.invalidateQueries({ queryKey: moneyAccountKeys.all });
                 setOpen(false);
                 return;
@@ -174,7 +181,7 @@ const RecordOutgoingPaymentDialog = ({ organizationId, purchase }: RecordOutgoin
                 <DialogHeader>
                     <p className="font-display text-lg font-semibold">Record Outgoing Payment</p>
                     <p className="text-sm text-muted-foreground">
-                        {purchase.vendorName} · due {formatCurrency(remainingDue)}
+                        {payableLabel} · due {formatCurrency(remainingDue)}
                     </p>
                 </DialogHeader>
                 <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>

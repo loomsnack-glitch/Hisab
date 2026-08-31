@@ -548,6 +548,30 @@ export const getMoneyAccountHistory = async (
                 ];
             }
 
+            if (movement.sourceKind === "outgoing_expense_payment") {
+                if (
+                    !movement.outgoingPaymentId ||
+                    !movement.expenseId ||
+                    !movement.expenseCategoryName ||
+                    !movement.paymentMethod
+                ) {
+                    return [];
+                }
+                return [
+                    {
+                        kind: "outgoing_expense_payment",
+                        id: movement.id,
+                        amount: movement.amount,
+                        occurredAt: movement.occurredAt,
+                        storeId: movement.storeId,
+                        outgoingPaymentId: movement.outgoingPaymentId,
+                        expenseId: movement.expenseId,
+                        expenseCategoryName: movement.expenseCategoryName,
+                        paymentMethod: movement.paymentMethod,
+                    },
+                ];
+            }
+
             if (!movement.paymentId || !movement.saleId || !movement.paymentMethod) {
                 return [];
             }

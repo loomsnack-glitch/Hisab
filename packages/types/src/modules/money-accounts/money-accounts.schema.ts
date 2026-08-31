@@ -220,6 +220,7 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS = [
   "pos_payment",
   "sale_replacement_reversal",
   "outgoing_purchase_payment",
+  "outgoing_expense_payment",
 ] as const;
 
 export const MoneyAccountMovementSourceKindSchema = z.enum(MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS);
@@ -231,6 +232,7 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS: Record<
   pos_payment: "POS Payment",
   sale_replacement_reversal: "Bill edit reversal",
   outgoing_purchase_payment: "Purchase payment",
+  outgoing_expense_payment: "Expense payment",
 };
 
 export const moneyAccountMovementAmountSchema = z
@@ -322,33 +324,38 @@ export const MoneyAccountMovementDTOSchema = z
       return;
     }
 
-    if (value.sourceKind === "outgoing_purchase_payment") {
+    if (
+      value.sourceKind === "outgoing_purchase_payment" ||
+      value.sourceKind === "outgoing_expense_payment"
+    ) {
+      const label =
+        value.sourceKind === "outgoing_purchase_payment" ? "Purchase payment" : "Expense payment";
       if (!(value.amount < 0)) {
         ctx.addIssue({
           code: "custom",
           path: ["amount"],
-          message: "A Purchase payment Movement must be negative",
+          message: `A ${label} Movement must be negative`,
         });
       }
       if (!value.outgoingPaymentId) {
         ctx.addIssue({
           code: "custom",
           path: ["outgoingPaymentId"],
-          message: "A Purchase payment Movement must link an Outgoing Payment",
+          message: `A ${label} Movement must link an Outgoing Payment`,
         });
       }
       if (value.paymentId) {
         ctx.addIssue({
           code: "custom",
           path: ["paymentId"],
-          message: "A Purchase payment Movement cannot reuse a POS Payment id",
+          message: `A ${label} Movement cannot reuse a POS Payment id`,
         });
       }
       if (value.reversedMovementId) {
         ctx.addIssue({
           code: "custom",
           path: ["reversedMovementId"],
-          message: "A Purchase payment Movement cannot reverse another Movement",
+          message: `A ${label} Movement cannot reverse another Movement`,
         });
       }
       return;
@@ -427,11 +434,24 @@ export const MoneyAccountHistoryOutgoingPurchasePaymentEntrySchema = z.object({
   paymentMethod: PaymentMethodSchema,
 });
 
+export const MoneyAccountHistoryOutgoingExpensePaymentEntrySchema = z.object({
+  kind: z.literal("outgoing_expense_payment"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementReversalAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id"),
+  outgoingPaymentId: z.uuid("Invalid outgoing payment id"),
+  expenseId: z.uuid("Invalid expense id"),
+  expenseCategoryName: z.string().min(1),
+  paymentMethod: PaymentMethodSchema,
+});
+
 export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryOpeningEntrySchema,
   MoneyAccountHistoryMovementEntrySchema,
   MoneyAccountHistoryReversalEntrySchema,
   MoneyAccountHistoryOutgoingPurchasePaymentEntrySchema,
+  MoneyAccountHistoryOutgoingExpensePaymentEntrySchema,
 ]);
 
 export const MoneyAccountHistoryResponseSchema = z.object({

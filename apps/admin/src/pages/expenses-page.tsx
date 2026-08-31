@@ -126,6 +126,13 @@ const ExpensesPage = () => {
             getSortValue: (expense) => expense.total,
         },
         {
+            id: "paidTotal",
+            header: "Paid",
+            accessor: (expense) => formatCurrency(expense.paidTotal),
+            sortable: true,
+            getSortValue: (expense) => expense.paidTotal,
+        },
+        {
             id: "dueAmount",
             header: "Due",
             accessor: (expense) =>
@@ -343,7 +350,9 @@ const ExpensesPage = () => {
                                                 <div>
                                                     <p className="text-sm font-semibold tabular-nums">{formatCurrency(expense.total)}</p>
                                                     <p className="text-[11px] text-muted-foreground">
-                                                        Due {expense.dueAmount === null ? "—" : formatCurrency(expense.dueAmount)}
+                                                        Paid {formatCurrency(expense.paidTotal)}
+                                                        {" · Due "}
+                                                        {expense.dueAmount === null ? "—" : formatCurrency(expense.dueAmount)}
                                                         {expense.payableStatus
                                                             ? ` · ${EXPENSE_PAYABLE_STATUS_LABELS[expense.payableStatus]}`
                                                             : ""}

@@ -84,6 +84,9 @@ const attachRelated = (
     }
     const paymentsByPurchaseId = new Map<string, OutgoingPaymentDTO[]>();
     for (const payment of outgoingPayments) {
+        if (!payment.purchaseId) {
+            continue;
+        }
         const current = paymentsByPurchaseId.get(payment.purchaseId) ?? [];
         current.push(payment);
         paymentsByPurchaseId.set(payment.purchaseId, current);

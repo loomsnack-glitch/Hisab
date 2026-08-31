@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { discardDraftExpense, getExpense, recordExpense } from "@repo/services";
+import { discardDraftExpense, getExpense, recordExpense, createOutgoingExpensePayment } from "@repo/services";
+import {
+    OUTGOING_PAYMENT_METHOD_LABELS,
+} from "@repo/types";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -24,6 +27,7 @@ import {
     ExpensePayableStatusBadge,
 } from "@/components/expenses/expense-status-badges";
 import UpsertExpenseDialog from "@/components/expenses/upsert-expense-dialog";
+import RecordOutgoingPaymentDialog from "@/components/purchases/record-outgoing-payment-dialog";
 import { formatCurrency, formatDateOnly, formatDateTime } from "@/lib/format";
 import { expenseKeys } from "@/lib/query-keys";
 
@@ -116,6 +120,7 @@ const ExpenseDetailPage = () => {
 
     const expense = expenseQuery.data.data.expense;
     const isDraft = expense.lifecycle === "draft";
+    const canSettle = expense.lifecycle === "recorded" && (expense.dueAmount ?? 0) > 0;
 
     return (
         <div className="space-y-4" data-testid="expense-detail-page">
@@ -167,6 +172,17 @@ const ExpenseDetailPage = () => {
                                     Discard draft
                                 </Button>
                             </div>
+                        ) : canSettle ? (
+                            <RecordOutgoingPaymentDialog
+                                organizationId={organizationId}
+                                storeId={expense.storeId}
+                                payableLabel={expense.expenseCategoryName}
+                                dueAmount={expense.dueAmount}
+                                recordPayment={(data) =>
+                                    createOutgoingExpensePayment(organizationId, expense.id, data)
+                                }
+                                onRecorded={invalidate}
+                            />
                         ) : null}
                     </div>
                 </CardHeader>
@@ -191,6 +207,37 @@ const ExpenseDetailPage = () => {
                     {expense.notes ? (
                         <p className="text-sm text-muted-foreground">{expense.notes}</p>
                     ) : null}
+
+                    <div>
+                        <h3 className="mb-3 text-sm font-medium">Outgoing Payments</h3>
+                        {expense.outgoingPayments.length === 0 ? (
+                            <p className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-xs text-muted-foreground">
+                                {expense.lifecycle === "recorded"
+                                    ? "No Outgoing Payments recorded yet."
+                                    : "Draft Expenses do not create Outgoing Payments."}
+                            </p>
+                        ) : (
+                            <div className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/60">
+                                {expense.outgoingPayments.map((payment) => (
+                                    <div key={payment.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                                        <div className="min-w-0">
+                                            <p className="font-medium text-foreground">
+                                                {OUTGOING_PAYMENT_METHOD_LABELS[payment.paymentMethod]}
+                                                {payment.moneyAccountName ? ` · ${payment.moneyAccountName}` : ""}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {formatDateTime(payment.paidAt)}
+                                                {payment.reference ? ` · ${payment.reference}` : ""}
+                                            </p>
+                                        </div>
+                                        <p className="shrink-0 text-sm font-semibold tabular-nums">
+                                            {formatCurrency(payment.amount)}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
                     <p className="text-xs text-muted-foreground">
                         Paid {formatCurrency(expense.paidTotal)}

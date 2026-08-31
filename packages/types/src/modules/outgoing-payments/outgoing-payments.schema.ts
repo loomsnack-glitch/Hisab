@@ -90,21 +90,34 @@ export const CreateOutgoingPaymentSchema = z
   })
   .strict();
 
-export const OutgoingPaymentDTOSchema = z.object({
-  id: z.uuid("Invalid outgoing payment id"),
-  organizationId: z.uuid("Invalid organization id"),
-  purchaseId: z.uuid("Invalid purchase id"),
-  amount: outgoingPaymentAmountSchema,
-  paymentMethod: OutgoingPaymentMethodSchema,
-  moneyAccountId: z.uuid("Invalid money account id").nullable(),
-  moneyAccountName: z.string().min(1).nullable(),
-  reference: z.string().nullable(),
-  notes: z.string().nullable(),
-  paidAt: dtoDateSchema,
-  reversedAt: dtoDateSchema.nullable(),
-  createdBy: z.uuid("Invalid creator id"),
-  createdAt: dtoDateSchema,
-});
+export const OutgoingPaymentDTOSchema = z
+  .object({
+    id: z.uuid("Invalid outgoing payment id"),
+    organizationId: z.uuid("Invalid organization id"),
+    purchaseId: z.uuid("Invalid purchase id").nullable(),
+    expenseId: z.uuid("Invalid expense id").nullable(),
+    amount: outgoingPaymentAmountSchema,
+    paymentMethod: OutgoingPaymentMethodSchema,
+    moneyAccountId: z.uuid("Invalid money account id").nullable(),
+    moneyAccountName: z.string().min(1).nullable(),
+    reference: z.string().nullable(),
+    notes: z.string().nullable(),
+    paidAt: dtoDateSchema,
+    reversedAt: dtoDateSchema.nullable(),
+    createdBy: z.uuid("Invalid creator id"),
+    createdAt: dtoDateSchema,
+  })
+  .superRefine((value, ctx) => {
+    const hasPurchase = value.purchaseId != null;
+    const hasExpense = value.expenseId != null;
+    if (hasPurchase === hasExpense) {
+      ctx.addIssue({
+        code: "custom",
+        path: hasPurchase ? ["expenseId"] : ["purchaseId"],
+        message: "An Outgoing Payment must belong to exactly one Purchase or Expense",
+      });
+    }
+  });
 
 export const VendorOutstandingDTOSchema = z.object({
   vendorId: z.uuid("Invalid vendor id"),

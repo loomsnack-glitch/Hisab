@@ -34,9 +34,15 @@ describe("Organization Expense routes", () => {
         harness.createExpenseRepo.mockClear();
         harness.updateExpenseRepo.mockClear();
         harness.deleteExpenseRepo.mockClear();
+        harness.lockExpenseById.mockClear();
+        harness.createOutgoingPaymentRepo.mockClear();
+        harness.createMoneyAccountMovementRepo.mockClear();
+        harness.lockPaymentRouteByStoreAndMethod.mockClear();
+        harness.isMoneyAccountTrackingActive.mockClear();
 
         harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
         harness.getStoreById.mockResolvedValue(harness.store);
+        harness.isMoneyAccountTrackingActive.mockResolvedValue(false);
         harness.resetStoredExpense(harness.draftExpense);
         harness.getExpensesByOrganizationId.mockResolvedValue([harness.draftExpense]);
     });
@@ -186,5 +192,55 @@ describe("Organization Expense routes", () => {
         );
 
         expect(response.status).toBe(400);
+    });
+
+    test("records an Outgoing Payment against a recorded Expense", async () => {
+        harness.resetStoredExpense(harness.recordedExpense);
+
+        const response = await expensesRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/payments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 10000, paymentMethod: "cash" }),
+            },
+        );
+
+        expect(response.status).toBe(201);
+        const body = await readBody(response);
+        expect(body.data.expense.payableStatus).toBe("partial");
+        expect(body.data.expense.paidTotal).toBe(10000);
+        expect(harness.createOutgoingPaymentRepo).toHaveBeenCalled();
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+        expect(harness.lockPaymentRouteByStoreAndMethod).not.toHaveBeenCalled();
+    });
+
+    test("rejects a zero Outgoing Payment amount at the route seam", async () => {
+        harness.resetStoredExpense(harness.recordedExpense);
+
+        const response = await expensesRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/payments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 0, paymentMethod: "cash" }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.createOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects unauthenticated Outgoing Payments", async () => {
+        const response = await unauthenticatedRoutes.request(
+            `http://localhost/${harness.organizationId}/expenses/${harness.expenseId}/payments`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: 10000, paymentMethod: "cash" }),
+            },
+        );
+
+        expect(response.status).toBe(401);
     });
 });

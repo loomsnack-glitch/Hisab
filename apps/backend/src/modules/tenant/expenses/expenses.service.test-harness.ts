@@ -1,8 +1,12 @@
 import { mock } from "bun:test";
 import type {
     CreateExpenseREPO,
+    CreateOutgoingPaymentREPO,
     ExpenseCategoryDTO,
     ExpenseDTO,
+    MoneyAccountDTO,
+    MoneyAccountMovementDTO,
+    OutgoingPaymentDTO,
     UpdateExpenseREPO,
 } from "@repo/types";
 
@@ -60,6 +64,7 @@ export const draftExpense: ExpenseDTO = {
     paidTotal: 0,
     dueAmount: null,
     recordedAt: null,
+    outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -74,10 +79,53 @@ export const recordedExpense: ExpenseDTO = {
     recordedAt: now,
 };
 
+export const cashMoneyAccountId = "55555555-5555-4555-8555-555555555555";
+export const outgoingPaymentId = "12121212-1212-4121-8121-121212121212";
+
+export const adajanCashAccount: MoneyAccountDTO = {
+    id: cashMoneyAccountId,
+    organizationId,
+    name: "Adajan till",
+    type: "cash",
+    scope: "store_scoped",
+    storeId,
+    notes: null,
+    status: "active",
+    openingBalance: 200,
+    balance: 30000,
+    hasMovements: false,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+export const hdfcBankAccount: MoneyAccountDTO = {
+    id: "11111111-1111-4111-8111-111111111111",
+    organizationId,
+    name: "HDFC Current",
+    type: "bank",
+    scope: "organization_wide",
+    storeId: null,
+    notes: null,
+    status: "active",
+    openingBalance: 500,
+    balance: 50000,
+    hasMovements: false,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
 let storedExpense: ExpenseDTO | null = draftExpense;
+let storedOutgoingPayments: OutgoingPaymentDTO[] = [];
 
 export const resetStoredExpense = (expense: ExpenseDTO | null) => {
-    storedExpense = expense ? { ...expense } : null;
+    storedExpense = expense
+        ? { ...expense, outgoingPayments: [...expense.outgoingPayments] }
+        : null;
+    storedOutgoingPayments = expense ? [...expense.outgoingPayments] : [];
 };
 
 export const getOrganizationByIdForUser = mock(
@@ -104,6 +152,7 @@ export const createExpenseRepo = mock(async (data: CreateExpenseREPO) => {
         ...draftExpense,
         ...data,
         storeName: store.name,
+        outgoingPayments: [],
         updatedBy: data.updatedBy ?? null,
         createdAt: now,
         updatedAt: now,
@@ -116,6 +165,7 @@ export const updateExpenseRepo = mock(async (data: UpdateExpenseREPO) => {
         ...(storedExpense ?? draftExpense),
         ...data,
         storeName: store.name,
+        outgoingPayments: storedExpense?.outgoingPayments ?? storedOutgoingPayments,
         createdAt: storedExpense?.createdAt ?? now,
         updatedAt: now,
     };
@@ -124,8 +174,63 @@ export const updateExpenseRepo = mock(async (data: UpdateExpenseREPO) => {
 
 export const deleteExpenseRepo = mock(async () => {
     storedExpense = null;
+    storedOutgoingPayments = [];
     return true;
 });
+
+export const lockExpenseById = mock(async (_organizationId: string, id: string) => {
+    if (!storedExpense || storedExpense.id !== id) {
+        return null;
+    }
+    return storedExpense;
+});
+
+export const isMoneyAccountTrackingActive = mock(async () => false);
+export const lockMoneyAccountById = mock(async () => adajanCashAccount);
+export const createMoneyAccountMovementRepo = mock(
+    async (): Promise<MoneyAccountMovementDTO | null> => null,
+);
+export const lockPaymentRouteByStoreAndMethod = mock(async () => null);
+
+export const createOutgoingPaymentRepo = mock(async (data: CreateOutgoingPaymentREPO) => {
+    const payment: OutgoingPaymentDTO = {
+        id: data.id,
+        organizationId: data.organizationId,
+        purchaseId: data.purchaseId,
+        expenseId: data.expenseId,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod,
+        moneyAccountId: data.moneyAccountId,
+        moneyAccountName:
+            data.moneyAccountId === cashMoneyAccountId
+                ? adajanCashAccount.name
+                : data.moneyAccountId === hdfcBankAccount.id
+                  ? hdfcBankAccount.name
+                  : null,
+        reference: data.reference,
+        notes: data.notes,
+        paidAt: data.paidAt,
+        reversedAt: data.reversedAt,
+        createdBy: data.createdBy,
+        createdAt: now,
+    };
+    storedOutgoingPayments = [...storedOutgoingPayments, payment];
+    if (storedExpense) {
+        storedExpense = {
+            ...storedExpense,
+            outgoingPayments: storedOutgoingPayments,
+        };
+    }
+    return payment;
+});
+
+export const getOutgoingPaymentsByExpenseIds = mock(async () => storedOutgoingPayments);
+
+export const begin = mock(async (callback: (tx: unknown) => Promise<unknown>) => callback({}));
+
+mock.module("@/config/db", () => ({
+    pg: { begin },
+}));
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
@@ -139,9 +244,26 @@ mock.module("@/modules/tenant/expense-categories/expense-categories.repository",
 mock.module("./expenses.repository", () => ({
     getExpensesByOrganizationId,
     getExpenseById,
+    lockExpenseById,
     createExpense: createExpenseRepo,
     updateExpense: updateExpenseRepo,
     deleteExpense: deleteExpenseRepo,
+}));
+
+mock.module("@/modules/tenant/outgoing-payments/outgoing-payments.repository", () => ({
+    createOutgoingPayment: createOutgoingPaymentRepo,
+    getOutgoingPaymentsByExpenseIds,
+    getOutgoingPaymentById: mock(async () => storedOutgoingPayments[0] ?? null),
+}));
+
+mock.module("@/modules/tenant/money-accounts/money-account-tracking", () => ({
+    isMoneyAccountTrackingActive,
+}));
+
+mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
+    lockMoneyAccountById,
+    createMoneyAccountMovement: createMoneyAccountMovementRepo,
+    lockPaymentRouteByStoreAndMethod,
 }));
 
 export const expensesService = await import("./expenses.service");

@@ -5,8 +5,10 @@ import {
   ExpenseLifecycleSchema,
   ExpensePayableStatusSchema,
   UpdateDraftExpenseSchema,
+  canAcceptOutgoingExpensePayment,
   expenseCalendarDateInTimeZone,
   deriveExpensePayableState,
+  deriveExpensePayableStateFromPayments,
   isExpenseCategorySelectableForDraftExpense,
   isExpenseEffectiveDateAllowed,
 } from "./expenses.schema";
@@ -208,6 +210,40 @@ describe("Expense totals and Payable Status", () => {
       deriveExpensePayableState({ lifecycle: "recorded", total: 100, paidTotal: 100 }),
     ).toEqual({ payableStatus: "paid", dueAmount: 0 });
   });
+
+  test("Payable Status is derived from active Outgoing Payments without overpayment", () => {
+    expect(
+      deriveExpensePayableStateFromPayments({
+        lifecycle: "recorded",
+        total: 100,
+        outgoingPayments: [{ amount: 40, reversedAt: null }],
+      }),
+    ).toEqual({ payableStatus: "partial", paidTotal: 40, dueAmount: 60 });
+    expect(
+      canAcceptOutgoingExpensePayment({
+        lifecycle: "recorded",
+        total: 100,
+        outgoingPayments: [{ amount: 40, reversedAt: null }],
+        amount: 60,
+      }),
+    ).toBe(true);
+    expect(
+      canAcceptOutgoingExpensePayment({
+        lifecycle: "recorded",
+        total: 100,
+        outgoingPayments: [{ amount: 40, reversedAt: null }],
+        amount: 60.01,
+      }),
+    ).toBe(false);
+    expect(
+      canAcceptOutgoingExpensePayment({
+        lifecycle: "draft",
+        total: 100,
+        outgoingPayments: [],
+        amount: 10,
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("Draft Expense category selection", () => {
@@ -235,6 +271,7 @@ describe("Expense DTO", () => {
       paidTotal: 0,
       dueAmount: 25000,
       recordedAt: "2026-08-31T12:00:00.000Z",
+      outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
       createdAt: "2026-08-31T12:00:00.000Z",
@@ -268,6 +305,7 @@ describe("Expense DTO", () => {
       paidTotal: 0,
       dueAmount: null,
       recordedAt: null,
+      outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
       createdAt: "2026-08-31T12:00:00.000Z",
@@ -279,6 +317,7 @@ describe("Expense DTO", () => {
       expect(result.data.lifecycle).toBe("draft");
       expect(result.data.payableStatus).toBeNull();
       expect(result.data.dueAmount).toBeNull();
+      expect(result.data.outgoingPayments).toEqual([]);
     }
   });
 
@@ -299,6 +338,7 @@ describe("Expense DTO", () => {
       paidTotal: 0,
       dueAmount: null,
       recordedAt: null,
+      outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
       createdAt: "2026-08-31T12:00:00.000Z",

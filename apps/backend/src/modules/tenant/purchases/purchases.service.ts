@@ -758,6 +758,7 @@ export const createOutgoingPurchasePayment = async (
                     id: crypto.randomUUID(),
                     organizationId,
                     purchaseId,
+                    expenseId: null,
                     amount,
                     paymentMethod: paymentData.paymentMethod,
                     moneyAccountId: funding.moneyAccount?.id ?? null,

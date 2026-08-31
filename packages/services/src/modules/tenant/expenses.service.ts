@@ -1,5 +1,6 @@
 import type {
     CreateDraftExpenseJSON,
+    CreateOutgoingPaymentJSON,
     ExpenseResponse,
     ExpensesListResponse,
     ServiceResponse,
@@ -77,6 +78,22 @@ export const recordExpense = async (
     try {
         const response = await api.post(
             `/organizations/${organizationId}/expenses/${expenseId}/record`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createOutgoingExpensePayment = async (
+    organizationId: string,
+    expenseId: string,
+    data: CreateOutgoingPaymentJSON,
+): Promise<ServiceResponse<ExpenseResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/expenses/${expenseId}/payments`,
+            data,
         );
         return response.data;
     } catch (error) {

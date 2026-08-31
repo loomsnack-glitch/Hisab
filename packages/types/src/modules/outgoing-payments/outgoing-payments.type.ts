@@ -18,6 +18,7 @@ export type CreateOutgoingPaymentREPO = Pick<
   | "id"
   | "organizationId"
   | "purchaseId"
+  | "expenseId"
   | "amount"
   | "paymentMethod"
   | "moneyAccountId"

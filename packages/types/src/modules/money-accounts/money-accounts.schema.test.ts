@@ -844,6 +844,43 @@ describe("Money Account Movement and history contracts", () => {
     }
   });
 
+  test("Money Account Movement DTO records a negative Expense payment linked to an Outgoing Payment", () => {
+    const outgoingPaymentId = "12121212-1212-4121-8121-121212121212";
+    const result = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: -2500,
+      sourceKind: "outgoing_expense_payment",
+      paymentId: null,
+      outgoingPaymentId,
+      reversedMovementId: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(-2500);
+      expect(result.data.sourceKind).toBe("outgoing_expense_payment");
+      expect(result.data.outgoingPaymentId).toBe(outgoingPaymentId);
+      expect(result.data.paymentId).toBeNull();
+    }
+  });
+
+  test("rejects an Expense payment Movement that is positive, reuses a POS Payment id, or omits the Outgoing Payment", () => {
+    const outbound = {
+      ...movementDto,
+      amount: -40,
+      sourceKind: "outgoing_expense_payment" as const,
+      paymentId: null,
+      outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+      reversedMovementId: null,
+    };
+
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...outbound, amount: 40 }).success).toBe(false);
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...outbound, paymentId }).success).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...outbound, outgoingPaymentId: null }).success,
+    ).toBe(false);
+  });
+
   test("rejects a Purchase payment Movement that is positive, reuses a POS Payment id, or omits the Outgoing Payment", () => {
     const outbound = {
       ...movementDto,
@@ -1012,6 +1049,50 @@ describe("Money Account Movement and history contracts", () => {
         expect(result.data.entries[1].amount).toBe(-40);
         expect(result.data.entries[1].outgoingPaymentId).toBe(outgoingPaymentId);
         expect(result.data.entries[1].vendorName).toBe("Fresh Farms");
+        expect(result.data.entries[1].paymentMethod).toBe("cash");
+      }
+    }
+  });
+
+  test("account history includes an Expense payment as a dedicated negative entry linked to the Expense", () => {
+    const outgoingPaymentId = "12121212-1212-4121-8121-121212121212";
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        openingBalance: 100,
+        balance: 60,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 60,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "outgoing_expense_payment",
+          id: movementId,
+          amount: -40,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId,
+          outgoingPaymentId,
+          expenseId: "77777777-7777-4777-8777-777777777777",
+          expenseCategoryName: "Rent",
+          paymentMethod: "cash",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.balance).toBe(60);
+      expect(result.data.entries[1]?.kind).toBe("outgoing_expense_payment");
+      if (result.data.entries[1]?.kind === "outgoing_expense_payment") {
+        expect(result.data.entries[1].amount).toBe(-40);
+        expect(result.data.entries[1].outgoingPaymentId).toBe(outgoingPaymentId);
+        expect(result.data.entries[1].expenseCategoryName).toBe("Rent");
         expect(result.data.entries[1].paymentMethod).toBe("cash");
       }
     }

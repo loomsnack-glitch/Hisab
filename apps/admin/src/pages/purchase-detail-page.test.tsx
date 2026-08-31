@@ -140,6 +140,7 @@ describe("Admin Purchase detail page", () => {
                     id: "12121212-1212-4121-8121-121212121212",
                     organizationId,
                     purchaseId,
+                    expenseId: null,
                     amount: 40,
                     paymentMethod: "cash",
                     moneyAccountId: null,

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { discardDraftPurchase, getPurchase, recordPurchase } from "@repo/services";
+import { discardDraftPurchase, getPurchase, recordPurchase, createOutgoingPurchasePayment } from "@repo/services";
 import {
     OUTGOING_PAYMENT_METHOD_LABELS,
 } from "@repo/types";
@@ -173,7 +173,16 @@ const PurchaseDetailPage = () => {
                                 </Button>
                             </div>
                         ) : canSettle ? (
-                            <RecordOutgoingPaymentDialog organizationId={organizationId} purchase={purchase} />
+                            <RecordOutgoingPaymentDialog
+                                organizationId={organizationId}
+                                storeId={purchase.storeId}
+                                payableLabel={purchase.vendorName}
+                                dueAmount={purchase.dueAmount}
+                                recordPayment={(data) =>
+                                    createOutgoingPurchasePayment(organizationId, purchase.id, data)
+                                }
+                                onRecorded={invalidate}
+                            />
                         ) : null}
                     </div>
                 </CardHeader>

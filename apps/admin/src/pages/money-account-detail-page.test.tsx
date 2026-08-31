@@ -207,6 +207,39 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain(formatCurrency(-40));
     });
 
+    test("shows an Expense payment as a negative history entry linked to the Expense", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, balance: 60 },
+            openingBalance: 100,
+            balance: 60,
+            entries: [
+                {
+                    kind: "opening_balance",
+                    amount: 100,
+                    occurredAt: now,
+                },
+                {
+                    kind: "outgoing_expense_payment",
+                    id: "14141414-1414-4141-8141-141414141414",
+                    amount: -40,
+                    occurredAt: now,
+                    storeId,
+                    outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                    expenseId: "77777777-7777-4777-8777-777777777777",
+                    expenseCategoryName: "Rent",
+                    paymentMethod: "cash",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Expense payment");
+        expect(markup).toContain("Rent");
+        expect(markup).toContain("Cash");
+        expect(markup).toContain("View Expense");
+        expect(markup).toContain(`/organizations/${organizationId}/expenses/77777777-7777-4777-8777-777777777777`);
+        expect(markup).toContain(formatCurrency(-40));
+    });
+
     test("shows an empty tracked-payments state with Opening Balance", () => {
         const markup = renderHistoryPage("empty");
 

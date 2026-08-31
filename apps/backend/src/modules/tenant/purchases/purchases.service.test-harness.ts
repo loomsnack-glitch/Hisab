@@ -292,6 +292,7 @@ export const createOutgoingPaymentRepo = mock(async (data: CreateOutgoingPayment
         id: data.id,
         organizationId: data.organizationId,
         purchaseId: data.purchaseId,
+        expenseId: data.expenseId ?? null,
         amount: data.amount,
         paymentMethod: data.paymentMethod,
         moneyAccountId: data.moneyAccountId,

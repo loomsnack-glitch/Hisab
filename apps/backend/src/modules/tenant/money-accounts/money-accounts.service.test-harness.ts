@@ -199,6 +199,8 @@ export const hdfcUpiMovement: MoneyAccountHistoryMovementREPO = {
     outgoingPaymentId: null,
     purchaseId: null,
     vendorName: null,
+    expenseId: null,
+    expenseCategoryName: null,
 };
 
 export const hdfcCardMovement: MoneyAccountHistoryMovementREPO = {
@@ -219,6 +221,8 @@ export const hdfcCardMovement: MoneyAccountHistoryMovementREPO = {
     outgoingPaymentId: null,
     purchaseId: null,
     vendorName: null,
+    expenseId: null,
+    expenseCategoryName: null,
 };
 
 export const activeCashUniqueViolation = () =>

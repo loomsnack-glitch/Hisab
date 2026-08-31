@@ -14,8 +14,13 @@ const toMoneyAmount = (value: unknown): number => {
 const mapOutgoingPayment = (row: Record<string, unknown>): OutgoingPaymentDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     return {
-        ...(mapped as Omit<OutgoingPaymentDTO, "amount" | "moneyAccountId" | "moneyAccountName">),
+        ...(mapped as Omit<
+            OutgoingPaymentDTO,
+            "amount" | "moneyAccountId" | "moneyAccountName" | "purchaseId" | "expenseId"
+        >),
         amount: toMoneyAmount(mapped.amount),
+        purchaseId: typeof mapped.purchaseId === "string" ? mapped.purchaseId : null,
+        expenseId: typeof mapped.expenseId === "string" ? mapped.expenseId : null,
         moneyAccountId: typeof mapped.moneyAccountId === "string" ? mapped.moneyAccountId : null,
         moneyAccountName: typeof mapped.moneyAccountName === "string" ? mapped.moneyAccountName : null,
     };
@@ -25,6 +30,7 @@ const outgoingPaymentSelect = `
     outgoing_payments.id,
     outgoing_payments.organization_id,
     outgoing_payments.purchase_id,
+    outgoing_payments.expense_id,
     outgoing_payments.amount,
     outgoing_payments.payment_method,
     outgoing_payments.money_account_id,
@@ -74,6 +80,30 @@ export const getOutgoingPaymentsByPurchaseIds = async (
            AND money_accounts.organization_id = outgoing_payments.organization_id
         WHERE outgoing_payments.organization_id = ${organizationId}
           AND outgoing_payments.purchase_id IN ${db(purchaseIds)}
+        ORDER BY outgoing_payments.paid_at ASC, outgoing_payments.id ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapOutgoingPayment(result));
+};
+
+export const getOutgoingPaymentsByExpenseIds = async (
+    organizationId: string,
+    expenseIds: string[],
+    tx?: Bun.TransactionSQL,
+): Promise<OutgoingPaymentDTO[]> => {
+    if (expenseIds.length === 0) {
+        return [];
+    }
+
+    const db = tx || pg;
+    const results = await db`
+        SELECT ${db.unsafe(outgoingPaymentSelect)}
+        FROM outgoing_payments
+        LEFT JOIN money_accounts
+            ON money_accounts.id = outgoing_payments.money_account_id
+           AND money_accounts.organization_id = outgoing_payments.organization_id
+        WHERE outgoing_payments.organization_id = ${organizationId}
+          AND outgoing_payments.expense_id IN ${db(expenseIds)}
         ORDER BY outgoing_payments.paid_at ASC, outgoing_payments.id ASC
     `;
 
