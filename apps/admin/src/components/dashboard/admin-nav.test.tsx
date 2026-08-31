@@ -58,6 +58,18 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/purchases`, withOrg)).toBe(true);
     });
 
+    test("includes Expenses as an Organization-scoped workspace destination", () => {
+        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
+        const expenses = getVisibleAdminWorkspaceDestinations(withOrg).find(
+            (destination) => destination.id === "expenses",
+        );
+
+        expect(workspaceIds).toContain("expenses");
+        expect(expenses?.path).toBe(`/organizations/${organizationId}/expenses`);
+        expect(expenses?.isActive(`/organizations/${organizationId}/expenses`)).toBe(true);
+        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/expenses`, withOrg)).toBe(true);
+    });
+
     test("includes Money Accounts as an Organization-scoped workspace destination", () => {
         const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
         const moneyAccounts = getVisibleAdminWorkspaceDestinations(withOrg).find(

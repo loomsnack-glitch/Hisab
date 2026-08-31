@@ -20,6 +20,7 @@ export * from "./modules/platform";
 export * from "./modules/user";
 export * from "./modules/units";
 export * from "./modules/expense-categories";
+export * from "./modules/expenses";
 export * from "./modules/vendors";
 export * from "./modules/purchases";
 export * from "./modules/money-accounts";

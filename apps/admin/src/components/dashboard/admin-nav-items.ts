@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
     Armchair,
+    Banknote,
     BarChart3,
     Building2,
     Contact,
@@ -80,6 +81,14 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         requiresOrganization: true,
         getPath: (organizationId) => `/organizations/${organizationId}/purchases`,
         isActive: (pathname) => /\/organizations\/[^/]+\/purchases(\/|$)/.test(pathname),
+    },
+    {
+        id: "expenses",
+        label: "Expenses",
+        icon: Banknote,
+        requiresOrganization: true,
+        getPath: (organizationId) => `/organizations/${organizationId}/expenses`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/expenses(\/|$)/.test(pathname),
     },
     {
         id: "units",
