@@ -223,6 +223,18 @@ _Avoid_: Manual balance field, payment-method total
 An immutable recorded increase or decrease that changes one Money Account Balance. Cash, UPI, and Card POS Payments create linked positive Money Account Movements, including partial or later-collected Payments. When a tracked paid Sale is replaced, each original Movement stays unchanged and an automatic negative sale-replacement reversal is appended in the same Money Account.
 _Avoid_: Editable balance, payment-method summary
 
+**Manual Money Movement**:
+An immutable manually recorded deposit into or withdrawal from one Money Account that represents a real change in money held, separate from sales, purchases, expenses, transfers, and balance reconciliation. A withdrawal cannot reduce its Money Account Balance below zero.
+_Avoid_: Balance adjustment, editable balance, uncategorized payment
+
+**Balance Adjustment**:
+An immutable reconciliation entry with a required reason, recorded when the balance is counted and derived by comparing an entered actual current balance with the tracked Money Account Balance after earlier activity was missed or recorded incorrectly. It is neither money in nor money out and is presented as a neutral adjustment; it is not backdated.
+_Avoid_: Deposit, withdrawal, editable current balance
+
+**Money Account Transfer**:
+An immutable linked movement that decreases one Money Account and increases another active Money Account in the same Organization by the identical amount, including between different Stores and Organization-wide accounts. It is shown as money out of the source and money in to the destination, but does not change the Organization's total tracked money; it cannot reduce the source balance below zero.
+_Avoid_: Balance adjustment, independent deposit and withdrawal, external money movement
+
 **Payment Routing Rule**:
 An Organization configuration that directs future UPI or Card Payments received at one Store to one Money Account. A Money Account may be the destination of more than one Payment Routing Rule; changing a rule never reassigns an existing Money Account Movement.
 _Avoid_: Cashier-selected account, payment-method account type
