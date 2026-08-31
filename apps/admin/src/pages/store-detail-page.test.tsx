@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import type { StoreDeviceDTO, StoreWithDevicesDTO } from "@repo/types";
+import type { StoreDeviceDTO, StoreWithDevicesDTO, MoneyAccountDTO, MoneyAccountPaymentRouteDTO } from "@repo/types";
 
 import StoresSection from "@/components/organizations/stores-section";
 import {
@@ -11,6 +11,7 @@ import {
     StoreSettingsPage,
 } from "@/pages/store-detail-page";
 import { billingKeys, moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
+import { getPosLoginUrl } from "@/lib/pos-origin";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -97,9 +98,46 @@ const renderStoresList = () => {
     return renderWithDataRouter(router, queryClient);
 };
 
-const renderStoreDetail = (path: string) => {
+const hdfcBankAccount = {
+    id: "11111111-1111-4111-8111-111111111111",
+    organizationId,
+    name: "HDFC Current",
+    type: "bank" as const,
+    scope: "organization_wide" as const,
+    storeId: null,
+    notes: null,
+    status: "active" as const,
+    openingBalance: 0,
+    balance: 0,
+    hasMovements: false,
+    createdBy: "11111111-1111-4111-8111-111111111111",
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+const renderStoreDetail = (
+    path: string,
+    options?: {
+        trackingEnabled?: boolean;
+        moneyAccounts?: MoneyAccountDTO[];
+        paymentRoutes?: MoneyAccountPaymentRouteDTO[];
+    },
+) => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(organizationKeys.detail(organizationId), organizationResponse);
+    const storeForPage = {
+        ...store,
+        moneyAccountTrackingEnabled: options?.trackingEnabled ?? false,
+    };
+    queryClient.setQueryData(organizationKeys.detail(organizationId), {
+        ...organizationResponse,
+        data: {
+            organization: {
+                ...organizationResponse.data.organization,
+                stores: [storeForPage],
+            },
+        },
+    });
     queryClient.setQueryData(billingKeys.saleNumberSettings(organizationId, storeId), {
         status: "success",
         data: {
@@ -121,25 +159,7 @@ const renderStoreDetail = (path: string) => {
     queryClient.setQueryData(moneyAccountKeys.list(organizationId), {
         status: "success",
         data: {
-            moneyAccounts: [
-                {
-                    id: "11111111-1111-4111-8111-111111111111",
-                    organizationId,
-                    name: "HDFC Current",
-                    type: "bank",
-                    scope: "organization_wide",
-                    storeId: null,
-                    notes: null,
-                    status: "active",
-                    openingBalance: 0,
-                    balance: 0,
-                    hasMovements: false,
-                    createdBy: "11111111-1111-4111-8111-111111111111",
-                    updatedBy: null,
-                    createdAt: now,
-                    updatedAt: now,
-                },
-            ],
+            moneyAccounts: options?.moneyAccounts ?? [hdfcBankAccount],
         },
         message: "Money Accounts fetched successfully",
         code: 200,
@@ -147,14 +167,14 @@ const renderStoreDetail = (path: string) => {
     queryClient.setQueryData(moneyAccountKeys.paymentRoutes(organizationId, storeId), {
         status: "success",
         data: {
-            routes: [
+            routes: options?.paymentRoutes ?? [
                 {
                     id: "12121212-1212-4121-8121-121212121212",
                     organizationId,
                     storeId,
-                    paymentMethod: "upi",
-                    moneyAccountId: "11111111-1111-4111-8111-111111111111",
-                    createdBy: "11111111-1111-4111-8111-111111111111",
+                    paymentMethod: "upi" as const,
+                    moneyAccountId: hdfcBankAccount.id,
+                    createdBy: hdfcBankAccount.createdBy,
                     updatedBy: null,
                     createdAt: now,
                     updatedAt: now,
@@ -212,7 +232,9 @@ describe("Store detail page", () => {
         expect(markup).toContain("Add device");
         expect(markup).toContain("Counter 1");
         expect(markup).toContain("Open POS");
-        expect(markup).toContain('href="http://localhost:5174/login?org=demo&amp;device=counter_1"');
+        expect(markup).toContain(
+            `href="${getPosLoginUrl({ organizationUsername: "demo", deviceUsername: "counter_1" }).replaceAll("&", "&amp;")}"`,
+        );
         expect(markup).not.toContain("/pos/login");
         expect(markup).not.toContain("Bill numbering");
     });
@@ -225,6 +247,12 @@ describe("Store detail page", () => {
         expect(markup).toContain("KOT system");
         expect(markup).toContain("Table management");
         expect(markup).toContain("Money Account Tracking");
+        expect(markup).toContain("When enabled, Cash, UPI, and Card POS collections immediately increase");
+        expect(markup).toContain("Tracking is off. POS continues as today.");
+        expect(markup).toContain("Retained Money Account history remains");
+        expect(markup).toContain("Store Cash Account: missing");
+        expect(markup).toContain("UPI route: ready · HDFC Current");
+        expect(markup).toContain("Card route: not set");
         expect(markup).toContain("Payment routing");
         expect(markup).toContain("UPI payments");
         expect(markup).toContain("Card payments");
@@ -239,5 +267,54 @@ describe("Store detail page", () => {
         expect(markup).not.toContain("Reset period");
         expect(markup).not.toContain("Add device");
         expect(markup).not.toContain("Counter 1");
+    });
+
+    test("explains inactive route repair and keeps tracking history readable while tracking is on", () => {
+        const inactiveBank = {
+            ...hdfcBankAccount,
+            status: "inactive" as const,
+            hasMovements: true,
+            openingBalance: 100,
+            balance: 250,
+        };
+        const markup = renderStoreDetail(
+            `/organizations/${organizationId}/stores/${storeId}/settings`,
+            {
+                trackingEnabled: true,
+                moneyAccounts: [inactiveBank],
+                paymentRoutes: [
+                    {
+                        id: "12121212-1212-4121-8121-121212121212",
+                        organizationId,
+                        storeId,
+                        paymentMethod: "upi",
+                        moneyAccountId: inactiveBank.id,
+                        createdBy: inactiveBank.createdBy,
+                        updatedBy: null,
+                        createdAt: now,
+                        updatedAt: now,
+                    },
+                    {
+                        id: "13131313-1313-4131-8131-131313131313",
+                        organizationId,
+                        storeId,
+                        paymentMethod: "card",
+                        moneyAccountId: inactiveBank.id,
+                        createdBy: inactiveBank.createdBy,
+                        updatedBy: null,
+                        createdAt: now,
+                        updatedAt: now,
+                    },
+                ],
+            },
+        );
+
+        expect(markup).toContain("Tracking is on for this Store. Bank Transfer and Other stay untracked.");
+        expect(markup).toContain("UPI route: needs repair · HDFC Current is inactive");
+        expect(markup).toContain("Card route: needs repair · HDFC Current is inactive");
+        expect(markup).toContain("Historic Movements remain visible");
+        expect(markup).toContain("Future UPI payments are blocked until you choose an");
+        expect(markup).toContain("Future Card payments are blocked until you choose an");
+        expect(markup).toContain("Historic Movements stay on this account");
     });
 });

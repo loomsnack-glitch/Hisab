@@ -13,6 +13,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Spinner } from "@repo/ui/components/spinner";
 import { ArrowLeft, RefreshCw, Wallet } from "lucide-react";
 
+import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 
@@ -28,10 +29,12 @@ const paymentMethodLabel = (method: string) => {
 const HistoryEntry = ({ entry }: { entry: MoneyAccountHistoryEntry }) => {
     if (entry.kind === "opening_balance") {
         return (
-            <div className="flex items-start justify-between gap-3 px-4 py-3">
+            <div className="flex items-start justify-between gap-3 bg-muted/20 px-4 py-3">
                 <div className="min-w-0">
                     <p className="font-medium text-foreground">Opening Balance</p>
-                    <p className="text-xs text-muted-foreground">{formatDateTime(entry.occurredAt)}</p>
+                    <p className="text-xs text-muted-foreground">
+                        Starting amount before tracked Payments · {formatDateTime(entry.occurredAt)}
+                    </p>
                 </div>
                 <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(entry.amount)}</p>
             </div>
@@ -48,6 +51,7 @@ const HistoryEntry = ({ entry }: { entry: MoneyAccountHistoryEntry }) => {
                     {" · "}
                     {formatDateTime(entry.occurredAt)}
                 </p>
+                <p className="text-xs text-muted-foreground">Linked Payment. This entry cannot be edited.</p>
             </div>
             <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(entry.amount)}</p>
         </div>
@@ -143,14 +147,43 @@ const MoneyAccountDetailPage = () => {
                                 {MONEY_ACCOUNT_SCOPE_LABELS[moneyAccount.scope]}
                                 {storeName ? ` · ${storeName}` : ""}
                             </CardDescription>
-                            <div className="flex flex-wrap gap-2">
-                                <Badge variant="outline" className="rounded-full">
-                                    Opening {formatCurrency(openingBalance)}
-                                </Badge>
-                                <Badge variant="outline" className="rounded-full">
-                                    Balance {formatCurrency(balance)}
-                                </Badge>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <ProductStatusBadge status={moneyAccount.status} />
+                                {moneyAccount.hasMovements ? (
+                                    <Badge variant="outline" className="rounded-full">
+                                        Identity locked after Movement
+                                    </Badge>
+                                ) : null}
                             </div>
+                            <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2">
+                                <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+                                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                        Opening Balance
+                                    </p>
+                                    <p className="mt-1 text-lg font-semibold tabular-nums">
+                                        {formatCurrency(openingBalance)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">Starting amount</p>
+                                </div>
+                                <div className="rounded-xl border border-border/60 bg-background px-3 py-2.5">
+                                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                        Calculated balance
+                                    </p>
+                                    <p className="mt-1 text-lg font-semibold tabular-nums">
+                                        {formatCurrency(balance)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Opening Balance plus tracked Payments
+                                    </p>
+                                </div>
+                            </div>
+                            {moneyAccount.status === "inactive" ? (
+                                <p className="text-sm text-muted-foreground">
+                                    This Money Account is inactive. Historic Movements remain visible. If it is used for
+                                    Cash, UPI, or Card at a tracking-enabled Store, those payments stay blocked until an
+                                    administrator repairs the configuration.
+                                </p>
+                            ) : null}
                         </div>
                     </div>
                 </CardHeader>
@@ -158,10 +191,10 @@ const MoneyAccountDetailPage = () => {
 
             <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
                 <CardHeader>
-                    <CardTitle className="font-display text-xl">Account history</CardTitle>
+                    <CardTitle className="font-display text-xl">Immutable history</CardTitle>
                     <CardDescription>
-                        Opening Balance and linked POS Payments. Earlier collections stay on this account even if routing
-                        changes later.
+                        Opening Balance followed by linked POS Payments. These entries cannot be edited, and changing a
+                        route later does not move earlier collections.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">

@@ -749,4 +749,66 @@ describe("Organization Money Account routes", () => {
         expect(updateMovement.status).toBe(404);
         expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
     });
+
+    test("rejects a direct current-balance write at the Money Account route seam", async () => {
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ balance: 999.99 }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.updateMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects Type, scope, and Store identity edits after the first Movement at the route seam", async () => {
+        harness.getMoneyAccountById.mockResolvedValue({
+            ...harness.hdfcBankAccount,
+            hasMovements: true,
+            openingBalance: 100,
+            balance: 250,
+        });
+
+        const typeResponse = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ type: "upi" }),
+            },
+        );
+        const scopeResponse = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scope: "store_scoped", storeId: harness.storeId }),
+            },
+        );
+
+        const typeBody = (await typeResponse.json()) as { message?: string };
+        expect(typeResponse.status).toBe(400);
+        expect(scopeResponse.status).toBe(400);
+        expect(typeBody.message).toContain(
+            "cannot be changed after this Money Account has Movements",
+        );
+        expect(harness.updateMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not expose a historical Payment backfill route", async () => {
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/backfill`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ storeId: harness.storeId }),
+            },
+        );
+
+        expect(response.status).toBe(404);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
 });

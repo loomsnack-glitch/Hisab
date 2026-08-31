@@ -63,6 +63,18 @@ const StorePaymentRoutingForm = ({ organizationId, store }: StorePaymentRoutingF
         routes.find((route) => route.paymentMethod === "card")?.moneyAccountId ?? NONE_VALUE;
 
     const eligibleAccounts = moneyAccounts.filter((account) => isEligibleDestination(account, store.id));
+    const accountById = new Map(moneyAccounts.map((account) => [account.id, account]));
+
+    const destinationNeedsRepair = (selectedId: string) => {
+        if (!selectedId) {
+            return null;
+        }
+        const account = accountById.get(selectedId);
+        if (!account || account.status !== "active") {
+            return account?.name ?? "This Money Account";
+        }
+        return null;
+    };
 
     const saveMutation = useMutation({
         mutationFn: async ({
@@ -97,7 +109,11 @@ const StorePaymentRoutingForm = ({ organizationId, store }: StorePaymentRoutingF
         },
     });
 
-    const renderMethodField = (paymentMethod: MoneyAccountPaymentRouteMethod, selectedId: string) => (
+    const renderMethodField = (paymentMethod: MoneyAccountPaymentRouteMethod, selectedId: string) => {
+        const inactiveName = destinationNeedsRepair(selectedId);
+        const methodLabel = MONEY_ACCOUNT_PAYMENT_ROUTE_METHOD_LABELS[paymentMethod];
+
+        return (
         <Field>
             <FieldLabel htmlFor={`${paymentMethod}-payment-route`}>
                 {MONEY_ACCOUNT_PAYMENT_ROUTE_METHOD_LABELS[paymentMethod]} payments
@@ -126,14 +142,21 @@ const StorePaymentRoutingForm = ({ organizationId, store }: StorePaymentRoutingF
                               .filter((account) => account.id === selectedId)
                               .map((account) => (
                                   <option key={account.id} value={account.id}>
-                                      {destinationLabel(account)}
+                                      {destinationLabel(account)} (inactive)
                                   </option>
                               ))
                         : null}
                 </select>
+                {inactiveName ? (
+                    <p className="text-sm text-muted-foreground">
+                        {inactiveName} is inactive. Future {methodLabel} payments are blocked until you choose an
+                        active Money Account. Historic Movements stay on this account.
+                    </p>
+                ) : null}
             </FieldContent>
         </Field>
-    );
+        );
+    };
 
     return (
         <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">

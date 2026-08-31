@@ -52,21 +52,21 @@ const missingCashAccountError = () =>
 const missingRouteError = (method: MoneyAccountPaymentRouteMethod) => {
     const label = TRACKED_PAYMENT_METHOD_LABELS[method];
     return new MoneyAccountTrackingSetupError(
-        `${label} Payments cannot be collected until this Store has a ${label} Payment Routing Rule. Ask an administrator to set one.`,
+        `${label} Payments cannot be collected until this Store has a ${label} route. Ask an administrator to set one.`,
     );
 };
 
 const inactiveDestinationError = (method: MoneyAccountPaymentRouteMethod) => {
     const label = TRACKED_PAYMENT_METHOD_LABELS[method];
     return new MoneyAccountTrackingSetupError(
-        `${label} Payments cannot be collected because the routed Money Account is inactive. Ask an administrator to update the ${label} Payment Routing Rule.`,
+        `${label} Payments cannot be collected because the ${label} destination is inactive. Ask an administrator to choose an active ${label} account.`,
     );
 };
 
 const unavailableDestinationError = (method: MoneyAccountPaymentRouteMethod) => {
     const label = TRACKED_PAYMENT_METHOD_LABELS[method];
     return new MoneyAccountTrackingSetupError(
-        `${label} Payments cannot be collected because the routed Money Account is not available to this Store. Ask an administrator to update the ${label} Payment Routing Rule.`,
+        `${label} Payments cannot be collected because the ${label} destination is not available to this Store. Ask an administrator to choose a ${label} account.`,
     );
 };
 

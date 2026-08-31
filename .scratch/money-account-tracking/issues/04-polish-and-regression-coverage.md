@@ -6,9 +6,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] Money Account list and detail views clearly distinguish Opening Balance, calculated current Balance, and immutable payment-linked history on desktop and mobile.
-- [ ] Store Settings explains the effect of enabling/disabling tracking, shows configuration readiness, and keeps retained history readable when the Store is disabled or later unavailable.
-- [ ] Deactivating a route destination explains that future use of the affected Cash/UPI/Card method is blocked until the administrator repairs the configuration; historic Movements remain visible.
-- [ ] All user-facing validation and POS errors explain the missing Store Cash Account or UPI/Card route without exposing account configuration controls to a device user.
-- [ ] End-to-end regression tests demonstrate no backfill, no direct balance mutation, no manual Movement endpoint, correct locked account identity after movement, and unchanged Bank Transfer/Other behavior.
-- [ ] Focused test suites and type checks for `@repo/types`, services, backend, Admin, and POS pass.
+- [x] Money Account list and detail views clearly distinguish Opening Balance, calculated current Balance, and immutable payment-linked history on desktop and mobile.
+- [x] Store Settings explains the effect of enabling/disabling tracking, shows configuration readiness, and keeps retained history readable when the Store is disabled or later unavailable.
+- [x] Deactivating a route destination explains that future use of the affected Cash/UPI/Card method is blocked until the administrator repairs the configuration; historic Movements remain visible.
+- [x] All user-facing validation and POS errors explain the missing Store Cash Account or UPI/Card route without exposing account configuration controls to a device user.
+- [x] End-to-end regression tests demonstrate no backfill, no direct balance mutation, no manual Movement endpoint, correct locked account identity after movement, and unchanged Bank Transfer/Other behavior.
+- [x] Focused test suites and type checks for `@repo/types`, services, backend, Admin, and POS pass.

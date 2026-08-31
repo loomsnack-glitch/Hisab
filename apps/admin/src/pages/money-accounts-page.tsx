@@ -102,6 +102,11 @@ const MoneyAccountsPage = () => {
                                 Type, availability, Store, and Opening Balance are locked
                             </p>
                         ) : null}
+                        {account.status === "inactive" && account.hasMovements ? (
+                            <p className="text-xs text-muted-foreground">
+                                Inactive. Historic Movements remain visible.
+                            </p>
+                        ) : null}
                     </div>
                 </div>
             ),
@@ -152,16 +157,22 @@ const MoneyAccountsPage = () => {
             id: "openingBalance",
             header: "Opening Balance",
             accessor: (account) => (
-                <span className="text-sm tabular-nums">{formatCurrency(account.openingBalance)}</span>
+                <div>
+                    <p className="text-sm tabular-nums">{formatCurrency(account.openingBalance)}</p>
+                    <p className="text-[11px] text-muted-foreground">Starting amount</p>
+                </div>
             ),
             sortable: true,
             getSortValue: (account) => account.openingBalance,
         },
         {
             id: "balance",
-            header: "Balance",
+            header: "Calculated balance",
             accessor: (account) => (
-                <span className="text-sm font-medium tabular-nums">{formatCurrency(account.balance)}</span>
+                <div>
+                    <p className="text-sm font-medium tabular-nums">{formatCurrency(account.balance)}</p>
+                    <p className="text-[11px] text-muted-foreground">Opening plus tracked Payments</p>
+                </div>
             ),
             sortable: true,
             getSortValue: (account) => account.balance,
@@ -405,13 +416,19 @@ const MoneyAccountsPage = () => {
                                             <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2.5">
                                                 <div className="min-w-0">
                                                     <p className="text-[11px] text-muted-foreground">
-                                                        Opening {formatCurrency(account.openingBalance)}
-                                                        {" · "}
-                                                        Balance {formatCurrency(account.balance)}
+                                                        Opening Balance {formatCurrency(account.openingBalance)}
+                                                    </p>
+                                                    <p className="text-[11px] font-medium text-foreground">
+                                                        Calculated balance {formatCurrency(account.balance)}
                                                     </p>
                                                     {account.hasMovements ? (
                                                         <p className="text-[11px] text-muted-foreground">
                                                             Type, availability, Store, and Opening Balance are locked
+                                                        </p>
+                                                    ) : null}
+                                                    {account.status === "inactive" && account.hasMovements ? (
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            Inactive. Historic Movements remain visible.
                                                         </p>
                                                     ) : null}
                                                 </div>

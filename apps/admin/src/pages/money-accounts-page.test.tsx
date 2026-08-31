@@ -241,7 +241,7 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.store_scoped);
         expect(markup).toContain("Every store");
         expect(markup).toContain("Opening Balance");
-        expect(markup).toContain("Balance");
+        expect(markup).toContain("Calculated balance");
         expect(markup).toContain("Add money account");
         expect(markup).toContain("Search money accounts...");
         expect(markup).toContain("Status");
@@ -261,14 +261,18 @@ describe("Admin Money Accounts page", () => {
         const lockedBank: MoneyAccountDTO = {
             ...hdfcBank,
             openingBalance: 500,
-            balance: 500,
+            balance: 750,
             hasMovements: true,
+            status: "inactive",
         };
         const markup = renderMoneyAccountsPage("success", [lockedBank]);
 
         expect(markup).toContain("Opening Balance");
-        expect(markup).toContain("Balance");
+        expect(markup).toContain("Calculated balance");
+        expect(markup).toContain("Starting amount");
+        expect(markup).toContain("Opening plus tracked Payments");
         expect(markup).toContain("Type, availability, Store, and Opening Balance are locked");
+        expect(markup).toContain("Inactive. Historic Movements remain visible.");
         expect(markup).not.toContain("current balance");
     });
 

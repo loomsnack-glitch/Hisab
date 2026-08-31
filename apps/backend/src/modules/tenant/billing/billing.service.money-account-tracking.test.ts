@@ -619,8 +619,9 @@ describe("Atomic POS Payment Money Account Tracking", () => {
 
         expect(response.status).toBe("error");
         expect(response.code).toBe(400);
-        expect(response.message).toContain("Cash");
-        expect(response.message).toContain("Cash Money Account");
+        expect(response.message).toBe(
+            "Cash Payments cannot be collected until this Store has an active Cash Money Account. Ask an administrator to create one.",
+        );
         expect(createdPayments).toHaveLength(0);
         expect(createdMovements).toHaveLength(0);
         expect(createdSales).toHaveLength(0);
@@ -643,7 +644,9 @@ describe("Atomic POS Payment Money Account Tracking", () => {
 
         expect(response.status).toBe("error");
         expect(response.code).toBe(400);
-        expect(response.message).toContain("UPI");
+        expect(response.message).toBe(
+            "UPI Payments cannot be collected until this Store has a UPI route. Ask an administrator to set one.",
+        );
         expect(response.message).not.toContain("Card");
         expect(createdPayments).toHaveLength(0);
         expect(createdMovements).toHaveLength(0);
@@ -668,8 +671,9 @@ describe("Atomic POS Payment Money Account Tracking", () => {
 
         expect(response.status).toBe("error");
         expect(response.code).toBe(400);
-        expect(response.message).toContain("Card");
-        expect(response.message).toMatch(/inactive|not available/i);
+        expect(response.message).toBe(
+            "Card Payments cannot be collected because the Card destination is inactive. Ask an administrator to choose an active Card account.",
+        );
         expect(createdPayments).toHaveLength(0);
         expect(createdMovements).toHaveLength(0);
     });
@@ -789,5 +793,30 @@ describe("Atomic POS Payment Money Account Tracking", () => {
         expect(createdPayments).toHaveLength(0);
         expect(createdMovements).toHaveLength(0);
         expect(createdSales).toHaveLength(0);
+    });
+
+    test("does not backfill earlier Payments when a new tracked Payment is collected", async () => {
+        const earlierPaymentId = "99999999-9999-4999-8999-999999999999";
+        createdPayments.push({
+            id: earlierPaymentId,
+            organizationId,
+            storeId,
+            saleId: "88888888-8888-4888-8888-888888888888",
+            amount: 40,
+            method: "cash",
+        });
+
+        const response = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            completeSalePayload(),
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdPayments).toHaveLength(2);
+        expect(createdMovements).toHaveLength(1);
+        expect(createdMovements[0]?.paymentId).toBe(createdPayments[1]?.id);
+        expect(createdMovements.some((movement) => movement.paymentId === earlierPaymentId)).toBe(false);
     });
 });

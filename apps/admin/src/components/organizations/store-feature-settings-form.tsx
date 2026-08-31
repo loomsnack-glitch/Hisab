@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
-import { updateStore } from "@repo/services";
+import { getMoneyAccountPaymentRoutes, getMoneyAccounts, updateStore } from "@repo/services";
 import { type StoreDTO } from "@repo/types";
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
@@ -13,7 +13,11 @@ import { Label } from "@repo/ui/components/label";
 import { LayoutGrid, UtensilsCrossed, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
-import { organizationKeys } from "@/lib/query-keys";
+import {
+    getStoreMoneyAccountTrackingReadiness,
+    type TrackingMethodReadiness,
+} from "@/lib/money-account-tracking-readiness";
+import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 
 type StoreFeatureSettingsFormProps = {
     organizationId: string;
@@ -34,12 +38,58 @@ const getDefaultValues = (store: StoreDTO): StoreFeatureSettingsFormValues => ({
     moneyAccountTrackingEnabled: store.moneyAccountTrackingEnabled,
 });
 
+const readinessLabel = (
+    method: "Store Cash Account" | "UPI route" | "Card route",
+    readiness: TrackingMethodReadiness,
+    trackingEnabled: boolean,
+) => {
+    const blockedWhileOn = trackingEnabled
+        ? "blocked until repaired"
+        : "will be blocked while tracking is on";
+
+    if (readiness.state === "ready") {
+        return `${method}: ready · ${readiness.accountName}`;
+    }
+    if (readiness.state === "inactive_destination") {
+        return `${method}: needs repair · ${readiness.accountName} is inactive. Future ${
+            method === "UPI route" ? "UPI" : "Card"
+        } payments are ${blockedWhileOn}. Historic Movements remain visible.`;
+    }
+    if (method === "Store Cash Account") {
+        return `${method}: missing. Cash payments are ${blockedWhileOn} until an active Cash Money Account exists.`;
+    }
+    return `${method}: not set. ${method === "UPI route" ? "UPI" : "Card"} payments are ${blockedWhileOn} until an administrator chooses an active Money Account.`;
+};
+
 const StoreFeatureSettingsForm = ({ organizationId, store }: StoreFeatureSettingsFormProps) => {
     const queryClient = useQueryClient();
     const form = useForm<StoreFeatureSettingsFormValues>({
         resolver: zodResolver(StoreFeatureSettingsFormSchema),
         defaultValues: getDefaultValues(store),
     });
+    const trackingEnabled = form.watch("moneyAccountTrackingEnabled");
+
+    const moneyAccountsQuery = useQuery({
+        queryKey: moneyAccountKeys.list(organizationId),
+        queryFn: () => getMoneyAccounts(organizationId),
+        enabled: Boolean(organizationId),
+    });
+    const routesQuery = useQuery({
+        queryKey: moneyAccountKeys.paymentRoutes(organizationId, store.id),
+        queryFn: () => getMoneyAccountPaymentRoutes(organizationId, store.id),
+        enabled: Boolean(organizationId && store.id),
+    });
+
+    const moneyAccounts =
+        moneyAccountsQuery.data?.status === "success"
+            ? moneyAccountsQuery.data.data?.moneyAccounts ?? []
+            : [];
+    const routes =
+        routesQuery.data?.status === "success" ? routesQuery.data.data?.routes ?? [] : [];
+    const readiness =
+        moneyAccountsQuery.isSuccess && routesQuery.isSuccess
+            ? getStoreMoneyAccountTrackingReadiness(store.id, moneyAccounts, routes)
+            : null;
 
     useEffect(() => {
         form.reset(getDefaultValues(store));
@@ -160,9 +210,27 @@ const StoreFeatureSettingsForm = ({ organizationId, store }: StoreFeatureSetting
                                     Money Account Tracking
                                 </Label>
                                 <p className="text-[11px] text-muted-foreground">
-                                    Record Cash, UPI, and Card POS collections against this store's Money Accounts.
-                                    Disabled by default.
+                                    When enabled, Cash, UPI, and Card POS collections immediately increase the configured
+                                    Money Accounts. When disabled, POS keeps recording Payments without new Movements.
+                                    Opening Balances, routes, calculated balances, and history stay readable.
                                 </p>
+                                {readiness ? (
+                                    <ul className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                                        <li>{readinessLabel("Store Cash Account", readiness.cash, trackingEnabled)}</li>
+                                        <li>{readinessLabel("UPI route", readiness.upi, trackingEnabled)}</li>
+                                        <li>{readinessLabel("Card route", readiness.card, trackingEnabled)}</li>
+                                    </ul>
+                                ) : null}
+                                {trackingEnabled ? (
+                                    <p className="mt-2 text-[11px] text-muted-foreground">
+                                        Tracking is on for this Store. Bank Transfer and Other stay untracked.
+                                    </p>
+                                ) : (
+                                    <p className="mt-2 text-[11px] text-muted-foreground">
+                                        Tracking is off. POS continues as today. Retained Money Account history remains
+                                        readable even if this Store later becomes unavailable.
+                                    </p>
+                                )}
                             </FieldContent>
                         </div>
                     </Field>

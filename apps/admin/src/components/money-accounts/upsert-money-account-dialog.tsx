@@ -118,6 +118,7 @@ const UpsertMoneyAccountDialog = ({
 
     const selectedScope = (useWatch({ control: form.control, name: "scope" }) ?? "organization_wide") as MoneyAccountScope;
     const selectedType = (useWatch({ control: form.control, name: "type" }) ?? "bank") as MoneyAccountType;
+    const selectedStatus = (useWatch({ control: form.control, name: "status" }) ?? "active") as MoneyAccountStatus;
     const isCashAccount = selectedType === "cash";
     const isLockedAfterMovements = Boolean(moneyAccount?.hasMovements);
 
@@ -397,6 +398,13 @@ const UpsertMoneyAccountDialog = ({
                                             control: () => "!min-h-11 rounded-xl",
                                         }}
                                     />
+                                    {selectedStatus === "inactive" ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            {isCashAccount
+                                                ? "Deactivating this Store Cash Account blocks Cash payments at tracking-enabled Stores until another active Cash account exists. Historic Movements remain visible."
+                                                : "If this account is a UPI or Card destination, those payments are blocked at tracking-enabled Stores until an administrator chooses an active account. Historic Movements remain visible."}
+                                        </p>
+                                    ) : null}
                                     <FieldError errors={[fieldState.error]} />
                                 </FieldContent>
                             </Field>

@@ -1235,5 +1235,7 @@ describe("Organization Money Account service", () => {
         expect("createMoneyAccountMovement" in moneyAccountsService).toBe(false);
         expect("updateMoneyAccountMovement" in moneyAccountsService).toBe(false);
         expect("deleteMoneyAccountMovement" in moneyAccountsService).toBe(false);
+        expect("backfillMoneyAccountMovements" in moneyAccountsService).toBe(false);
+        expect("updateMoneyAccountBalance" in moneyAccountsService).toBe(false);
     });
 });

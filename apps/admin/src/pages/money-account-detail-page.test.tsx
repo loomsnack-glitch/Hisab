@@ -100,10 +100,15 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("data-testid=\"money-account-history-page\"");
         expect(markup).toContain("HDFC Current");
         expect(markup).toContain("Opening Balance");
+        expect(markup).toContain("Calculated balance");
+        expect(markup).toContain("Starting amount");
+        expect(markup).toContain("Opening Balance plus tracked Payments");
         expect(markup).toContain("POS Payment");
         expect(markup).toContain("UPI");
         expect(markup).toContain("Sale 12");
-        expect(markup).toContain("Account history");
+        expect(markup).toContain("Immutable history");
+        expect(markup).toContain("cannot be edited");
+        expect(markup).toContain("Identity locked after Movement");
         expect(markup).toContain("Back to money accounts");
         expect(markup).not.toContain("Add movement");
         expect(markup).not.toContain("Correct balance");
@@ -115,6 +120,19 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Opening Balance");
         expect(markup).toContain("No tracked POS Payments yet.");
         expect(markup).not.toContain("Sale 12");
+    });
+
+    test("keeps inactive-account history readable and explains blocked future routing", () => {
+        const markup = renderHistoryPage("success", {
+            ...historyWithPayments,
+            moneyAccount: { ...moneyAccount, status: "inactive" },
+        });
+
+        expect(markup).toContain("This Money Account is inactive. Historic Movements remain visible.");
+        expect(markup).toContain("those payments stay blocked until an administrator repairs the configuration");
+        expect(markup).toContain("POS Payment");
+        expect(markup).toContain("Sale 12");
+        expect(markup).toContain("Immutable history");
     });
 
     test("shows a loading spinner while history is fetched", () => {
