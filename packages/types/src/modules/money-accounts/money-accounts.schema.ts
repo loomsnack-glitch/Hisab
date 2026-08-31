@@ -12,10 +12,12 @@ export const ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES = [
   "other",
 ] as const;
 
+export const MONEY_ACCOUNT_TYPES = ["cash", ...ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES] as const;
+
 export const MoneyAccountStatusSchema = z.enum(["active", "inactive"]);
 export const MoneyAccountScopeSchema = z.enum(["organization_wide", "store_scoped"]);
 export const OrganizationWideMoneyAccountTypeSchema = z.enum(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES);
-export const MoneyAccountTypeSchema = OrganizationWideMoneyAccountTypeSchema;
+export const MoneyAccountTypeSchema = z.enum(MONEY_ACCOUNT_TYPES);
 
 export const ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS: Record<
   z.infer<typeof OrganizationWideMoneyAccountTypeSchema>,
@@ -26,6 +28,11 @@ export const ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS: Record<
   card_settlement: "Card Settlement",
   petty_cash: "Petty Cash",
   other: "Other",
+};
+
+export const MONEY_ACCOUNT_TYPE_LABELS: Record<z.infer<typeof MoneyAccountTypeSchema>, string> = {
+  cash: "Cash",
+  ...ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
 };
 
 export const MONEY_ACCOUNT_SCOPE_LABELS: Record<z.infer<typeof MoneyAccountScopeSchema>, string> = {
@@ -61,6 +68,7 @@ const moneyAccountStoreIdSchema = z.uuid("Invalid store id").nullable().optional
 const STORE_REQUIRED_FOR_STORE_SCOPE = "Store is required for a Store-scoped Money Account";
 const STORE_FORBIDDEN_FOR_ORGANIZATION_WIDE =
   "An Organization-wide Money Account cannot have a Store assignment";
+const CASH_MUST_BE_STORE_SCOPED = "A Cash Money Account must be Store-scoped";
 
 const refineMoneyAccountScopeAndStore = (
   value: {
@@ -89,6 +97,29 @@ const refineMoneyAccountScopeAndStore = (
   }
 };
 
+const refineCashMustBeStoreScoped = (
+  value: {
+    type?: z.infer<typeof MoneyAccountTypeSchema>;
+    scope?: z.infer<typeof MoneyAccountScopeSchema>;
+    storeId?: string | null;
+  },
+  ctx: z.RefinementCtx,
+  options?: { defaultScope?: z.infer<typeof MoneyAccountScopeSchema> },
+) => {
+  if (value.type !== "cash") {
+    return;
+  }
+
+  const scope = value.scope ?? options?.defaultScope;
+  if (scope === "organization_wide") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["scope"],
+      message: CASH_MUST_BE_STORE_SCOPED,
+    });
+  }
+};
+
 export const MoneyAccountDTOSchema = z
   .object({
     id: z.uuid("Invalid money account id"),
@@ -104,26 +135,30 @@ export const MoneyAccountDTOSchema = z
     createdAt: dtoDateSchema,
     updatedAt: dtoDateSchema,
   })
-  .superRefine((value, ctx) => refineMoneyAccountScopeAndStore(value, ctx));
+  .superRefine((value, ctx) => {
+    refineMoneyAccountScopeAndStore(value, ctx);
+    refineCashMustBeStoreScoped(value, ctx);
+  });
 
 export const CreateMoneyAccountSchema = z
   .object({
     name: moneyAccountNameSchema,
-    type: OrganizationWideMoneyAccountTypeSchema,
+    type: MoneyAccountTypeSchema,
     scope: MoneyAccountScopeSchema.optional(),
     storeId: moneyAccountStoreIdSchema,
     notes: moneyAccountNotesSchema,
     status: MoneyAccountStatusSchema.optional(),
   })
   .strict()
-  .superRefine((value, ctx) =>
-    refineMoneyAccountScopeAndStore(value, ctx, { defaultScope: "organization_wide" }),
-  );
+  .superRefine((value, ctx) => {
+    refineMoneyAccountScopeAndStore(value, ctx, { defaultScope: "organization_wide" });
+    refineCashMustBeStoreScoped(value, ctx, { defaultScope: "organization_wide" });
+  });
 
 export const UpdateMoneyAccountSchema = z
   .object({
     name: moneyAccountNameSchema.optional(),
-    type: OrganizationWideMoneyAccountTypeSchema.optional(),
+    type: MoneyAccountTypeSchema.optional(),
     scope: MoneyAccountScopeSchema.optional(),
     storeId: moneyAccountStoreIdSchema,
     notes: moneyAccountNotesSchema,
@@ -140,4 +175,7 @@ export const UpdateMoneyAccountSchema = z
       value.status !== undefined,
     { message: "At least one field is required" },
   )
-  .superRefine((value, ctx) => refineMoneyAccountScopeAndStore(value, ctx));
+  .superRefine((value, ctx) => {
+    refineMoneyAccountScopeAndStore(value, ctx);
+    refineCashMustBeStoreScoped(value, ctx);
+  });

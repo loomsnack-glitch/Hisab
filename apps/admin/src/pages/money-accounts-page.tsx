@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { getMoneyAccounts, getOrganizationDetails } from "@repo/services";
 import {
     MONEY_ACCOUNT_SCOPE_LABELS,
-    ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
+    MONEY_ACCOUNT_TYPE_LABELS,
     type MoneyAccountDTO,
     type MoneyAccountScope,
     type MoneyAccountType,
@@ -26,7 +26,7 @@ import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table"
 
 const MoneyAccountTypeBadge = ({ type }: { type: MoneyAccountType }) => (
     <Badge variant="outline" className="rounded-full">
-        {ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[type]}
+        {MONEY_ACCOUNT_TYPE_LABELS[type]}
     </Badge>
 );
 
@@ -76,7 +76,7 @@ const MoneyAccountsPage = () => {
         const query = mobileSearchQuery.toLowerCase().trim();
         return moneyAccounts.filter((account) =>
             account.name.toLowerCase().includes(query)
-            || ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type].toLowerCase().includes(query)
+            || MONEY_ACCOUNT_TYPE_LABELS[account.type].toLowerCase().includes(query)
             || MONEY_ACCOUNT_SCOPE_LABELS[account.scope].toLowerCase().includes(query)
             || storeNameFor(account).toLowerCase().includes(query)
             || (account.notes ?? "").toLowerCase().includes(query),
@@ -108,8 +108,8 @@ const MoneyAccountsPage = () => {
             header: "Type",
             accessor: (account) => <MoneyAccountTypeBadge type={account.type} />,
             sortable: true,
-            getSortValue: (account) => ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type],
-            filterOptions: Object.entries(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS).map(([value, label]) => ({
+            getSortValue: (account) => MONEY_ACCOUNT_TYPE_LABELS[account.type],
+            filterOptions: Object.entries(MONEY_ACCOUNT_TYPE_LABELS).map(([value, label]) => ({
                 label,
                 value,
             })),
@@ -179,7 +179,7 @@ const MoneyAccountsPage = () => {
 
     const searchKeys = [
         (account: MoneyAccountDTO) => account.name,
-        (account: MoneyAccountDTO) => ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type],
+        (account: MoneyAccountDTO) => MONEY_ACCOUNT_TYPE_LABELS[account.type],
         (account: MoneyAccountDTO) => MONEY_ACCOUNT_SCOPE_LABELS[account.scope],
         (account: MoneyAccountDTO) => storeNameFor(account),
         (account: MoneyAccountDTO) => account.notes ?? "",
@@ -236,7 +236,7 @@ const MoneyAccountsPage = () => {
                                 </EmptyMedia>
                                 <EmptyTitle>No money accounts yet</EmptyTitle>
                                 <EmptyDescription>
-                                    Add a Bank, UPI, Card Settlement, Petty Cash, or Other Money Account for every Store, or for one Store in this Organization.
+                                    Add a Cash, Bank, UPI, Card Settlement, Petty Cash, or Other Money Account. Cash belongs to one Store; other accounts can be for every Store or one Store in this Organization.
                                 </EmptyDescription>
                             </EmptyHeader>
                             <EmptyContent>
@@ -357,7 +357,7 @@ const MoneyAccountsPage = () => {
                                                             {account.name}
                                                         </h4>
                                                         <p className="text-[11px] text-muted-foreground/70 truncate">
-                                                            {ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[account.type]}
+                                                            {MONEY_ACCOUNT_TYPE_LABELS[account.type]}
                                                             {" · "}
                                                             {MONEY_ACCOUNT_SCOPE_LABELS[account.scope]}
                                                             {account.scope === "store_scoped" && storeNameFor(account)

@@ -4,12 +4,15 @@ import {
     type MoneyAccountDTO,
     type MoneyAccountResponse,
     type MoneyAccountScope,
+    type MoneyAccountType,
     type MoneyAccountsListResponse,
     type ServiceResponse,
     type UpdateMoneyAccountSVC,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as moneyAccountsRepository from "./money-accounts.repository";
+
+const ACTIVE_CASH_UNIQUE_INDEX = "money_accounts_one_active_cash_per_store";
 
 const getOrganizationForUser = async (organizationId: string, userId: string) =>
     organizationRepository.getOrganizationByIdForUser(organizationId, userId);
@@ -35,6 +38,34 @@ const invalidScopeStore = (message: string): ServiceResponse<null> => ({
     code: STATUS_CODES.BAD_REQUEST,
 });
 
+const activeCashConflict = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "This Store already has an active Cash Money Account",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
+const isUniqueViolation = (error: unknown): boolean =>
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23505";
+
+const isActiveCashUniqueViolation = (error: unknown): boolean => {
+    if (!isUniqueViolation(error)) {
+        return false;
+    }
+
+    const constraint = (error as { constraint?: unknown }).constraint;
+    const detail = (error as { detail?: unknown }).detail;
+    const message = error instanceof Error ? error.message : "";
+    return (
+        constraint === ACTIVE_CASH_UNIQUE_INDEX ||
+        (typeof detail === "string" && detail.includes(ACTIVE_CASH_UNIQUE_INDEX)) ||
+        message.includes(ACTIVE_CASH_UNIQUE_INDEX)
+    );
+};
+
 const normalizeNotes = (notes: string | null | undefined): string | null => {
     if (notes === undefined || notes === null) {
         return null;
@@ -45,12 +76,13 @@ const normalizeNotes = (notes: string | null | undefined): string | null => {
 
 const resolveMoneyAccountScopeAndStore = async (
     organizationId: string,
-    data: { scope?: MoneyAccountScope; storeId?: string | null },
-    existing?: Pick<MoneyAccountDTO, "scope" | "storeId">,
+    data: { type?: MoneyAccountType; scope?: MoneyAccountScope; storeId?: string | null },
+    existing?: Pick<MoneyAccountDTO, "type" | "scope" | "storeId">,
 ): Promise<
-    | { ok: true; scope: MoneyAccountScope; storeId: string | null }
+    | { ok: true; type: MoneyAccountType; scope: MoneyAccountScope; storeId: string | null }
     | { ok: false; response: ServiceResponse<null> }
 > => {
+    const type = data.type ?? existing?.type;
     const scope = data.scope ?? existing?.scope ?? "organization_wide";
     const storeId =
         scope === "organization_wide"
@@ -58,6 +90,13 @@ const resolveMoneyAccountScopeAndStore = async (
             : data.storeId !== undefined
                 ? data.storeId
                 : (existing?.storeId ?? null);
+
+    if (type === "cash" && scope !== "store_scoped") {
+        return {
+            ok: false,
+            response: invalidScopeStore("A Cash Money Account must be Store-scoped"),
+        };
+    }
 
     if (scope === "organization_wide" && data.storeId) {
         return {
@@ -85,7 +124,21 @@ const resolveMoneyAccountScopeAndStore = async (
         }
     }
 
-    return { ok: true, scope, storeId };
+    if (!type) {
+        return {
+            ok: false,
+            response: invalidScopeStore("Money Account type is required"),
+        };
+    }
+
+    return { ok: true, type, scope, storeId };
+};
+
+const mapPersistenceError = (error: unknown): ServiceResponse<null> | null => {
+    if (isActiveCashUniqueViolation(error)) {
+        return activeCashConflict();
+    }
+    return null;
 };
 
 export const getMoneyAccounts = async (
@@ -144,33 +197,41 @@ export const createMoneyAccount = async (
         return resolved.response;
     }
 
-    const moneyAccount = await moneyAccountsRepository.createMoneyAccount({
-        id: crypto.randomUUID(),
-        organizationId,
-        name: moneyAccountData.name,
-        type: moneyAccountData.type,
-        scope: resolved.scope,
-        storeId: resolved.storeId,
-        notes: normalizeNotes(moneyAccountData.notes),
-        status: moneyAccountData.status ?? "active",
-        createdBy: userId,
-    });
+    try {
+        const moneyAccount = await moneyAccountsRepository.createMoneyAccount({
+            id: crypto.randomUUID(),
+            organizationId,
+            name: moneyAccountData.name,
+            type: resolved.type,
+            scope: resolved.scope,
+            storeId: resolved.storeId,
+            notes: normalizeNotes(moneyAccountData.notes),
+            status: moneyAccountData.status ?? "active",
+            createdBy: userId,
+        });
 
-    if (!moneyAccount) {
+        if (!moneyAccount) {
+            return {
+                status: "error",
+                message: "Failed to create money account",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+
         return {
-            status: "error",
-            message: "Failed to create money account",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            status: "success",
+            data: { moneyAccount },
+            message: "Money Account created successfully",
+            code: STATUS_CODES.CREATED,
         };
+    } catch (error) {
+        const persistenceError = mapPersistenceError(error);
+        if (persistenceError) {
+            return persistenceError;
+        }
+        throw error;
     }
-
-    return {
-        status: "success",
-        data: { moneyAccount },
-        message: "Money Account created successfully",
-        code: STATUS_CODES.CREATED,
-    };
 };
 
 export const updateMoneyAccount = async (
@@ -194,34 +255,42 @@ export const updateMoneyAccount = async (
         return resolved.response;
     }
 
-    const moneyAccount = await moneyAccountsRepository.updateMoneyAccount({
-        id: moneyAccountId,
-        organizationId,
-        name: moneyAccountData.name ?? existing.name,
-        type: moneyAccountData.type ?? existing.type,
-        scope: resolved.scope,
-        storeId: resolved.storeId,
-        notes:
-            moneyAccountData.notes === undefined
-                ? existing.notes
-                : normalizeNotes(moneyAccountData.notes),
-        status: moneyAccountData.status ?? existing.status,
-        updatedBy: userId,
-    });
+    try {
+        const moneyAccount = await moneyAccountsRepository.updateMoneyAccount({
+            id: moneyAccountId,
+            organizationId,
+            name: moneyAccountData.name ?? existing.name,
+            type: resolved.type,
+            scope: resolved.scope,
+            storeId: resolved.storeId,
+            notes:
+                moneyAccountData.notes === undefined
+                    ? existing.notes
+                    : normalizeNotes(moneyAccountData.notes),
+            status: moneyAccountData.status ?? existing.status,
+            updatedBy: userId,
+        });
 
-    if (!moneyAccount) {
+        if (!moneyAccount) {
+            return {
+                status: "error",
+                message: "Failed to update money account",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+
         return {
-            status: "error",
-            message: "Failed to update money account",
-            data: null,
-            code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            status: "success",
+            data: { moneyAccount },
+            message: "Money Account updated successfully",
+            code: STATUS_CODES.SUCCESS,
         };
+    } catch (error) {
+        const persistenceError = mapPersistenceError(error);
+        if (persistenceError) {
+            return persistenceError;
+        }
+        throw error;
     }
-
-    return {
-        status: "success",
-        data: { moneyAccount },
-        message: "Money Account updated successfully",
-        code: STATUS_CODES.SUCCESS,
-    };
 };

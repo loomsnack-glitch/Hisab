@@ -7,6 +7,8 @@ import {
     getOrganizationByIdForUser,
     getStoreById,
     hdfcBankAccount,
+    inactiveAdajanCashAccount,
+    inactiveCashMoneyAccountId,
     inactiveMoneyAccountId,
     inactivePettyCashAccount,
     moneyAccountId,
@@ -20,6 +22,11 @@ import {
     storeScopedMoneyAccountId,
     updateMoneyAccountRepo,
     userId,
+    vesuStore,
+    vesuStoreId,
+    adajanCashAccount,
+    cashMoneyAccountId,
+    activeCashUniqueViolation,
 } from "./money-accounts.service.test-harness";
 
 describe("Organization Money Account service", () => {
@@ -37,6 +44,8 @@ describe("Organization Money Account service", () => {
             hdfcBankAccount,
             inactivePettyCashAccount,
             adajanUpiAccount,
+            adajanCashAccount,
+            inactiveAdajanCashAccount,
         ]);
         getMoneyAccountById.mockResolvedValue(hdfcBankAccount);
         createMoneyAccountRepo.mockImplementation(async (data) => ({
@@ -59,7 +68,7 @@ describe("Organization Money Account service", () => {
         const response = await moneyAccountsService.getMoneyAccounts(userId, organizationId);
 
         expect(response.status).toBe("success");
-        expect(response.data?.moneyAccounts).toHaveLength(3);
+        expect(response.data?.moneyAccounts).toHaveLength(5);
         expect(
             response.data?.moneyAccounts.some(
                 (account) => account.name === "HDFC Current" && account.scope === "organization_wide" && account.storeId === null,
@@ -72,6 +81,24 @@ describe("Organization Money Account service", () => {
                     account.scope === "store_scoped" &&
                     account.storeId === storeId &&
                     account.status === "active",
+            ),
+        ).toBe(true);
+        expect(
+            response.data?.moneyAccounts.some(
+                (account) =>
+                    account.name === "Adajan cash" &&
+                    account.type === "cash" &&
+                    account.scope === "store_scoped" &&
+                    account.storeId === storeId &&
+                    account.status === "active",
+            ),
+        ).toBe(true);
+        expect(
+            response.data?.moneyAccounts.some(
+                (account) =>
+                    account.name === "Old Adajan till" &&
+                    account.type === "cash" &&
+                    account.status === "inactive",
             ),
         ).toBe(true);
         expect(
@@ -400,6 +427,256 @@ describe("Organization Money Account service", () => {
         expect(response.data?.moneyAccount.status).toBe("active");
         expect(response.data?.moneyAccount.name).toBe("Office petty cash");
         expect(response.data?.moneyAccount.scope).toBe("organization_wide");
+    });
+
+    test("creates a Store-scoped Cash Money Account for a Store in the Organization", async () => {
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Adajan cash",
+            type: "cash",
+            scope: "store_scoped",
+            storeId,
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.code).toBe(201);
+        expect(response.data?.moneyAccount.type).toBe("cash");
+        expect(response.data?.moneyAccount.scope).toBe("store_scoped");
+        expect(response.data?.moneyAccount.storeId).toBe(storeId);
+        expect(response.data?.moneyAccount.status).toBe("active");
+        expect(getStoreById).toHaveBeenCalledWith(organizationId, storeId);
+        expect(createMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                name: "Adajan cash",
+                type: "cash",
+                scope: "store_scoped",
+                storeId,
+                status: "active",
+            }),
+        );
+    });
+
+    test("creates an inactive Cash Money Account while another Store Cash Account is active", async () => {
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Spare till",
+            type: "cash",
+            scope: "store_scoped",
+            storeId,
+            status: "inactive",
+        });
+
+        expect(response.status).toBe("success");
+        expect(createMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: "cash",
+                storeId,
+                status: "inactive",
+            }),
+        );
+    });
+
+    test("creates a Cash Money Account for a different Store", async () => {
+        getStoreById.mockImplementation(async (_organizationId, requestedStoreId) =>
+            requestedStoreId === vesuStoreId ? vesuStore : store,
+        );
+
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Vesu cash",
+            type: "cash",
+            scope: "store_scoped",
+            storeId: vesuStoreId,
+        });
+
+        expect(response.status).toBe("success");
+        expect(getStoreById).toHaveBeenCalledWith(organizationId, vesuStoreId);
+        expect(createMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: "cash",
+                storeId: vesuStoreId,
+            }),
+        );
+    });
+
+    test("rejects an Organization-wide Cash Money Account", async () => {
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Shared cash",
+            type: "cash",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("A Cash Money Account must be Store-scoped");
+        expect(createMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Cash Money Account without a Store", async () => {
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Adajan cash",
+            type: "cash",
+            scope: "store_scoped",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("Store is required for a Store-scoped Money Account");
+        expect(createMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Cash Money Account assigned to a Store from another Organization", async () => {
+        getStoreById.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Adajan cash",
+            type: "cash",
+            scope: "store_scoped",
+            storeId: otherOrganizationStoreId,
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("Store not found");
+        expect(createMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("maps a concurrent second active Cash Money Account to a Store conflict", async () => {
+        createMoneyAccountRepo.mockImplementation(async () => {
+            throw activeCashUniqueViolation();
+        });
+
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Second till",
+            type: "cash",
+            scope: "store_scoped",
+            storeId,
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toBe("This Store already has an active Cash Money Account");
+    });
+
+    test("deactivates the Store Cash Account so a replacement can be created", async () => {
+        getMoneyAccountById.mockResolvedValue(adajanCashAccount);
+        updateMoneyAccountRepo.mockImplementation(async (data) => ({
+            ...adajanCashAccount,
+            ...data,
+            createdBy: adajanCashAccount.createdBy,
+            createdAt: adajanCashAccount.createdAt,
+            updatedAt: adajanCashAccount.updatedAt,
+        }));
+
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            cashMoneyAccountId,
+            { status: "inactive" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.status).toBe("inactive");
+        expect(response.data?.moneyAccount.type).toBe("cash");
+        expect(response.data?.moneyAccount.storeId).toBe(storeId);
+        expect(updateMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: cashMoneyAccountId,
+                type: "cash",
+                status: "inactive",
+                storeId,
+            }),
+        );
+    });
+
+    test("activates a replacement Cash Money Account after the previous one is inactive", async () => {
+        getMoneyAccountById.mockResolvedValue(inactiveAdajanCashAccount);
+        updateMoneyAccountRepo.mockImplementation(async (data) => ({
+            ...inactiveAdajanCashAccount,
+            ...data,
+            createdBy: inactiveAdajanCashAccount.createdBy,
+            createdAt: inactiveAdajanCashAccount.createdAt,
+            updatedAt: inactiveAdajanCashAccount.updatedAt,
+        }));
+
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            inactiveCashMoneyAccountId,
+            { status: "active" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.status).toBe("active");
+        expect(response.data?.moneyAccount.type).toBe("cash");
+        expect(response.data?.moneyAccount.storeId).toBe(storeId);
+    });
+
+    test("rejects activating a second Cash Money Account while another is active for the Store", async () => {
+        getMoneyAccountById.mockResolvedValue(inactiveAdajanCashAccount);
+        updateMoneyAccountRepo.mockImplementation(async () => {
+            throw activeCashUniqueViolation();
+        });
+
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            inactiveCashMoneyAccountId,
+            { status: "active" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toBe("This Store already has an active Cash Money Account");
+    });
+
+    test("rejects moving a Cash Money Account to Organization-wide scope", async () => {
+        getMoneyAccountById.mockResolvedValue(adajanCashAccount);
+
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            cashMoneyAccountId,
+            { scope: "organization_wide" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("A Cash Money Account must be Store-scoped");
+        expect(updateMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects changing an Organization-wide account to Cash without Store scope", async () => {
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { type: "cash" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("A Cash Money Account must be Store-scoped");
+        expect(updateMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("changes a Store-scoped non-cash account to Cash for its Store", async () => {
+        getMoneyAccountById.mockResolvedValue(adajanUpiAccount);
+        updateMoneyAccountRepo.mockImplementation(async (data) => ({
+            ...adajanUpiAccount,
+            ...data,
+            createdBy: adajanUpiAccount.createdBy,
+            createdAt: adajanUpiAccount.createdAt,
+            updatedAt: adajanUpiAccount.updatedAt,
+        }));
+
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            storeScopedMoneyAccountId,
+            { type: "cash" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.type).toBe("cash");
+        expect(response.data?.moneyAccount.scope).toBe("store_scoped");
+        expect(response.data?.moneyAccount.storeId).toBe(storeId);
     });
 
     test("does not expose a Money Account deletion command", () => {

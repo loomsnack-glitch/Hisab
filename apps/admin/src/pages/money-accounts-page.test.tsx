@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import {
     MONEY_ACCOUNT_SCOPE_LABELS,
-    ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
+    MONEY_ACCOUNT_TYPE_LABELS,
     type MoneyAccountDTO,
 } from "@repo/types";
 
@@ -106,7 +106,37 @@ const adajanUpi: MoneyAccountDTO = {
     updatedAt: now,
 };
 
-const allAccounts = [hdfcBank, sharedUpi, cardSettlement, pettyCash, otherAccount, adajanUpi];
+const adajanCash: MoneyAccountDTO = {
+    id: "77777777-7777-4777-8777-777777777777",
+    organizationId,
+    name: "Adajan cash",
+    type: "cash",
+    scope: "store_scoped",
+    storeId,
+    notes: "Physical till",
+    status: "active",
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+const inactiveAdajanCash: MoneyAccountDTO = {
+    id: "88888888-8888-4888-8888-888888888888",
+    organizationId,
+    name: "Old Adajan till",
+    type: "cash",
+    scope: "store_scoped",
+    storeId,
+    notes: null,
+    status: "inactive",
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+const allAccounts = [hdfcBank, sharedUpi, cardSettlement, pettyCash, otherAccount, adajanUpi, adajanCash, inactiveAdajanCash];
 
 const seedOrganizationDetails = (queryClient: QueryClient) => {
     queryClient.setQueryData(organizationKeys.detail(organizationId), {
@@ -184,12 +214,15 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain("Office petty cash");
         expect(markup).toContain("Director wallet");
         expect(markup).toContain("Adajan UPI QR");
+        expect(markup).toContain("Adajan cash");
+        expect(markup).toContain("Old Adajan till");
         expect(markup).toContain("Adajan");
-        expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.bank);
-        expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.upi);
-        expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.card_settlement);
-        expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.petty_cash);
-        expect(markup).toContain(ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS.other);
+        expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.bank);
+        expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.upi);
+        expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.card_settlement);
+        expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.petty_cash);
+        expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.other);
+        expect(markup).toContain(MONEY_ACCOUNT_TYPE_LABELS.cash);
         expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.organization_wide);
         expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.store_scoped);
         expect(markup).toContain("Every store");
@@ -203,7 +236,6 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain("inactive");
         expect(markup).toContain("Edit");
         expect(markup).not.toContain("Delete");
-        expect(markup).not.toContain("Store Cash");
         expect(markup).not.toContain("bank account number");
         expect(markup).not.toContain("UPI ID");
     });
@@ -228,8 +260,8 @@ describe("Admin Money Accounts page", () => {
 
         expect(markup).toContain("No money accounts yet");
         expect(markup).toContain("Add money account");
-        expect(markup).toContain("Bank, UPI, Card Settlement, Petty Cash, or Other");
-        expect(markup).toContain("for every Store, or for one Store");
+        expect(markup).toContain("Cash, Bank, UPI, Card Settlement, Petty Cash, or Other");
+        expect(markup).toContain("Cash belongs to one Store");
         expect(markup).not.toContain("Delete");
     });
 });

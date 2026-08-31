@@ -7,12 +7,16 @@ export const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 export const moneyAccountId = "11111111-1111-4111-8111-111111111111";
 export const inactiveMoneyAccountId = "22222222-2222-4222-8222-222222222222";
 export const storeScopedMoneyAccountId = "44444444-4444-4444-8444-444444444444";
+export const cashMoneyAccountId = "55555555-5555-4555-8555-555555555555";
+export const inactiveCashMoneyAccountId = "66666666-6666-4666-8666-666666666666";
 export const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 export const otherOrganizationStoreId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+export const vesuStoreId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 export const now = new Date("2026-08-31T12:00:00.000Z");
 
 export const organization = { id: organizationId, name: "Demo Org" };
 export const store = { id: storeId, organizationId, name: "Adajan" };
+export const vesuStore = { id: vesuStoreId, organizationId, name: "Vesu" };
 
 export const hdfcBankAccount: MoneyAccountDTO = {
     id: moneyAccountId,
@@ -73,6 +77,42 @@ export const adajanUpiAccount: MoneyAccountDTO = {
     createdAt: now,
     updatedAt: now,
 };
+
+export const adajanCashAccount: MoneyAccountDTO = {
+    id: cashMoneyAccountId,
+    organizationId,
+    name: "Adajan cash",
+    type: "cash",
+    scope: "store_scoped",
+    storeId,
+    notes: "Physical till",
+    status: "active",
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+export const inactiveAdajanCashAccount: MoneyAccountDTO = {
+    id: inactiveCashMoneyAccountId,
+    organizationId,
+    name: "Old Adajan till",
+    type: "cash",
+    scope: "store_scoped",
+    storeId,
+    notes: null,
+    status: "inactive",
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+export const activeCashUniqueViolation = () =>
+    Object.assign(new Error("duplicate key value violates unique constraint \"money_accounts_one_active_cash_per_store\""), {
+        code: "23505",
+        constraint: "money_accounts_one_active_cash_per_store",
+    });
 
 export const getOrganizationByIdForUser = mock(async () => organization);
 export const getStoreById = mock(async () => store);

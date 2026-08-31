@@ -6,15 +6,15 @@ import { createMoneyAccount, getOrganizationDetails, updateMoneyAccount } from "
 import {
     CreateMoneyAccountSchema,
     MONEY_ACCOUNT_SCOPE_LABELS,
+    MONEY_ACCOUNT_TYPE_LABELS,
     MoneyAccountScopeSchema,
     MoneyAccountStatusSchema,
-    ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
-    OrganizationWideMoneyAccountTypeSchema,
+    MoneyAccountTypeSchema,
     type CreateMoneyAccountJSON,
     type MoneyAccountDTO,
     type MoneyAccountScope,
     type MoneyAccountStatus,
-    type OrganizationWideMoneyAccountType,
+    type MoneyAccountType,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -48,8 +48,8 @@ const defaultValues: CreateMoneyAccountJSON = {
     status: "active",
 };
 
-const typeSelectOptions = OrganizationWideMoneyAccountTypeSchema.options.map((type) => ({
-    label: ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS[type],
+const typeSelectOptions = MoneyAccountTypeSchema.options.map((type) => ({
+    label: MONEY_ACCOUNT_TYPE_LABELS[type],
     value: type,
 }));
 
@@ -87,6 +87,8 @@ const UpsertMoneyAccountDialog = ({
     });
 
     const selectedScope = (useWatch({ control: form.control, name: "scope" }) ?? "organization_wide") as MoneyAccountScope;
+    const selectedType = (useWatch({ control: form.control, name: "type" }) ?? "bank") as MoneyAccountType;
+    const isCashAccount = selectedType === "cash";
 
     const storesQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -112,11 +114,12 @@ const UpsertMoneyAccountDialog = ({
 
     const mutation = useMutation({
         mutationFn: (data: CreateMoneyAccountJSON) => {
+            const scope = data.type === "cash" ? "store_scoped" : (data.scope ?? "organization_wide");
             const payload = {
                 name: data.name,
                 type: data.type,
-                scope: data.scope ?? "organization_wide",
-                storeId: (data.scope ?? "organization_wide") === "store_scoped" ? data.storeId : null,
+                scope,
+                storeId: scope === "store_scoped" ? data.storeId : null,
                 notes: data.notes,
                 status: data.status,
             };
@@ -142,7 +145,9 @@ const UpsertMoneyAccountDialog = ({
     });
 
     const onSubmit: SubmitHandler<CreateMoneyAccountJSON> = (values) => {
-        const scope = (values.scope ?? "organization_wide") as MoneyAccountScope;
+        const scope = values.type === "cash"
+            ? "store_scoped"
+            : ((values.scope ?? "organization_wide") as MoneyAccountScope);
         mutation.mutate({
             name: values.name.trim(),
             type: values.type,
@@ -195,15 +200,22 @@ const UpsertMoneyAccountDialog = ({
                                         value={
                                             typeSelectOptions.find((option) => option.value === field.value) ?? null
                                         }
-                                        onChange={(option) =>
-                                            field.onChange(
-                                                (option?.value ?? "bank") as OrganizationWideMoneyAccountType,
-                                            )
-                                        }
+                                        onChange={(option) => {
+                                            const type = (option?.value ?? "bank") as MoneyAccountType;
+                                            field.onChange(type);
+                                            if (type === "cash") {
+                                                form.setValue("scope", "store_scoped", { shouldValidate: true });
+                                            }
+                                        }}
                                         classNames={{
                                             control: () => "!min-h-11 rounded-xl",
                                         }}
                                     />
+                                    {field.value === "cash" ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            Cash accounts belong to one Store. A Store can have only one active Cash Money Account.
+                                        </p>
+                                    ) : null}
                                     <FieldError errors={[fieldState.error]} />
                                 </FieldContent>
                             </Field>
@@ -219,11 +231,14 @@ const UpsertMoneyAccountDialog = ({
                                 <FieldContent>
                                     <ReactSelect
                                         options={scopeSelectOptions}
+                                        isDisabled={isCashAccount}
                                         value={
                                             scopeSelectOptions.find((option) => option.value === field.value) ?? null
                                         }
                                         onChange={(option) => {
-                                            const scope = (option?.value ?? "organization_wide") as MoneyAccountScope;
+                                            const scope = isCashAccount
+                                                ? "store_scoped"
+                                                : ((option?.value ?? "organization_wide") as MoneyAccountScope);
                                             field.onChange(scope);
                                             if (scope === "organization_wide") {
                                                 form.setValue("storeId", null, { shouldValidate: true });

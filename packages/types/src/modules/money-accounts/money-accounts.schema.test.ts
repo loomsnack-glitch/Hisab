@@ -5,6 +5,7 @@ import {
   MONEY_ACCOUNT_NAME_MAX_LENGTH,
   MONEY_ACCOUNT_NOTES_MAX_LENGTH,
   MONEY_ACCOUNT_SCOPE_LABELS,
+  MONEY_ACCOUNT_TYPE_LABELS,
   MoneyAccountDTOSchema,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPE_LABELS,
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES,
@@ -184,6 +185,38 @@ describe("Money Account contracts", () => {
     ).toBe(false);
   });
 
+  test("create Money Account accepts a Store-scoped Cash account with a Store", () => {
+    const result = CreateMoneyAccountSchema.safeParse({
+      name: "Adajan cash",
+      type: "cash",
+      scope: "store_scoped",
+      storeId,
+      notes: "Physical till",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe("cash");
+      expect(result.data.scope).toBe("store_scoped");
+      expect(result.data.storeId).toBe(storeId);
+    }
+  });
+
+  test("create Money Account accepts an inactive Store-scoped Cash account", () => {
+    const result = CreateMoneyAccountSchema.safeParse({
+      name: "Old till",
+      type: "cash",
+      scope: "store_scoped",
+      storeId,
+      status: "inactive",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.status).toBe("inactive");
+    }
+  });
+
   test("rejects Cash as an Organization-wide Money Account type", () => {
     expect(
       CreateMoneyAccountSchema.safeParse({
@@ -192,21 +225,42 @@ describe("Money Account contracts", () => {
       }).success,
     ).toBe(false);
     expect(
+      CreateMoneyAccountSchema.safeParse({
+        name: "Store cash",
+        type: "cash",
+        scope: "organization_wide",
+      }).success,
+    ).toBe(false);
+    expect(
       UpdateMoneyAccountSchema.safeParse({
         type: "cash",
+        scope: "organization_wide",
       }).success,
     ).toBe(false);
   });
 
-  test("rejects Cash even when Store-scoped", () => {
+  test("rejects a Cash Money Account without a Store", () => {
     expect(
       CreateMoneyAccountSchema.safeParse({
         name: "Store cash",
         type: "cash",
         scope: "store_scoped",
-        storeId,
       }).success,
     ).toBe(false);
+    expect(
+      CreateMoneyAccountSchema.safeParse({
+        name: "Store cash",
+        type: "cash",
+        scope: "store_scoped",
+        storeId: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("update Money Account can change a Cash account's status without restating Store scope", () => {
+    expect(UpdateMoneyAccountSchema.safeParse({ type: "cash" }).success).toBe(true);
+    expect(UpdateMoneyAccountSchema.safeParse({ status: "inactive" }).success).toBe(true);
+    expect(UpdateMoneyAccountSchema.safeParse({ status: "active" }).success).toBe(true);
   });
 
   test("rejects Store assignment and Store-scoped fields without a valid Store", () => {
@@ -435,14 +489,31 @@ describe("Money Account contracts", () => {
     ).toBe(false);
   });
 
-  test("rejects a Cash Money Account DTO", () => {
+  test("Money Account DTO accepts a Store-scoped Cash account", () => {
+    const result = MoneyAccountDTOSchema.safeParse({
+      ...organizationWideDto,
+      name: "Adajan cash",
+      type: "cash",
+      scope: "store_scoped",
+      storeId,
+      notes: "Physical till",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe("cash");
+      expect(result.data.scope).toBe("store_scoped");
+      expect(result.data.storeId).toBe(storeId);
+      expect(MONEY_ACCOUNT_TYPE_LABELS[result.data.type]).toBe("Cash");
+    }
+  });
+
+  test("rejects an Organization-wide Cash Money Account DTO", () => {
     expect(
       MoneyAccountDTOSchema.safeParse({
         ...organizationWideDto,
         name: "Store cash",
         type: "cash",
-        scope: "store_scoped",
-        storeId,
       }).success,
     ).toBe(false);
   });
