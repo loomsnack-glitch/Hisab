@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+    adajanCashAccount,
+    cashMoneyAccountId,
+    createMoneyAccountMovementRepo,
+    createOutgoingPaymentRepo,
     createPurchaseRepo,
     deletePurchaseRepo,
     draftPurchase,
@@ -11,7 +15,12 @@ import {
     getUnitById,
     getVendorById,
     getVendorItemById,
+    hdfcBankAccount,
     inactiveVendorId,
+    isMoneyAccountTrackingActive,
+    lockMoneyAccountById,
+    lockPaymentRouteByStoreAndMethod,
+    lockPurchaseById,
     millersTomatoItemId,
     onionItemId,
     organizationId,
@@ -52,9 +61,30 @@ describe("Organization Purchase service", () => {
         updatePurchaseRepo.mockClear();
         replacePurchaseLinesRepo.mockClear();
         deletePurchaseRepo.mockClear();
+        lockPurchaseById.mockClear();
+        createOutgoingPaymentRepo.mockClear();
+        createMoneyAccountMovementRepo.mockClear();
+        lockMoneyAccountById.mockClear();
+        lockPaymentRouteByStoreAndMethod.mockClear();
+        isMoneyAccountTrackingActive.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue({ id: organizationId, name: "Demo Org" });
         getStoreById.mockResolvedValue({ id: storeId, organizationId, name: "Adajan" });
+        isMoneyAccountTrackingActive.mockResolvedValue(false);
+        lockMoneyAccountById.mockResolvedValue(adajanCashAccount);
+        createMoneyAccountMovementRepo.mockResolvedValue({
+            id: "14141414-1414-4141-8141-141414141414",
+            organizationId,
+            moneyAccountId: cashMoneyAccountId,
+            storeId,
+            amount: -40,
+            occurredAt: new Date("2026-08-31T12:00:00.000Z"),
+            sourceKind: "outgoing_purchase_payment" as const,
+            paymentId: null,
+            outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+            reversedMovementId: null,
+            createdAt: new Date("2026-08-31T12:00:00.000Z"),
+        });
         resetStoredPurchase(draftPurchase);
         getPurchasesByOrganizationId.mockResolvedValue([draftPurchase]);
     });
@@ -275,5 +305,272 @@ describe("Organization Purchase service", () => {
         expect(response.data?.purchase.lines[0]?.vendorItemName).toBe("Tomato");
         expect(response.data?.purchase.lines[0]?.agreedUnitPrice).toBe(40.5);
         expect(response.data?.purchase.vendorName).toBe("Fresh Farms");
+    });
+
+    test("Vendor Outstanding sums due amounts from recorded Purchases only", async () => {
+        getPurchasesByOrganizationId.mockResolvedValue([
+            draftPurchase,
+            recordedPurchase,
+            {
+                ...recordedPurchase,
+                id: "77777777-7777-4777-8777-777777777777",
+                payableStatus: "paid",
+                paidTotal: 106.5,
+                dueAmount: 0,
+            },
+        ]);
+
+        const response = await purchasesService.getPurchases(userId, organizationId);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.vendorOutstanding).toEqual([
+            { vendorId, vendorName: "Fresh Farms", outstandingAmount: 106.5 },
+        ]);
+    });
+
+    test("records an untracked Cash Outgoing Payment without a Money Account Movement", async () => {
+        resetStoredPurchase(recordedPurchase);
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash", reference: "CASH-1" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.code).toBe(201);
+        expect(response.data?.purchase.payableStatus).toBe("partial");
+        expect(response.data?.purchase.paidTotal).toBe(40);
+        expect(response.data?.purchase.dueAmount).toBe(66.5);
+        expect(response.data?.purchase.outgoingPayments).toHaveLength(1);
+        expect(response.data?.purchase.outgoingPayments[0]?.paymentMethod).toBe("cash");
+        expect(response.data?.purchase.outgoingPayments[0]?.moneyAccountId).toBeNull();
+        expect(createOutgoingPaymentRepo).toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+        expect(lockMoneyAccountById).not.toHaveBeenCalled();
+        expect(lockPaymentRouteByStoreAndMethod).not.toHaveBeenCalled();
+    });
+
+    test("rejects Bank Transfer and Other without Money Account Tracking", async () => {
+        resetStoredPurchase(recordedPurchase);
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "bank_transfer", moneyAccountId: hdfcBankAccount.id },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects an Outgoing Payment on a Draft Purchase", async () => {
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects an Outgoing Payment that would overpay the remaining due", async () => {
+        resetStoredPurchase(recordedPurchase);
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 106.51, paymentMethod: "upi" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+    });
+
+    test("accepts a later partial payment until the Purchase is paid", async () => {
+        resetStoredPurchase(recordedPurchase);
+
+        const first = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+        const second = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 66.5, paymentMethod: "upi" },
+        );
+
+        expect(first.data?.purchase.payableStatus).toBe("partial");
+        expect(second.status).toBe("success");
+        expect(second.data?.purchase.payableStatus).toBe("paid");
+        expect(second.data?.purchase.paidTotal).toBe(106.5);
+        expect(second.data?.purchase.dueAmount).toBe(0);
+        expect(second.data?.purchase.outgoingPayments).toHaveLength(2);
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("records a tracked Cash payment as one negative Movement on the selected eligible account", async () => {
+        resetStoredPurchase(recordedPurchase);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.payableStatus).toBe("partial");
+        expect(lockMoneyAccountById).toHaveBeenCalledWith(
+            organizationId,
+            cashMoneyAccountId,
+            expect.anything(),
+        );
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                moneyAccountId: cashMoneyAccountId,
+                storeId,
+                amount: -40,
+                sourceKind: "outgoing_purchase_payment",
+                paymentId: null,
+            }),
+            expect.anything(),
+        );
+        expect(lockPaymentRouteByStoreAndMethod).not.toHaveBeenCalled();
+    });
+
+    test("records a tracked Bank Transfer against an Organization-wide Bank account", async () => {
+        resetStoredPurchase(recordedPurchase);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        lockMoneyAccountById.mockResolvedValue(hdfcBankAccount);
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "bank_transfer", moneyAccountId: hdfcBankAccount.id },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                moneyAccountId: hdfcBankAccount.id,
+                amount: -40,
+                sourceKind: "outgoing_purchase_payment",
+            }),
+            expect.anything(),
+        );
+        expect(lockPaymentRouteByStoreAndMethod).not.toHaveBeenCalled();
+    });
+
+    test("rejects a tracked payment when the selected Money Account has insufficient balance", async () => {
+        resetStoredPurchase(recordedPurchase);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        lockMoneyAccountById.mockResolvedValue({ ...adajanCashAccount, balance: 10 });
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.message).toMatch(/sufficient balance/i);
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+        expect(updatePurchaseRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a tracked payment for an ineligible or other-Store Money Account", async () => {
+        resetStoredPurchase(recordedPurchase);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        lockMoneyAccountById.mockResolvedValue(hdfcBankAccount);
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash", moneyAccountId: hdfcBankAccount.id },
+        );
+
+        expect(response.status).toBe("error");
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not backfill an untracked payment after tracking is enabled", async () => {
+        resetStoredPurchase(recordedPurchase);
+
+        const untracked = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+        expect(untracked.status).toBe("success");
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        const tracked = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 20, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+
+        expect(tracked.status).toBe("success");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(1);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({ amount: -20 }),
+            expect.anything(),
+        );
+        expect(lockPaymentRouteByStoreAndMethod).not.toHaveBeenCalled();
+    });
+
+    test("rolls back Purchase settlement when the Money Account Movement cannot be created", async () => {
+        resetStoredPurchase(recordedPurchase);
+        isMoneyAccountTrackingActive.mockResolvedValue(true);
+        createMoneyAccountMovementRepo.mockResolvedValue(null);
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            organizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash", moneyAccountId: cashMoneyAccountId },
+        );
+
+        expect(response.status).toBe("error");
+        expect(updatePurchaseRepo).not.toHaveBeenCalled();
+    });
+
+    test("denies Outgoing Payments when the user is not a member of the Organization", async () => {
+        getOrganizationByIdForUser.mockResolvedValue(null);
+        resetStoredPurchase(recordedPurchase);
+
+        const response = await purchasesService.createOutgoingPurchasePayment(
+            userId,
+            otherOrganizationId,
+            purchaseId,
+            { amount: 40, paymentMethod: "cash" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(createOutgoingPaymentRepo).not.toHaveBeenCalled();
+        expect(lockPurchaseById).not.toHaveBeenCalled();
     });
 });

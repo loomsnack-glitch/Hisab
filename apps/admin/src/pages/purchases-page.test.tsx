@@ -47,6 +47,7 @@ const draftPurchase: PurchaseDTO = {
             lineTotal: 81,
         },
     ],
+    outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -71,7 +72,7 @@ const renderPurchasesPage = (
     if (result !== "pending") {
         queryClient.setQueryData(purchaseKeys.list(organizationId), {
             status: result === "error" ? "error" : "success",
-            data: result === "error" ? null : { purchases: result === "empty" ? [] : purchases },
+            data: result === "error" ? null : { purchases: result === "empty" ? [] : purchases, vendorOutstanding: result === "empty" ? [] : [{ vendorId, vendorName: "Fresh Farms", outstandingAmount: 106.5 }] },
             message: result === "error"
                 ? "Purchases could not be loaded right now."
                 : "Purchases fetched successfully",
@@ -100,6 +101,8 @@ describe("Admin Purchases page", () => {
         expect(markup).toContain("Draft");
         expect(markup).toContain("Recorded");
         expect(markup).toContain("Due");
+        expect(markup).toContain("Paid");
+        expect(markup).toContain("Vendor Outstanding");
         expect(markup).toContain("Add purchase");
         expect(markup).toContain("Search purchases...");
         expect(markup).toContain("View");

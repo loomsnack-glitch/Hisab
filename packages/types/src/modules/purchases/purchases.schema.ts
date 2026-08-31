@@ -1,5 +1,12 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
+import {
+  OutgoingPaymentDTOSchema,
+  VendorOutstandingDTOSchema,
+  isOutgoingPaymentActive,
+  roundOutgoingPaymentMoney,
+  sumActiveOutgoingPayments,
+} from "../outgoing-payments/outgoing-payments.schema";
 import { VendorItemStatusSchema, VendorStatusSchema } from "../vendors/vendors.schema";
 
 export const PURCHASE_INVOICE_REFERENCE_MAX_LENGTH = 255;
@@ -149,6 +156,78 @@ export const derivePurchasePayableState = (input: {
   return { payableStatus: "partial", dueAmount };
 };
 
+export const calculateVendorOutstanding = (
+  purchases: Array<{
+    vendorId: string;
+    vendorName: string;
+    lifecycle: z.infer<typeof PurchaseLifecycleSchema>;
+    dueAmount: number | null;
+  }>,
+): z.infer<typeof VendorOutstandingDTOSchema>[] => {
+  const byVendor = new Map<
+    string,
+    z.infer<typeof VendorOutstandingDTOSchema>
+  >();
+
+  for (const purchase of purchases) {
+    if (purchase.lifecycle !== "recorded" || purchase.dueAmount == null || purchase.dueAmount <= 0) {
+      continue;
+    }
+
+    const current = byVendor.get(purchase.vendorId) ?? {
+      vendorId: purchase.vendorId,
+      vendorName: purchase.vendorName,
+      outstandingAmount: 0,
+    };
+    current.outstandingAmount = roundOutgoingPaymentMoney(
+      current.outstandingAmount + purchase.dueAmount,
+    );
+    byVendor.set(purchase.vendorId, current);
+  }
+
+  return [...byVendor.values()];
+};
+
+export const derivePurchasePayableStateFromPayments = (input: {
+  lifecycle: z.infer<typeof PurchaseLifecycleSchema>;
+  total: number;
+  outgoingPayments: Array<{ amount: number; reversedAt: Date | string | null }>;
+}): {
+  payableStatus: z.infer<typeof PayableStatusSchema> | null;
+  paidTotal: number;
+  dueAmount: number | null;
+} => {
+  const paidTotal = sumActiveOutgoingPayments(input.outgoingPayments);
+  const payable = derivePurchasePayableState({
+    lifecycle: input.lifecycle,
+    total: input.total,
+    paidTotal,
+  });
+  return {
+    payableStatus: payable.payableStatus,
+    paidTotal,
+    dueAmount: payable.dueAmount,
+  };
+};
+
+export const canAcceptOutgoingPayment = (input: {
+  lifecycle: z.infer<typeof PurchaseLifecycleSchema>;
+  total: number;
+  outgoingPayments: Array<{ amount: number; reversedAt: Date | string | null }>;
+  amount: number;
+}): boolean => {
+  if (input.lifecycle !== "recorded") {
+    return false;
+  }
+  if (input.amount <= 0) {
+    return false;
+  }
+  const { dueAmount } = derivePurchasePayableStateFromPayments(input);
+  return dueAmount != null && roundOutgoingPaymentMoney(input.amount) <= dueAmount;
+};
+
+export { isOutgoingPaymentActive, sumActiveOutgoingPayments };
+
 export const isVendorSelectableForDraftPurchase = (vendor: {
   status: z.infer<typeof VendorStatusSchema>;
 }): boolean => vendor.status === "active";
@@ -238,6 +317,7 @@ export const PurchaseDTOSchema = z.object({
   dueAmount: purchaseMoneySchema.nullable(),
   recordedAt: dtoDateSchema.nullable(),
   lines: z.array(PurchaseLineDTOSchema),
+  outgoingPayments: z.array(OutgoingPaymentDTOSchema),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,

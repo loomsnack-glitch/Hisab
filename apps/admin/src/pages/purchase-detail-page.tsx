@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { discardDraftPurchase, getPurchase, recordPurchase } from "@repo/services";
 import {
+    OUTGOING_PAYMENT_METHOD_LABELS,
+} from "@repo/types";
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -24,6 +27,7 @@ import {
     PurchaseLifecycleBadge,
 } from "@/components/purchases/purchase-status-badges";
 import UpsertPurchaseDialog from "@/components/purchases/upsert-purchase-dialog";
+import RecordOutgoingPaymentDialog from "@/components/purchases/record-outgoing-payment-dialog";
 import { formatCurrency, formatDateOnly, formatDateTime } from "@/lib/format";
 import { purchaseKeys } from "@/lib/query-keys";
 
@@ -116,6 +120,7 @@ const PurchaseDetailPage = () => {
 
     const purchase = purchaseQuery.data.data.purchase;
     const isDraft = purchase.lifecycle === "draft";
+    const canSettle = purchase.lifecycle === "recorded" && (purchase.dueAmount ?? 0) > 0;
 
     return (
         <div className="space-y-4" data-testid="purchase-detail-page">
@@ -167,11 +172,13 @@ const PurchaseDetailPage = () => {
                                     Discard draft
                                 </Button>
                             </div>
+                        ) : canSettle ? (
+                            <RecordOutgoingPaymentDialog organizationId={organizationId} purchase={purchase} />
                         ) : null}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                         <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Lines</p>
                             <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(purchase.linesTotal)}</p>
@@ -183,6 +190,10 @@ const PurchaseDetailPage = () => {
                         <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Total</p>
                             <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(purchase.total)}</p>
+                        </div>
+                        <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Paid</p>
+                            <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(purchase.paidTotal)}</p>
                         </div>
                         <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Due</p>
@@ -216,6 +227,37 @@ const PurchaseDetailPage = () => {
                                         </div>
                                         <p className="shrink-0 text-sm font-semibold tabular-nums">
                                             {formatCurrency(line.lineTotal)}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <h3 className="mb-3 text-sm font-medium">Outgoing Payments</h3>
+                        {purchase.outgoingPayments.length === 0 ? (
+                            <p className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-xs text-muted-foreground">
+                                {purchase.lifecycle === "recorded"
+                                    ? "No Outgoing Payments recorded yet."
+                                    : "Draft Purchases do not create Outgoing Payments."}
+                            </p>
+                        ) : (
+                            <div className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/60">
+                                {purchase.outgoingPayments.map((payment) => (
+                                    <div key={payment.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                                        <div className="min-w-0">
+                                            <p className="font-medium text-foreground">
+                                                {OUTGOING_PAYMENT_METHOD_LABELS[payment.paymentMethod]}
+                                                {payment.moneyAccountName ? ` · ${payment.moneyAccountName}` : ""}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {formatDateTime(payment.paidAt)}
+                                                {payment.reference ? ` · ${payment.reference}` : ""}
+                                            </p>
+                                        </div>
+                                        <p className="shrink-0 text-sm font-semibold tabular-nums">
+                                            {formatCurrency(payment.amount)}
                                         </p>
                                     </div>
                                 ))}

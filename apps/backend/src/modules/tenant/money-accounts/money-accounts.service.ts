@@ -524,6 +524,30 @@ export const getMoneyAccountHistory = async (
                 ];
             }
 
+            if (movement.sourceKind === "outgoing_purchase_payment") {
+                if (
+                    !movement.outgoingPaymentId ||
+                    !movement.purchaseId ||
+                    !movement.vendorName ||
+                    !movement.paymentMethod
+                ) {
+                    return [];
+                }
+                return [
+                    {
+                        kind: "outgoing_purchase_payment",
+                        id: movement.id,
+                        amount: movement.amount,
+                        occurredAt: movement.occurredAt,
+                        storeId: movement.storeId,
+                        outgoingPaymentId: movement.outgoingPaymentId,
+                        purchaseId: movement.purchaseId,
+                        vendorName: movement.vendorName,
+                        paymentMethod: movement.paymentMethod,
+                    },
+                ];
+            }
+
             if (!movement.paymentId || !movement.saleId || !movement.paymentMethod) {
                 return [];
             }

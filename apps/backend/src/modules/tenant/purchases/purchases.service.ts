@@ -1,12 +1,17 @@
 import {
     STATUS_CODES,
     calculatePurchaseTotals,
+    calculateVendorOutstanding,
     calendarDateInTimeZone,
+    canAcceptOutgoingPayment,
     derivePurchasePayableState,
+    derivePurchasePayableStateFromPayments,
     isPurchaseEffectiveDateAllowed,
     isVendorItemSelectableForDraftPurchase,
     isVendorSelectableForDraftPurchase,
+    roundOutgoingPaymentMoney,
     type CreateDraftPurchaseSVC,
+    type CreateOutgoingPaymentSVC,
     type CreatePurchaseLineREPO,
     type CreatePurchaseREPO,
     type PurchaseDTO,
@@ -14,6 +19,7 @@ import {
     type PurchaseResponse,
     type PurchasesListResponse,
     type ServiceResponse,
+    type StatusCode,
     type UpdateDraftPurchaseSVC,
     type UpdatePurchaseREPO,
     type VendorDTO,
@@ -22,6 +28,12 @@ import { pg } from "@/config/db";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as vendorsRepository from "@/modules/tenant/vendors/vendors.repository";
+import {
+    createOutgoingPurchasePaymentMovement,
+    isOutgoingPaymentFundingError,
+    resolveOutgoingPaymentFunding,
+} from "@/modules/tenant/outgoing-payments/outgoing-payment-funding";
+import * as outgoingPaymentsRepository from "@/modules/tenant/outgoing-payments/outgoing-payments.repository";
 import * as purchasesRepository from "./purchases.repository";
 
 const getOrganizationForUser = async (organizationId: string, userId: string) =>
@@ -232,7 +244,10 @@ export const getPurchases = async (
     const purchases = await purchasesRepository.getPurchasesByOrganizationId(organizationId);
     return {
         status: "success",
-        data: { purchases },
+        data: {
+            purchases,
+            vendorOutstanding: calculateVendorOutstanding(purchases),
+        },
         message: "Purchases fetched successfully",
         code: STATUS_CODES.SUCCESS,
     };
@@ -675,6 +690,173 @@ export const recordPurchase = async (
             return {
                 status: "error",
                 message: "Failed to record Purchase",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+        throw error;
+    }
+};
+
+export const createOutgoingPurchasePayment = async (
+    userId: string,
+    organizationId: string,
+    purchaseId: string,
+    paymentData: CreateOutgoingPaymentSVC,
+): Promise<ServiceResponse<PurchaseResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const amount = roundOutgoingPaymentMoney(paymentData.amount);
+    const paidAt = new Date();
+
+    try {
+        const purchase = await pg.begin(async (tx) => {
+            const existing = await purchasesRepository.lockPurchaseById(
+                organizationId,
+                purchaseId,
+                tx,
+            );
+            if (!existing) {
+                return null;
+            }
+
+            if (existing.lifecycle !== "recorded") {
+                throw Object.assign(
+                    new Error("Outgoing Payments can only be recorded against a recorded Purchase"),
+                    { code: STATUS_CODES.BAD_REQUEST, expose: true },
+                );
+            }
+
+            if (
+                !canAcceptOutgoingPayment({
+                    lifecycle: existing.lifecycle,
+                    total: existing.total,
+                    outgoingPayments: existing.outgoingPayments,
+                    amount,
+                })
+            ) {
+                throw Object.assign(
+                    new Error("Outgoing Payment cannot exceed the remaining due amount"),
+                    { code: STATUS_CODES.CONFLICT, expose: true },
+                );
+            }
+
+            const funding = await resolveOutgoingPaymentFunding(tx, {
+                organizationId,
+                storeId: existing.storeId,
+                payment: {
+                    ...paymentData,
+                    amount,
+                },
+            });
+
+            const createdPayment = await outgoingPaymentsRepository.createOutgoingPayment(
+                {
+                    id: crypto.randomUUID(),
+                    organizationId,
+                    purchaseId,
+                    amount,
+                    paymentMethod: paymentData.paymentMethod,
+                    moneyAccountId: funding.moneyAccount?.id ?? null,
+                    reference: normalizeOptionalText(paymentData.reference),
+                    notes: normalizeOptionalText(paymentData.notes),
+                    paidAt,
+                    reversedAt: null,
+                    createdBy: userId,
+                },
+                tx,
+            );
+            if (!createdPayment) {
+                throw new Error("Failed to create Outgoing Payment");
+            }
+
+            if (funding.trackingActive && funding.moneyAccount) {
+                await createOutgoingPurchasePaymentMovement(tx, {
+                    organizationId,
+                    storeId: existing.storeId,
+                    moneyAccount: funding.moneyAccount,
+                    payment: createdPayment,
+                });
+            }
+
+            const settlement = derivePurchasePayableStateFromPayments({
+                lifecycle: "recorded",
+                total: existing.total,
+                outgoingPayments: [...existing.outgoingPayments, createdPayment],
+            });
+
+            const header: UpdatePurchaseREPO = {
+                id: existing.id,
+                organizationId,
+                storeId: existing.storeId,
+                vendorId: existing.vendorId,
+                vendorName: existing.vendorName,
+                lifecycle: "recorded",
+                payableStatus: settlement.payableStatus,
+                effectiveDate: existing.effectiveDate,
+                invoiceReference: existing.invoiceReference,
+                notes: existing.notes,
+                adjustment: existing.adjustment,
+                linesTotal: existing.linesTotal,
+                total: existing.total,
+                paidTotal: settlement.paidTotal,
+                dueAmount: settlement.dueAmount,
+                recordedAt: existing.recordedAt,
+                updatedBy: userId,
+            };
+            const updated = await purchasesRepository.updatePurchase(header, tx);
+            if (!updated) {
+                throw new Error("Failed to update Purchase settlement");
+            }
+            return updated;
+        });
+
+        if (!purchase) {
+            return purchaseNotFound();
+        }
+
+        return {
+            status: "success",
+            data: { purchase },
+            message: "Outgoing Payment recorded successfully",
+            code: STATUS_CODES.CREATED,
+        };
+    } catch (error) {
+        if (isOutgoingPaymentFundingError(error)) {
+            return {
+                status: "error",
+                message: error.message,
+                data: null,
+                code: error.code,
+            };
+        }
+        if (error instanceof Error && "expose" in error && error.expose === true) {
+            return {
+                status: "error",
+                message: error.message,
+                data: null,
+                code: (error as Error & { code?: StatusCode }).code ?? STATUS_CODES.BAD_REQUEST,
+            };
+        }
+        if (error instanceof Error && error.message === "Failed to create Outgoing Payment") {
+            return {
+                status: "error",
+                message: "Failed to record Outgoing Payment",
+                data: null,
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+        if (
+            error instanceof Error &&
+            (error.message === "Failed to create money account movement" ||
+                error.message === "Failed to update Purchase settlement")
+        ) {
+            return {
+                status: "error",
+                message: "Failed to record Outgoing Payment",
                 data: null,
                 code: STATUS_CODES.INTERNAL_SERVER_ERROR,
             };

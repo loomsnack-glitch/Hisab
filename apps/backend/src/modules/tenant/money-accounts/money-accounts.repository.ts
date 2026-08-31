@@ -42,9 +42,11 @@ const mapPaymentRoute = (row: Record<string, unknown>): MoneyAccountPaymentRoute
 const mapMovement = (row: Record<string, unknown>): MoneyAccountMovementDTO => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     return {
-        ...(mapped as Omit<MoneyAccountMovementDTO, "amount" | "paymentId" | "reversedMovementId">),
+        ...(mapped as Omit<MoneyAccountMovementDTO, "amount" | "paymentId" | "outgoingPaymentId" | "reversedMovementId">),
         amount: toMoneyAmount(mapped.amount),
         paymentId: typeof mapped.paymentId === "string" ? mapped.paymentId : null,
+        outgoingPaymentId:
+            typeof mapped.outgoingPaymentId === "string" ? mapped.outgoingPaymentId : null,
         reversedMovementId:
             typeof mapped.reversedMovementId === "string" ? mapped.reversedMovementId : null,
     };
@@ -55,10 +57,20 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
     return {
         ...(mapped as Omit<
             MoneyAccountHistoryMovementREPO,
-            "amount" | "paymentId" | "reversedMovementId" | "saleId" | "paymentMethod" | "originalPaymentId"
+            | "amount"
+            | "paymentId"
+            | "outgoingPaymentId"
+            | "reversedMovementId"
+            | "saleId"
+            | "paymentMethod"
+            | "originalPaymentId"
+            | "purchaseId"
+            | "vendorName"
         >),
         amount: toMoneyAmount(mapped.amount),
         paymentId: typeof mapped.paymentId === "string" ? mapped.paymentId : null,
+        outgoingPaymentId:
+            typeof mapped.outgoingPaymentId === "string" ? mapped.outgoingPaymentId : null,
         reversedMovementId:
             typeof mapped.reversedMovementId === "string" ? mapped.reversedMovementId : null,
         saleId: typeof mapped.saleId === "string" ? mapped.saleId : null,
@@ -68,6 +80,8 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
                 : null,
         originalPaymentId:
             typeof mapped.originalPaymentId === "string" ? mapped.originalPaymentId : null,
+        purchaseId: typeof mapped.purchaseId === "string" ? mapped.purchaseId : null,
+        vendorName: typeof mapped.vendorName === "string" ? mapped.vendorName : null,
     };
 };
 
@@ -334,12 +348,15 @@ export const getMovementsByMoneyAccountId = async (
             movements.occurred_at,
             movements.source_kind,
             movements.payment_id,
+            movements.outgoing_payment_id,
             movements.reversed_movement_id,
             movements.created_at,
             linked_payments.sale_id,
-            linked_payments.method AS payment_method,
+            COALESCE(linked_payments.method, outgoing_payments.payment_method) AS payment_method,
             sales.sale_number,
-            original_movements.payment_id AS original_payment_id
+            original_movements.payment_id AS original_payment_id,
+            outgoing_payments.purchase_id,
+            purchases.vendor_name
         FROM money_account_movements AS movements
         LEFT JOIN money_account_movements AS original_movements
             ON original_movements.id = movements.reversed_movement_id
@@ -347,6 +364,12 @@ export const getMovementsByMoneyAccountId = async (
             ON linked_payments.id = COALESCE(movements.payment_id, original_movements.payment_id)
         LEFT JOIN sales
             ON sales.id = linked_payments.sale_id
+        LEFT JOIN outgoing_payments
+            ON outgoing_payments.id = movements.outgoing_payment_id
+           AND outgoing_payments.organization_id = movements.organization_id
+        LEFT JOIN purchases
+            ON purchases.id = outgoing_payments.purchase_id
+           AND purchases.organization_id = movements.organization_id
         WHERE movements.organization_id = ${organizationId}
           AND movements.money_account_id = ${moneyAccountId}
         ORDER BY
@@ -372,6 +395,22 @@ export const getMovementByPaymentId = async (
         FROM money_account_movements
         WHERE organization_id = ${organizationId}
           AND payment_id = ${paymentId}
+    `;
+
+    return result ? mapMovement(result) : null;
+};
+
+export const getMovementByOutgoingPaymentId = async (
+    organizationId: string,
+    outgoingPaymentId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<MoneyAccountMovementDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM money_account_movements
+        WHERE organization_id = ${organizationId}
+          AND outgoing_payment_id = ${outgoingPaymentId}
     `;
 
     return result ? mapMovement(result) : null;
@@ -446,6 +485,25 @@ export const createMoneyAccountMovement = async (
         }
 
         return getMovementByReversedMovementId(movementData.organizationId, reversedMovementId, tx);
+    }
+
+    if (movementData.sourceKind === "outgoing_purchase_payment") {
+        const outgoingPaymentId = movementData.outgoingPaymentId;
+        if (!outgoingPaymentId) {
+            return null;
+        }
+
+        const [result] = await db`
+            INSERT INTO money_account_movements ${camelToSnakeSql(movementData)}
+            ON CONFLICT (outgoing_payment_id) DO NOTHING
+            RETURNING *
+        `;
+
+        if (result) {
+            return mapMovement(result);
+        }
+
+        return getMovementByOutgoingPaymentId(movementData.organizationId, outgoingPaymentId, tx);
     }
 
     const paymentId = movementData.paymentId;

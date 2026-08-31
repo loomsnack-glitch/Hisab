@@ -4,10 +4,12 @@ import { camelToSnakeSql } from "@/utils/case-sql";
 import type {
     CreatePurchaseLineREPO,
     CreatePurchaseREPO,
+    OutgoingPaymentDTO,
     PurchaseDTO,
     PurchaseLineDTO,
     UpdatePurchaseREPO,
 } from "@repo/types";
+import * as outgoingPaymentsRepository from "@/modules/tenant/outgoing-payments/outgoing-payments.repository";
 
 const toMoneyAmount = (value: unknown): number => {
     const amount = Number(value ?? 0);
@@ -46,12 +48,13 @@ const mapPurchaseLine = (row: Record<string, unknown>): PurchaseLineDTO => {
     };
 };
 
-const mapPurchaseHeader = (row: Record<string, unknown>): Omit<PurchaseDTO, "lines"> => {
+const mapPurchaseHeader = (row: Record<string, unknown>): Omit<PurchaseDTO, "lines" | "outgoingPayments"> => {
     const mapped = snakeToCamel(row) as Record<string, unknown>;
     return {
         ...(mapped as Omit<
             PurchaseDTO,
             | "lines"
+            | "outgoingPayments"
             | "effectiveDate"
             | "adjustment"
             | "linesTotal"
@@ -68,9 +71,10 @@ const mapPurchaseHeader = (row: Record<string, unknown>): Omit<PurchaseDTO, "lin
     };
 };
 
-const attachLines = (
-    purchases: Array<Omit<PurchaseDTO, "lines">>,
+const attachRelated = (
+    purchases: Array<Omit<PurchaseDTO, "lines" | "outgoingPayments">>,
     lines: PurchaseLineDTO[],
+    outgoingPayments: OutgoingPaymentDTO[],
 ): PurchaseDTO[] => {
     const linesByPurchaseId = new Map<string, PurchaseLineDTO[]>();
     for (const line of lines) {
@@ -78,10 +82,17 @@ const attachLines = (
         current.push(line);
         linesByPurchaseId.set(line.purchaseId, current);
     }
+    const paymentsByPurchaseId = new Map<string, OutgoingPaymentDTO[]>();
+    for (const payment of outgoingPayments) {
+        const current = paymentsByPurchaseId.get(payment.purchaseId) ?? [];
+        current.push(payment);
+        paymentsByPurchaseId.set(payment.purchaseId, current);
+    }
 
     return purchases.map((purchase) => ({
         ...purchase,
         lines: linesByPurchaseId.get(purchase.id) ?? [],
+        outgoingPayments: paymentsByPurchaseId.get(purchase.id) ?? [],
     }));
 };
 
@@ -145,15 +156,17 @@ export const getPurchasesByOrganizationId = async (
         ORDER BY purchases.effective_date DESC, purchases.created_at DESC
     `;
 
-    const headers: Array<Omit<PurchaseDTO, "lines">> = results.map(
+    const headers: Array<Omit<PurchaseDTO, "lines" | "outgoingPayments">> = results.map(
         (result: Record<string, unknown>) => mapPurchaseHeader(result),
     );
-    const lines = await getPurchaseLinesByPurchaseIds(
+    const purchaseIds = headers.map((purchase) => purchase.id);
+    const lines = await getPurchaseLinesByPurchaseIds(organizationId, purchaseIds, tx);
+    const outgoingPayments = await outgoingPaymentsRepository.getOutgoingPaymentsByPurchaseIds(
         organizationId,
-        headers.map((purchase) => purchase.id),
+        purchaseIds,
         tx,
     );
-    return attachLines(headers, lines);
+    return attachRelated(headers, lines, outgoingPayments);
 };
 
 export const getPurchaseById = async (
@@ -178,7 +191,42 @@ export const getPurchaseById = async (
 
     const header = mapPurchaseHeader(result as Record<string, unknown>);
     const lines = await getPurchaseLinesByPurchaseIds(organizationId, [purchaseId], tx);
-    return attachLines([header], lines)[0] ?? null;
+    const outgoingPayments = await outgoingPaymentsRepository.getOutgoingPaymentsByPurchaseIds(
+        organizationId,
+        [purchaseId],
+        tx,
+    );
+    return attachRelated([header], lines, outgoingPayments)[0] ?? null;
+};
+
+export const lockPurchaseById = async (
+    organizationId: string,
+    purchaseId: string,
+    tx: Bun.TransactionSQL,
+): Promise<PurchaseDTO | null> => {
+    const [result] = await tx`
+        SELECT ${tx.unsafe(purchaseSelect)}
+        FROM purchases
+        INNER JOIN stores
+            ON stores.id = purchases.store_id
+           AND stores.organization_id = purchases.organization_id
+        WHERE purchases.id = ${purchaseId}
+          AND purchases.organization_id = ${organizationId}
+        FOR UPDATE OF purchases
+    `;
+
+    if (!result) {
+        return null;
+    }
+
+    const header = mapPurchaseHeader(result as Record<string, unknown>);
+    const lines = await getPurchaseLinesByPurchaseIds(organizationId, [purchaseId], tx);
+    const outgoingPayments = await outgoingPaymentsRepository.getOutgoingPaymentsByPurchaseIds(
+        organizationId,
+        [purchaseId],
+        tx,
+    );
+    return attachRelated([header], lines, outgoingPayments)[0] ?? null;
 };
 
 export const createPurchase = async (

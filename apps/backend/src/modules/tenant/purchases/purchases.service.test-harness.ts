@@ -1,7 +1,11 @@
 import { mock } from "bun:test";
 import type {
+    CreateOutgoingPaymentREPO,
     CreatePurchaseLineREPO,
     CreatePurchaseREPO,
+    MoneyAccountDTO,
+    MoneyAccountMovementDTO,
+    OutgoingPaymentDTO,
     PurchaseDTO,
     PurchaseLineDTO,
     UnitDTO,
@@ -139,6 +143,7 @@ export const draftPurchase: PurchaseDTO = {
     dueAmount: null,
     recordedAt: null,
     lines: [tomatoLine],
+    outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -153,10 +158,53 @@ export const recordedPurchase: PurchaseDTO = {
     recordedAt: now,
 };
 
+export const cashMoneyAccountId = "55555555-5555-4555-8555-555555555555";
+export const outgoingPaymentId = "12121212-1212-4121-8121-121212121212";
+
+export const adajanCashAccount: MoneyAccountDTO = {
+    id: cashMoneyAccountId,
+    organizationId,
+    name: "Adajan till",
+    type: "cash",
+    scope: "store_scoped",
+    storeId,
+    notes: null,
+    status: "active",
+    openingBalance: 200,
+    balance: 200,
+    hasMovements: false,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+export const hdfcBankAccount: MoneyAccountDTO = {
+    id: "11111111-1111-4111-8111-111111111111",
+    organizationId,
+    name: "HDFC Current",
+    type: "bank",
+    scope: "organization_wide",
+    storeId: null,
+    notes: null,
+    status: "active",
+    openingBalance: 500,
+    balance: 500,
+    hasMovements: false,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
 let storedPurchase: PurchaseDTO | null = draftPurchase;
+let storedOutgoingPayments: OutgoingPaymentDTO[] = [];
 
 export const resetStoredPurchase = (purchase: PurchaseDTO | null) => {
-    storedPurchase = purchase ? { ...purchase, lines: [...purchase.lines] } : null;
+    storedPurchase = purchase
+        ? { ...purchase, lines: [...purchase.lines], outgoingPayments: [...purchase.outgoingPayments] }
+        : null;
+    storedOutgoingPayments = purchase ? [...purchase.outgoingPayments] : [];
 };
 
 export const getOrganizationByIdForUser = mock(
@@ -191,6 +239,7 @@ export const createPurchaseRepo = mock(async (data: CreatePurchaseREPO) => {
         ...data,
         storeName: store.name,
         lines: [],
+        outgoingPayments: [],
         updatedBy: data.updatedBy ?? null,
         createdAt: now,
         updatedAt: now,
@@ -204,6 +253,7 @@ export const updatePurchaseRepo = mock(async (data: UpdatePurchaseREPO) => {
         ...data,
         storeName: store.name,
         lines: storedPurchase?.lines ?? [],
+        outgoingPayments: storedPurchase?.outgoingPayments ?? storedOutgoingPayments,
         createdAt: storedPurchase?.createdAt ?? now,
         updatedAt: now,
     };
@@ -223,8 +273,51 @@ export const replacePurchaseLinesRepo = mock(
     },
 );
 
+export const lockPurchaseById = mock(async (_organizationId: string, id: string) => {
+    if (!storedPurchase || storedPurchase.id !== id) {
+        return null;
+    }
+    return storedPurchase;
+});
+
+export const isMoneyAccountTrackingActive = mock(async () => false);
+export const lockMoneyAccountById = mock(async () => adajanCashAccount);
+export const createMoneyAccountMovementRepo = mock(
+    async (): Promise<MoneyAccountMovementDTO | null> => null,
+);
+export const lockPaymentRouteByStoreAndMethod = mock(async () => null);
+
+export const createOutgoingPaymentRepo = mock(async (data: CreateOutgoingPaymentREPO) => {
+    const payment: OutgoingPaymentDTO = {
+        id: data.id,
+        organizationId: data.organizationId,
+        purchaseId: data.purchaseId,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod,
+        moneyAccountId: data.moneyAccountId,
+        moneyAccountName: data.moneyAccountId === cashMoneyAccountId ? adajanCashAccount.name : data.moneyAccountId === hdfcBankAccount.id ? hdfcBankAccount.name : null,
+        reference: data.reference,
+        notes: data.notes,
+        paidAt: data.paidAt,
+        reversedAt: data.reversedAt,
+        createdBy: data.createdBy,
+        createdAt: now,
+    };
+    storedOutgoingPayments = [...storedOutgoingPayments, payment];
+    if (storedPurchase) {
+        storedPurchase = {
+            ...storedPurchase,
+            outgoingPayments: storedOutgoingPayments,
+        };
+    }
+    return payment;
+});
+
+export const getOutgoingPaymentsByPurchaseIds = mock(async () => storedOutgoingPayments);
+
 export const deletePurchaseRepo = mock(async () => {
     storedPurchase = null;
+    storedOutgoingPayments = [];
     return true;
 });
 
@@ -251,10 +344,27 @@ mock.module("@/modules/tenant/vendors/vendors.repository", () => ({
 mock.module("./purchases.repository", () => ({
     getPurchasesByOrganizationId,
     getPurchaseById,
+    lockPurchaseById,
     createPurchase: createPurchaseRepo,
     updatePurchase: updatePurchaseRepo,
     replacePurchaseLines: replacePurchaseLinesRepo,
     deletePurchase: deletePurchaseRepo,
+}));
+
+mock.module("@/modules/tenant/outgoing-payments/outgoing-payments.repository", () => ({
+    createOutgoingPayment: createOutgoingPaymentRepo,
+    getOutgoingPaymentsByPurchaseIds,
+    getOutgoingPaymentById: mock(async () => storedOutgoingPayments[0] ?? null),
+}));
+
+mock.module("@/modules/tenant/money-accounts/money-account-tracking", () => ({
+    isMoneyAccountTrackingActive,
+}));
+
+mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
+    lockMoneyAccountById,
+    createMoneyAccountMovement: createMoneyAccountMovementRepo,
+    lockPaymentRouteByStoreAndMethod,
 }));
 
 export const purchasesService = await import("./purchases.service");

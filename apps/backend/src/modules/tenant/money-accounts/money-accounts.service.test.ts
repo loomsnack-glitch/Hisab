@@ -1274,6 +1274,46 @@ describe("Organization Money Account service", () => {
         });
     });
 
+    test("includes Purchase payments in history as negative entries linked to the Purchase", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            openingBalance: 100,
+            balance: 100,
+            hasMovements: false,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([
+            {
+                ...hdfcUpiMovement,
+                amount: -40,
+                sourceKind: "outgoing_purchase_payment",
+                paymentId: null,
+                outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+                purchaseId: "88888888-8888-4888-8888-888888888888",
+                vendorName: "Fresh Farms",
+                paymentMethod: "cash",
+                saleId: null,
+                saleNumber: null,
+            },
+        ]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            moneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.balance).toBe(60);
+        expect(response.data?.entries[1]).toMatchObject({
+            kind: "outgoing_purchase_payment",
+            amount: -40,
+            outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+            purchaseId: "88888888-8888-4888-8888-888888888888",
+            vendorName: "Fresh Farms",
+            paymentMethod: "cash",
+        });
+    });
+
     test("returns only the Opening Balance entry when a Money Account has no Movements", async () => {
         getMoneyAccountById.mockResolvedValue({
             ...hdfcBankAccount,

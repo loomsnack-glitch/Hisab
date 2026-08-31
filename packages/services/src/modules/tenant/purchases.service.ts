@@ -1,5 +1,6 @@
 import type {
     CreateDraftPurchaseJSON,
+    CreateOutgoingPaymentJSON,
     PurchaseResponse,
     PurchasesListResponse,
     ServiceResponse,
@@ -77,6 +78,22 @@ export const recordPurchase = async (
     try {
         const response = await api.post(
             `/organizations/${organizationId}/purchases/${purchaseId}/record`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createOutgoingPurchasePayment = async (
+    organizationId: string,
+    purchaseId: string,
+    data: CreateOutgoingPaymentJSON,
+): Promise<ServiceResponse<PurchaseResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/purchases/${purchaseId}/payments`,
+            data,
         );
         return response.data;
     } catch (error) {

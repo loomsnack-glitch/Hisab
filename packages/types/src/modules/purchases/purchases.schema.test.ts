@@ -7,7 +7,9 @@ import {
   UpdateDraftPurchaseSchema,
   calculatePurchaseLineTotal,
   calculatePurchaseTotals,
+  calculateVendorOutstanding,
   calendarDateInTimeZone,
+  canAcceptOutgoingPayment,
   derivePurchasePayableState,
   isPurchaseEffectiveDateAllowed,
   isVendorItemSelectableForDraftPurchase,
@@ -272,6 +274,71 @@ describe("Purchase totals and Payable Status", () => {
       derivePurchasePayableState({ lifecycle: "recorded", total: 100, paidTotal: 100 }),
     ).toEqual({ payableStatus: "paid", dueAmount: 0 });
   });
+
+  test("a payable cannot be overpaid relative to remaining due", () => {
+    expect(
+      canAcceptOutgoingPayment({
+        lifecycle: "recorded",
+        total: 100,
+        outgoingPayments: [{ amount: 40, reversedAt: null }],
+        amount: 60,
+      }),
+    ).toBe(true);
+    expect(
+      canAcceptOutgoingPayment({
+        lifecycle: "recorded",
+        total: 100,
+        outgoingPayments: [{ amount: 40, reversedAt: null }],
+        amount: 60.01,
+      }),
+    ).toBe(false);
+    expect(
+      canAcceptOutgoingPayment({
+        lifecycle: "draft",
+        total: 100,
+        outgoingPayments: [],
+        amount: 10,
+      }),
+    ).toBe(false);
+  });
+
+  test("Vendor Outstanding sums remaining due from recorded Purchases only", () => {
+    expect(
+      calculateVendorOutstanding([
+        {
+          vendorId,
+          vendorName: "Fresh Farms",
+          lifecycle: "draft",
+          dueAmount: null,
+        },
+        {
+          vendorId,
+          vendorName: "Fresh Farms",
+          lifecycle: "recorded",
+          dueAmount: 106.5,
+        },
+        {
+          vendorId,
+          vendorName: "Fresh Farms",
+          lifecycle: "recorded",
+          dueAmount: 0,
+        },
+        {
+          vendorId: "22222222-2222-4222-8222-222222222222",
+          vendorName: "Miller Spices",
+          lifecycle: "recorded",
+          dueAmount: 20,
+        },
+      ]),
+    ).toEqual([
+      { vendorId, vendorName: "Fresh Farms", outstandingAmount: 106.5 },
+      {
+        vendorId: "22222222-2222-4222-8222-222222222222",
+        vendorName: "Miller Spices",
+        outstandingAmount: 20,
+      },
+    ]);
+  });
 });
 
 describe("Draft Purchase vendor selection", () => {
@@ -350,6 +417,7 @@ describe("Purchase DTO", () => {
           lineTotal: 81,
         },
       ],
+      outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
       createdAt: "2026-08-31T12:00:00.000Z",
@@ -387,6 +455,7 @@ describe("Purchase DTO", () => {
       dueAmount: null,
       recordedAt: null,
       lines: [],
+      outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
       createdAt: "2026-08-31T12:00:00.000Z",
@@ -421,6 +490,7 @@ describe("Purchase DTO", () => {
       dueAmount: null,
       recordedAt: null,
       lines: [],
+      outgoingPayments: [],
       createdBy: userId,
       updatedBy: null,
       createdAt: "2026-08-31T12:00:00.000Z",

@@ -741,6 +741,7 @@ describe("Money Account Movement and history contracts", () => {
     occurredAt: "2026-08-31T12:00:00.000Z",
     sourceKind: "pos_payment" as const,
     paymentId,
+    outgoingPaymentId: null,
     reversedMovementId: null,
     createdAt: "2026-08-31T12:00:00.000Z",
   };
@@ -790,6 +791,7 @@ describe("Money Account Movement and history contracts", () => {
       amount: -250.5,
       sourceKind: "sale_replacement_reversal",
       paymentId: null,
+      outgoingPaymentId: null,
       reversedMovementId: movementId,
     });
 
@@ -819,6 +821,43 @@ describe("Money Account Movement and history contracts", () => {
     ).toBe(false);
     expect(
       MoneyAccountMovementDTOSchema.safeParse({ ...reversal, reversedMovementId: null }).success,
+    ).toBe(false);
+  });
+
+  test("Money Account Movement DTO records a negative Purchase payment linked to an Outgoing Payment", () => {
+    const outgoingPaymentId = "12121212-1212-4121-8121-121212121212";
+    const result = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: -40,
+      sourceKind: "outgoing_purchase_payment",
+      paymentId: null,
+      outgoingPaymentId,
+      reversedMovementId: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(-40);
+      expect(result.data.sourceKind).toBe("outgoing_purchase_payment");
+      expect(result.data.outgoingPaymentId).toBe(outgoingPaymentId);
+      expect(result.data.paymentId).toBeNull();
+    }
+  });
+
+  test("rejects a Purchase payment Movement that is positive, reuses a POS Payment id, or omits the Outgoing Payment", () => {
+    const outbound = {
+      ...movementDto,
+      amount: -40,
+      sourceKind: "outgoing_purchase_payment" as const,
+      paymentId: null,
+      outgoingPaymentId: "12121212-1212-4121-8121-121212121212",
+      reversedMovementId: null,
+    };
+
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...outbound, amount: 40 }).success).toBe(false);
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...outbound, paymentId }).success).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...outbound, outgoingPaymentId: null }).success,
     ).toBe(false);
   });
 
@@ -930,6 +969,50 @@ describe("Money Account Movement and history contracts", () => {
         expect(result.data.entries[2].reversedMovementId).toBe(movementId);
         expect(result.data.entries[2].originalPaymentId).toBe(paymentId);
         expect(result.data.entries[2].saleNumber).toBe("12");
+      }
+    }
+  });
+
+  test("account history includes a Purchase payment as a dedicated negative entry linked to the Purchase", () => {
+    const outgoingPaymentId = "12121212-1212-4121-8121-121212121212";
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        openingBalance: 100,
+        balance: 60,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 60,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "outgoing_purchase_payment",
+          id: movementId,
+          amount: -40,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId,
+          outgoingPaymentId,
+          purchaseId: "88888888-8888-4888-8888-888888888888",
+          vendorName: "Fresh Farms",
+          paymentMethod: "cash",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.balance).toBe(60);
+      expect(result.data.entries[1]?.kind).toBe("outgoing_purchase_payment");
+      if (result.data.entries[1]?.kind === "outgoing_purchase_payment") {
+        expect(result.data.entries[1].amount).toBe(-40);
+        expect(result.data.entries[1].outgoingPaymentId).toBe(outgoingPaymentId);
+        expect(result.data.entries[1].vendorName).toBe("Fresh Farms");
+        expect(result.data.entries[1].paymentMethod).toBe("cash");
       }
     }
   });

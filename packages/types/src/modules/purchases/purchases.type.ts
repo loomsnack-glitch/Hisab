@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { VendorOutstandingDTO } from "../outgoing-payments/outgoing-payments.type";
 import type {
   CreateDraftPurchaseSchema,
   PayableStatusSchema,
@@ -8,7 +9,6 @@ import type {
   PurchaseLineInputSchema,
   UpdateDraftPurchaseSchema,
 } from "./purchases.schema";
-
 export type PurchaseLifecycle = z.infer<typeof PurchaseLifecycleSchema>;
 export type PayableStatus = z.infer<typeof PayableStatusSchema>;
 export type PurchaseLineDTO = z.infer<typeof PurchaseLineDTOSchema>;
@@ -80,6 +80,7 @@ export type UpdatePurchaseREPO = Pick<
 
 export type PurchasesListResponse = {
   purchases: PurchaseDTO[];
+  vendorOutstanding: VendorOutstandingDTO[];
 };
 
 export type PurchaseResponse = {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "react-router-dom";
-import { getVendors } from "@repo/services";
+import { getPurchases, getVendors } from "@repo/services";
 import type { VendorDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
@@ -15,8 +15,8 @@ import { LayoutGrid, Package, Pencil, PlusCircle, RefreshCw, Search, Table as Ta
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertVendorDialog from "@/components/vendors/upsert-vendor-dialog";
 import VendorItemsCatalogue from "@/components/vendors/vendor-items-catalogue";
-import { formatDateTime } from "@/lib/format";
-import { vendorKeys } from "@/lib/query-keys";
+import { formatCurrency, formatDateTime } from "@/lib/format";
+import { purchaseKeys, vendorKeys } from "@/lib/query-keys";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
 const VendorsPage = () => {
@@ -31,8 +31,20 @@ const VendorsPage = () => {
         queryFn: () => getVendors(organizationId),
         enabled: Boolean(organizationId),
     });
+    const purchasesQuery = useQuery({
+        queryKey: purchaseKeys.list(organizationId),
+        queryFn: () => getPurchases(organizationId),
+        enabled: Boolean(organizationId),
+    });
 
     const vendors = vendorsQuery.data?.status === "success" ? vendorsQuery.data.data?.vendors ?? [] : [];
+    const outstandingByVendorId = useMemo(() => {
+        const outstanding =
+            purchasesQuery.data?.status === "success"
+                ? purchasesQuery.data.data?.vendorOutstanding ?? []
+                : [];
+        return new Map(outstanding.map((entry) => [entry.vendorId, entry.outstandingAmount]));
+    }, [purchasesQuery.data]);
 
     const filteredVendors = useMemo(() => {
         if (!mobileSearchQuery.trim()) return vendors;
@@ -76,13 +88,20 @@ const VendorsPage = () => {
             getFilterValue: (vendor) => vendor.status,
         },
         {
+            id: "outstanding",
+            header: "Outstanding",
+            accessor: (vendor) => formatCurrency(outstandingByVendorId.get(vendor.id) ?? 0),
+            sortable: true,
+            getSortValue: (vendor) => outstandingByVendorId.get(vendor.id) ?? 0,
+        },
+        {
             id: "updatedAt",
             header: "Updated",
             accessor: (vendor) => formatDateTime(vendor.updatedAt),
             sortable: true,
             getSortValue: (vendor) => String(vendor.updatedAt),
         },
-    ], []);
+    ], [outstandingByVendorId]);
 
     const renderActions = (vendor: VendorDTO) => (
         <UpsertVendorDialog

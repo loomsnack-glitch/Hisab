@@ -44,6 +44,8 @@ const PurchasesPage = () => {
 
     const purchases =
         purchasesQuery.data?.status === "success" ? purchasesQuery.data.data?.purchases ?? [] : [];
+    const vendorOutstanding =
+        purchasesQuery.data?.status === "success" ? purchasesQuery.data.data?.vendorOutstanding ?? [] : [];
     const stores =
         organizationQuery.data?.status === "success"
             ? organizationQuery.data.data?.organization.stores ?? []
@@ -123,6 +125,13 @@ const PurchasesPage = () => {
             accessor: (purchase) => formatCurrency(purchase.total),
             sortable: true,
             getSortValue: (purchase) => purchase.total,
+        },
+        {
+            id: "paidTotal",
+            header: "Paid",
+            accessor: (purchase) => formatCurrency(purchase.paidTotal),
+            sortable: true,
+            getSortValue: (purchase) => purchase.paidTotal,
         },
         {
             id: "dueAmount",
@@ -221,6 +230,20 @@ const PurchasesPage = () => {
                 </Card>
             ) : (
                 <>
+                    {vendorOutstanding.length > 0 ? (
+                        <div className="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-sm">
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Vendor Outstanding</p>
+                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                                {vendorOutstanding.map((entry) => (
+                                    <p key={entry.vendorId}>
+                                        <span className="font-medium">{entry.vendorName}</span>
+                                        {" · "}
+                                        <span className="tabular-nums">{formatCurrency(entry.outstandingAmount)}</span>
+                                    </p>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
                     <div className="hidden sm:block">
                         <PremiumTable
                             data={purchases}

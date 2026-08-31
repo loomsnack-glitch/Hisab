@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateDraftPurchaseSchema, STATUS_CODES, UpdateDraftPurchaseSchema } from "@repo/types";
+import { CreateDraftPurchaseSchema, CreateOutgoingPaymentSchema, STATUS_CODES, UpdateDraftPurchaseSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -176,6 +176,38 @@ export const createPurchasesRoutes = (
             return handleError(FILE_NAME, "recordPurchase", c, error);
         }
     });
+
+    router.post(
+        "/:organizationId/purchases/:purchaseId/payments",
+        validateSchema("json", CreateOutgoingPaymentSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const purchaseId = c.req.param("purchaseId");
+                const invalidOrganizationId = validateUuidParam(
+                    organizationId,
+                    "Invalid organization id",
+                );
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidPurchaseId = validateUuidParam(purchaseId, "Invalid purchase id");
+                if (invalidPurchaseId) {
+                    return c.json(invalidPurchaseId, invalidPurchaseId.code);
+                }
+
+                const serviceResponse = await purchasesService.createOutgoingPurchasePayment(
+                    c.get("authUser").id,
+                    organizationId,
+                    purchaseId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "createOutgoingPurchasePayment", c, error);
+            }
+        },
+    );
 
     return router;
 };

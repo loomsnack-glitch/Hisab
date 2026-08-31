@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { UnitDTO, VendorDTO, VendorItemDTO } from "@repo/types";
 
-import { unitKeys, vendorKeys } from "@/lib/query-keys";
+import { unitKeys, purchaseKeys, vendorKeys } from "@/lib/query-keys";
+import { formatCurrency } from "@/lib/format";
 import VendorsPage from "@/pages/vendors-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -163,6 +164,17 @@ const renderVendorsPage = (
     const queryClient = new QueryClient();
     if (result !== "pending") {
         seedVendors(queryClient, result, vendors);
+        queryClient.setQueryData(purchaseKeys.list(organizationId), {
+            status: "success",
+            data: {
+                purchases: [],
+                vendorOutstanding: result === "empty"
+                    ? []
+                    : [{ vendorId: freshFarms.id, vendorName: freshFarms.name, outstandingAmount: 106.5 }],
+            },
+            message: "Purchases fetched successfully",
+            code: 200,
+        });
     }
     if (itemsResult !== "pending") {
         seedItems(queryClient, itemsResult, vendorItems);
@@ -197,6 +209,8 @@ describe("Admin Vendors page", () => {
         expect(markup).toContain("Add vendor");
         expect(markup).toContain("Search vendors...");
         expect(markup).toContain("Status");
+        expect(markup).toContain("Outstanding");
+        expect(markup).toContain(formatCurrency(106.5));
         expect(markup).toContain("active");
         expect(markup).toContain("inactive");
         expect(markup).toContain("Edit");

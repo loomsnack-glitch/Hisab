@@ -23,6 +23,7 @@ export * from "./modules/expense-categories";
 export * from "./modules/expenses";
 export * from "./modules/vendors";
 export * from "./modules/purchases";
+export * from "./modules/outgoing-payments";
 export * from "./modules/money-accounts";
 export * from "./services/whatsapp.type";
 export * from "./services/whatsapp.schema";

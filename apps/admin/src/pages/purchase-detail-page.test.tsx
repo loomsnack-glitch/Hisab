@@ -49,6 +49,7 @@ const draftPurchase: PurchaseDTO = {
             lineTotal: 81,
         },
     ],
+    outgoingPayments: [],
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -123,6 +124,44 @@ describe("Admin Purchase detail page", () => {
         expect(markup).not.toContain("Edit draft");
         expect(markup).not.toContain("Discard draft");
         expect(markup).not.toContain(">Record purchase<");
+        expect(markup).toContain("Record payment");
+        expect(markup).toContain("Outgoing Payments");
+        expect(markup).toContain("No Outgoing Payments recorded yet.");
+    });
+
+    test("shows a recorded Purchase with later settlement actions and payment history", () => {
+        const partialPurchase: PurchaseDTO = {
+            ...recordedPurchase,
+            payableStatus: "partial",
+            paidTotal: 40,
+            dueAmount: 66.5,
+            outgoingPayments: [
+                {
+                    id: "12121212-1212-4121-8121-121212121212",
+                    organizationId,
+                    purchaseId,
+                    amount: 40,
+                    paymentMethod: "cash",
+                    moneyAccountId: null,
+                    moneyAccountName: null,
+                    reference: "CASH-1",
+                    notes: null,
+                    paidAt: now,
+                    reversedAt: null,
+                    createdBy: userId,
+                    createdAt: now,
+                },
+            ],
+        };
+        const markup = renderDetailPage("success", partialPurchase);
+
+        expect(markup).toContain("Partial");
+        expect(markup).toContain("Record payment");
+        expect(markup).toContain("Cash");
+        expect(markup).toContain("CASH-1");
+        expect(markup).toContain(formatCurrency(40));
+        expect(markup).toContain(formatCurrency(66.5));
+        expect(markup).not.toContain("No Outgoing Payments recorded yet.");
     });
 
     test("shows a loading spinner while the Purchase is fetched", () => {
