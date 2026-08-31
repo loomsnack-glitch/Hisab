@@ -144,11 +144,11 @@ A record of money collected against a Sale. A Sale may have many Payments across
 _Avoid_: Settlement row, transaction row
 
 **Money Account**:
-An Organization-owned place where business money is held or received, such as a Store Cash Account, Bank Account, UPI QR account, Card Settlement account, or Petty Cash box. A Money Account may be available to one Store or across the Organization. It is retained through active or inactive status rather than permanently deleted.
+An Organization-owned place where business money is held or received, such as a Store Cash Account, Bank Account, UPI QR account, Card Settlement account, or Petty Cash box. A Money Account may be available to one Store or across the Organization and is retained through active or inactive status rather than permanently deleted; after it has Money Account Movements, its type, scope, and Store assignment are fixed.
 _Avoid_: Full chart-of-account account, sales income account, expense category
 
 **Store Cash Account**:
-The sole active Cash Money Account at one Store in the first release, representing all physical cash held there. It does not distinguish individual counters, cash drawers, or cashier shifts.
+The sole active Cash Money Account at one Store, representing all physical cash held there. When Money Account Tracking is enabled for that Store, it is the automatic destination of its Cash Payments; it does not distinguish individual counters, cash drawers, or cashier shifts.
 _Avoid_: Counter-specific cash account, cashier wallet
 
 **Store-Scoped Money Account**:
@@ -166,6 +166,30 @@ _Avoid_: Payment method, full accounting account type, revenue category
 **Money Account Details**:
 The non-sensitive identifying information kept for a Money Account: its name, type, availability scope, optional Store, optional notes, and active status. Full bank-account numbers, UPI IDs, card-terminal IDs, and QR images are not Money Account Details in the first release.
 _Avoid_: Stored payment credential, bank-account master data
+
+**Opening Balance**:
+The amount already held in a Money Account immediately before Hisab starts tracking money changes for that account. It may be recorded once while the account has no Money Account Movements, defaults to zero when omitted, and then remains part of that account's balance.
+_Avoid_: Editable current balance, balance correction
+
+**Money Account Balance**:
+The amount currently held in a Money Account, calculated from its Opening Balance and its recorded money changes. It is not directly overwritten.
+_Avoid_: Manual balance field, payment-method total
+
+**Money Account Movement**:
+An immutable recorded increase or decrease that changes one Money Account Balance. In the initial tracking release, only Cash, UPI, and Card POS Payments create linked positive Money Account Movements, including partial or later-collected Payments.
+_Avoid_: Editable balance, payment-method summary
+
+**Payment Routing Rule**:
+An Organization configuration that directs future UPI or Card Payments received at one Store to one Money Account. A Money Account may be the destination of more than one Payment Routing Rule; changing a rule never reassigns an existing Money Account Movement.
+_Avoid_: Cashier-selected account, payment-method account type
+
+**Money Account Tracking**:
+An optional Store feature that records Cash, UPI, and Card POS Payments as Money Account Movements and makes Money Account Balances available. Tracking begins when it is enabled and does not backfill earlier Payments; when it is disabled or unavailable, the Store continues recording POS Payments without creating Money Account Movements, while its prior routes, balances, and movement history are retained for administrators.
+_Avoid_: General ledger, mandatory POS payment feature
+
+**Feature Entitlement**:
+A subscription-granted right that makes an optional Store feature available to an Organization. It does not activate the feature for a particular Store; the Store's feature setting does that.
+_Avoid_: Store feature setting, feature activation
 
 **Sale Number**:
 A human-friendly bill identifier assigned when a Sale is committed. It is unique within a Store for the current financial year, prints as a plain sequence (1, 2, 3…), and resets each financial year with no Store customization.
