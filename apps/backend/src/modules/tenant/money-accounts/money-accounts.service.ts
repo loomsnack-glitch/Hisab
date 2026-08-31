@@ -14,6 +14,7 @@ import {
     type MoneyAccountsListResponse,
     type RecordManualMoneyMovementSVC,
     type RecordBalanceAdjustmentSVC,
+    type RecordMoneyAccountTransferSVC,
     type ServiceResponse,
     type UpdateMoneyAccountSVC,
     type UpsertMoneyAccountPaymentRouteSVC,
@@ -702,6 +703,35 @@ export const getMoneyAccountHistory = async (
                 ];
             }
 
+            if (movement.sourceKind === "transfer_out" || movement.sourceKind === "transfer_in") {
+                const transferId = movement.transferId;
+                const counterpartMoneyAccountId = movement.counterpartMoneyAccountId;
+                const counterpartMoneyAccountName = movement.counterpartMoneyAccountName?.trim();
+                if (
+                    !transferId ||
+                    !counterpartMoneyAccountId ||
+                    !counterpartMoneyAccountName ||
+                    (movement.sourceKind === "transfer_out" && !(movement.amount < 0)) ||
+                    (movement.sourceKind === "transfer_in" && !(movement.amount > 0))
+                ) {
+                    return [];
+                }
+                return [
+                    {
+                        kind: movement.sourceKind,
+                        id: movement.id,
+                        amount: movement.amount,
+                        occurredAt: movement.occurredAt,
+                        storeId: movement.storeId,
+                        transferId,
+                        counterpartMoneyAccountId,
+                        counterpartMoneyAccountName,
+                        counterpartStoreId: movement.counterpartStoreId ?? null,
+                        note: movement.note ?? null,
+                    },
+                ];
+            }
+
             if (!movement.paymentId || !movement.saleId || !movement.paymentMethod || !movement.storeId) {
                 return [];
             }
@@ -754,12 +784,36 @@ const insufficientWithdrawalBalance = (): ServiceResponse<null> => ({
     code: STATUS_CODES.BAD_REQUEST,
 });
 
+const insufficientTransferBalance = (): ServiceResponse<null> => ({
+    status: "error",
+    message:
+        "This transfer would make the Money Account Balance negative. Reconcile the account first if earlier activity was missed.",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+const sameAccountTransfer = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "Source and destination Money Accounts must be distinct",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+const destinationMoneyAccountInactive = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "The destination Money Account is inactive",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
 const failedToRecordMovement = (): ServiceResponse<null> => ({
     status: "error",
     message: "Failed to record money movement",
     data: null,
     code: STATUS_CODES.INTERNAL_SERVER_ERROR,
 });
+
+const FAILED_TRANSFER_PERSISTENCE = "Failed to record money movement";
 
 const resolveManualMovementStoreId = (moneyAccount: MoneyAccountDTO): string | null =>
     moneyAccount.scope === "store_scoped" ? moneyAccount.storeId : null;
@@ -960,5 +1014,125 @@ export const recordMoneyAccountBalanceAdjustment = async (
         message: "Balance Adjustment recorded successfully",
         code: STATUS_CODES.CREATED,
     };
+};
+
+export const recordMoneyAccountTransfer = async (
+    userId: string,
+    organizationId: string,
+    sourceMoneyAccountId: string,
+    transferData: RecordMoneyAccountTransferSVC,
+): Promise<ServiceResponse<MoneyAccountResponse | null>> => {
+    const organization = await getOrganizationForUser(organizationId, userId);
+    if (!organization) {
+        return organizationNotFound();
+    }
+
+    const destinationMoneyAccountId = transferData.destinationMoneyAccountId;
+    if (sourceMoneyAccountId === destinationMoneyAccountId) {
+        return sameAccountTransfer();
+    }
+
+    try {
+        const result = await pg.begin(async (tx) => {
+            const orderedIds = [sourceMoneyAccountId, destinationMoneyAccountId].sort((left, right) =>
+                left < right ? -1 : left > right ? 1 : 0,
+            );
+            const lockedById = new Map<string, MoneyAccountDTO>();
+            for (const moneyAccountId of orderedIds) {
+                const locked = await moneyAccountsRepository.lockMoneyAccountById(
+                    organizationId,
+                    moneyAccountId,
+                    tx,
+                );
+                if (!locked) {
+                    return { ok: false as const, response: moneyAccountNotFound() };
+                }
+                lockedById.set(locked.id, locked);
+            }
+
+            const source = lockedById.get(sourceMoneyAccountId);
+            const destination = lockedById.get(destinationMoneyAccountId);
+            if (!source || !destination) {
+                return { ok: false as const, response: moneyAccountNotFound() };
+            }
+            if (source.status !== "active") {
+                return { ok: false as const, response: moneyAccountInactive() };
+            }
+            if (destination.status !== "active") {
+                return { ok: false as const, response: destinationMoneyAccountInactive() };
+            }
+
+            const amount = toMoneyAmount(transferData.amount);
+            const nextSourceBalance = toMoneyAmount(source.balance - amount);
+            if (nextSourceBalance < 0) {
+                return { ok: false as const, response: insufficientTransferBalance() };
+            }
+
+            const occurredAt = new Date();
+            const transferId = crypto.randomUUID();
+            const note = normalizeNotes(transferData.note);
+            const sourceMovement = await moneyAccountsRepository.createMoneyAccountMovement(
+                {
+                    id: crypto.randomUUID(),
+                    organizationId,
+                    moneyAccountId: source.id,
+                    storeId: resolveManualMovementStoreId(source),
+                    amount: toMoneyAmount(-amount),
+                    occurredAt,
+                    sourceKind: "transfer_out",
+                    paymentId: null,
+                    outgoingPaymentId: null,
+                    reversedMovementId: null,
+                    note,
+                    actualBalance: null,
+                    transferId,
+                },
+                tx,
+            );
+            const destinationMovement = await moneyAccountsRepository.createMoneyAccountMovement(
+                {
+                    id: crypto.randomUUID(),
+                    organizationId,
+                    moneyAccountId: destination.id,
+                    storeId: resolveManualMovementStoreId(destination),
+                    amount,
+                    occurredAt,
+                    sourceKind: "transfer_in",
+                    paymentId: null,
+                    outgoingPaymentId: null,
+                    reversedMovementId: null,
+                    note,
+                    actualBalance: null,
+                    transferId,
+                },
+                tx,
+            );
+            if (!sourceMovement || !destinationMovement) {
+                throw new Error(FAILED_TRANSFER_PERSISTENCE);
+            }
+
+            return {
+                ok: true as const,
+                moneyAccount: {
+                    ...source,
+                    balance: nextSourceBalance,
+                    hasMovements: true,
+                },
+            };
+        });
+
+        if (!result.ok) {
+            return result.response;
+        }
+
+        return {
+            status: "success",
+            data: { moneyAccount: result.moneyAccount },
+            message: "Transfer recorded successfully",
+            code: STATUS_CODES.CREATED,
+        };
+    } catch {
+        return failedToRecordMovement();
+    }
 };
 

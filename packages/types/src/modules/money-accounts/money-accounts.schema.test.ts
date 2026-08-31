@@ -15,6 +15,7 @@ import {
   ORGANIZATION_WIDE_MONEY_ACCOUNT_TYPES,
   RecordBalanceAdjustmentSchema,
   RecordManualMoneyMovementSchema,
+  RecordMoneyAccountTransferSchema,
   UpdateMoneyAccountSchema,
   UpsertMoneyAccountPaymentRouteSchema,
 } from "./money-accounts.schema";
@@ -1850,6 +1851,284 @@ describe("Money Account Movement and history contracts", () => {
         expect(result.data.entries[2].storeId).toBeNull();
       }
     }
+  });
+
+  test("accepts a Money Account Transfer amount with a distinct destination and optional note", () => {
+    const destinationMoneyAccountId = "33333333-3333-4333-8333-333333333333";
+    const omitted = RecordMoneyAccountTransferSchema.safeParse({
+      destinationMoneyAccountId,
+      amount: 40,
+    });
+    const withNote = RecordMoneyAccountTransferSchema.safeParse({
+      destinationMoneyAccountId,
+      amount: 40.5,
+      note: "  Cash to bank  ",
+    });
+
+    expect(omitted.success).toBe(true);
+    if (omitted.success) {
+      expect(omitted.data.destinationMoneyAccountId).toBe(destinationMoneyAccountId);
+      expect(omitted.data.amount).toBe(40);
+      expect(omitted.data.note).toBeUndefined();
+    }
+    expect(withNote.success).toBe(true);
+    if (withNote.success) {
+      expect(withNote.data.amount).toBe(40.5);
+      expect(withNote.data.note).toBe("Cash to bank");
+    }
+  });
+
+  test("rejects a zero, negative, or malformed Money Account Transfer amount", () => {
+    const destinationMoneyAccountId = "33333333-3333-4333-8333-333333333333";
+    expect(
+      RecordMoneyAccountTransferSchema.safeParse({
+        destinationMoneyAccountId,
+        amount: 0,
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordMoneyAccountTransferSchema.safeParse({
+        destinationMoneyAccountId,
+        amount: -40,
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordMoneyAccountTransferSchema.safeParse({
+        destinationMoneyAccountId,
+        amount: 1.234,
+      }).success,
+    ).toBe(false);
+    expect(RecordMoneyAccountTransferSchema.safeParse({ amount: 40 }).success).toBe(false);
+    expect(
+      RecordMoneyAccountTransferSchema.safeParse({
+        destinationMoneyAccountId: "not-a-uuid",
+        amount: 40,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects a Money Account Transfer with a backdated timestamp, source override, or extra fields", () => {
+    const destinationMoneyAccountId = "33333333-3333-4333-8333-333333333333";
+    expect(
+      RecordMoneyAccountTransferSchema.safeParse({
+        destinationMoneyAccountId,
+        amount: 40,
+        occurredAt: "2026-01-01T00:00:00.000Z",
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordMoneyAccountTransferSchema.safeParse({
+        destinationMoneyAccountId,
+        amount: 40,
+        sourceMoneyAccountId: moneyAccountId,
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordMoneyAccountTransferSchema.safeParse({
+        destinationMoneyAccountId,
+        amount: 40,
+        sourceKind: "transfer_out",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("Money Account Movement DTO records linked Transfer out and Transfer in with the same correlation id and opposite signs", () => {
+    const transferId = "abababab-abab-4aba-8aba-abababababab";
+    const destinationMoneyAccountId = "33333333-3333-4333-8333-333333333333";
+    const outflow = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      amount: -40,
+      sourceKind: "transfer_out",
+      storeId,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: "Cash to bank",
+      transferId,
+    });
+    const inflow = MoneyAccountMovementDTOSchema.safeParse({
+      ...movementDto,
+      moneyAccountId: destinationMoneyAccountId,
+      amount: 40,
+      sourceKind: "transfer_in",
+      storeId: null,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: "Cash to bank",
+      transferId,
+    });
+
+    expect(outflow.success).toBe(true);
+    if (outflow.success) {
+      expect(outflow.data.sourceKind).toBe("transfer_out");
+      expect(outflow.data.amount).toBe(-40);
+      expect(outflow.data.storeId).toBe(storeId);
+      expect(outflow.data.transferId).toBe(transferId);
+      expect(outflow.data.paymentId).toBeNull();
+    }
+    expect(inflow.success).toBe(true);
+    if (inflow.success) {
+      expect(inflow.data.sourceKind).toBe("transfer_in");
+      expect(inflow.data.amount).toBe(40);
+      expect(inflow.data.storeId).toBeNull();
+      expect(inflow.data.transferId).toBe(transferId);
+    }
+  });
+
+  test("rejects a Transfer that has the wrong sign, a Payment link, or no correlation id", () => {
+    const transferId = "abababab-abab-4aba-8aba-abababababab";
+    const transferOut = {
+      ...movementDto,
+      amount: -40,
+      sourceKind: "transfer_out" as const,
+      storeId,
+      paymentId: null,
+      outgoingPaymentId: null,
+      reversedMovementId: null,
+      note: null,
+      transferId,
+    };
+
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...transferOut, amount: 40 }).success).toBe(
+      false,
+    );
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({
+        ...transferOut,
+        sourceKind: "transfer_in",
+        amount: -40,
+      }).success,
+    ).toBe(false);
+    expect(MoneyAccountMovementDTOSchema.safeParse({ ...transferOut, paymentId }).success).toBe(
+      false,
+    );
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({ ...transferOut, transferId: null }).success,
+    ).toBe(false);
+    expect(
+      MoneyAccountMovementDTOSchema.safeParse({
+        ...movementDto,
+        transferId,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("account history includes Transfer out and Transfer in with counterpart account, Store, and note", () => {
+    const transferId = "abababab-abab-4aba-8aba-abababababab";
+    const destinationMoneyAccountId = "33333333-3333-4333-8333-333333333333";
+    const vesuStoreId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const result = MoneyAccountHistoryResponseSchema.safeParse({
+      moneyAccount: {
+        ...organizationWideDto,
+        name: "Adajan cash",
+        type: "cash",
+        scope: "store_scoped",
+        storeId,
+        openingBalance: 100,
+        balance: 60,
+        hasMovements: true,
+      },
+      openingBalance: 100,
+      balance: 60,
+      entries: [
+        {
+          kind: "opening_balance",
+          amount: 100,
+          occurredAt: organizationWideDto.createdAt,
+        },
+        {
+          kind: "transfer_out",
+          id: movementId,
+          amount: -40,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId,
+          transferId,
+          counterpartMoneyAccountId: destinationMoneyAccountId,
+          counterpartMoneyAccountName: "Vesu UPI QR",
+          counterpartStoreId: vesuStoreId,
+          note: "Cash to Vesu",
+        },
+        {
+          kind: "transfer_in",
+          id: "15151515-1515-4151-8151-151515151515",
+          amount: 40,
+          occurredAt: "2026-08-31T12:00:00.000Z",
+          storeId: vesuStoreId,
+          transferId,
+          counterpartMoneyAccountId: moneyAccountId,
+          counterpartMoneyAccountName: "Adajan cash",
+          counterpartStoreId: storeId,
+          note: "Cash to Vesu",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.entries[1]?.kind).toBe("transfer_out");
+      expect(result.data.entries[2]?.kind).toBe("transfer_in");
+      if (result.data.entries[1]?.kind === "transfer_out") {
+        expect(result.data.entries[1].amount).toBe(-40);
+        expect(result.data.entries[1].storeId).toBe(storeId);
+        expect(result.data.entries[1].transferId).toBe(transferId);
+        expect(result.data.entries[1].counterpartMoneyAccountName).toBe("Vesu UPI QR");
+        expect(result.data.entries[1].counterpartStoreId).toBe(vesuStoreId);
+        expect(result.data.entries[1].note).toBe("Cash to Vesu");
+      }
+      if (result.data.entries[2]?.kind === "transfer_in") {
+        expect(result.data.entries[2].amount).toBe(40);
+        expect(result.data.entries[2].storeId).toBe(vesuStoreId);
+        expect(result.data.entries[2].counterpartMoneyAccountName).toBe("Adajan cash");
+      }
+    }
+  });
+
+  test("rejects a Transfer history entry without a counterpart account or with the wrong sign", () => {
+    const transferId = "abababab-abab-4aba-8aba-abababababab";
+    const destinationMoneyAccountId = "33333333-3333-4333-8333-333333333333";
+    const baseHistory = {
+      moneyAccount: organizationWideDto,
+      openingBalance: 0,
+      balance: 0,
+    };
+
+    expect(
+      MoneyAccountHistoryResponseSchema.safeParse({
+        ...baseHistory,
+        entries: [
+          {
+            kind: "transfer_out",
+            id: movementId,
+            amount: -40,
+            occurredAt: "2026-08-31T12:00:00.000Z",
+            storeId,
+            transferId,
+            counterpartMoneyAccountId: destinationMoneyAccountId,
+            note: null,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      MoneyAccountHistoryResponseSchema.safeParse({
+        ...baseHistory,
+        entries: [
+          {
+            kind: "transfer_out",
+            id: movementId,
+            amount: 40,
+            occurredAt: "2026-08-31T12:00:00.000Z",
+            storeId,
+            transferId,
+            counterpartMoneyAccountId: destinationMoneyAccountId,
+            counterpartMoneyAccountName: "HDFC Current",
+            counterpartStoreId: null,
+            note: null,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   test("rejects a history Movement entry without Sale and Payment information", () => {

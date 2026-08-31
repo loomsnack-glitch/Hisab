@@ -68,6 +68,24 @@ describe("Money Accounts client service", () => {
         ]);
     });
 
+    test("records a Money Account Transfer through the administrator endpoint", async () => {
+        const requests: Array<{ method: string; url: string }> = [];
+        api.post = (async (url: string) => {
+            requests.push({ method: "POST", url });
+            return { data: { status: "success", data: null } };
+        }) as typeof api.post;
+
+        await moneyAccountsService.recordMoneyAccountTransfer("org-id", "account-id", {
+            destinationMoneyAccountId: "destination-id",
+            amount: 40,
+            note: "Cash to bank",
+        });
+
+        expect(requests).toEqual([
+            { method: "POST", url: "/organizations/org-id/money-accounts/account-id/transfers" },
+        ]);
+    });
+
     test("does not expose a direct balance write or generic Movement client", () => {
         expect("createMoneyAccountMovement" in moneyAccountsService).toBe(false);
         expect("updateMoneyAccountMovement" in moneyAccountsService).toBe(false);

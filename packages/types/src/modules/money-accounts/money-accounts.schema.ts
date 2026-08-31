@@ -228,6 +228,8 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS = [
   "manual_deposit",
   "manual_withdrawal",
   "balance_adjustment",
+  "transfer_out",
+  "transfer_in",
 ] as const;
 
 export const MoneyAccountMovementSourceKindSchema = z.enum(MONEY_ACCOUNT_MOVEMENT_SOURCE_KINDS);
@@ -247,6 +249,8 @@ export const MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS: Record<
   manual_deposit: "Deposit",
   manual_withdrawal: "Withdrawal",
   balance_adjustment: "Balance Adjustment",
+  transfer_out: "Transfer out",
+  transfer_in: "Transfer in",
 };
 
 export const moneyAccountMovementAmountSchema = z
@@ -309,6 +313,14 @@ export const RecordBalanceAdjustmentSchema = z
   })
   .strict();
 
+export const RecordMoneyAccountTransferSchema = z
+  .object({
+    destinationMoneyAccountId: z.uuid("Invalid destination money account id"),
+    amount: moneyAccountMovementAmountSchema,
+    note: moneyAccountNotesSchema,
+  })
+  .strict();
+
 export const UpsertMoneyAccountPaymentRouteSchema = z
   .object({
     paymentMethod: MoneyAccountPaymentRouteMethodSchema,
@@ -342,13 +354,16 @@ export const MoneyAccountMovementDTOSchema = z
     reversedMovementId: z.uuid("Invalid reversed money account movement id").nullable(),
     note: z.string().nullable(),
     actualBalance: moneyAccountActualBalanceSchema.nullable().optional(),
+    transferId: z.uuid("Invalid transfer id").nullable().optional(),
     createdAt: dtoDateSchema,
   })
   .superRefine((value, ctx) => {
     const allowsNullableStoreAttribution =
       value.sourceKind === "manual_deposit" ||
       value.sourceKind === "manual_withdrawal" ||
-      value.sourceKind === "balance_adjustment";
+      value.sourceKind === "balance_adjustment" ||
+      value.sourceKind === "transfer_out" ||
+      value.sourceKind === "transfer_in";
     if (!allowsNullableStoreAttribution && !value.storeId) {
       ctx.addIssue({
         code: "custom",
@@ -391,6 +406,13 @@ export const MoneyAccountMovementDTOSchema = z
           code: "custom",
           path: ["reversedMovementId"],
           message: "A Balance Adjustment cannot reverse another Movement",
+        });
+      }
+      if (value.transferId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["transferId"],
+          message: "A Balance Adjustment cannot reuse a Money Account Transfer id",
         });
       }
       return;
@@ -441,7 +463,69 @@ export const MoneyAccountMovementDTOSchema = z
           message: `A ${label} cannot reverse another Movement`,
         });
       }
+      if (value.transferId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["transferId"],
+          message: `A ${label} cannot reuse a Money Account Transfer id`,
+        });
+      }
       return;
+    }
+
+    if (value.sourceKind === "transfer_out" || value.sourceKind === "transfer_in") {
+      const label = MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[value.sourceKind];
+      if (value.sourceKind === "transfer_out" && !(value.amount < 0)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["amount"],
+          message: "A Transfer out must be less than 0",
+        });
+      }
+      if (value.sourceKind === "transfer_in" && !(value.amount > 0)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["amount"],
+          message: "A Transfer in must be greater than 0",
+        });
+      }
+      if (!value.transferId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["transferId"],
+          message: `A ${label} must include a transfer correlation id`,
+        });
+      }
+      if (value.paymentId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["paymentId"],
+          message: `A ${label} cannot reuse a POS Payment id`,
+        });
+      }
+      if (value.outgoingPaymentId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["outgoingPaymentId"],
+          message: `A ${label} cannot reuse an Outgoing Payment id`,
+        });
+      }
+      if (value.reversedMovementId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["reversedMovementId"],
+          message: `A ${label} cannot reverse another Movement`,
+        });
+      }
+      return;
+    }
+
+    if (value.transferId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["transferId"],
+        message: "Only a Money Account Transfer can record a transfer correlation id",
+      });
     }
 
     if (value.sourceKind === "pos_payment") {
@@ -716,6 +800,32 @@ export const MoneyAccountHistoryBalanceAdjustmentEntrySchema = z.object({
   actualBalance: moneyAccountActualBalanceSchema,
 });
 
+const moneyAccountHistoryTransferCounterpartSchema = {
+  transferId: z.uuid("Invalid transfer id"),
+  counterpartMoneyAccountId: z.uuid("Invalid counterpart money account id"),
+  counterpartMoneyAccountName: z.string().min(1),
+  counterpartStoreId: z.uuid("Invalid store id").nullable(),
+  note: z.string().nullable(),
+};
+
+export const MoneyAccountHistoryTransferOutEntrySchema = z.object({
+  kind: z.literal("transfer_out"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementReversalAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id").nullable(),
+  ...moneyAccountHistoryTransferCounterpartSchema,
+});
+
+export const MoneyAccountHistoryTransferInEntrySchema = z.object({
+  kind: z.literal("transfer_in"),
+  id: z.uuid("Invalid money account movement id"),
+  amount: moneyAccountMovementAmountSchema,
+  occurredAt: dtoDateSchema,
+  storeId: z.uuid("Invalid store id").nullable(),
+  ...moneyAccountHistoryTransferCounterpartSchema,
+});
+
 export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryOpeningEntrySchema,
   MoneyAccountHistoryMovementEntrySchema,
@@ -729,6 +839,8 @@ export const MoneyAccountHistoryEntrySchema = z.discriminatedUnion("kind", [
   MoneyAccountHistoryManualDepositEntrySchema,
   MoneyAccountHistoryManualWithdrawalEntrySchema,
   MoneyAccountHistoryBalanceAdjustmentEntrySchema,
+  MoneyAccountHistoryTransferOutEntrySchema,
+  MoneyAccountHistoryTransferInEntrySchema,
 ]);
 
 export const MoneyAccountHistoryResponseSchema = z.object({

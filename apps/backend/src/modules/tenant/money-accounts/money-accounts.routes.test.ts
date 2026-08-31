@@ -997,6 +997,178 @@ describe("Organization Money Account routes", () => {
         expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
     });
 
+    test("records a Transfer for an authenticated administrator", async () => {
+        harness.lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === harness.cashMoneyAccountId) {
+                return { ...harness.adajanCashAccount, openingBalance: 100, balance: 100 };
+            }
+            if (id === harness.moneyAccountId) {
+                return { ...harness.hdfcBankAccount, openingBalance: 80, balance: 80 };
+            }
+            return null;
+        });
+        harness.createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...harness.hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            actualBalance: data.actualBalance ?? null,
+            transferId: data.transferId ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.cashMoneyAccountId}/transfers`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    destinationMoneyAccountId: harness.moneyAccountId,
+                    amount: 40,
+                    note: "Cash to bank",
+                }),
+            },
+        );
+
+        expect(response.status).toBe(201);
+        const body = await response.json();
+        expect(body.data.moneyAccount.balance).toBe(60);
+        expect(harness.createMoneyAccountMovementRepo).toHaveBeenCalledTimes(2);
+        expect(harness.createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceKind: "transfer_out",
+                amount: -40,
+                storeId: harness.storeId,
+                note: "Cash to bank",
+            }),
+            {},
+        );
+        expect(harness.createMoneyAccountMovementRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceKind: "transfer_in",
+                amount: 40,
+                storeId: null,
+            }),
+            {},
+        );
+        expect(
+            (harness.createMoneyAccountMovementRepo.mock.calls[0]?.[0] as { transferId?: string } | undefined)
+                ?.transferId,
+        ).toBe(
+            (harness.createMoneyAccountMovementRepo.mock.calls[1]?.[0] as { transferId?: string } | undefined)
+                ?.transferId,
+        );
+    });
+
+    test("rejects an unauthenticated Transfer", async () => {
+        const response = await unauthenticatedRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/transfers`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    destinationMoneyAccountId: harness.gpayUpiAccount.id,
+                    amount: 10,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(401);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a same-account, zero-amount, or backdated Transfer at the route seam", async () => {
+        const sameAccount = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/transfers`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    destinationMoneyAccountId: harness.moneyAccountId,
+                    amount: 10,
+                }),
+            },
+        );
+        const zero = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/transfers`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    destinationMoneyAccountId: harness.gpayUpiAccount.id,
+                    amount: 0,
+                }),
+            },
+        );
+        const backdated = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/transfers`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    destinationMoneyAccountId: harness.gpayUpiAccount.id,
+                    amount: 10,
+                    occurredAt: "2026-01-01T00:00:00.000Z",
+                }),
+            },
+        );
+
+        expect(sameAccount.status).toBe(400);
+        expect(zero.status).toBe(400);
+        expect(backdated.status).toBe(400);
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Transfer that would make the source Money Account Balance negative at the route seam", async () => {
+        harness.lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === harness.moneyAccountId) {
+                return { ...harness.hdfcBankAccount, openingBalance: 5, balance: 5 };
+            }
+            if (id === harness.gpayUpiAccount.id) {
+                return { ...harness.gpayUpiAccount, openingBalance: 0, balance: 0 };
+            }
+            return null;
+        });
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}/transfers`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    destinationMoneyAccountId: harness.gpayUpiAccount.id,
+                    amount: 10,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.message).toContain("would make the Money Account Balance negative");
+        expect(harness.createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("transfer migrations add paired source kinds, a correlation id, and opposite-sign constraints", () => {
+        const kinds = readFileSync(
+            join(import.meta.dir, "../../../../db/migrations/20260901020400_add_transfer_movement_kinds.sql"),
+            "utf8",
+        );
+        const constraint = readFileSync(
+            join(import.meta.dir, "../../../../db/migrations/20260901020500_constrain_transfer_movements.sql"),
+            "utf8",
+        );
+
+        expect(kinds).toContain("ADD VALUE IF NOT EXISTS 'transfer_out'");
+        expect(kinds).toContain("ADD VALUE IF NOT EXISTS 'transfer_in'");
+        expect(kinds).toContain("ADD COLUMN transfer_id UUID");
+        expect(constraint).toContain("source_kind = 'transfer_out'");
+        expect(constraint).toContain("source_kind = 'transfer_in'");
+        expect(constraint).toContain("AND amount < 0");
+        expect(constraint).toContain("AND amount > 0");
+        expect(constraint).toContain("AND transfer_id IS NOT NULL");
+        expect(constraint).toContain("AND transfer_id IS NULL");
+    });
+
     test("rejects a direct current-balance write at the Money Account route seam", async () => {
         const response = await moneyAccountsRoutes.request(
             `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}`,

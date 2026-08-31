@@ -174,9 +174,9 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Add money");
         expect(markup).toContain("Withdraw money");
         expect(markup).toContain("Adjust balance");
+        expect(markup).toContain("Transfer money");
         expect(markup).not.toContain("Add movement");
         expect(markup).not.toContain("Correct balance");
-        expect(markup).not.toContain("Transfer money");
     });
 
     test("shows a bill-edit reversal as a dedicated negative history entry", () => {
@@ -433,6 +433,7 @@ describe("Admin Money Account history page", () => {
         expect(markup).not.toContain("Add money");
         expect(markup).not.toContain("Withdraw money");
         expect(markup).not.toContain("Adjust balance");
+        expect(markup).not.toContain("Transfer money");
     });
 
     test("shows a loading spinner while history is fetched", () => {
@@ -508,6 +509,7 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Add money");
         expect(markup).toContain("Withdraw money");
         expect(markup).toContain("Adjust balance");
+        expect(markup).toContain("Transfer money");
     });
 
     test("shows a Balance Adjustment as a neutral gray history row with reason and counted amount", () => {
@@ -546,8 +548,145 @@ describe("Admin Money Account history page", () => {
         expect(markup).toContain("Adjustment");
         expect(markup).toContain("−₹0.00");
         expect(markup).toContain("+₹250.50");
-        expect(markup).not.toContain("Transfer money");
+        expect(markup).not.toContain("Transfer out");
+        expect(markup).not.toContain("Transfer in");
         expect(markup).not.toContain("Adajan");
         expect(markup).not.toContain("View Bill");
+    });
+
+    test("shows a Transfer out as red money out with counterpart account and Store", () => {
+        const vesuStoreId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+        const queryClient = new QueryClient();
+        const historyQuery = getDefaultHistoryQuery();
+        const historyQueryKey = {
+            occurredFrom: historyQuery.occurredFrom,
+            occurredTo: historyQuery.occurredTo,
+        };
+        seedOrganizationDetails(queryClient);
+        queryClient.setQueryData(organizationKeys.detail(organizationId), {
+            status: "success",
+            data: {
+                organization: {
+                    id: organizationId,
+                    name: "Demo Org",
+                    username: "demo",
+                    tagline: null,
+                    createdBy: userId,
+                    updatedBy: null,
+                    createdAt: now,
+                    updatedAt: now,
+                    stores: [
+                        {
+                            id: storeId,
+                            organizationId,
+                            name: "Adajan",
+                            address: null,
+                            devices: [],
+                            createdBy: userId,
+                            createdAt: now,
+                            updatedAt: now,
+                        },
+                        {
+                            id: vesuStoreId,
+                            organizationId,
+                            name: "Vesu",
+                            address: null,
+                            devices: [],
+                            createdBy: userId,
+                            createdAt: now,
+                            updatedAt: now,
+                        },
+                    ],
+                },
+            },
+            message: "Organization fetched successfully",
+            code: 200,
+        });
+        queryClient.setQueryData(moneyAccountKeys.history(organizationId, moneyAccountId, historyQueryKey), {
+            status: "success",
+            data: {
+                moneyAccount: {
+                    ...moneyAccount,
+                    name: "Adajan cash",
+                    type: "cash",
+                    scope: "store_scoped",
+                    storeId,
+                    openingBalance: 100,
+                    balance: 60,
+                },
+                openingBalance: 100,
+                balance: 60,
+                entries: [
+                    {
+                        kind: "transfer_out",
+                        id: "15151515-1515-4151-8151-151515151515",
+                        amount: -40,
+                        occurredAt: now,
+                        storeId,
+                        transferId: "abababab-abab-4aba-8aba-abababababab",
+                        counterpartMoneyAccountId: "77777777-7777-4777-8777-777777777777",
+                        counterpartMoneyAccountName: "Vesu UPI QR",
+                        counterpartStoreId: vesuStoreId,
+                        note: "Cash to Vesu",
+                    },
+                ],
+            },
+            message: "Money Account history fetched successfully",
+            code: 200,
+        });
+
+        const markup = renderToStaticMarkup(
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter initialEntries={[`/organizations/${organizationId}/money-accounts/${moneyAccountId}`]}>
+                    <Routes>
+                        <Route
+                            path="/organizations/:organizationId/money-accounts/:moneyAccountId"
+                            element={<MoneyAccountDetailPage />}
+                        />
+                    </Routes>
+                </MemoryRouter>
+            </QueryClientProvider>,
+        );
+
+        expect(markup).toContain("Transfer out");
+        expect(markup).toContain("Vesu UPI QR");
+        expect(markup).toContain("Vesu");
+        expect(markup).toContain("Cash to Vesu");
+        expect(markup).toContain("−₹40.00");
+        expect(markup).toContain("text-destructive");
+        expect(markup).toContain("Transfer money");
+        expect(markup).not.toContain("View Bill");
+    });
+
+    test("shows a Transfer in as green money in with counterpart account and no invented Store on an Organization-wide account", () => {
+        const markup = renderHistoryPage("success", {
+            moneyAccount: { ...moneyAccount, openingBalance: 80, balance: 120 },
+            openingBalance: 80,
+            balance: 120,
+            entries: [
+                {
+                    kind: "transfer_in",
+                    id: "15151515-1515-4151-8151-151515151515",
+                    amount: 40,
+                    occurredAt: now,
+                    storeId: null,
+                    transferId: "abababab-abab-4aba-8aba-abababababab",
+                    counterpartMoneyAccountId: "55555555-5555-4555-8555-555555555555",
+                    counterpartMoneyAccountName: "Adajan cash",
+                    counterpartStoreId: storeId,
+                    note: "Cash to bank",
+                },
+            ],
+        });
+
+        expect(markup).toContain("Transfer in");
+        expect(markup).toContain("Adajan cash");
+        expect(markup).toContain("Adajan");
+        expect(markup).toContain("Cash to bank");
+        expect(markup).toContain("+₹40.00");
+        expect(markup).toContain("text-emerald-600");
+        expect(markup).toContain("+₹40.00");
+        expect(markup).not.toContain("View Bill");
+        expect(markup).not.toContain("Balance Adjustment");
     });
 });

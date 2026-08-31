@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateMoneyAccountSchema, MoneyAccountHistoryQuerySchema, MoneyAccountPaymentRouteMethodSchema, RecordBalanceAdjustmentSchema, RecordManualMoneyMovementSchema, STATUS_CODES, UpdateMoneyAccountSchema, UpsertMoneyAccountPaymentRouteSchema } from "@repo/types";
+import { CreateMoneyAccountSchema, MoneyAccountHistoryQuerySchema, MoneyAccountPaymentRouteMethodSchema, RecordBalanceAdjustmentSchema, RecordManualMoneyMovementSchema, RecordMoneyAccountTransferSchema, STATUS_CODES, UpdateMoneyAccountSchema, UpsertMoneyAccountPaymentRouteSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -235,6 +235,35 @@ export const createMoneyAccountsRoutes = (
                 return handleServiceResponse(c, serviceResponse);
             } catch (error) {
                 return handleError(FILE_NAME, "recordMoneyAccountBalanceAdjustment", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/:organizationId/money-accounts/:moneyAccountId/transfers",
+        validateSchema("json", RecordMoneyAccountTransferSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const moneyAccountId = c.req.param("moneyAccountId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidMoneyAccountId = validateUuidParam(moneyAccountId, "Invalid money account id");
+                if (invalidMoneyAccountId) {
+                    return c.json(invalidMoneyAccountId, invalidMoneyAccountId.code);
+                }
+
+                const serviceResponse = await moneyAccountsService.recordMoneyAccountTransfer(
+                    c.get("authUser").id,
+                    organizationId,
+                    moneyAccountId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "recordMoneyAccountTransfer", c, error);
             }
         },
     );

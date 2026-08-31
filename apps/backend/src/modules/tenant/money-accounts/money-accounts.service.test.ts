@@ -19,6 +19,7 @@ import {
     hdfcBankAccount,
     hdfcCardMovement,
     hdfcUpiMovement,
+    gpayUpiAccount,
     inactiveAdajanCashAccount,
     laterMovementId,
     lockActiveStoreCashAccount,
@@ -2143,6 +2144,413 @@ describe("Organization Money Account service", () => {
             otherOrganizationId,
             moneyAccountId,
             { actualBalance: 10, reason: "Counted" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(lockMoneyAccountById).not.toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("records a linked Transfer from a Store-scoped Money Account to an Organization-wide Money Account", async () => {
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === cashMoneyAccountId) {
+                return { ...adajanCashAccount, openingBalance: 100, balance: 100 };
+            }
+            if (id === moneyAccountId) {
+                return { ...hdfcBankAccount, openingBalance: 80, balance: 80 };
+            }
+            return null;
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            actualBalance: data.actualBalance ?? null,
+            transferId: data.transferId ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            cashMoneyAccountId,
+            { amount: 40, destinationMoneyAccountId: moneyAccountId, note: "Cash to bank" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.code).toBe(201);
+        expect(response.data?.moneyAccount.id).toBe(cashMoneyAccountId);
+        expect(response.data?.moneyAccount.balance).toBe(60);
+        expect(lockMoneyAccountById.mock.calls.map((call) => call[1])).toEqual([
+            moneyAccountId,
+            cashMoneyAccountId,
+        ]);
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(2);
+        const [sourceMovement, destinationMovement] = createMoneyAccountMovementRepo.mock.calls.map(
+            (call) => call[0],
+        );
+        expect(sourceMovement).toMatchObject({
+            moneyAccountId: cashMoneyAccountId,
+            storeId,
+            amount: -40,
+            sourceKind: "transfer_out",
+            paymentId: null,
+            outgoingPaymentId: null,
+            reversedMovementId: null,
+            note: "Cash to bank",
+        });
+        expect(destinationMovement).toMatchObject({
+            moneyAccountId,
+            storeId: null,
+            amount: 40,
+            sourceKind: "transfer_in",
+            note: "Cash to bank",
+        });
+        expect(sourceMovement?.transferId).toBe(destinationMovement?.transferId);
+        expect(sourceMovement?.transferId).toEqual(expect.any(String));
+        expect(sourceMovement?.occurredAt).toBeInstanceOf(Date);
+        expect(destinationMovement?.occurredAt).toEqual(sourceMovement?.occurredAt);
+    });
+
+    test("records a cross-Store Transfer without inventing Store attribution on the Organization-wide side", async () => {
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === cashMoneyAccountId) {
+                return { ...adajanCashAccount, openingBalance: 80, balance: 80 };
+            }
+            if (id === vesuUpiAccount.id) {
+                return { ...vesuUpiAccount, openingBalance: 20, balance: 20 };
+            }
+            return null;
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            actualBalance: data.actualBalance ?? null,
+            transferId: data.transferId ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            cashMoneyAccountId,
+            { amount: 25.5, destinationMoneyAccountId: vesuUpiAccount.id },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.balance).toBe(54.5);
+        expect(createMoneyAccountMovementRepo.mock.calls.map((call) => call[0])).toEqual([
+            expect.objectContaining({
+                moneyAccountId: cashMoneyAccountId,
+                storeId,
+                amount: -25.5,
+                sourceKind: "transfer_out",
+            }),
+            expect.objectContaining({
+                moneyAccountId: vesuUpiAccount.id,
+                storeId: vesuStoreId,
+                amount: 25.5,
+                sourceKind: "transfer_in",
+            }),
+        ]);
+    });
+
+    test("locks both Money Accounts in a stable id order even when the destination id sorts first", async () => {
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === moneyAccountId) {
+                return { ...hdfcBankAccount, openingBalance: 100, balance: 100 };
+            }
+            if (id === gpayUpiAccount.id) {
+                return { ...gpayUpiAccount, openingBalance: 10, balance: 10 };
+            }
+            return null;
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => ({
+            ...hdfcUpiMovement,
+            ...data,
+            outgoingPaymentId: data.outgoingPaymentId ?? null,
+            note: data.note ?? null,
+            transferId: data.transferId ?? null,
+            createdAt: data.occurredAt,
+        }));
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            gpayUpiAccount.id,
+            { amount: 10, destinationMoneyAccountId: moneyAccountId },
+        );
+
+        expect(response.status).toBe("success");
+        expect(lockMoneyAccountById.mock.calls.map((call) => call[1])).toEqual([
+            moneyAccountId,
+            gpayUpiAccount.id,
+        ]);
+    });
+
+    test("includes Transfer history with counterpart details without changing existing automatic rows", async () => {
+        const transferId = "abababab-abab-4aba-8aba-abababababab";
+        getMoneyAccountById.mockResolvedValue({
+            ...adajanCashAccount,
+            openingBalance: 100,
+            balance: 60,
+            hasMovements: true,
+        });
+        getMovementsByMoneyAccountId.mockResolvedValue([
+            hdfcUpiMovement,
+            {
+                ...hdfcUpiMovement,
+                id: "30303030-3030-4030-8030-303030303030",
+                moneyAccountId: cashMoneyAccountId,
+                amount: -40,
+                sourceKind: "transfer_out",
+                paymentId: null,
+                outgoingPaymentId: null,
+                reversedMovementId: null,
+                storeId,
+                note: "Cash to bank",
+                actualBalance: null,
+                transferId,
+                counterpartMoneyAccountId: moneyAccountId,
+                counterpartMoneyAccountName: "HDFC Current",
+                counterpartStoreId: null,
+                saleId: null,
+                saleNumber: null,
+                paymentMethod: null,
+            },
+        ]);
+
+        const response = await moneyAccountsService.getMoneyAccountHistory(
+            userId,
+            organizationId,
+            cashMoneyAccountId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.balance).toBe(310.5);
+        expect(response.data?.entries[1]).toMatchObject({
+            kind: "pos_payment",
+            amount: 250.5,
+            paymentId: hdfcUpiMovement.paymentId,
+            saleNumber: "12",
+        });
+        expect(response.data?.entries[2]).toEqual({
+            kind: "transfer_out",
+            id: "30303030-3030-4030-8030-303030303030",
+            amount: -40,
+            occurredAt: hdfcUpiMovement.occurredAt,
+            storeId,
+            transferId,
+            counterpartMoneyAccountId: moneyAccountId,
+            counterpartMoneyAccountName: "HDFC Current",
+            counterpartStoreId: null,
+            note: "Cash to bank",
+        });
+    });
+
+    test("rejects a Transfer to the same Money Account", async () => {
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 10, destinationMoneyAccountId: moneyAccountId },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("Source and destination Money Accounts must be distinct");
+        expect(lockMoneyAccountById).not.toHaveBeenCalled();
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Transfer that would make the source Money Account Balance negative", async () => {
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === moneyAccountId) {
+                return { ...hdfcBankAccount, openingBalance: 10, balance: 10 };
+            }
+            if (id === gpayUpiAccount.id) {
+                return { ...gpayUpiAccount, openingBalance: 0, balance: 0 };
+            }
+            return null;
+        });
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 10.01, destinationMoneyAccountId: gpayUpiAccount.id },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toContain("would make the Money Account Balance negative");
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("locks both Money Accounts so a later competing Transfer cannot overdraw", async () => {
+        const balances: Record<string, number> = {
+            [moneyAccountId]: 50,
+            [gpayUpiAccount.id]: 0,
+        };
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === moneyAccountId) {
+                return { ...hdfcBankAccount, openingBalance: 50, balance: balances[id] ?? 0 };
+            }
+            if (id === gpayUpiAccount.id) {
+                return { ...gpayUpiAccount, openingBalance: 0, balance: balances[id] ?? 0 };
+            }
+            return null;
+        });
+        createMoneyAccountMovementRepo.mockImplementation(async (data) => {
+            balances[data.moneyAccountId] = Math.round(
+                ((balances[data.moneyAccountId] ?? 0) + data.amount + Number.EPSILON) * 100,
+            ) / 100;
+            return {
+                ...hdfcUpiMovement,
+                ...data,
+                outgoingPaymentId: data.outgoingPaymentId ?? null,
+                note: data.note ?? null,
+                transferId: data.transferId ?? null,
+                createdAt: data.occurredAt,
+            };
+        });
+
+        const first = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 50, destinationMoneyAccountId: gpayUpiAccount.id },
+        );
+        const second = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 50, destinationMoneyAccountId: gpayUpiAccount.id },
+        );
+
+        expect(first.status).toBe("success");
+        expect(first.data?.moneyAccount.balance).toBe(0);
+        expect(second.status).toBe("error");
+        expect(second.message).toContain("would make the Money Account Balance negative");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(2);
+        expect(balances[moneyAccountId]).toBe(0);
+        expect(balances[gpayUpiAccount.id]).toBe(50);
+    });
+
+    test("rolls back both sides when destination persistence fails", async () => {
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === moneyAccountId) {
+                return { ...hdfcBankAccount, openingBalance: 100, balance: 100 };
+            }
+            if (id === gpayUpiAccount.id) {
+                return { ...gpayUpiAccount, openingBalance: 0, balance: 0 };
+            }
+            return null;
+        });
+        createMoneyAccountMovementRepo
+            .mockResolvedValueOnce({
+                ...hdfcUpiMovement,
+                amount: -40,
+                sourceKind: "transfer_out",
+                paymentId: null,
+                transferId: "abababab-abab-4aba-8aba-abababababab",
+            })
+            .mockResolvedValueOnce(null);
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 40, destinationMoneyAccountId: gpayUpiAccount.id },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(500);
+        expect(response.message).toBe("Failed to record money movement");
+        expect(createMoneyAccountMovementRepo).toHaveBeenCalledTimes(2);
+        expect(begin).toHaveBeenCalledTimes(1);
+    });
+
+    test("rejects a Transfer to an inactive destination Money Account", async () => {
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === moneyAccountId) {
+                return { ...hdfcBankAccount, openingBalance: 100, balance: 100 };
+            }
+            if (id === inactiveMoneyAccountId) {
+                return inactivePettyCashAccount;
+            }
+            return null;
+        });
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 10, destinationMoneyAccountId: inactiveMoneyAccountId },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("The destination Money Account is inactive");
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Transfer from an inactive source Money Account", async () => {
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === inactiveMoneyAccountId) {
+                return inactivePettyCashAccount;
+            }
+            if (id === moneyAccountId) {
+                return { ...hdfcBankAccount, openingBalance: 100, balance: 100 };
+            }
+            return null;
+        });
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            inactiveMoneyAccountId,
+            { amount: 10, destinationMoneyAccountId: moneyAccountId },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toBe("This Money Account is inactive");
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Transfer to a Money Account from another Organization", async () => {
+        lockMoneyAccountById.mockImplementation(async (_organizationId, id) => {
+            if (id === moneyAccountId) {
+                return { ...hdfcBankAccount, openingBalance: 100, balance: 100 };
+            }
+            return null;
+        });
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { amount: 10, destinationMoneyAccountId: gpayUpiAccount.id },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(createMoneyAccountMovementRepo).not.toHaveBeenCalled();
+    });
+
+    test("denies a Transfer when the user is not a member of the Organization", async () => {
+        getOrganizationByIdForUser.mockResolvedValue(null);
+
+        const response = await moneyAccountsService.recordMoneyAccountTransfer(
+            userId,
+            otherOrganizationId,
+            moneyAccountId,
+            { amount: 10, destinationMoneyAccountId: gpayUpiAccount.id },
         );
 
         expect(response.status).toBe("error");

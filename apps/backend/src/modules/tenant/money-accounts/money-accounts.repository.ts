@@ -44,7 +44,7 @@ const mapMovement = (row: Record<string, unknown>): MoneyAccountMovementDTO => {
     return {
         ...(mapped as Omit<
             MoneyAccountMovementDTO,
-            "amount" | "paymentId" | "outgoingPaymentId" | "reversedMovementId" | "storeId" | "note" | "actualBalance"
+            "amount" | "paymentId" | "outgoingPaymentId" | "reversedMovementId" | "storeId" | "note" | "actualBalance" | "transferId"
         >),
         amount: toMoneyAmount(mapped.amount),
         storeId: typeof mapped.storeId === "string" ? mapped.storeId : null,
@@ -56,6 +56,7 @@ const mapMovement = (row: Record<string, unknown>): MoneyAccountMovementDTO => {
         note: typeof mapped.note === "string" ? mapped.note : null,
         actualBalance:
             mapped.actualBalance == null ? null : toMoneyAmount(mapped.actualBalance),
+        transferId: typeof mapped.transferId === "string" ? mapped.transferId : null,
     };
 };
 
@@ -71,6 +72,10 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
             | "storeId"
             | "note"
             | "actualBalance"
+            | "transferId"
+            | "counterpartMoneyAccountId"
+            | "counterpartMoneyAccountName"
+            | "counterpartStoreId"
             | "saleId"
             | "paymentMethod"
             | "originalPaymentId"
@@ -90,6 +95,17 @@ const mapHistoryMovement = (row: Record<string, unknown>): MoneyAccountHistoryMo
         note: typeof mapped.note === "string" ? mapped.note : null,
         actualBalance:
             mapped.actualBalance == null ? null : toMoneyAmount(mapped.actualBalance),
+        transferId: typeof mapped.transferId === "string" ? mapped.transferId : null,
+        counterpartMoneyAccountId:
+            typeof mapped.counterpartMoneyAccountId === "string"
+                ? mapped.counterpartMoneyAccountId
+                : null,
+        counterpartMoneyAccountName:
+            typeof mapped.counterpartMoneyAccountName === "string"
+                ? mapped.counterpartMoneyAccountName
+                : null,
+        counterpartStoreId:
+            typeof mapped.counterpartStoreId === "string" ? mapped.counterpartStoreId : null,
         saleId: typeof mapped.saleId === "string" ? mapped.saleId : null,
         paymentMethod:
             typeof mapped.paymentMethod === "string"
@@ -382,7 +398,11 @@ export const getMovementsByMoneyAccountId = async (
             movements.reversed_movement_id,
             movements.note,
             movements.actual_balance,
+            movements.transfer_id,
             movements.created_at,
+            counterpart_accounts.id AS counterpart_money_account_id,
+            counterpart_accounts.name AS counterpart_money_account_name,
+            counterpart_accounts.store_id AS counterpart_store_id,
             linked_payments.sale_id,
             COALESCE(linked_payments.method, outgoing_payments.payment_method) AS payment_method,
             sales.sale_number,
@@ -408,6 +428,13 @@ export const getMovementsByMoneyAccountId = async (
         LEFT JOIN expenses
             ON expenses.id = outgoing_payments.expense_id
            AND expenses.organization_id = movements.organization_id
+        LEFT JOIN money_account_movements AS counterpart_movements
+            ON counterpart_movements.transfer_id = movements.transfer_id
+           AND counterpart_movements.id <> movements.id
+           AND counterpart_movements.organization_id = movements.organization_id
+        LEFT JOIN money_accounts AS counterpart_accounts
+            ON counterpart_accounts.id = counterpart_movements.money_account_id
+           AND counterpart_accounts.organization_id = movements.organization_id
         WHERE movements.organization_id = ${organizationId}
           AND movements.money_account_id = ${moneyAccountId}
           AND (${occurredFrom}::timestamptz IS NULL OR movements.occurred_at >= ${occurredFrom}::timestamptz)
@@ -515,13 +542,16 @@ export const createMoneyAccountMovement = async (
     if (
         movementData.sourceKind === "manual_deposit" ||
         movementData.sourceKind === "manual_withdrawal" ||
-        movementData.sourceKind === "balance_adjustment"
+        movementData.sourceKind === "balance_adjustment" ||
+        movementData.sourceKind === "transfer_out" ||
+        movementData.sourceKind === "transfer_in"
     ) {
         const [result] = await db`
             INSERT INTO money_account_movements ${camelToSnakeSql({
                 ...movementData,
                 note: movementData.note ?? null,
                 actualBalance: movementData.actualBalance ?? null,
+                transferId: movementData.transferId ?? null,
             })}
             RETURNING *
         `;

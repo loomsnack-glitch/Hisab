@@ -32,6 +32,7 @@ import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import HistoryDateToolbar from "@/components/common/history-date-toolbar";
 import RecordManualMoneyMovementDialog from "@/components/money-accounts/record-manual-money-movement-dialog";
 import AdjustMoneyAccountBalanceDialog from "@/components/money-accounts/adjust-money-account-balance-dialog";
+import TransferMoneyAccountDialog from "@/components/money-accounts/transfer-money-account-dialog";
 import { getDefaultHistoryQuery } from "@/lib/date-range-filter";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
@@ -386,6 +387,24 @@ const HistoryEntry = ({
         );
     }
 
+    if (entry.kind === "transfer_out" || entry.kind === "transfer_in") {
+        const counterpartStoreName = entry.counterpartStoreId
+            ? resolveStoreName(entry.counterpartStoreId, storeNameById)
+            : null;
+        const ownStoreName = entry.storeId ? resolveStoreName(entry.storeId, storeNameById) : null;
+        return (
+            <MovementRow
+                title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS[entry.kind]}
+                amount={entry.amount}
+                occurredAt={entry.occurredAt}
+                icon={entry.kind === "transfer_in" ? ArrowDownLeft : ArrowUpRight}
+                entityLabel={entry.counterpartMoneyAccountName}
+                storeName={counterpartStoreName ?? ownStoreName}
+                note={entry.note}
+            />
+        );
+    }
+
     return (
         <MovementRow
             title={MONEY_ACCOUNT_MOVEMENT_SOURCE_KIND_LABELS.pos_payment}
@@ -605,6 +624,11 @@ const MoneyAccountDetailPage = () => {
                         <AdjustMoneyAccountBalanceDialog
                             organizationId={organizationId}
                             moneyAccount={{ ...moneyAccount, balance }}
+                        />
+                        <TransferMoneyAccountDialog
+                            organizationId={organizationId}
+                            moneyAccount={{ ...moneyAccount, balance }}
+                            storeNameById={storeNameById}
                         />
                     </div>
                 ) : null}

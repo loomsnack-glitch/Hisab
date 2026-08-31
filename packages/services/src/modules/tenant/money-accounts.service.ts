@@ -9,6 +9,7 @@ import type {
     MoneyAccountsListResponse,
     RecordManualMoneyMovementJSON,
     RecordBalanceAdjustmentJSON,
+    RecordMoneyAccountTransferJSON,
     ServiceResponse,
     UpdateMoneyAccountJSON,
     UpsertMoneyAccountPaymentRouteJSON,
@@ -167,6 +168,22 @@ export const recordMoneyAccountBalanceAdjustment = async (
     try {
         const response = await api.post(
             `/organizations/${organizationId}/money-accounts/${moneyAccountId}/balance-adjustments`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const recordMoneyAccountTransfer = async (
+    organizationId: string,
+    moneyAccountId: string,
+    data: RecordMoneyAccountTransferJSON,
+): Promise<ServiceResponse<MoneyAccountResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/money-accounts/${moneyAccountId}/transfers`,
             data,
         );
         return response.data;
