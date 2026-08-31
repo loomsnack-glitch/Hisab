@@ -35,6 +35,7 @@ const session: DeviceSessionDTO = {
     address: null,
     kotSystemEnabled: false,
     tableManagementEnabled: true,
+    moneyAccountTrackingEnabled: false,
   },
   organization: {
     id: organizationId,

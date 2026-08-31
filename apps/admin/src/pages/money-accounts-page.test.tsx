@@ -16,6 +16,12 @@ const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const now = new Date("2026-08-31T12:00:00.000Z");
 const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
+const trackedMoney = {
+    openingBalance: 0,
+    balance: 0,
+    hasMovements: false,
+} as const;
+
 const hdfcBank: MoneyAccountDTO = {
     id: "11111111-1111-4111-8111-111111111111",
     organizationId,
@@ -25,6 +31,7 @@ const hdfcBank: MoneyAccountDTO = {
     storeId: null,
     notes: "Main operating account",
     status: "active",
+    ...trackedMoney,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -40,6 +47,7 @@ const sharedUpi: MoneyAccountDTO = {
     storeId: null,
     notes: null,
     status: "active",
+    ...trackedMoney,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -55,6 +63,7 @@ const cardSettlement: MoneyAccountDTO = {
     storeId: null,
     notes: null,
     status: "active",
+    ...trackedMoney,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -70,6 +79,7 @@ const pettyCash: MoneyAccountDTO = {
     storeId: null,
     notes: null,
     status: "inactive",
+    ...trackedMoney,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -85,6 +95,7 @@ const otherAccount: MoneyAccountDTO = {
     storeId: null,
     notes: "Non-sensitive purpose note",
     status: "active",
+    ...trackedMoney,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -100,6 +111,7 @@ const adajanUpi: MoneyAccountDTO = {
     storeId,
     notes: "Counter QR",
     status: "active",
+    ...trackedMoney,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -115,6 +127,7 @@ const adajanCash: MoneyAccountDTO = {
     storeId,
     notes: "Physical till",
     status: "active",
+    ...trackedMoney,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -130,6 +143,7 @@ const inactiveAdajanCash: MoneyAccountDTO = {
     storeId,
     notes: null,
     status: "inactive",
+    ...trackedMoney,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -226,6 +240,8 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.organization_wide);
         expect(markup).toContain(MONEY_ACCOUNT_SCOPE_LABELS.store_scoped);
         expect(markup).toContain("Every store");
+        expect(markup).toContain("Opening Balance");
+        expect(markup).toContain("Balance");
         expect(markup).toContain("Add money account");
         expect(markup).toContain("Search money accounts...");
         expect(markup).toContain("Status");
@@ -238,6 +254,21 @@ describe("Admin Money Accounts page", () => {
         expect(markup).not.toContain("Delete");
         expect(markup).not.toContain("bank account number");
         expect(markup).not.toContain("UPI ID");
+    });
+
+    test("shows Opening Balance, calculated Balance, and lock state after Movements", () => {
+        const lockedBank: MoneyAccountDTO = {
+            ...hdfcBank,
+            openingBalance: 500,
+            balance: 500,
+            hasMovements: true,
+        };
+        const markup = renderMoneyAccountsPage("success", [lockedBank]);
+
+        expect(markup).toContain("Opening Balance");
+        expect(markup).toContain("Balance");
+        expect(markup).toContain("Type, availability, Store, and Opening Balance are locked");
+        expect(markup).not.toContain("current balance");
     });
 
     test("shows a loading spinner while Money Accounts are fetched", () => {

@@ -33,6 +33,9 @@ const organizationWideDto = {
   storeId: null,
   notes: "Main operating account",
   status: "active" as const,
+  openingBalance: 0,
+  balance: 0,
+  hasMovements: false,
   createdBy: userId,
   updatedBy: null,
   createdAt: "2026-08-31T00:00:00.000Z",
@@ -313,7 +316,7 @@ describe("Money Account contracts", () => {
       qrImage: "data:image/png;base64,abc",
       credentials: { pin: "1234" },
       balance: 1000,
-      openingBalance: 500,
+      hasMovements: true,
     };
 
     for (const [field, value] of Object.entries(forbiddenFields)) {
@@ -426,10 +429,98 @@ describe("Money Account contracts", () => {
       expect(result.data.storeId).toBeNull();
       expect(result.data.notes).toBe("Main operating account");
       expect(result.data.status).toBe("active");
+      expect(result.data.openingBalance).toBe(0);
+      expect(result.data.balance).toBe(0);
+      expect(result.data.hasMovements).toBe(false);
       expect("bankAccountNumber" in result.data).toBe(false);
       expect("upiId" in result.data).toBe(false);
-      expect("balance" in result.data).toBe(false);
     }
+  });
+
+  test("create Money Account accepts a non-negative Opening Balance and omits it as optional", () => {
+    const omitted = CreateMoneyAccountSchema.safeParse({
+      name: "HDFC Current",
+      type: "bank",
+    });
+    const explicitZero = CreateMoneyAccountSchema.safeParse({
+      name: "HDFC Current",
+      type: "bank",
+      openingBalance: 0,
+    });
+    const recorded = CreateMoneyAccountSchema.safeParse({
+      name: "HDFC Current",
+      type: "bank",
+      openingBalance: 1250.5,
+    });
+
+    expect(omitted.success).toBe(true);
+    if (omitted.success) {
+      expect(omitted.data.openingBalance).toBeUndefined();
+    }
+    expect(explicitZero.success).toBe(true);
+    if (explicitZero.success) {
+      expect(explicitZero.data.openingBalance).toBe(0);
+    }
+    expect(recorded.success).toBe(true);
+    if (recorded.success) {
+      expect(recorded.data.openingBalance).toBe(1250.5);
+    }
+  });
+
+  test("rejects a negative or malformed Opening Balance", () => {
+    expect(
+      CreateMoneyAccountSchema.safeParse({
+        name: "HDFC Current",
+        type: "bank",
+        openingBalance: -0.01,
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateMoneyAccountSchema.safeParse({
+        name: "HDFC Current",
+        type: "bank",
+        openingBalance: 10.999,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateMoneyAccountSchema.safeParse({
+        openingBalance: -5,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("update Money Account accepts an Opening Balance change", () => {
+    const result = UpdateMoneyAccountSchema.safeParse({
+      openingBalance: 80,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.openingBalance).toBe(80);
+    }
+  });
+
+  test("Money Account DTO exposes Opening Balance and calculated Balance, initially equal", () => {
+    const result = MoneyAccountDTOSchema.safeParse({
+      ...organizationWideDto,
+      openingBalance: 500,
+      balance: 500,
+      hasMovements: false,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.openingBalance).toBe(500);
+      expect(result.data.balance).toBe(500);
+      expect(result.data.hasMovements).toBe(false);
+    }
+  });
+
+  test("rejects a Money Account DTO without Opening Balance or calculated Balance", () => {
+    const { openingBalance: _openingBalance, balance: _balance, hasMovements: _hasMovements, ...withoutBalances } =
+      organizationWideDto;
+
+    expect(MoneyAccountDTOSchema.safeParse(withoutBalances).success).toBe(false);
   });
 
   test("Money Account DTO includes Store-scoped availability and the selected Store", () => {

@@ -19,6 +19,7 @@ const store = {
   name: "Main Store",
   kotSystemEnabled: true,
   tableManagementEnabled: false,
+  moneyAccountTrackingEnabled: false,
 };
 
 const deviceSession = {

@@ -525,6 +525,10 @@ export const updateStore = async (
       storeData.tableManagementEnabled === undefined
         ? store.tableManagementEnabled
         : storeData.tableManagementEnabled,
+    moneyAccountTrackingEnabled:
+      storeData.moneyAccountTrackingEnabled === undefined
+        ? store.moneyAccountTrackingEnabled
+        : storeData.moneyAccountTrackingEnabled,
     updatedBy: userId,
   });
 

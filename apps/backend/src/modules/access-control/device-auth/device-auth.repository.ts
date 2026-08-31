@@ -24,6 +24,7 @@ const mapDeviceSession = (row: DeviceSessionRow): DeviceSessionDTO => {
             address: (mapped.storeAddress as string | null | undefined) ?? null,
             kotSystemEnabled: Boolean(mapped.storeKotSystemEnabled),
             tableManagementEnabled: Boolean(mapped.storeTableManagementEnabled),
+            moneyAccountTrackingEnabled: Boolean(mapped.storeMoneyAccountTrackingEnabled),
         },
         organization: {
             id: String(mapped.organizationId),
@@ -42,6 +43,7 @@ export const getDeviceSessionById = async (deviceId: string): Promise<DeviceSess
             s.address AS store_address,
             s.kot_system_enabled AS store_kot_system_enabled,
             s.table_management_enabled AS store_table_management_enabled,
+            s.money_account_tracking_enabled AS store_money_account_tracking_enabled,
             o.name AS organization_name,
             o.username AS organization_username,
             o.tagline AS organization_tagline
@@ -68,6 +70,7 @@ export const getDeviceSessionByLoginUsername = async (
             s.address AS store_address,
             s.kot_system_enabled AS store_kot_system_enabled,
             s.table_management_enabled AS store_table_management_enabled,
+            s.money_account_tracking_enabled AS store_money_account_tracking_enabled,
             o.name AS organization_name,
             o.username AS organization_username,
             o.tagline AS organization_tagline

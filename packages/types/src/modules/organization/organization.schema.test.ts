@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   OrganizationDTOSchema,
+  StoreDTOSchema,
   UpdateOrganizationSchema,
   UpdateOrganizationCatalogSettingsSchema,
   UpdateStoreSchema,
   UpdateStoreDevicePosSettingsSchema,
 } from "./organization.schema";
+import { DeviceSessionStoreDTOSchema } from "../device-auth/device-auth.schema";
 
 describe("Organization branding contracts", () => {
   test("accepts an optional tagline and preserves trimmed text", () => {
@@ -131,5 +133,67 @@ describe("Barcode settings contracts", () => {
         productCode: "7622202334009",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("Store Money Account Tracking contracts", () => {
+  test("Store DTO requires Money Account Tracking and defaults it as a boolean feature", () => {
+    const result = StoreDTOSchema.safeParse({
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Adajan",
+      kotSystemEnabled: false,
+      tableManagementEnabled: false,
+      moneyAccountTrackingEnabled: false,
+      createdBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      updatedAt: "2026-08-31T00:00:00.000Z",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.moneyAccountTrackingEnabled).toBe(false);
+    }
+    expect(
+      StoreDTOSchema.safeParse({
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name: "Adajan",
+        kotSystemEnabled: false,
+        tableManagementEnabled: false,
+        createdBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        createdAt: "2026-08-31T00:00:00.000Z",
+        updatedAt: "2026-08-31T00:00:00.000Z",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("Update Store accepts Money Account Tracking enablement without requiring other feature flags", () => {
+    const result = UpdateStoreSchema.safeParse({
+      name: "Adajan",
+      moneyAccountTrackingEnabled: true,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.moneyAccountTrackingEnabled).toBe(true);
+    }
+  });
+
+  test("device session Store includes Money Account Tracking", () => {
+    const result = DeviceSessionStoreDTOSchema.safeParse({
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Adajan",
+      address: null,
+      kotSystemEnabled: false,
+      tableManagementEnabled: false,
+      moneyAccountTrackingEnabled: false,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.moneyAccountTrackingEnabled).toBe(false);
+    }
   });
 });

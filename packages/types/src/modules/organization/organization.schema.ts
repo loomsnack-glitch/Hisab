@@ -125,6 +125,7 @@ export const StoreDTOSchema = z.object({
   whatsappLinks: z.array(StoreMessageLinkSchema).default([]),
   kotSystemEnabled: z.boolean(),
   tableManagementEnabled: z.boolean(),
+  moneyAccountTrackingEnabled: z.boolean(),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,
@@ -176,6 +177,7 @@ export const UpdateStoreSchema = z
     whatsappLinks: z.array(StoreMessageLinkSchema).max(20).optional(),
     kotSystemEnabled: z.boolean().optional(),
     tableManagementEnabled: z.boolean().optional(),
+    moneyAccountTrackingEnabled: z.boolean().optional(),
   })
   .superRefine((store, context) => {
     if (Boolean(store.reviewPlatform) !== Boolean(store.reviewLink)) {

@@ -53,6 +53,9 @@ describe("Organization Money Account service", () => {
         createMoneyAccountRepo.mockImplementation(async (data) => ({
             ...hdfcBankAccount,
             ...data,
+            openingBalance: data.openingBalance,
+            balance: data.openingBalance,
+            hasMovements: false,
             updatedBy: data.updatedBy ?? null,
             createdAt: hdfcBankAccount.createdAt,
             updatedAt: hdfcBankAccount.updatedAt,
@@ -60,6 +63,9 @@ describe("Organization Money Account service", () => {
         updateMoneyAccountRepo.mockImplementation(async (data) => ({
             ...hdfcBankAccount,
             ...data,
+            openingBalance: data.openingBalance,
+            balance: data.openingBalance,
+            hasMovements: hdfcBankAccount.hasMovements,
             createdBy: hdfcBankAccount.createdBy,
             createdAt: hdfcBankAccount.createdAt,
             updatedAt: hdfcBankAccount.updatedAt,
@@ -161,6 +167,9 @@ describe("Organization Money Account service", () => {
         expect(response.data?.moneyAccount.scope).toBe("organization_wide");
         expect(response.data?.moneyAccount.storeId).toBeNull();
         expect(response.data?.moneyAccount.organizationId).toBe(organizationId);
+        expect(response.data?.moneyAccount.openingBalance).toBe(0);
+        expect(response.data?.moneyAccount.balance).toBe(0);
+        expect(response.data?.moneyAccount.hasMovements).toBe(false);
         expect(getStoreById).not.toHaveBeenCalled();
         expect(createMoneyAccountRepo).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -171,6 +180,7 @@ describe("Organization Money Account service", () => {
                 storeId: null,
                 notes: null,
                 status: "active",
+                openingBalance: 0,
                 createdBy: userId,
             }),
         );
@@ -742,6 +752,159 @@ describe("Organization Money Account service", () => {
 
     test("does not expose a Money Account deletion command", () => {
         expect("deleteMoneyAccount" in moneyAccountsService).toBe(false);
+    });
+
+    test("creates a Money Account with an omitted Opening Balance as zero and equal calculated Balance", async () => {
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "HDFC Current",
+            type: "bank",
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.openingBalance).toBe(0);
+        expect(response.data?.moneyAccount.balance).toBe(0);
+        expect(createMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                openingBalance: 0,
+            }),
+        );
+    });
+
+    test("creates a Money Account with a recorded Opening Balance and equal calculated Balance", async () => {
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "HDFC Current",
+            type: "bank",
+            openingBalance: 1250.5,
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.openingBalance).toBe(1250.5);
+        expect(response.data?.moneyAccount.balance).toBe(1250.5);
+        expect(createMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                openingBalance: 1250.5,
+            }),
+        );
+    });
+
+    test("updates Opening Balance while the Money Account has no Movements", async () => {
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { openingBalance: 80 },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.openingBalance).toBe(80);
+        expect(response.data?.moneyAccount.balance).toBe(80);
+        expect(updateMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                openingBalance: 80,
+            }),
+        );
+    });
+
+    test("rejects Type, scope, Store assignment, and Opening Balance edits after the first Movement", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            hasMovements: true,
+            openingBalance: 100,
+            balance: 250,
+        });
+
+        const typeResponse = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { type: "upi" },
+        );
+        const openingResponse = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { openingBalance: 50 },
+        );
+        const scopeResponse = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { scope: "store_scoped", storeId },
+        );
+
+        expect(typeResponse.status).toBe("error");
+        expect(typeResponse.code).toBe(400);
+        expect(typeResponse.message).toContain("cannot be changed after this Money Account has Movements");
+        expect(openingResponse.status).toBe("error");
+        expect(scopeResponse.status).toBe("error");
+        expect(updateMoneyAccountRepo).not.toHaveBeenCalled();
+    });
+
+    test("still allows name, notes, and status changes after the first Movement", async () => {
+        getMoneyAccountById.mockResolvedValue({
+            ...hdfcBankAccount,
+            hasMovements: true,
+            openingBalance: 100,
+            balance: 250,
+        });
+        updateMoneyAccountRepo.mockImplementation(async (data) => ({
+            ...hdfcBankAccount,
+            ...data,
+            hasMovements: true,
+            balance: data.openingBalance,
+            createdBy: hdfcBankAccount.createdBy,
+            createdAt: hdfcBankAccount.createdAt,
+            updatedAt: hdfcBankAccount.updatedAt,
+        }));
+
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            moneyAccountId,
+            {
+                name: "HDFC Current Co",
+                notes: "Updated notes",
+                status: "inactive",
+            },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.moneyAccount.name).toBe("HDFC Current Co");
+        expect(response.data?.moneyAccount.notes).toBe("Updated notes");
+        expect(response.data?.moneyAccount.status).toBe("inactive");
+        expect(response.data?.moneyAccount.type).toBe("bank");
+        expect(response.data?.moneyAccount.openingBalance).toBe(100);
+        expect(updateMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                name: "HDFC Current Co",
+                type: "bank",
+                scope: "organization_wide",
+                storeId: null,
+                openingBalance: 100,
+                status: "inactive",
+            }),
+        );
+    });
+
+    test("does not expose a direct current-balance write", async () => {
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            moneyAccountId,
+            { notes: "Keep Opening Balance" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(updateMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                openingBalance: 0,
+            }),
+        );
+        expect(updateMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.not.objectContaining({
+                balance: expect.anything(),
+            }),
+        );
     });
 
     test("returns not found when updating a Money Account from another Organization", async () => {

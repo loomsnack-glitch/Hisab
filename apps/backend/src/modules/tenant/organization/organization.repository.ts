@@ -322,6 +322,7 @@ export const updateStore = async (
             whatsapp_links = ${storeData.whatsappLinks}::jsonb,
             kot_system_enabled = ${storeData.kotSystemEnabled},
             table_management_enabled = ${storeData.tableManagementEnabled},
+            money_account_tracking_enabled = ${storeData.moneyAccountTrackingEnabled},
             updated_by = ${storeData.updatedBy},
             updated_at = NOW()
         WHERE id = ${storeData.id}

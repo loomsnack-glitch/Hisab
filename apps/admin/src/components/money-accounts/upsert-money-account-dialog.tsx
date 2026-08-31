@@ -54,6 +54,19 @@ type UpsertMoneyAccountDialogProps = {
     trigger?: React.ReactElement;
 };
 
+const decimalAmountPattern = /^\d+(\.\d{0,2})?$/;
+
+const sanitizeTwoDecimalInput = (value: string) => {
+    const digitsAndDot = value.replace(/[^\d.]/g, "");
+    const dotIndex = digitsAndDot.indexOf(".");
+
+    if (dotIndex === -1) {
+        return digitsAndDot;
+    }
+
+    return digitsAndDot.slice(0, dotIndex + 1) + digitsAndDot.slice(dotIndex + 1).replace(/\./g, "").slice(0, 2);
+};
+
 const defaultValues: CreateMoneyAccountJSON = {
     name: "",
     type: "bank",
@@ -61,6 +74,7 @@ const defaultValues: CreateMoneyAccountJSON = {
     storeId: null,
     notes: "",
     status: "active",
+    openingBalance: 0,
 };
 
 const typeSelectOptions = MoneyAccountTypeSchema.options.map((type) => ({
@@ -85,6 +99,7 @@ const valuesFromAccount = (moneyAccount: MoneyAccountDTO): CreateMoneyAccountJSO
     storeId: moneyAccount.storeId,
     notes: moneyAccount.notes ?? "",
     status: moneyAccount.status,
+    openingBalance: moneyAccount.openingBalance,
 });
 
 const UpsertMoneyAccountDialog = ({
@@ -104,6 +119,7 @@ const UpsertMoneyAccountDialog = ({
     const selectedScope = (useWatch({ control: form.control, name: "scope" }) ?? "organization_wide") as MoneyAccountScope;
     const selectedType = (useWatch({ control: form.control, name: "type" }) ?? "bank") as MoneyAccountType;
     const isCashAccount = selectedType === "cash";
+    const isLockedAfterMovements = Boolean(moneyAccount?.hasMovements);
 
     const storesQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -137,6 +153,7 @@ const UpsertMoneyAccountDialog = ({
                 storeId: scope === "store_scoped" ? data.storeId : null,
                 notes: data.notes,
                 status: data.status,
+                openingBalance: data.openingBalance ?? 0,
             };
 
             return moneyAccount
@@ -176,6 +193,7 @@ const UpsertMoneyAccountDialog = ({
             storeId: scope === "store_scoped" ? values.storeId : null,
             notes: values.notes ?? "",
             status: (values.status ?? "active") as MoneyAccountStatus,
+            openingBalance: values.openingBalance ?? 0,
         });
     };
 
@@ -218,6 +236,7 @@ const UpsertMoneyAccountDialog = ({
                                 <FieldContent>
                                     <ReactSelect
                                         options={typeSelectOptions}
+                                        isDisabled={isLockedAfterMovements}
                                         value={
                                             typeSelectOptions.find((option) => option.value === field.value) ?? null
                                         }
@@ -252,7 +271,7 @@ const UpsertMoneyAccountDialog = ({
                                 <FieldContent>
                                     <ReactSelect
                                         options={scopeSelectOptions}
-                                        isDisabled={isCashAccount}
+                                        isDisabled={isCashAccount || isLockedAfterMovements}
                                         value={
                                             scopeSelectOptions.find((option) => option.value === field.value) ?? null
                                         }
@@ -287,6 +306,7 @@ const UpsertMoneyAccountDialog = ({
                                             options={storeSelectOptions}
                                             placeholder="Select store"
                                             isLoading={storesQuery.isPending}
+                                            isDisabled={isLockedAfterMovements}
                                             value={
                                                 storeSelectOptions.find((option) => option.value === field.value) ?? null
                                             }
@@ -306,6 +326,43 @@ const UpsertMoneyAccountDialog = ({
                             )}
                         />
                     ) : null}
+
+                    <Field data-invalid={!!form.formState.errors.openingBalance}>
+                        <FieldLabel>Opening Balance</FieldLabel>
+                        <FieldContent>
+                            <Input
+                                className="h-11 rounded-xl"
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                disabled={isLockedAfterMovements}
+                                value={
+                                    form.watch("openingBalance") === undefined
+                                        ? ""
+                                        : String(form.watch("openingBalance"))
+                                }
+                                onChange={(event) => {
+                                    const sanitized = sanitizeTwoDecimalInput(event.target.value);
+                                    if (sanitized === "" || decimalAmountPattern.test(sanitized)) {
+                                        form.setValue(
+                                            "openingBalance",
+                                            sanitized === "" ? 0 : Number(sanitized),
+                                            { shouldValidate: true, shouldDirty: true },
+                                        );
+                                    }
+                                }}
+                            />
+                            {isLockedAfterMovements ? (
+                                <p className="text-xs text-muted-foreground">
+                                    Opening Balance, type, availability, and Store cannot change after this Money Account has Movements.
+                                </p>
+                            ) : (
+                                <p className="text-xs text-muted-foreground">
+                                    Amount already held before Hisab starts tracking this account. Omit to use zero.
+                                </p>
+                            )}
+                            <FieldError errors={[form.formState.errors.openingBalance]} />
+                        </FieldContent>
+                    </Field>
 
                     <Field data-invalid={!!form.formState.errors.notes}>
                         <FieldLabel>

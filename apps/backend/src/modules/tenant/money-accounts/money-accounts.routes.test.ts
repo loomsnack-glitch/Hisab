@@ -40,6 +40,9 @@ describe("Organization Money Account routes", () => {
         harness.createMoneyAccountRepo.mockImplementation(async (data) => ({
             ...harness.hdfcBankAccount,
             ...data,
+            openingBalance: data.openingBalance,
+            balance: data.openingBalance,
+            hasMovements: false,
             updatedBy: data.updatedBy ?? null,
             createdAt: harness.now,
             updatedAt: harness.now,
@@ -47,6 +50,9 @@ describe("Organization Money Account routes", () => {
         harness.updateMoneyAccountRepo.mockImplementation(async (data) => ({
             ...harness.hdfcBankAccount,
             ...data,
+            openingBalance: data.openingBalance,
+            balance: data.openingBalance,
+            hasMovements: harness.hdfcBankAccount.hasMovements,
             createdBy: harness.hdfcBankAccount.createdBy,
             createdAt: harness.now,
             updatedAt: harness.now,
@@ -117,6 +123,8 @@ describe("Organization Money Account routes", () => {
         expect(body.data.moneyAccount.name).toBe("HDFC Current");
         expect(body.data.moneyAccount.scope).toBe("organization_wide");
         expect(body.data.moneyAccount.storeId).toBeNull();
+        expect(body.data.moneyAccount.openingBalance).toBe(0);
+        expect(body.data.moneyAccount.balance).toBe(0);
     });
 
     test("creates an Organization-wide Money Account at the Organization administrator seam", async () => {
@@ -399,6 +407,7 @@ describe("Organization Money Account routes", () => {
                     bankAccountNumber: "123456789012",
                     upiId: "shop@upi",
                     balance: 1000,
+                    hasMovements: true,
                 }),
             },
         );
@@ -486,6 +495,54 @@ describe("Organization Money Account routes", () => {
 
         expect(response.status).toBe(404);
         expect(harness.getMoneyAccountsByOrganizationId).not.toHaveBeenCalled();
+    });
+
+    test("creates a Money Account with an Opening Balance for an authenticated administrator", async () => {
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: "HDFC Current",
+                    type: "bank",
+                    openingBalance: 500,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(201);
+        const body = await response.json();
+        expect(body.data.moneyAccount.openingBalance).toBe(500);
+        expect(body.data.moneyAccount.balance).toBe(500);
+        expect(harness.createMoneyAccountRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                openingBalance: 500,
+            }),
+        );
+    });
+
+    test("rejects Opening Balance changes after the first Movement", async () => {
+        harness.getMoneyAccountById.mockResolvedValue({
+            ...harness.hdfcBankAccount,
+            hasMovements: true,
+            openingBalance: 100,
+            balance: 250,
+        });
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts/${harness.moneyAccountId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ openingBalance: 50 }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.message).toContain("cannot be changed after this Money Account has Movements");
+        expect(harness.updateMoneyAccountRepo).not.toHaveBeenCalled();
     });
 
     test("does not expose a Money Account deletion route", async () => {

@@ -20,7 +20,7 @@ import { LayoutGrid, Pencil, PlusCircle, RefreshCw, Search, Table as TableIcon, 
 
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertMoneyAccountDialog from "@/components/money-accounts/upsert-money-account-dialog";
-import { formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime } from "@/lib/format";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
@@ -97,6 +97,11 @@ const MoneyAccountsPage = () => {
                         {account.notes ? (
                             <p className="text-xs text-muted-foreground truncate">{account.notes}</p>
                         ) : null}
+                        {account.hasMovements ? (
+                            <p className="text-xs text-muted-foreground">
+                                Type, availability, Store, and Opening Balance are locked
+                            </p>
+                        ) : null}
                     </div>
                 </div>
             ),
@@ -142,6 +147,24 @@ const MoneyAccountsPage = () => {
                 value: store.id,
             })),
             getFilterValue: (account) => account.storeId ?? "",
+        },
+        {
+            id: "openingBalance",
+            header: "Opening Balance",
+            accessor: (account) => (
+                <span className="text-sm tabular-nums">{formatCurrency(account.openingBalance)}</span>
+            ),
+            sortable: true,
+            getSortValue: (account) => account.openingBalance,
+        },
+        {
+            id: "balance",
+            header: "Balance",
+            accessor: (account) => (
+                <span className="text-sm font-medium tabular-nums">{formatCurrency(account.balance)}</span>
+            ),
+            sortable: true,
+            getSortValue: (account) => account.balance,
         },
         {
             id: "status",
@@ -370,9 +393,18 @@ const MoneyAccountsPage = () => {
                                             </div>
 
                                             <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2.5">
-                                                <p className="text-[11px] text-muted-foreground">
-                                                    Updated {formatDateTime(account.updatedAt)}
-                                                </p>
+                                                <div className="min-w-0">
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        Opening {formatCurrency(account.openingBalance)}
+                                                        {" · "}
+                                                        Balance {formatCurrency(account.balance)}
+                                                    </p>
+                                                    {account.hasMovements ? (
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            Type, availability, Store, and Opening Balance are locked
+                                                        </p>
+                                                    ) : null}
+                                                </div>
                                                 <UpsertMoneyAccountDialog
                                                     organizationId={organizationId}
                                                     moneyAccount={account}

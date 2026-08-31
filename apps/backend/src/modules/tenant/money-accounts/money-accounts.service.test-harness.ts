@@ -27,6 +27,9 @@ export const hdfcBankAccount: MoneyAccountDTO = {
     storeId: null,
     notes: "Main operating account",
     status: "active",
+    openingBalance: 0,
+    balance: 0,
+    hasMovements: false,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -42,6 +45,9 @@ export const gpayUpiAccount: MoneyAccountDTO = {
     storeId: null,
     notes: null,
     status: "active",
+    openingBalance: 0,
+    balance: 0,
+    hasMovements: false,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -57,6 +63,9 @@ export const inactivePettyCashAccount: MoneyAccountDTO = {
     storeId: null,
     notes: null,
     status: "inactive",
+    openingBalance: 0,
+    balance: 0,
+    hasMovements: false,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -72,6 +81,9 @@ export const adajanUpiAccount: MoneyAccountDTO = {
     storeId,
     notes: "Counter QR",
     status: "active",
+    openingBalance: 0,
+    balance: 0,
+    hasMovements: false,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -87,6 +99,9 @@ export const adajanCashAccount: MoneyAccountDTO = {
     storeId,
     notes: "Physical till",
     status: "active",
+    openingBalance: 0,
+    balance: 0,
+    hasMovements: false,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -102,6 +117,9 @@ export const inactiveAdajanCashAccount: MoneyAccountDTO = {
     storeId,
     notes: null,
     status: "inactive",
+    openingBalance: 0,
+    balance: 0,
+    hasMovements: false,
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -144,6 +162,7 @@ type CreateMoneyAccountRepoArg = {
     storeId: string | null;
     notes: string | null;
     status: MoneyAccountDTO["status"];
+    openingBalance: number;
     createdBy: string;
     updatedBy?: string | null;
 };
@@ -157,12 +176,15 @@ type UpdateMoneyAccountRepoArg = {
     storeId: string | null;
     notes: string | null;
     status: MoneyAccountDTO["status"];
+    openingBalance: number;
     updatedBy: string;
 };
 
 export const createMoneyAccountRepo = mock(async (data: CreateMoneyAccountRepoArg) => ({
     ...hdfcBankAccount,
     ...data,
+    balance: data.openingBalance,
+    hasMovements: false,
     createdAt: now,
     updatedAt: now,
     updatedBy: data.updatedBy ?? null,
@@ -171,6 +193,8 @@ export const createMoneyAccountRepo = mock(async (data: CreateMoneyAccountRepoAr
 export const updateMoneyAccountRepo = mock(async (data: UpdateMoneyAccountRepoArg) => ({
     ...hdfcBankAccount,
     ...data,
+    balance: data.openingBalance,
+    hasMovements: hdfcBankAccount.hasMovements,
     updatedAt: now,
 }));
 

@@ -65,6 +65,23 @@ const moneyAccountNotesSchema = z
 
 const moneyAccountStoreIdSchema = z.uuid("Invalid store id").nullable().optional();
 
+const isAtMostTwoDecimalPlaces = (value: number): boolean =>
+  Number.isFinite(value) && Math.abs(Math.round(value * 100) - value * 100) < 1e-6;
+
+export const moneyAccountOpeningBalanceSchema = z
+  .number({ error: "Opening Balance is required" })
+  .min(0, "Opening Balance must be 0 or more")
+  .refine(isAtMostTwoDecimalPlaces, {
+    message: "Opening Balance must have at most two decimal places",
+  });
+
+export const moneyAccountBalanceSchema = z
+  .number({ error: "Balance is required" })
+  .min(0, "Balance must be 0 or more")
+  .refine(isAtMostTwoDecimalPlaces, {
+    message: "Balance must have at most two decimal places",
+  });
+
 const STORE_REQUIRED_FOR_STORE_SCOPE = "Store is required for a Store-scoped Money Account";
 const STORE_FORBIDDEN_FOR_ORGANIZATION_WIDE =
   "An Organization-wide Money Account cannot have a Store assignment";
@@ -130,6 +147,9 @@ export const MoneyAccountDTOSchema = z
     storeId: z.uuid("Invalid store id").nullable(),
     notes: z.string().nullable(),
     status: MoneyAccountStatusSchema,
+    openingBalance: moneyAccountOpeningBalanceSchema,
+    balance: moneyAccountBalanceSchema,
+    hasMovements: z.boolean(),
     createdBy: z.uuid("Invalid creator id"),
     updatedBy: z.uuid("Invalid updater id").nullable().optional(),
     createdAt: dtoDateSchema,
@@ -148,6 +168,7 @@ export const CreateMoneyAccountSchema = z
     storeId: moneyAccountStoreIdSchema,
     notes: moneyAccountNotesSchema,
     status: MoneyAccountStatusSchema.optional(),
+    openingBalance: moneyAccountOpeningBalanceSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -163,6 +184,7 @@ export const UpdateMoneyAccountSchema = z
     storeId: moneyAccountStoreIdSchema,
     notes: moneyAccountNotesSchema,
     status: MoneyAccountStatusSchema.optional(),
+    openingBalance: moneyAccountOpeningBalanceSchema.optional(),
   })
   .strict()
   .refine(
@@ -172,7 +194,8 @@ export const UpdateMoneyAccountSchema = z
       value.scope !== undefined ||
       value.storeId !== undefined ||
       value.notes !== undefined ||
-      value.status !== undefined,
+      value.status !== undefined ||
+      value.openingBalance !== undefined,
     { message: "At least one field is required" },
   )
   .superRefine((value, ctx) => {

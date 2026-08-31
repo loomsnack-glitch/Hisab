@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { Field, FieldContent } from "@repo/ui/components/field";
 import { Label } from "@repo/ui/components/label";
-import { LayoutGrid, UtensilsCrossed } from "lucide-react";
+import { LayoutGrid, UtensilsCrossed, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
@@ -23,6 +23,7 @@ type StoreFeatureSettingsFormProps = {
 const StoreFeatureSettingsFormSchema = z.object({
     kotSystemEnabled: z.boolean(),
     tableManagementEnabled: z.boolean(),
+    moneyAccountTrackingEnabled: z.boolean(),
 });
 
 type StoreFeatureSettingsFormValues = z.infer<typeof StoreFeatureSettingsFormSchema>;
@@ -30,6 +31,7 @@ type StoreFeatureSettingsFormValues = z.infer<typeof StoreFeatureSettingsFormSch
 const getDefaultValues = (store: StoreDTO): StoreFeatureSettingsFormValues => ({
     kotSystemEnabled: store.kotSystemEnabled,
     tableManagementEnabled: store.tableManagementEnabled,
+    moneyAccountTrackingEnabled: store.moneyAccountTrackingEnabled,
 });
 
 const StoreFeatureSettingsForm = ({ organizationId, store }: StoreFeatureSettingsFormProps) => {
@@ -50,6 +52,7 @@ const StoreFeatureSettingsForm = ({ organizationId, store }: StoreFeatureSetting
                 address: store.address ?? "",
                 kotSystemEnabled: values.kotSystemEnabled,
                 tableManagementEnabled: values.tableManagementEnabled,
+                moneyAccountTrackingEnabled: values.moneyAccountTrackingEnabled,
             }),
         onSuccess: (response) => {
             if (response.status === "success") {
@@ -129,6 +132,36 @@ const StoreFeatureSettingsForm = ({ organizationId, store }: StoreFeatureSetting
                                 </Label>
                                 <p className="text-[11px] text-muted-foreground">
                                     Enable table service and floor management for this store.
+                                </p>
+                            </FieldContent>
+                        </div>
+                    </Field>
+
+                    <Field>
+                        <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                            <Controller
+                                control={form.control}
+                                name="moneyAccountTrackingEnabled"
+                                render={({ field }) => (
+                                    <Checkbox
+                                        id="money-account-tracking-enabled"
+                                        checked={field.value}
+                                        onCheckedChange={(checked) => field.onChange(checked === true)}
+                                        aria-label="Enable Money Account Tracking"
+                                    />
+                                )}
+                            />
+                            <FieldContent className="gap-1">
+                                <Label
+                                    htmlFor="money-account-tracking-enabled"
+                                    className="flex items-center gap-2 text-sm font-medium"
+                                >
+                                    <Wallet className="size-4 text-primary" />
+                                    Money Account Tracking
+                                </Label>
+                                <p className="text-[11px] text-muted-foreground">
+                                    Record Cash, UPI, and Card POS collections against this store's Money Accounts.
+                                    Disabled by default.
                                 </p>
                             </FieldContent>
                         </div>

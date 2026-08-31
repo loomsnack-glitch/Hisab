@@ -45,6 +45,14 @@ const activeCashConflict = (): ServiceResponse<null> => ({
     code: STATUS_CODES.CONFLICT,
 });
 
+const moneyAccountLockedAfterMovements = (): ServiceResponse<null> => ({
+    status: "error",
+    message:
+        "Type, availability, Store assignment, and Opening Balance cannot be changed after this Money Account has Movements",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
 const errorChainText = (error: unknown, depth = 0): string => {
     if (depth > 5 || error == null) {
         return "";
@@ -212,6 +220,7 @@ export const createMoneyAccount = async (
             storeId: resolved.storeId,
             notes: normalizeNotes(moneyAccountData.notes),
             status: moneyAccountData.status ?? "active",
+            openingBalance: moneyAccountData.openingBalance ?? 0,
             createdBy: userId,
         });
 
@@ -260,6 +269,17 @@ export const updateMoneyAccount = async (
         return resolved.response;
     }
 
+    const nextOpeningBalance = moneyAccountData.openingBalance ?? existing.openingBalance;
+    if (
+        existing.hasMovements &&
+        (resolved.type !== existing.type ||
+            resolved.scope !== existing.scope ||
+            resolved.storeId !== existing.storeId ||
+            nextOpeningBalance !== existing.openingBalance)
+    ) {
+        return moneyAccountLockedAfterMovements();
+    }
+
     try {
         const moneyAccount = await moneyAccountsRepository.updateMoneyAccount({
             id: moneyAccountId,
@@ -273,6 +293,7 @@ export const updateMoneyAccount = async (
                     ? existing.notes
                     : normalizeNotes(moneyAccountData.notes),
             status: moneyAccountData.status ?? existing.status,
+            openingBalance: nextOpeningBalance,
             updatedBy: userId,
         });
 

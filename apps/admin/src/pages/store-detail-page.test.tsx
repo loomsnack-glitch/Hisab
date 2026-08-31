@@ -42,6 +42,7 @@ const store: StoreWithDevicesDTO = {
     whatsappLinks: [],
     kotSystemEnabled: false,
     tableManagementEnabled: false,
+    moneyAccountTrackingEnabled: false,
     devices: [device],
     createdBy: "11111111-1111-4111-8111-111111111111",
     updatedBy: null,
@@ -177,6 +178,7 @@ describe("Store detail page", () => {
         expect(markup).toContain("Store features");
         expect(markup).toContain("KOT system");
         expect(markup).toContain("Table management");
+        expect(markup).toContain("Money Account Tracking");
         expect(markup).toContain("financial year");
         expect(markup).toContain("Token numbers");
         expect(markup).toContain("KOT Numbers");

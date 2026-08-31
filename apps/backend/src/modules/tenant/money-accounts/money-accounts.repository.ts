@@ -7,8 +7,27 @@ import type {
     UpdateMoneyAccountREPO,
 } from "@repo/types";
 
-const mapMoneyAccount = (row: Record<string, unknown>): MoneyAccountDTO =>
-    snakeToCamel(row) as MoneyAccountDTO;
+const toMoneyAmount = (value: unknown): number => {
+    const amount = Number(value ?? 0);
+    if (!Number.isFinite(amount)) {
+        return 0;
+    }
+    return Math.round((amount + Number.EPSILON) * 100) / 100;
+};
+
+const mapMoneyAccount = (row: Record<string, unknown>): MoneyAccountDTO => {
+    const mapped = snakeToCamel(row) as Record<string, unknown>;
+    const openingBalance = toMoneyAmount(mapped.openingBalance);
+    const movementTotal = toMoneyAmount(mapped.movementTotal);
+    const hasMovements = Boolean(mapped.hasMovements) || movementTotal > 0;
+
+    return {
+        ...(mapped as Omit<MoneyAccountDTO, "openingBalance" | "balance" | "hasMovements">),
+        openingBalance,
+        hasMovements,
+        balance: Math.round((openingBalance + movementTotal + Number.EPSILON) * 100) / 100,
+    };
+};
 
 export const getMoneyAccountsByOrganizationId = async (
     organizationId: string,
@@ -65,6 +84,7 @@ export const updateMoneyAccount = async (
             store_id = ${moneyAccountData.storeId},
             notes = ${moneyAccountData.notes},
             status = ${moneyAccountData.status},
+            opening_balance = ${moneyAccountData.openingBalance},
             updated_by = ${moneyAccountData.updatedBy},
             updated_at = NOW()
         WHERE id = ${moneyAccountData.id}
