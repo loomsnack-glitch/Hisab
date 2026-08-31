@@ -27,6 +27,8 @@ import {
     adajanCashAccount,
     cashMoneyAccountId,
     activeCashUniqueViolation,
+    messageOnlyActiveCashUniqueViolation,
+    wrappedActiveCashUniqueViolation,
 } from "./money-accounts.service.test-harness";
 
 describe("Organization Money Account service", () => {
@@ -552,6 +554,44 @@ describe("Organization Money Account service", () => {
         expect(response.status).toBe("error");
         expect(response.code).toBe(409);
         expect(response.message).toBe("This Store already has an active Cash Money Account");
+        expect(response.message).not.toContain("duplicate key");
+    });
+
+    test("maps a Postgres Cash unique-constraint message without a 23505 code to a Store conflict", async () => {
+        createMoneyAccountRepo.mockImplementation(async () => {
+            throw messageOnlyActiveCashUniqueViolation();
+        });
+
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Second till",
+            type: "cash",
+            scope: "store_scoped",
+            storeId,
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toBe("This Store already has an active Cash Money Account");
+        expect(response.message).not.toContain("duplicate key");
+        expect(response.message).not.toContain("money_accounts_one_active_cash_per_store");
+    });
+
+    test("maps a wrapped Cash unique-constraint error to a Store conflict", async () => {
+        createMoneyAccountRepo.mockImplementation(async () => {
+            throw wrappedActiveCashUniqueViolation();
+        });
+
+        const response = await moneyAccountsService.createMoneyAccount(userId, organizationId, {
+            name: "Second till",
+            type: "cash",
+            scope: "store_scoped",
+            storeId,
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toBe("This Store already has an active Cash Money Account");
+        expect(response.message).not.toContain("duplicate key");
     });
 
     test("deactivates the Store Cash Account so a replacement can be created", async () => {
@@ -624,6 +664,27 @@ describe("Organization Money Account service", () => {
         expect(response.status).toBe("error");
         expect(response.code).toBe(409);
         expect(response.message).toBe("This Store already has an active Cash Money Account");
+        expect(response.message).not.toContain("duplicate key");
+    });
+
+    test("maps a Postgres Cash unique-constraint message on update without a 23505 code", async () => {
+        getMoneyAccountById.mockResolvedValue(inactiveAdajanCashAccount);
+        updateMoneyAccountRepo.mockImplementation(async () => {
+            throw messageOnlyActiveCashUniqueViolation();
+        });
+
+        const response = await moneyAccountsService.updateMoneyAccount(
+            userId,
+            organizationId,
+            inactiveCashMoneyAccountId,
+            { status: "active" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(409);
+        expect(response.message).toBe("This Store already has an active Cash Money Account");
+        expect(response.message).not.toContain("duplicate key");
+        expect(response.message).not.toContain("money_accounts_one_active_cash_per_store");
     });
 
     test("rejects moving a Cash Money Account to Organization-wide scope", async () => {

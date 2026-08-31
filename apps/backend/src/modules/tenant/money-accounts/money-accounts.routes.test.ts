@@ -252,6 +252,33 @@ describe("Organization Money Account routes", () => {
         expect(response.status).toBe(409);
         const body = await response.json();
         expect(body.message).toBe("This Store already has an active Cash Money Account");
+        expect(body.message).not.toContain("duplicate key");
+    });
+
+    test("does not expose a Postgres unique-constraint message for a second active Cash account", async () => {
+        harness.createMoneyAccountRepo.mockImplementation(async () => {
+            throw harness.messageOnlyActiveCashUniqueViolation();
+        });
+
+        const response = await moneyAccountsRoutes.request(
+            `http://localhost/${harness.organizationId}/money-accounts`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: "Second till",
+                    type: "cash",
+                    scope: "store_scoped",
+                    storeId: harness.storeId,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(409);
+        const body = await response.json();
+        expect(body.message).toBe("This Store already has an active Cash Money Account");
+        expect(JSON.stringify(body)).not.toContain("duplicate key");
+        expect(JSON.stringify(body)).not.toContain("money_accounts_one_active_cash_per_store");
     });
 
     test("deactivates a Store Cash Account and then activates its replacement", async () => {

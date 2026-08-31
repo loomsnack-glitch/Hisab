@@ -114,6 +114,17 @@ export const activeCashUniqueViolation = () =>
         constraint: "money_accounts_one_active_cash_per_store",
     });
 
+export const messageOnlyActiveCashUniqueViolation = () =>
+    new Error('duplicate key value violates unique constraint "money_accounts_one_active_cash_per_store"');
+
+export const wrappedActiveCashUniqueViolation = () =>
+    Object.assign(new Error("Failed query: insert into \"money_accounts\""), {
+        cause: Object.assign(
+            new Error('duplicate key value violates unique constraint "money_accounts_one_active_cash_per_store"'),
+            { code: "23505" },
+        ),
+    });
+
 export const getOrganizationByIdForUser = mock(async () => organization);
 export const getStoreById = mock(async () => store);
 export const getMoneyAccountsByOrganizationId = mock(async () => [

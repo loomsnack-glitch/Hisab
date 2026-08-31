@@ -33,6 +33,21 @@ import { toast } from "sonner";
 
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
 
+const ACTIVE_CASH_CONFLICT_MESSAGE = "This Store already has an active Cash Money Account";
+
+const toMoneyAccountSaveErrorMessage = (message: string | undefined, fallback: string) => {
+    if (!message) {
+        return fallback;
+    }
+    if (
+        message.includes("money_accounts_one_active_cash_per_store")
+        || /duplicate key value violates unique constraint/i.test(message)
+    ) {
+        return ACTIVE_CASH_CONFLICT_MESSAGE;
+    }
+    return message;
+};
+
 type UpsertMoneyAccountDialogProps = {
     organizationId: string;
     moneyAccount?: MoneyAccountDTO;
@@ -137,10 +152,16 @@ const UpsertMoneyAccountDialog = ({
                 return;
             }
 
-            toast.error(response.message);
+            toast.error(toMoneyAccountSaveErrorMessage(
+                response.message,
+                `Failed to ${isEditMode ? "update" : "create"} money account`,
+            ));
         },
         onError: (error: { message?: string }) => {
-            toast.error(error.message ?? `Failed to ${isEditMode ? "update" : "create"} money account`);
+            toast.error(toMoneyAccountSaveErrorMessage(
+                error.message,
+                `Failed to ${isEditMode ? "update" : "create"} money account`,
+            ));
         },
     });
 

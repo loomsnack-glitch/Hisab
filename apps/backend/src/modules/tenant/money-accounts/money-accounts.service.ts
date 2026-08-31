@@ -45,26 +45,31 @@ const activeCashConflict = (): ServiceResponse<null> => ({
     code: STATUS_CODES.CONFLICT,
 });
 
-const isUniqueViolation = (error: unknown): boolean =>
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "23505";
-
-const isActiveCashUniqueViolation = (error: unknown): boolean => {
-    if (!isUniqueViolation(error)) {
-        return false;
+const errorChainText = (error: unknown, depth = 0): string => {
+    if (depth > 5 || error == null) {
+        return "";
+    }
+    if (typeof error === "string") {
+        return error;
+    }
+    if (typeof error !== "object") {
+        return String(error);
     }
 
-    const constraint = (error as { constraint?: unknown }).constraint;
-    const detail = (error as { detail?: unknown }).detail;
-    const message = error instanceof Error ? error.message : "";
-    return (
-        constraint === ACTIVE_CASH_UNIQUE_INDEX ||
-        (typeof detail === "string" && detail.includes(ACTIVE_CASH_UNIQUE_INDEX)) ||
-        message.includes(ACTIVE_CASH_UNIQUE_INDEX)
-    );
+    const record = error as Record<string, unknown>;
+    const parts = [record.code, record.constraint, record.constraint_name, record.detail, record.message]
+        .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
+        .map(String);
+
+    if ("cause" in record) {
+        parts.push(errorChainText(record.cause, depth + 1));
+    }
+
+    return parts.join("\n");
 };
+
+const isActiveCashUniqueViolation = (error: unknown): boolean =>
+    errorChainText(error).includes(ACTIVE_CASH_UNIQUE_INDEX);
 
 const normalizeNotes = (notes: string | null | undefined): string | null => {
     if (notes === undefined || notes === null) {
