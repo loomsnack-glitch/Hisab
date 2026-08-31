@@ -36,6 +36,50 @@ _Avoid_: Store vendor, supplier record when referring to the vendor's offered go
 An Organization-owned good available from exactly one Vendor, with a name, purchase unit, required non-negative two-decimal default purchase price, and active or inactive status. Identically named Vendor Items may belong to different Vendors and retain independent prices. Vendor Items are retained and managed by status rather than deleted in Ganatri Admin. A Vendor Item is not a sellable Catalog Product and does not yet represent inventory.
 _Avoid_: Product, stock item, purchase line
 
+**Purchase**:
+A Store-scoped record of goods acquired from one Vendor, including its effective date, optional invoice/reference and notes, Purchase Lines, Purchase Adjustment, and settlement state. A Purchase belongs to the Store that incurred it even when an Organization-wide Money Account funds its payment.
+_Avoid_: Supplier invoice, stock receipt, expense
+
+**Purchase Line**:
+A historical record of one Vendor Item acquired in a Purchase, including its item and unit snapshots, purchased quantity, and agreed unit price. Its total is calculated from the quantity and agreed unit price.
+_Avoid_: Live Vendor Item lookup, inventory stock row
+
+**Purchase Adjustment**:
+An optional explicitly recorded positive or negative amount added after a Purchase's line totals to determine its final total, such as freight, a bulk discount, or rounding.
+_Avoid_: Silent total override, per-line price
+
+**Expense**:
+A Store-scoped record of one non-Vendor operational cost with an effective date, optional invoice/reference and notes, exactly one Expense Category, payable total, and payment history. An Expense belongs to the Store that incurred it even when an Organization-wide Money Account funds its payment; spending across categories is recorded as separate Expenses.
+_Avoid_: Purchase, general ledger entry
+
+**Expense Category**:
+An Organization-wide classification for Expenses. Hisab provides the read-only predefined categories Rent, Electricity, Water, Internet & Phone, Salaries & Wages, Maintenance & Repairs, Transport, Supplies, Marketing, Taxes & Fees, and Other; Organizations may create their own. Categories are retained by active or inactive status so historical Expenses remain classified.
+_Avoid_: Money Account Type, Vendor Item, chart-of-account account
+
+**Outgoing Payment**:
+An immutable record of money paid toward one Purchase or Expense. Each Outgoing Payment has its own amount, payment method, and—when Money Account Tracking is enabled—the Money Account from which it is deducted; a mistake is corrected by reversal rather than deletion or in-place editing.
+_Avoid_: Purchase total, expense total, synthetic due row
+
+**Outgoing Payment Funding Source**:
+The payment method and, when Money Account Tracking is enabled, the single active Money Account explicitly selected for an Outgoing Payment. Without tracking, the payment method is Cash, UPI, or Card; with tracking, Bank Transfer and Other are also available. The selected Money Account must be available to the Purchase or Expense's Store, have sufficient balance, and is decreased by that payment.
+_Avoid_: POS Payment Routing Rule, automatic outgoing route
+
+**Payable Status**:
+The settlement state of a Purchase or Expense based on the total of its Outgoing Payments. A payable record may be due, partial, or paid.
+_Avoid_: Payment Status, transaction status
+
+**Draft Payable**:
+An unrecorded Purchase or Expense that may be freely changed or discarded. A Draft Payable has no payable status or due balance and creates neither Outgoing Payments nor Money Account Movements until it is recorded.
+_Avoid_: Receivable Sale draft, unpaid recorded Purchase, unpaid recorded Expense
+
+**Vendor Outstanding**:
+The reportable sum of amounts still due on a Vendor's recorded Purchases. It is calculated from those Purchase records and is not an independent Vendor balance, credit, or payment-allocation ledger in the first release.
+_Avoid_: Vendor credit account, unapplied payment balance
+
+**Payable Void**:
+The recorded cancellation of a Purchase or Expense with a required reason. It cancels any remaining amount due and reverses each of its Outgoing Payments, including their Money Account Movements, without altering historical records.
+_Avoid_: Delete, edit to zero, return to draft
+
 **Unit**:
 An Organization-wide measure used to express a Vendor Item's default purchase price and a future Purchase quantity. A Unit has a descriptive name and short label but no conversion rules in the first release. Units are either predefined read-only measures supplied by Hisab or Organization-defined measures. The Organization controls each Unit's active or inactive availability; inactive Units cannot be assigned to new or edited records but remain shown on existing records. Predefined Unit definitions remain read-only, while Organization-defined Units are retained rather than deleted. Normalized Unit names and labels are unique across both predefined and Organization-defined Units, even when inactive. Units will also be available to the Product catalogue.
 _Avoid_: Vendor-only setting, product-only unit, quantity
@@ -184,7 +228,7 @@ An Organization configuration that directs future UPI or Card Payments received 
 _Avoid_: Cashier-selected account, payment-method account type
 
 **Money Account Tracking**:
-An optional Store feature that records Cash, UPI, and Card POS Payments as Money Account Movements and makes Money Account Balances available. Tracking begins when it is enabled and does not backfill earlier Payments; when it is disabled or unavailable, the Store continues recording POS Payments without creating Money Account Movements, while its prior routes, balances, and movement history are retained for administrators. Replacing a Sale that already has Money Account Movements still appends automatic reversals so those historical balances stay correct.
+An optional Store feature that records Cash, UPI, and Card POS Payments and eligible Outgoing Payments as Money Account Movements and makes Money Account Balances available. Tracking begins when it is enabled and does not backfill earlier Payments; when it is disabled or unavailable, the Store continues recording POS Payments and Outgoing Payments without creating Money Account Movements, while its prior routes, balances, and movement history are retained for administrators. Replacing a Sale that already has Money Account Movements still appends automatic reversals so those historical balances stay correct.
 _Avoid_: General ledger, mandatory POS payment feature
 
 **Feature Entitlement**:
