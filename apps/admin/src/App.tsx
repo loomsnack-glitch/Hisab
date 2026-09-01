@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { userAuthenticate } from "@repo/services";
 import SplashLoader from "@repo/ui/components/loaders/splash-loader";
@@ -47,6 +47,17 @@ import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import { getDocumentTitle } from "@/lib/app-identity";
 
 const SPLASH_DURATION_MS = 2200;
+
+const WhatsAppStoreInboxRedirect = () => {
+    const { organizationId = "", storeId = "" } = useParams();
+    const query = new URLSearchParams({ storeId });
+    return <Navigate to={`/organizations/${organizationId}/whatsapp/message-history?${query.toString()}`} replace />;
+};
+
+const WhatsAppInboxWorkspaceRedirect = () => {
+    const { organizationId = "" } = useParams();
+    return <Navigate to={`/organizations/${organizationId}/whatsapp/message-history`} replace />;
+};
 
 const App = () => {
     const location = useLocation();
@@ -152,9 +163,10 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/whatsapp/links" element={<Navigate to="../templates" replace />} />
                                 <Route path="/organizations/:organizationId/whatsapp/delivery" element={<Navigate to="../accounts" replace />} />
                                 <Route path="/organizations/:organizationId/whatsapp/promotions" element={<WhatsAppOrganizationPage />} />
-                                <Route path="/organizations/:organizationId/whatsapp/inbox" element={<Navigate to="../accounts" replace />} />
+                                <Route path="/organizations/:organizationId/whatsapp/message-history" element={<WhatsAppOrganizationPage />} />
+                                <Route path="/organizations/:organizationId/whatsapp/inbox" element={<WhatsAppInboxWorkspaceRedirect />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp" element={<WhatsAppAccountPage />} />
-                                <Route path="/organizations/:organizationId/stores/:storeId/whatsapp/inbox" element={<WhatsAppInboxPage />} />
+                                <Route path="/organizations/:organizationId/stores/:storeId/whatsapp/inbox" element={<WhatsAppStoreInboxRedirect />} />
                             </Route>
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>

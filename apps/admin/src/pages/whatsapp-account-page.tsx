@@ -14,14 +14,6 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { whatsappKeys } from "@/lib/query-keys";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
-const statusLabel: Record<string, string> = {
-    pending_qr: "Scan the QR code",
-    connecting: "Connecting",
-    connected: "Connected",
-    disconnected: "Disconnected",
-    failed: "Connection failed",
-    revoked: "Session revoked",
-};
 const cloudStatusLabel: Record<string, string> = {
     connected: "Connected",
     disconnected: "Disconnected",
@@ -57,10 +49,8 @@ const WhatsAppAccountPage = () => {
     const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
     const account = accountData?.account;
     const accounts = accountsQuery.data?.data?.accounts ?? [];
-    const baileysLinkingEnabled = import.meta.env.VITE_WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
     const availableAccounts = accounts.filter(candidate =>
-        (baileysLinkingEnabled || candidate.provider === "cloud_api")
-        && !candidate.assignedStoreIds.includes(storeId),
+        candidate.provider === "cloud_api" && !candidate.assignedStoreIds.includes(storeId),
     );
     const selectedAccount = availableAccounts.find(candidate => candidate.id === selectedAccountId);
     const assignMutation = useMutation({
@@ -129,7 +119,7 @@ const WhatsAppAccountPage = () => {
                             </CardTitle>
                             <CardDescription className="mt-2">Link an organization WhatsApp account to this Store. Add and manage accounts from the organization page.</CardDescription>
                         </div>
-                        {account ? <Badge variant="outline" className="rounded-full">{account.provider === "cloud_api" ? `${cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable"} · Cloud API` : statusLabel[account.status] ?? account.status}</Badge> : null}
+                        {account ? <Badge variant="outline" className="rounded-full">{cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable"} · Cloud API</Badge> : null}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-5">
@@ -170,7 +160,7 @@ const WhatsAppAccountPage = () => {
                                                             <WhatsAppIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
                                                             <span className="min-w-0 flex-1">
                                                                 <span className="block truncate font-medium leading-5">{candidate.phoneNumber}</span>
-                                                                <span className="block truncate text-[11px] leading-4 text-muted-foreground">{statusLabel[candidate.status] ?? candidate.status} · {candidate.assignedStoreIds.length} Store{candidate.assignedStoreIds.length === 1 ? "" : "s"} linked</span>
+                                                                <span className="block truncate text-[11px] leading-4 text-muted-foreground">{cloudStatusLabel[candidate.cloudStatus ?? candidate.status] ?? "Cloud status unavailable"} · {candidate.assignedStoreIds.length} Store{candidate.assignedStoreIds.length === 1 ? "" : "s"} linked</span>
                                                             </span>
                                                         </span>
                                                     </SelectItem>

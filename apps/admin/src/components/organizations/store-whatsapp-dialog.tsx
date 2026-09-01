@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Link2, LoaderCircle, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getWhatsAppAccount, getWhatsAppAccounts, assignWhatsAppAccount, removeWhatsAppAccount } from "@repo/services";
-import { STATUS_CODES, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
+import type { WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
@@ -14,14 +14,6 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { whatsappKeys } from "@/lib/query-keys";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
-const statusLabel: Record<string, string> = {
-    pending_qr: "Waiting for QR scan",
-    connecting: "Connecting",
-    connected: "Connected",
-    disconnected: "Disconnected",
-    failed: "Connection failed",
-    revoked: "Session revoked",
-};
 const cloudStatusLabel: Record<string, string> = {
     connected: "Connected",
     disconnected: "Disconnected",
@@ -31,10 +23,8 @@ const cloudStatusLabel: Record<string, string> = {
     failed: "Connection failed",
 };
 
-const ACCOUNT_STATUS_RETRY_ATTEMPTS = 7;
-
 type Props = { organizationId: string; storeId: string; storeName: string };
-type QueryError = { message?: string; code?: number; data?: WhatsAppAccountStatusResponseDTO | null };
+type QueryError = { message?: string; data?: WhatsAppAccountStatusResponseDTO | null };
 
 const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
     const queryClient = useQueryClient();
@@ -47,26 +37,14 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
         queryKey: accountKey,
         queryFn: () => getWhatsAppAccount(organizationId, storeId),
         enabled: open,
-        refetchInterval: query => {
-            const error = query.state.error as QueryError | null;
-            const queryAccount = query.state.data?.data?.account ?? error?.data?.account;
-            if (queryAccount?.provider === "cloud_api") return false;
-            const status = queryAccount?.status;
-            const retryBudgetAvailable = query.state.fetchFailureCount < ACCOUNT_STATUS_RETRY_ATTEMPTS;
-            return retryBudgetAvailable && (error?.code === STATUS_CODES.SERVICE_UNAVAILABLE || status === "pending_qr" || status === "connecting") ? 2_000 : false;
-        },
     });
     const accountsQuery = useQuery({ queryKey: accountsKey, queryFn: () => getWhatsAppAccounts(organizationId), enabled: open });
     const accountError = accountQuery.error as QueryError | null;
     const accountData = accountQuery.isError ? accountError?.data ?? null : accountQuery.data?.data ?? null;
     const account = accountData?.account;
-    const isCloudAccount = account?.provider === "cloud_api";
-    const statusRetryExhausted = accountQuery.isError
-        && (accountError?.code !== STATUS_CODES.SERVICE_UNAVAILABLE || accountQuery.failureCount >= ACCOUNT_STATUS_RETRY_ATTEMPTS);
     const accounts = accountsQuery.data?.data?.accounts ?? [];
-    const baileysLinkingEnabled = import.meta.env.VITE_WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
     const availableAccounts = accounts.filter(candidate =>
-        (baileysLinkingEnabled || candidate.provider === "cloud_api")
+        candidate.provider === "cloud_api"
         && !candidate.assignedStoreIds.includes(storeId),
     );
     const selectedAccount = availableAccounts.find(candidate => candidate.id === selectedAccountId);
@@ -124,18 +102,10 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div><p className="text-xs text-muted-foreground">Linked mobile</p><p className="mt-1 text-lg font-semibold tracking-tight">{account.phoneNumber}</p></div>
                                     <Badge variant={accountQuery.isError ? "secondary" : "outline"} className="rounded-full">
-                                        {accountQuery.isError ? "Status unavailable" : isCloudAccount ? cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable" : statusLabel[account.status] ?? account.status}
+                                        {accountQuery.isError ? "Status unavailable" : cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable"}
                                     </Badge>
                                 </div>
                                 <p className="mt-3 text-xs text-muted-foreground">Linked to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"} in this organization.</p>
-                                {accountQuery.isError ? (
-                                    statusRetryExhausted ? (
-                                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                                            <p className="text-xs text-muted-foreground">WhatsApp status could not be loaded.</p>
-                                            <Button variant="link" className="h-auto p-0 text-xs" disabled={accountQuery.isFetching} onClick={() => void accountQuery.refetch()}>Retry status</Button>
-                                        </div>
-                                    ) : <p className="mt-2 text-xs text-muted-foreground">WhatsApp status is temporarily unavailable. Retrying automatically.</p>
-                                ) : null}
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" className="rounded-full" onClick={() => setUnlinkOpen(true)} disabled={isBusy}><Trash2 className="size-4" />Unlink from Store</Button>
@@ -168,7 +138,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                                                             <WhatsAppIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
                                                             <span className="min-w-0 flex-1">
                                                                 <span className="block truncate font-medium leading-5">{candidate.phoneNumber}</span>
-                                                                <span className="block truncate text-[11px] leading-4 text-muted-foreground">{candidate.provider === "cloud_api" ? `${cloudStatusLabel[candidate.cloudStatus ?? candidate.status] ?? "Cloud API"} · Cloud API` : statusLabel[candidate.status] ?? candidate.status} · {candidate.assignedStoreIds.length} Store{candidate.assignedStoreIds.length === 1 ? "" : "s"} linked</span>
+                                                                <span className="block truncate text-[11px] leading-4 text-muted-foreground">{cloudStatusLabel[candidate.cloudStatus ?? candidate.status] ?? "Cloud API"} · Cloud API · {candidate.assignedStoreIds.length} Store{candidate.assignedStoreIds.length === 1 ? "" : "s"} linked</span>
                                                             </span>
                                                         </span>
                                                     </SelectItem>

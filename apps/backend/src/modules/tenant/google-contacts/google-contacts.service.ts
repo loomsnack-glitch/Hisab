@@ -62,7 +62,6 @@ export type GoogleContactsServiceDependencies = {
   vault: GoogleContactsCredentialVault;
   oauth: GoogleOAuthProvider;
 };
-
 const defaultDependencies = (): GoogleContactsServiceDependencies => ({
   getOrganizationByIdForUser: organizationRepository.getOrganizationByIdForUser,
   createOAuthStateRecord: createGoogleContactsOAuthStateRecord,
@@ -491,4 +490,3 @@ export const disconnectGoogleContactsForOrganization = async (
     throw error;
   }
 };
-

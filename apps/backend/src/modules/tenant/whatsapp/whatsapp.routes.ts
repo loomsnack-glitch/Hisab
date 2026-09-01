@@ -5,8 +5,6 @@ import {
     STATUS_CODES,
     WhatsAppAssignAccountSchema,
     WhatsAppAttachConversationCustomerSchema,
-    WhatsAppCreateAccountSchema,
-    WhatsAppChangeAccountNumberSchema,
     WhatsAppSendConversationTextSchema,
     WhatsAppSendInvoiceSchema,
     WhatsAppDueReminderRequestSchema,
@@ -14,11 +12,6 @@ import {
     WhatsAppCreateMessageTemplateSchema,
     WhatsAppUpdateMessageTemplateSchema,
     WhatsAppMessageTemplateKindSchema,
-    WhatsAppWorkerInboundMessageSchema,
-    WhatsAppWorkerMessageEventSchema,
-    WhatsAppWorkerInvoiceResultSchema,
-    WhatsAppWorkerMessageStatusSchema,
-    WhatsAppWorkerStatusUpdateSchema,
     WhatsAppCreateCloudTemplateBindingSchema,
     WhatsAppRecordCustomerConsentSchema,
     WhatsAppSetCustomerSuppressionSchema,
@@ -29,7 +22,6 @@ import {
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { handleServiceResponse } from "@/helpers/service.helper";
 import { validateSchema } from "@/middlewares/validate";
-import { whatsappWorkerMiddleware } from "@/middlewares/whatsapp-worker.middleware";
 import type { AppVariables } from "@/types/hono";
 import * as service from "./whatsapp.service";
 import { registerCloudOnboardingRoutes } from "./cloud-api/cloud-onboarding.routes";
@@ -76,18 +68,6 @@ const unexpectedError = (c: Context, error?: unknown) => {
     );
 };
 
-const unexpectedInternalError = (c: Context, operation: string, error: unknown, message: string) => {
-    console.error(`[whatsapp] ${operation}`, error instanceof Error ? error.message : String(error));
-    return c.json({ status: "error", message }, 500);
-};
-
-const workerPartitionFromQuery = (c: Context): { count: number; index: number } | null => {
-    const count = Number(c.req.query("partitionCount") ?? 1);
-    const index = Number(c.req.query("partitionIndex") ?? 0);
-    if (!Number.isInteger(count) || count < 1 || !Number.isInteger(index) || index < 0 || index >= count) return null;
-    return { count, index };
-};
-
 userRouter.use("*", authMiddleware);
 registerCloudOnboardingRoutes(userRouter, startCloudOnboarding, {
     complete: completeCloudAccountProvisioning,
@@ -127,48 +107,6 @@ userRouter.get("/:organizationId/whatsapp/accounts", async c => {
         const invalid = invalidUuid(organizationId, "Invalid organization id");
         if (invalid) return c.json(invalid, invalid.code);
         return handleServiceResponse(c, await service.listAccounts(c.get("authUser").id, organizationId));
-    } catch (error) {
-        return unexpectedError(c, error);
-    }
-});
-
-userRouter.post(
-    "/:organizationId/whatsapp/accounts",
-    validateSchema("json", WhatsAppCreateAccountSchema),
-    async c => {
-        try {
-            const organizationId = c.req.param("organizationId");
-            const invalid = invalidUuid(organizationId, "Invalid organization id");
-            if (invalid) return c.json(invalid, invalid.code);
-            return handleServiceResponse(
-                c,
-                await service.createOrganizationAccount(c.get("authUser").id, organizationId, c.req.valid("json")),
-            );
-        } catch (error) {
-            return unexpectedError(c, error);
-        }
-    },
-);
-
-userRouter.post("/:organizationId/whatsapp/accounts/:accountId/connect", async c => {
-    try {
-        const organizationId = c.req.param("organizationId");
-        const accountId = c.req.param("accountId");
-        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid account id");
-        if (invalid) return c.json(invalid, invalid.code);
-        return handleServiceResponse(c, await service.connectOrganizationAccount(c.get("authUser").id, organizationId, accountId));
-    } catch (error) {
-        return unexpectedError(c, error);
-    }
-});
-
-userRouter.post("/:organizationId/whatsapp/accounts/:accountId/disconnect", async c => {
-    try {
-        const organizationId = c.req.param("organizationId");
-        const accountId = c.req.param("accountId");
-        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid account id");
-        if (invalid) return c.json(invalid, invalid.code);
-        return handleServiceResponse(c, await service.disconnectOrganizationAccount(c.get("authUser").id, organizationId, accountId));
     } catch (error) {
         return unexpectedError(c, error);
     }
@@ -494,30 +432,6 @@ userRouter.get("/:organizationId/customers/:customerId/whatsapp/consent", async 
         return unexpectedError(c, error);
     }
 });
-
-userRouter.post(
-    "/:organizationId/whatsapp/accounts/:accountId/change-number",
-    validateSchema("json", WhatsAppChangeAccountNumberSchema),
-    async c => {
-        try {
-            const organizationId = c.req.param("organizationId");
-            const accountId = c.req.param("accountId");
-            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid account id");
-            if (invalid) return c.json(invalid, invalid.code);
-            return handleServiceResponse(
-                c,
-                await service.changeOrganizationAccountNumber(
-                    c.get("authUser").id,
-                    organizationId,
-                    accountId,
-                    c.req.valid("json"),
-                ),
-            );
-        } catch (error) {
-            return unexpectedError(c, error);
-        }
-    },
-);
 
 userRouter.get("/:organizationId/stores/:storeId/whatsapp/account", async c => {
     try {
@@ -917,133 +831,5 @@ for (const action of ["retry", "resend"] as const) {
         }
     });
 }
-
-export const whatsappInternalRoutes = new Hono();
-whatsappInternalRoutes.use("*", whatsappWorkerMiddleware);
-
-whatsappInternalRoutes.get("/accounts", async c => {
-    try {
-        const partition = workerPartitionFromQuery(c);
-        if (!partition) return c.json({ status: "error", message: "Invalid worker partition" }, STATUS_CODES.BAD_REQUEST);
-        return c.json({ accounts: await service.getWorkerAccounts(partition) });
-    } catch (error) {
-        return unexpectedInternalError(c, "worker reconciliation failed", error, "Worker reconciliation failed");
-    }
-});
-
-whatsappInternalRoutes.post(
-    "/accounts/:accountId/status",
-    validateSchema("json", WhatsAppWorkerStatusUpdateSchema),
-    async c => {
-        try {
-            const accountId = c.req.param("accountId");
-            if (!uuidSchema.safeParse(accountId).success) {
-                return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
-            }
-            const account = await service.receiveWorkerStatus(accountId, c.req.valid("json"));
-            if (!account) {
-                return c.json({ status: "error", message: "WhatsApp account not found" }, STATUS_CODES.NOT_FOUND);
-            }
-            return c.json({ status: "success" });
-        } catch (error) {
-            return unexpectedInternalError(c, "worker status update failed", error, "Worker status update failed");
-        }
-    },
-);
-
-whatsappInternalRoutes.get("/outbox/next", async c => {
-    try {
-        const partition = workerPartitionFromQuery(c);
-        if (!partition) return c.json({ status: "error", message: "Invalid worker partition" }, STATUS_CODES.BAD_REQUEST);
-        const workerId = c.req.header("x-whatsapp-worker-id")?.trim() || "worker";
-        if (!/^[a-zA-Z0-9._-]{1,100}$/.test(workerId)) {
-            return c.json({ status: "error", message: "Invalid worker id" }, STATUS_CODES.BAD_REQUEST);
-        }
-        return c.json(await service.claimInvoiceForWorker(workerId, partition));
-    } catch (error) {
-        return unexpectedInternalError(c, "WhatsApp outbox claim failed", error, "WhatsApp outbox claim failed");
-    }
-});
-
-whatsappInternalRoutes.get("/operations/metrics", async c => {
-    try {
-        return c.json({ metrics: await service.getOperationsMetrics() });
-    } catch (error) {
-        return unexpectedInternalError(c, "WhatsApp operations metrics failed", error, "WhatsApp operations metrics failed");
-    }
-});
-
-whatsappInternalRoutes.get("/accounts/:accountId/history-anchors", async c => {
-    try {
-        const accountId = c.req.param("accountId");
-        if (!uuidSchema.safeParse(accountId).success) {
-            return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
-        }
-        return c.json({ anchors: await service.getHistoryAnchorsForWorker(accountId) });
-    } catch (error) {
-        return unexpectedInternalError(c, "WhatsApp history anchors failed", error, "WhatsApp history anchors failed");
-    }
-});
-
-whatsappInternalRoutes.post("/outbox/:outboxId/result", async c => {
-    try {
-        const outboxId = c.req.param("outboxId");
-        if (!uuidSchema.safeParse(outboxId).success) {
-            return c.json({ status: "error", message: "Invalid outbox id" }, STATUS_CODES.BAD_REQUEST);
-        }
-        const body = await c.req.json();
-        const parsed = WhatsAppWorkerInvoiceResultSchema.safeParse(body);
-        if (!parsed.success) return c.json({ status: "error", message: "Invalid invoice result" }, STATUS_CODES.BAD_REQUEST);
-        const accepted = await service.receiveInvoiceResult(outboxId, parsed.data);
-        return c.json({ status: accepted ? "success" : "ignored" });
-    } catch (error) {
-        return unexpectedInternalError(c, "WhatsApp outbox result failed", error, "WhatsApp outbox result failed");
-    }
-});
-
-whatsappInternalRoutes.post("/accounts/:accountId/messages/status", async c => {
-    try {
-        const accountId = c.req.param("accountId");
-        if (!uuidSchema.safeParse(accountId).success) {
-            return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
-        }
-        const parsed = WhatsAppWorkerMessageStatusSchema.safeParse(await c.req.json());
-        if (!parsed.success) return c.json({ status: "error", message: "Invalid message status" }, STATUS_CODES.BAD_REQUEST);
-        const accepted = await service.receiveInvoiceMessageStatus(accountId, parsed.data);
-        return c.json({ status: accepted ? "success" : "ignored" });
-    } catch (error) {
-        return unexpectedInternalError(c, "WhatsApp message status failed", error, "WhatsApp message status failed");
-    }
-});
-
-whatsappInternalRoutes.post("/accounts/:accountId/messages/inbound", async c => {
-    try {
-        const accountId = c.req.param("accountId");
-        if (!uuidSchema.safeParse(accountId).success) {
-            return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
-        }
-        const parsed = WhatsAppWorkerInboundMessageSchema.safeParse(await c.req.json());
-        if (!parsed.success) return c.json({ status: "error", message: "Invalid inbound message" }, STATUS_CODES.BAD_REQUEST);
-        const result = await service.ingestInboundMessage(accountId, parsed.data);
-        return c.json({ status: "success", ...result });
-    } catch (error) {
-        return unexpectedInternalError(c, "Inbound WhatsApp message failed", error, "Inbound WhatsApp message failed");
-    }
-});
-
-whatsappInternalRoutes.post("/accounts/:accountId/messages/events", async c => {
-    try {
-        const accountId = c.req.param("accountId");
-        if (!uuidSchema.safeParse(accountId).success) {
-            return c.json({ status: "error", message: "Invalid account id" }, STATUS_CODES.BAD_REQUEST);
-        }
-        const parsed = WhatsAppWorkerMessageEventSchema.safeParse(await c.req.json());
-        if (!parsed.success) return c.json({ status: "error", message: "Invalid WhatsApp message event" }, STATUS_CODES.BAD_REQUEST);
-        const result = await service.ingestMessageEvent(accountId, parsed.data);
-        return c.json({ status: "success", ...result });
-    } catch (error) {
-        return unexpectedInternalError(c, "WhatsApp message event failed", error, "WhatsApp message event failed");
-    }
-});
 
 export default userRouter;
