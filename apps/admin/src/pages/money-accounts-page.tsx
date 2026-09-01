@@ -121,7 +121,7 @@ const MoneyAccountCard = ({ account, organizationId, storeLabel }: MoneyAccountC
                 className="rounded-full"
                 render={<Link to={`/organizations/${organizationId}/money-accounts/${account.id}`} />}
             >
-                View history
+                Transactions
             </Button>
             <UpsertMoneyAccountDialog
                 organizationId={organizationId}
@@ -325,7 +325,7 @@ const MoneyAccountsPage = () => {
                 className="rounded-full"
                 render={<Link to={`/organizations/${organizationId}/money-accounts/${account.id}`} />}
             >
-                View history
+                Transactions
             </Button>
             <UpsertMoneyAccountDialog
                 organizationId={organizationId}

@@ -259,7 +259,7 @@ describe("Admin Money Accounts page", () => {
         expect(markup).toContain("active");
         expect(markup).toContain("inactive");
         expect(markup).toContain("Edit");
-        expect(markup).toContain("View history");
+        expect(markup).toContain("Transactions");
         expect(markup).toContain("aria-label=\"Card view\"");
         expect(markup).toContain("aria-label=\"Table view\"");
         expect(markup).not.toContain("Delete");

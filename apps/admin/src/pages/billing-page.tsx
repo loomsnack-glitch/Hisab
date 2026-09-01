@@ -10,6 +10,7 @@ import {
     createPosDraftSale,
     createCustomer,
     createPosCustomer,
+    getCustomers,
     replacePosSale,
     getCategories,
     getOrganizationDetails,
@@ -112,6 +113,7 @@ import {
 import { toast } from "sonner";
 
 import CustomerDirectory from "@/components/customers/customer-directory";
+import CheckoutCustomerFields from "@/components/billing/checkout-customer-fields";
 import CustomizeProductDialog, { type CustomizeAddOnSelection } from "@/components/billing/customize-product-dialog";
 import ConfigureComboDialog, { type ComboDialogSelection } from "@/components/billing/configure-combo-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
@@ -122,6 +124,17 @@ import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import type { BillingWorkspaceMode, PosComposerHandoff, PosPanelTab } from "@/lib/billing-mode";
 import { billingKeys, catalogKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDateTime, formatDiscountPercentage, getAverageBillPerOrder } from "@/lib/format";
+import {
+    findCustomerByExactPhone,
+    getCheckoutPhoneDigits,
+    getCheckoutPhoneLookupValue,
+    resolveCheckoutCustomer,
+    toCheckoutPhoneInput,
+} from "@/lib/checkout-customer";
+import {
+    readCheckoutBillingAdjustmentsOpen,
+    writeCheckoutBillingAdjustmentsOpen,
+} from "@/lib/checkout-billing-adjustments-preferences";
 import { getComposerItemPricing } from "@/lib/combo-pricing";
 import { buildReceiptText } from "@/lib/receipt-text";
 import { printReceiptText } from "@/lib/print-receipt-text";
@@ -516,7 +529,7 @@ const BillingPage = ({
         isDeviceMode && posPrinter?.connected ? ["print"] : [],
     );
     const [serviceMode, setServiceMode] = useState<SaleServiceMode>("dine_in");
-    const [settlementEditorOpen, setSettlementEditorOpen] = useState(false);
+    const [billingAdjustmentsOpen, setBillingAdjustmentsOpenState] = useState(false);
     const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
     const [replacingSaleId, setReplacingSaleId] = useState<string | null>(null);
     const [replaceConfirmationOpen, setReplaceConfirmationOpen] = useState(false);
@@ -524,7 +537,8 @@ const BillingPage = ({
     const [customerCreateOpen, setCustomerCreateOpen] = useState(false);
     const [newCustomerName, setNewCustomerName] = useState("");
     const [newCustomerPhone, setNewCustomerPhone] = useState("");
-    const [discountEditorOpen, setDiscountEditorOpen] = useState(false);
+    const [checkoutPhone, setCheckoutPhone] = useState("");
+    const [checkoutName, setCheckoutName] = useState("");
     const [historyFilter] = useState<"all" | "draft" | "open" | "paid" | "voided">("all");
     const [leftPanelTab, setLeftPanelTab] = useState<BillingPanelTab>(
         isDeviceMode ? initialPanelTab : "bills",
@@ -561,6 +575,22 @@ const BillingPage = ({
     const deferredProductSearch = useDeferredValue(productSearch.trim().toLowerCase());
     const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
     const deferredSalesSearch = useDeferredValue(salesSearch.trim().toLowerCase());
+
+    const setBillingAdjustmentsOpen = useCallback(
+        (
+            open: boolean | ((prev: boolean) => boolean),
+            options?: { persist?: boolean },
+        ) => {
+            setBillingAdjustmentsOpenState((prev) => {
+                const next = typeof open === "function" ? open(prev) : open;
+                if (options?.persist !== false && organizationId) {
+                    writeCheckoutBillingAdjustmentsOpen(organizationId, next);
+                }
+                return next;
+            });
+        },
+        [organizationId],
+    );
 
     const applySalesDatePreset = (preset: SalesDatePreset) => {
         const today = startOfLocalDay(new Date());
@@ -780,6 +810,27 @@ const BillingPage = ({
         enabled: isDeviceMode && Boolean(organizationId),
     });
 
+    const checkoutPhoneLookup = getCheckoutPhoneLookupValue(checkoutPhone);
+    const checkoutCustomerLookupQuery = useQuery({
+        queryKey: billingKeys.customers(organizationId, {
+            lookup: "checkout-phone",
+            search: checkoutPhoneLookup,
+        }),
+        queryFn: () =>
+            isDeviceMode
+                ? getPosCustomers({
+                      search: checkoutPhoneLookup || undefined,
+                      status: "all",
+                      limit: 20,
+                  })
+                : getCustomers(organizationId, {
+                      search: checkoutPhoneLookup || undefined,
+                      status: "all",
+                      limit: 20,
+                  }),
+        enabled: Boolean(organizationId) && Boolean(checkoutPhoneLookup) && placeOrderDialogOpen,
+    });
+
     const salesQuery = useInfiniteQuery({
         queryKey: billingKeys.sales(organizationId, selectedStoreId, salesQueryParams),
         initialPageParam: null as string | null,
@@ -970,6 +1021,26 @@ const BillingPage = ({
         !dateRangeNeedsInput && firstSalesPage?.status === "success" ? firstSalesPage.data?.summary ?? null : null;
     const selectedCustomer =
         customers.find((customer) => customer.id === selectedCustomerId) ?? selectedCustomerFallback;
+    const checkoutLookupCustomers =
+        checkoutCustomerLookupQuery.data?.status === "success"
+            ? (checkoutCustomerLookupQuery.data.data?.customers ?? [])
+            : undefined;
+    const checkoutResolution = resolveCheckoutCustomer({
+        phone: checkoutPhone,
+        name: checkoutName,
+        selectedCustomer: selectedCustomer ?? null,
+        lookupCustomers: checkoutPhoneLookup
+            ? checkoutCustomerLookupQuery.isFetched
+                ? (checkoutLookupCustomers ?? [])
+                : undefined
+            : [],
+        isLookupLoading:
+            Boolean(checkoutPhoneLookup) &&
+            checkoutCustomerLookupQuery.isFetching &&
+            !(selectedCustomer && toCheckoutPhoneInput(selectedCustomer.phone) === checkoutPhone),
+    });
+    const hasInvalidCheckoutCustomer =
+        checkoutResolution.status === "blocked" || checkoutResolution.status === "looking_up";
     const customerSearchLooksLikePhone = /^[+\d\s()-]+$/.test(customerSearch);
 
     const categoryOptions = [{ id: "all", name: "All" }, ...categories];
@@ -1231,18 +1302,18 @@ const BillingPage = ({
 
         if (isSelected) {
             setDiscountInput("");
-            setDiscountEditorOpen(true);
+            setBillingAdjustmentsOpen(true);
             return;
         }
 
         setDiscountInput(String(presetValue));
-        setDiscountEditorOpen(true);
+        setBillingAdjustmentsOpen(true);
     };
 
     const removeOrderDiscount = () => {
         setDiscountInput("");
         setDiscountMode("percent");
-        setDiscountEditorOpen(false);
+        setBillingAdjustmentsOpen(false, { persist: false });
     };
 
     const toggleInvoiceAction = (action: InvoiceAction) => {
@@ -1254,12 +1325,55 @@ const BillingPage = ({
     const selectCustomer = (customer: CustomerDTO | null) => {
         setSelectedCustomerId(customer?.id ?? "");
         setSelectedCustomerFallback(customer);
+        setCheckoutPhone(toCheckoutPhoneInput(customer?.phone));
+        setCheckoutName(customer?.name ?? "");
         setCustomerSearch("");
         setCustomerPickerOpen(false);
         setCustomerCreateOpen(false);
         setNewCustomerName("");
         setNewCustomerPhone("");
     };
+
+    const handleCheckoutPhoneChange = (value: string) => {
+        const digits = getCheckoutPhoneDigits(value);
+        setCheckoutPhone(digits);
+        if (!selectedCustomer) {
+            return;
+        }
+        if (toCheckoutPhoneInput(selectedCustomer.phone) === digits) {
+            return;
+        }
+        setSelectedCustomerId("");
+        setSelectedCustomerFallback(null);
+        setCheckoutName("");
+    };
+
+    const existingCheckoutCustomer =
+        checkoutResolution.status === "existing" ? checkoutResolution.customer : null;
+
+    useEffect(() => {
+        if (!existingCheckoutCustomer) {
+            return;
+        }
+
+        setCheckoutName((current) =>
+            current === existingCheckoutCustomer.name ? current : existingCheckoutCustomer.name,
+        );
+        setCheckoutPhone((current) => {
+            const next = toCheckoutPhoneInput(existingCheckoutCustomer.phone);
+            return current || next === current ? current : next;
+        });
+        setSelectedCustomerId((current) =>
+            current === existingCheckoutCustomer.id ? current : existingCheckoutCustomer.id,
+        );
+        const match = findCustomerByExactPhone(
+            checkoutLookupCustomers ?? customers,
+            existingCheckoutCustomer.phone ?? checkoutPhone,
+        );
+        if (match) {
+            setSelectedCustomerFallback(match);
+        }
+    }, [existingCheckoutCustomer, checkoutLookupCustomers, customers, checkoutPhone]);
 
     const openCustomerPicker = () => {
         setCustomerSearch("");
@@ -1301,17 +1415,18 @@ const BillingPage = ({
         setSelectedCustomerId("");
         setSelectedCustomerFallback(null);
         setCustomerSearch("");
+        setCheckoutPhone("");
+        setCheckoutName("");
         setNotes("");
         setItems([]);
         setSettlementMode("full");
-        setSettlementEditorOpen(false);
+        setBillingAdjustmentsOpen(false, { persist: false });
         setSelectedPaymentMethod("cash");
         setPartialPaymentAmount("");
         setDiscountInput("");
         setDiscountMode("percent");
         setInvoiceActions(isDeviceMode && posPrinter?.connected ? ["print"] : []);
         setServiceMode("dine_in");
-        setDiscountEditorOpen(false);
         setPlaceOrderDialogOpen(false);
         setCustomerPickerOpen(false);
         setCustomerCreateOpen(false);
@@ -1675,8 +1790,10 @@ const BillingPage = ({
         );
     };
 
-    const buildDraftPayload = (): CreateDraftSaleJSON => ({
-        customerId: selectedCustomerId || null,
+    const buildDraftPayload = (
+        customerId: string | null = selectedCustomerId || null,
+    ): CreateDraftSaleJSON => ({
+        customerId,
         orderDiscountAmount,
         notes: notes.trim() || null,
         serviceMode,
@@ -1699,12 +1816,14 @@ const BillingPage = ({
         })),
     });
 
-    const buildCommitPayload = (): CommitSaleJSON => ({
-        customerId: selectedCustomerId || null,
+    const buildCommitPayload = (
+        customerId: string | null = selectedCustomerId || null,
+    ): CommitSaleJSON => ({
+        customerId,
         orderDiscountAmount,
         notes: notes.trim() || null,
         serviceMode,
-        items: buildDraftPayload().items,
+        items: buildDraftPayload(customerId).items,
         payments:
             settlementMode === "due"
                 ? []
@@ -1717,6 +1836,60 @@ const BillingPage = ({
                       },
                   ],
     });
+
+    const resolveCheckoutCustomerId = async (): Promise<string | null> => {
+        const resolution = resolveCheckoutCustomer({
+            phone: checkoutPhone,
+            name: checkoutName,
+            selectedCustomer: selectedCustomer ?? null,
+            lookupCustomers: checkoutPhoneLookup
+                ? checkoutCustomerLookupQuery.isFetched
+                    ? (checkoutLookupCustomers ?? [])
+                    : undefined
+                : [],
+            isLookupLoading:
+                Boolean(checkoutPhoneLookup) &&
+                checkoutCustomerLookupQuery.isFetching &&
+                !(selectedCustomer && toCheckoutPhoneInput(selectedCustomer.phone) === checkoutPhone),
+        });
+
+        if (resolution.status === "blocked") {
+            throw new Error(resolution.reason);
+        }
+        if (resolution.status === "looking_up") {
+            throw new Error("Finding customer…");
+        }
+        if (resolution.status === "walk_in") {
+            return null;
+        }
+        if (resolution.status === "existing") {
+            return resolution.customer.id;
+        }
+
+        const response = isDeviceMode
+            ? await createPosCustomer({
+                  name: resolution.name,
+                  phone: resolution.phone,
+                  isActive: true,
+              })
+            : await createCustomer(organizationId, {
+                  name: resolution.name,
+                  phone: resolution.phone,
+                  isActive: true,
+              });
+
+        if (response.status !== "success" || !response.data?.customer) {
+            throw new Error(response.message || "Failed to create customer");
+        }
+
+        const customer = response.data.customer;
+        setSelectedCustomerId(customer.id);
+        setSelectedCustomerFallback(customer);
+        setCheckoutName(customer.name);
+        setCheckoutPhone(toCheckoutPhoneInput(customer.phone));
+        queryClient.invalidateQueries({ queryKey: billingKeys.organization(organizationId) });
+        return customer.id;
+    };
 
     const createCustomerMutation = useMutation({
         mutationFn: (payload: CreateCustomerJSON) =>
@@ -1750,7 +1923,8 @@ const BillingPage = ({
                 throw new Error(discountValidationMessage || "Enter a valid discount");
             }
 
-            const payload = buildDraftPayload();
+            const customerId = await resolveCheckoutCustomerId();
+            const payload = buildDraftPayload(customerId);
             const response = activeDraftId
                 ? isDeviceMode
                     ? await updatePosDraftSale(activeDraftId, payload as UpdateDraftSaleJSON)
@@ -1789,6 +1963,8 @@ const BillingPage = ({
                 throw new Error(isDeviceMode ? "Store session is missing" : "Select a store first");
             }
 
+            const customerId = await resolveCheckoutCustomerId();
+
             if (items.length === 0) {
                 throw new Error("Add at least one product before completing the bill");
             }
@@ -1812,8 +1988,8 @@ const BillingPage = ({
             if (replacingSaleId) {
                 const response = await replacePosSale(replacingSaleId, {
                     requestId,
-                    ...buildDraftPayload(),
-                    ...buildCommitPayload(),
+                    ...buildDraftPayload(customerId),
+                    ...buildCommitPayload(customerId),
                     replacementReason: "Edited after bill change",
                 } satisfies ReplaceSaleJSON);
 
@@ -1826,8 +2002,8 @@ const BillingPage = ({
 
             if (activeDraftId) {
                 const response = isDeviceMode
-                    ? await commitPosSale(activeDraftId, buildCommitPayload())
-                    : await commitSale(organizationId, selectedStoreId, activeDraftId, buildCommitPayload());
+                    ? await commitPosSale(activeDraftId, buildCommitPayload(customerId))
+                    : await commitSale(organizationId, selectedStoreId, activeDraftId, buildCommitPayload(customerId));
 
                 if (response.status !== "success" || !response.data?.sale) {
                     throw new Error(response.message || "Failed to complete bill");
@@ -1839,8 +2015,8 @@ const BillingPage = ({
             if (isDeviceMode) {
                 const payload: CompleteSaleJSON = {
                     requestId,
-                    ...buildDraftPayload(),
-                    payments: buildCommitPayload().payments,
+                    ...buildDraftPayload(customerId),
+                    payments: buildCommitPayload(customerId).payments,
                 };
                 const response = await completePosSale(payload);
 
@@ -1851,7 +2027,7 @@ const BillingPage = ({
                 return response.data.sale;
             }
 
-            const draftPayload = buildDraftPayload();
+            const draftPayload = buildDraftPayload(customerId);
             const draftResponse = await createDraftSale(organizationId, selectedStoreId, draftPayload);
 
             if (draftResponse.status !== "success" || !draftResponse.data?.sale) {
@@ -1859,8 +2035,8 @@ const BillingPage = ({
             }
 
             const commitResponse = isDeviceMode
-                ? await commitPosSale(draftResponse.data.sale.id, buildCommitPayload())
-                : await commitSale(organizationId, selectedStoreId, draftResponse.data.sale.id, buildCommitPayload());
+                ? await commitPosSale(draftResponse.data.sale.id, buildCommitPayload(customerId))
+                : await commitSale(organizationId, selectedStoreId, draftResponse.data.sale.id, buildCommitPayload(customerId));
 
             if (commitResponse.status !== "success" || !commitResponse.data?.sale) {
                 throw new Error(commitResponse.message || "Failed to complete bill");
@@ -1952,6 +2128,8 @@ const BillingPage = ({
         setActiveDraftId(editSaleId ? null : sale.id);
         setSelectedCustomerId(sale.customerId ?? "");
         setSelectedCustomerFallback(null);
+        setCheckoutPhone(toCheckoutPhoneInput(sale.customer?.phone));
+        setCheckoutName(sale.customer?.name ?? "");
         setCustomerSearch(sale.customer?.phone || sale.customer?.name || "");
         setNotes(sale.notes ?? "");
         setServiceMode(sale.serviceMode ?? "dine_in");
@@ -2004,14 +2182,32 @@ const BillingPage = ({
             })),
         );
         setSettlementMode("full");
-        setSettlementEditorOpen(false);
+        setBillingAdjustmentsOpen(
+            Number(sale.orderDiscountAmount) > 0 ? true : false,
+            { persist: false },
+        );
         setSelectedPaymentMethod("cash");
         setPartialPaymentAmount("");
         setDiscountInput(Number(sale.orderDiscountAmount) > 0 ? String(sale.orderDiscountAmount) : "");
         setDiscountMode("amount");
-        setDiscountEditorOpen(Number(sale.orderDiscountAmount) > 0);
         setLeftPanelTab("products");
     }, [getComposerUnitDiscountFromSaleItem]);
+
+    useEffect(() => {
+        if (!placeOrderDialogOpen || !organizationId) {
+            return;
+        }
+
+        if (orderDiscountAmount > 0) {
+            setBillingAdjustmentsOpenState(true);
+            return;
+        }
+
+        const stored = readCheckoutBillingAdjustmentsOpen(organizationId);
+        if (stored !== null) {
+            setBillingAdjustmentsOpenState(stored);
+        }
+    }, [organizationId, orderDiscountAmount, placeOrderDialogOpen]);
 
     useEffect(() => {
         if (!pendingComposerHandoff) {
@@ -3385,7 +3581,8 @@ const BillingPage = ({
                                                     saveDraftMutation.isPending ||
                                                     completeSaleMutation.isPending ||
                                                     items.length === 0 ||
-                                                    hasInvalidDiscount
+                                                    hasInvalidDiscount ||
+                                                    hasInvalidCheckoutCustomer
                                                 }
                                                 onClick={() => saveDraftMutation.mutate()}
                                             >
@@ -3429,13 +3626,13 @@ const BillingPage = ({
                         setCustomerSearch("");
                         setNewCustomerName("");
                         setNewCustomerPhone("");
-                        setDiscountEditorOpen(false);
+                        setBillingAdjustmentsOpen(false, { persist: false });
                     }
                 }}
             >
                 <DialogContent
                     className={cn(
-                        "grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] rounded-2xl border-border/70 bg-background/95 p-2 shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:p-3",
+                        "grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] rounded-2xl border-border/70 bg-background/95 p-2 shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:p-3 lg:max-w-4xl lg:p-4 xl:max-w-5xl",
                         customerPickerOpen && customerCreateOpen ? "overflow-visible" : "overflow-hidden",
                     )}
                 >
@@ -3635,62 +3832,25 @@ const BillingPage = ({
                             )}
                         </div>
                     ) : (
-                    <div className="min-h-0 space-y-3 overflow-y-auto pt-1 pb-0 pr-1">
-                        <section>
-                            <div className="flex items-stretch gap-1.5">
-                                <button
-                                    type="button"
-                                    onClick={openCustomerPicker}
-                                    className={cn(
-                                        "flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-xl border px-3 text-left transition-colors",
-                                        selectedCustomer
-                                            ? "border-primary/25 bg-primary/5 hover:bg-primary/10"
-                                            : "border-border/60 bg-card/60 hover:bg-muted/50",
-                                    )}
-                                    aria-label="Select customer"
-                                >
-                                    <span
-                                        className={cn(
-                                            "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                                            selectedCustomer
-                                                ? "bg-primary/15 text-primary"
-                                                : "bg-muted text-muted-foreground",
-                                        )}
-                                    >
-                                        {selectedCustomer
-                                            ? (selectedCustomer.name.trim()[0] || "?").toUpperCase()
-                                            : <User className="size-4" />}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block truncate text-sm font-semibold text-foreground">
-                                            {selectedCustomer?.name || "Walk-in customer"}
-                                        </span>
-                                        <span className="block truncate text-[11px] text-muted-foreground">
-                                            {selectedCustomer?.phone ? selectedCustomer.phone : "Optional · tap to assign"}
-                                        </span>
-                                    </span>
-                                    <Search className="size-4 shrink-0 text-muted-foreground" />
-                                </button>
-                                {selectedCustomer ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => selectCustomer(null)}
-                                        className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                        aria-label="Use walk-in customer"
-                                    >
-                                        <X className="size-4" />
-                                    </button>
-                                ) : null}
-                            </div>
-                        </section>
+                    <div className="min-h-0 space-y-3 overflow-y-auto pt-1 pb-0 pr-1 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+                        <div className="lg:col-span-2">
+                          <CheckoutCustomerFields
+                            phone={checkoutPhone}
+                            name={checkoutName}
+                            resolution={checkoutResolution}
+                            onPhoneChange={handleCheckoutPhoneChange}
+                            onNameChange={setCheckoutName}
+                            onOpenPicker={openCustomerPicker}
+                          />
+                        </div>
 
-                        <section className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+                        <section className="min-w-0 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     className="flex min-w-0 flex-1 items-center justify-between text-left text-xs font-semibold text-foreground"
-                                    onClick={() => setDiscountEditorOpen((open) => !open)}
-                                    aria-expanded={discountEditorOpen}
+                                    onClick={() => setBillingAdjustmentsOpen((open) => !open)}
+                                    aria-expanded={billingAdjustmentsOpen}
                                 >
                                     <span>{orderDiscountAmount > 0 ? "Order discount" : "Add discount"}</span>
                                     <span
@@ -3702,7 +3862,7 @@ const BillingPage = ({
                                     >
                                         {orderDiscountAmount > 0
                                             ? `-${formatCurrency(orderDiscountAmount)}${orderDiscountPercentage ? ` (${orderDiscountPercentage})` : ""}`
-                                            : discountEditorOpen
+                                            : billingAdjustmentsOpen
                                               ? "Hide"
                                               : "Optional"}
                                     </span>
@@ -3719,9 +3879,29 @@ const BillingPage = ({
                                     </button>
                                 ) : null}
                             </div>
-                            {discountEditorOpen ? (
-                                <div className="mt-3 grid gap-2 border-t border-border/50 pt-3 sm:grid-cols-[1fr_auto]">
-                                    <div className="flex h-10 shrink-0 items-center rounded-xl border border-border/60 bg-background/50 p-0.5 sm:order-2">
+                            {billingAdjustmentsOpen ? (
+                                <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
+                                    <div className="flex gap-2">
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        max={discountMode === "percent" ? 100 : undefined}
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        className={cn(
+                                            "h-10 min-w-0 flex-1 rounded-xl bg-background/70 text-sm",
+                                            discountValidationMessage &&
+                                                "border-destructive focus-visible:ring-destructive",
+                                        )}
+                                        placeholder={discountMode === "percent" ? "0%" : "₹0.00"}
+                                        value={discountInput}
+                                        onChange={(event) => setDiscountInput(event.target.value)}
+                                        aria-label={
+                                            discountMode === "percent" ? "Discount percentage" : "Discount amount"
+                                        }
+                                        aria-invalid={hasInvalidDiscount}
+                                    />
+                                    <div className="flex h-10 shrink-0 items-center rounded-xl border border-border/60 bg-background/50 p-0.5">
                                         <button
                                             type="button"
                                             onClick={() => changeDiscountMode("amount")}
@@ -3751,26 +3931,8 @@ const BillingPage = ({
                                             %
                                         </button>
                                     </div>
-                                    <Input
-                                        type="number"
-                                        min="0"
-                                        max={discountMode === "percent" ? 100 : undefined}
-                                        step="0.01"
-                                        inputMode="decimal"
-                                        className={cn(
-                                            "h-10 rounded-xl bg-background/70 text-sm sm:order-1",
-                                            discountValidationMessage &&
-                                                "border-destructive focus-visible:ring-destructive",
-                                        )}
-                                        placeholder={discountMode === "percent" ? "0%" : "₹0.00"}
-                                        value={discountInput}
-                                        onChange={(event) => setDiscountInput(event.target.value)}
-                                        aria-label={
-                                            discountMode === "percent" ? "Discount percentage" : "Discount amount"
-                                        }
-                                        aria-invalid={hasInvalidDiscount}
-                                    />
-                                    <div className="sm:col-span-2">
+                                    </div>
+                                    <div>
                                         {discountPresetOptions.length > 0 ? (
                                             <div className="flex flex-wrap gap-1.5">
                                                 {discountPresetOptions.map((preset) => {
@@ -3806,7 +3968,7 @@ const BillingPage = ({
                                         )}
                                     </div>
                                     {discountValidationMessage ? (
-                                        <p className="text-xs text-destructive sm:col-span-2">
+                                        <p className="text-xs text-destructive">
                                             {discountValidationMessage}
                                         </p>
                                     ) : null}
@@ -3814,12 +3976,12 @@ const BillingPage = ({
                             ) : null}
                         </section>
 
-                        <section className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+                        <section className="min-w-0 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
                             <button
                                 type="button"
                                 className="flex w-full items-center justify-between text-left text-xs font-semibold text-foreground"
-                                onClick={() => setSettlementEditorOpen((open) => !open)}
-                                aria-expanded={settlementEditorOpen}
+                                onClick={() => setBillingAdjustmentsOpen((open) => !open)}
+                                aria-expanded={billingAdjustmentsOpen}
                             >
                                 <span>Settlement</span>
                                 <span className="text-muted-foreground">
@@ -3828,10 +3990,10 @@ const BillingPage = ({
                                         : settlementMode === "partial"
                                           ? "Balance remains"
                                           : "Pay later"}{" "}
-                                    {settlementEditorOpen ? "Hide" : "Edit"}
+                                    {billingAdjustmentsOpen ? "Hide" : "Edit"}
                                 </span>
                             </button>
-                            {settlementEditorOpen ? (
+                            {billingAdjustmentsOpen ? (
                                 <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
                                     <div className="grid grid-cols-3 gap-1">
                                         {settlementOptions.map((option) => (
@@ -3910,7 +4072,7 @@ const BillingPage = ({
                             ) : null}
                         </section>
 
-                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
+                        <section className="min-w-0 space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
                             <div className="flex items-center justify-between gap-3">
                                 <p className="text-sm font-semibold text-foreground">Order type</p>
                                 <p className="text-[11px] text-muted-foreground">Required</p>
@@ -3943,7 +4105,7 @@ const BillingPage = ({
                             </div>
                         </section>
 
-                        <section className="space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
+                        <section className="min-w-0 space-y-2 rounded-2xl border border-border/60 bg-card/60 p-3">
                             <div className="flex items-center justify-between gap-3">
                                 <p className="text-sm font-semibold text-foreground">Invoice options</p>
                                 <p className="text-[11px] text-muted-foreground">After placing order</p>
@@ -3982,7 +4144,7 @@ const BillingPage = ({
                             </div>
                         </section>
 
-                        <aside className="space-y-3">
+                        <aside className="space-y-3 lg:col-span-2">
                             <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/30 p-4">
                                 <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                                     <span>Order total</span>
@@ -4090,6 +4252,7 @@ const BillingPage = ({
                                     disabled={
                                         completeSaleMutation.isPending ||
                                         hasInvalidDiscount ||
+                                        hasInvalidCheckoutCustomer ||
                                         hasInvalidPartialPayment
                                     }
                                     onClick={handleCompleteSale}
