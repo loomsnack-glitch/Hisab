@@ -81,8 +81,28 @@ The recorded cancellation of a Purchase or Expense with a required reason. It ca
 _Avoid_: Delete, edit to zero, return to draft
 
 **Unit**:
-An Organization-wide measure used to express a Vendor Item's default purchase price and a future Purchase quantity. A Unit has a descriptive name and short label but no conversion rules in the first release. Units are either predefined read-only measures supplied by Hisab or Organization-defined measures. The Organization controls each Unit's active or inactive availability; inactive Units cannot be assigned to new or edited records but remain shown on existing records. Predefined Unit definitions remain read-only, while Organization-defined Units are retained rather than deleted. Normalized Unit names and labels are unique across both predefined and Organization-defined Units, even when inactive. Units will also be available to the Product catalogue.
+An Organization-wide measure used to express a Vendor Item's default purchase price and a future Purchase quantity, and a Catalog Product's Default Selling Quantity. A Unit has a descriptive name and short label but no conversion rules in the first release. Units are either predefined read-only measures supplied by Hisab or Organization-defined measures. The Organization controls each Unit's active or inactive availability; inactive Units cannot be assigned to new or edited records but remain shown on existing records. Predefined Unit definitions remain read-only, while Organization-defined Units are retained rather than deleted. Normalized Unit names and labels are unique across both predefined and Organization-defined Units, even when inactive.
 _Avoid_: Vendor-only setting, product-only unit, quantity
+
+**Catalog Product**:
+An Organization-owned item offered for sale through Ganatri POS. Each Catalog Product has exactly one Unit, a Default Selling Quantity in that Unit, and a selling price for exactly that default amount. Existing Catalog Products are treated as one piece at their existing selling price.
+_Avoid_: Vendor Item, inventory stock row, packaging variant when the underlying sellable item is unchanged
+
+**Default Selling Quantity**:
+The positive amount of a Catalog Product's Unit contained in one ordinary POS item. A normal POS tap adds one Default Selling Quantity at the Catalog Product's selling price; for example, a Cake configured as 250 g for ₹250 adds `Cake (250g)` at ₹250. It is distinct from the whole-number Sale Item quantity, which counts how many equal portions are sold.
+_Avoid_: Sale Item quantity, unit conversion, per-gram price
+
+**Proportional Product Price**:
+The calculated selling price for a custom amount of a Catalog Product: its configured selling price multiplied by the chosen amount divided by its Default Selling Quantity. POS does not ask the cashier to override this price; the bill records the resulting amount and price snapshot. If that calculation exceeds two decimal places, Hisab rounds the one sold portion to the nearest paise before multiplying it by the Sale Item quantity.
+_Avoid_: Cashier-entered custom price, independent packaging-variant price, rounded display-only calculation
+
+**Custom Selling Quantity**:
+A POS-selected positive amount, with at most two decimal places, of a plain single Catalog Product's Unit that differs from its Default Selling Quantity. Only a plain single Catalog Product explicitly configured to allow custom selling quantities offers this POS action; bundles and combos remain fixed portions. Choosing its unchanged Default Selling Quantity merges with the matching ordinary Sale Item; a different amount is a distinct Sale Item. V1 does not configure quantity steps.
+_Avoid_: A separate Catalog Product, free-form price override, Sale Item quantity
+
+**Sold Product Name**:
+The name shown for a Catalog Product on a Sale Item, bill, receipt, POS cart, and sale history. It consists of the base Catalog Product name followed by the quantity and Unit label in parentheses, such as `Cake (250g)` or `Water Bottle (1pc)`. The suffix identifies one sold portion and does not rename the Catalog Product.
+_Avoid_: Catalog Product name, packaging-variant Product name, display-only unit tooltip
 
 **Ganatri POS**:
 The device-authenticated Ganatri application used by a Store Device to perform its Store-Scoped POS Workflow. It is separate from Ganatri Admin and does not live under an Admin URL path.
@@ -476,19 +496,19 @@ The rule that links one Product to one Add-On and makes that Add-On selectable f
 _Avoid_: Per-product add-on price override, duplicated add-on catalog row, free-floating cap rule
 
 **Configured Sale Item**:
-A Sale Item is defined by its parent Product plus its selected Add-On quantities. Two selections of the same Product with different Add-On combinations are different Configured Sale Items and therefore appear as separate lines in a Draft Sale, the selected Add-On quantities are defined per one parent product unit, and one Configured Sale Item may include multiple different Add-Ons at the same time.
+A Sale Item is defined by its parent Product, its sold amount, and its selected Add-On quantities. Two selections of the same Product with different sold amounts or Add-On combinations are different Configured Sale Items and therefore appear as separate lines in a Draft Sale; the selected Add-On quantities are defined per one parent product unit, and one Configured Sale Item may include multiple different Add-Ons at the same time.
 _Avoid_: Plain product row, merged product regardless of add-ons, mutable cart option set
 
 **Sale Item Configuration Merge**:
-When the same Product is added again with the exact same Add-On selection, Billing increases the existing Configured Sale Item quantity instead of creating a duplicate line. Different Add-On selections stay on separate lines even when the parent Product is the same, and a customize action with no selected Add-Ons merges into the plain Product line.
+When the same Product is added again with the exact same sold amount and Add-On selection, Billing increases the existing Configured Sale Item quantity instead of creating a duplicate line. Different sold amounts or Add-On selections stay on separate lines even when the parent Product is the same, and a customize action with no selected Add-Ons merges into the plain Product line only when its sold amount also matches.
 _Avoid_: Always duplicate line, merge by product only, ignore add-on signature
 
 **Configured Sale Item Signature**:
-The identity rule for a Configured Sale Item is the parent Product plus its selected Add-On quantities, not the parent Product id alone. This signature is based on the normalized Add-On set and quantities rather than the order the operator clicked them, and it replaces the simpler billing v1 assumption that a Draft Sale can contain only one line per Product.
+The identity rule for a Configured Sale Item is the parent Product plus its sold amount and selected Add-On quantities, not the parent Product id alone. This signature is based on the normalized amount and Add-On set and quantities rather than the order the operator clicked them, and it replaces the simpler billing v1 assumption that a Draft Sale can contain only one line per Product.
 _Avoid_: Product-only uniqueness, duplicate-product rejection, parent-only line identity
 
 **Persisted Configuration Signature**:
-The normalized `Configured Sale Item Signature` is stored on the parent `sale_item` itself so billing can merge matching configurations, keep different configurations separate, and query configured lines efficiently without rebuilding identity from child Add-On rows on every write.
+The normalized `Configured Sale Item Signature` is stored on the parent `sale_item` itself so billing can merge matching configurations, keep different sold amounts or configurations separate, and query configured lines efficiently without rebuilding identity from child Add-On rows on every write.
 _Avoid_: Recomputed-only line identity, child-row-only merge key, product-only draft merge
 
 **Frozen Add-On Selection**:
