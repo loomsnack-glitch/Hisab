@@ -251,4 +251,83 @@ describe("Direct POS KOT workflow", () => {
     expect(split.generatedItems[0]?.quantity).toBe(1);
     expect(split.pendingItems[0]?.quantity).toBe(1);
   });
+
+  test("keeps Cake (250g) KOT quantities separate from a pending Cake (500g) line", () => {
+    const priorKot = kot("KOT-101", "11111111-1111-4111-8111-111111111111");
+    priorKot.items = [
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        organizationId: priorKot.organizationId,
+        storeId: priorKot.storeId,
+        kotId: priorKot.id,
+        productId: "99999999-9999-4999-8999-999999999999",
+        quantity: 1,
+        configurationSignature: "plain",
+        soldQuantity: 250,
+        unitId: "98989898-9898-4989-8989-989898989898",
+        unitLabelSnapshot: "g",
+        productNameSnapshot: "Cake (250g)",
+        unitPriceSnapshot: 250,
+        discountAmount: 0,
+        lineSubtotal: 250,
+        lineTotal: 250,
+        addOns: [],
+        bundleComponents: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    const saleItems = [
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        organizationId: priorKot.organizationId,
+        storeId: priorKot.storeId,
+        saleId: priorKot.saleId!,
+        productId: priorKot.items[0]!.productId,
+        quantity: 1,
+        configurationSignature: "plain",
+        soldQuantity: 250,
+        unitId: "98989898-9898-4989-8989-989898989898",
+        unitLabelSnapshot: "g",
+        productNameSnapshot: "Cake (250g)",
+        unitPriceSnapshot: 250,
+        discountAmount: 0,
+        lineSubtotal: 250,
+        lineTotal: 250,
+        addOns: [],
+        bundleComponents: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "44444444-4444-4444-8444-444444444444",
+        organizationId: priorKot.organizationId,
+        storeId: priorKot.storeId,
+        saleId: priorKot.saleId!,
+        productId: priorKot.items[0]!.productId,
+        quantity: 1,
+        configurationSignature: "plain",
+        soldQuantity: 500,
+        unitId: "98989898-9898-4989-8989-989898989898",
+        unitLabelSnapshot: "g",
+        productNameSnapshot: "Cake (500g)",
+        unitPriceSnapshot: 500,
+        discountAmount: 0,
+        lineSubtotal: 500,
+        lineTotal: 500,
+        addOns: [],
+        bundleComponents: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ] as SaleDetailDTO["items"];
+
+    const split = splitKotBackedDraftComposer(saleItems, [priorKot]);
+    expect(split.generatedItems).toHaveLength(1);
+    expect(split.generatedItems[0]?.name).toBe("Cake (250g)");
+    expect(split.generatedItems[0]?.quantity).toBe(1);
+    expect(split.pendingItems).toHaveLength(1);
+    expect(split.pendingItems[0]?.name).toBe("Cake (500g)");
+    expect(split.pendingItems[0]?.soldQuantity).toBe(500);
+  });
 });

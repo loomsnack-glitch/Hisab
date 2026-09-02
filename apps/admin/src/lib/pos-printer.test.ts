@@ -203,6 +203,41 @@ describe("80mm ESC/POS receipt payload", () => {
     expect(receipt).toContain("500");
   });
 
+  test("prints a custom Cake (500g) line with its add-on snapshot", () => {
+    const cakeSale = {
+      ...sale,
+      items: [
+        {
+          ...sale.items[0],
+          productNameSnapshot: "Cake (500g)",
+          quantity: 1,
+          unitPriceSnapshot: 500,
+          lineTotal: 500,
+          addOns: [
+            {
+              addOnNameSnapshot: "Extra Cheese",
+              totalQuantity: 1,
+              unitPriceSnapshot: 20,
+              lineTotal: 18,
+            },
+          ],
+        },
+      ],
+      subtotal: 520,
+      grandTotal: 518,
+      paidTotal: 518,
+    };
+    const output = new TextDecoder().decode(build80mmEscPosPayload(cakeSale));
+    const receipt = buildReceiptText(cakeSale, {}, { width: RECEIPT_WIDTH });
+
+    expect(output).toContain("Cake (500g)");
+    expect(output).toContain("Extra Cheese");
+    expect(receipt).toContain("Cake (500g)");
+    expect(receipt).toContain("+ Extra Cheese");
+    expect(receipt).toContain("500");
+    expect(receipt).toContain("18");
+  });
+
   test("wraps a long organization tagline to the printer width", () => {
     const output = new TextDecoder().decode(
       build80mmEscPosPayload(sale, {

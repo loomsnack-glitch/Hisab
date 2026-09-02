@@ -126,6 +126,38 @@ describe("public invoice page", () => {
     });
   });
 
+  it("keeps a custom Cake (500g) parent line and add-on snapshot in invoice output", () => {
+    const lines = flattenInvoiceLines({
+      ...sampleDocument.sale,
+      items: [{
+        productNameSnapshot: "Cake (500g)",
+        quantity: 1,
+        unitPriceSnapshot: 500,
+        lineTotal: 500,
+        addOns: [{
+          addOnNameSnapshot: "Extra Cheese",
+          totalQuantity: 1,
+          unitPriceSnapshot: 20,
+          unitDiscountSnapshot: 2,
+          lineTotal: 18,
+        }],
+        bundleComponents: [],
+      }],
+    } as never);
+
+    expect(lines[0]).toMatchObject({
+      name: "Cake (500g)",
+      quantity: "1",
+      rate: "₹500.00",
+      amount: "₹500.00",
+    });
+    expect(lines[1]).toMatchObject({
+      name: "+ Extra Cheese",
+      quantity: "1",
+      amount: "₹18.00",
+    });
+  });
+
   it("uses print mode without interactive actions for PDF preview", () => {
     const html = renderInvoiceHtml(sampleDocument, { mode: "print", viewport: "pdf" });
     expect(html).not.toContain("Download PDF");

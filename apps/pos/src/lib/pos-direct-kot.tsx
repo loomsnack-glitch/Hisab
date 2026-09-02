@@ -1,4 +1,4 @@
-import type { KotDTO, SaleDetailDTO, SaleItemDTO } from "@repo/types";
+import { formatSoldAmount, type KotDTO, type SaleDetailDTO, type SaleItemDTO } from "@repo/types";
 import {
   snapshotItemsToComposerItems,
   type KotComposerItem as TableKotComposerItem,
@@ -61,7 +61,7 @@ export const selectedStandaloneKotItemsToComposerItems = (
 };
 
 const composerConfigurationKey = (item: TableKotComposerItem) =>
-  `${item.productId}::${item.configurationSignature ?? ""}`;
+  `${item.productId}::${formatSoldAmount(item.soldQuantity)}::${item.configurationSignature ?? ""}`;
 
 const subtractComposerQuantities = (
   source: TableKotComposerItem[],

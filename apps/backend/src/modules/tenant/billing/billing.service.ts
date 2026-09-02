@@ -2125,6 +2125,7 @@ const prepareStandaloneKotGeneration = async (
   const selectionKey = (item: SaleItemInput) =>
     JSON.stringify({
       productId: item.productId,
+      soldQuantity: formatSoldAmount(Number(item.soldQuantity ?? 1)),
       addOns: [...(item.addOns ?? [])]
         .map((addOn) => ({ addOnId: addOn.addOnId, quantity: addOn.quantity }))
         .sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
@@ -2153,6 +2154,7 @@ const prepareStandaloneKotGeneration = async (
   ): SaleItemInput => ({
     productId: item.productId,
     quantity: Number(item.quantity),
+    soldQuantity: Number(item.soldQuantity ?? 1),
     addOns: (item.addOns ?? []).map((addOn) => ({
       addOnId: addOn.addOnId,
       quantity: Number(addOn.quantityPerParent),

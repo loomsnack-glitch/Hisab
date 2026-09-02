@@ -1706,6 +1706,132 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(updated.data?.sale.items[0]?.soldQuantity).toBe(500);
         expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(500);
     });
+
+    test("rejects a custom amount on a Combo and keeps a default Combo portion as 1pc", async () => {
+        getProductByIdSpy.mockImplementation(
+            async (_organizationId, requestedProductId) => {
+                if (requestedProductId === comboProductId) return comboProduct as never;
+                if (requestedProductId === comboOptionProductId)
+                    return comboOptionProduct as never;
+                return product as never;
+            },
+        );
+        getComboChoiceGroupsSpy.mockResolvedValue([comboChoiceGroup] as never);
+        getComboChoiceOptionsSpy.mockResolvedValue([comboChoiceOption] as never);
+
+        const rejected = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    {
+                        productId: comboProductId,
+                        quantity: 1,
+                        soldQuantity: 2,
+                        addOns: [],
+                        comboSelections: [
+                            {
+                                groupId: comboChoiceGroupId,
+                                optionProductId: comboOptionProductId,
+                                quantity: 1,
+                                addOns: [],
+                            },
+                        ],
+                    },
+                ],
+            },
+        );
+        expect(rejected.status).toBe("error");
+        expect(rejected.message).toContain("Custom Selling Quantity is not available");
+        expect(createSaleItem).not.toHaveBeenCalled();
+
+        const allowed = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    {
+                        productId: comboProductId,
+                        quantity: 1,
+                        soldQuantity: 1,
+                        addOns: [],
+                        comboSelections: [
+                            {
+                                groupId: comboChoiceGroupId,
+                                optionProductId: comboOptionProductId,
+                                quantity: 1,
+                                addOns: [],
+                            },
+                        ],
+                    },
+                ],
+            },
+        );
+        expect(allowed.status).toBe("success");
+        expect(createdSaleItems[0]?.productNameSnapshot).toBe("Burger Meal (1pc)");
+        expect(createdSaleItems[0]?.soldQuantity).toBe(1);
+        expect(createdSaleItems[0]?.unitPriceSnapshot).toBe(100);
+        expect(createdSaleItems[0]?.lineTotal).toBe(110);
+    });
+
+    test("a KOT batch cannot consume one sold amount using another amount of the same Product", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSaleForDevice(deviceSession, {
+            items: [
+                { productId, quantity: 1, soldQuantity: 250, addOns: [] },
+                { productId, quantity: 1, soldQuantity: 500, addOns: [] },
+            ],
+            generateKot: true,
+            kotBatchItems: [{ productId, quantity: 2, soldQuantity: 500, addOns: [] }],
+            kotRequestId: "30303030-3030-4303-8303-303030303030",
+            serviceMode: "dine_in",
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("unsent item delta");
+        expect(persistPreparedStandaloneKotBatch).not.toHaveBeenCalled();
+    });
+
+    test("a KOT batch for Cake (500g) leaves the 250 g line unsent", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSaleForDevice(deviceSession, {
+            items: [
+                { productId, quantity: 1, soldQuantity: 250, addOns: [] },
+                { productId, quantity: 1, soldQuantity: 500, addOns: [] },
+            ],
+            generateKot: true,
+            kotBatchItems: [{ productId, quantity: 1, soldQuantity: 500, addOns: [] }],
+            kotRequestId: "31313131-3131-4313-8313-313131313131",
+            serviceMode: "dine_in",
+        });
+
+        expect(response.status).toBe("success");
+        expect(persistPreparedStandaloneKotBatch).toHaveBeenCalledTimes(1);
+        expect(prepareStandaloneKotBatchForActor.mock.calls[0]?.[0]).toMatchObject({
+            batchItems: [{ productId, quantity: 1, soldQuantity: 500, addOns: [] }],
+        });
+        expect(createdSaleItems).toHaveLength(2);
+    });
 });
 
 describe("Configuration-aware Draft Sale behavior", () => {
@@ -1716,10 +1842,12 @@ describe("Configuration-aware Draft Sale behavior", () => {
         createdSales.length = 0;
         createdSaleItems.length = 0;
         createdSaleItemAddOns.length = 0;
+        createdPayments.length = 0;
 
         createSale.mockClear();
         createSaleItem.mockClear();
         createSaleItemAddOn.mockClear();
+        createPayment.mockClear();
         getSaleById.mockClear();
         getSaleItemsBySaleId.mockClear();
         deleteSaleItemsBySaleId.mockClear();
@@ -2583,5 +2711,305 @@ describe("Configuration-aware Draft Sale behavior", () => {
       organizationId,
       storeId,
     );
+    });
+
+    test("same Product, sold amount, and add-on configuration merge into one line", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    {
+                        productId,
+                        quantity: 1,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                    {
+                        productId,
+                        quantity: 1,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                ],
+            },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItems[0]?.productNameSnapshot).toBe("Cake (500g)");
+        expect(createdSaleItems[0]?.soldQuantity).toBe(500);
+        expect(createdSaleItems[0]?.quantity).toBe(2);
+        expect(createdSaleItems[0]?.unitPriceSnapshot).toBe(500);
+        expect(createdSaleItems[0]?.lineTotal).toBe(1000);
+        expect(createdSaleItemAddOns).toHaveLength(1);
+        expect(createdSaleItemAddOns[0]?.quantityPerParent).toBe(1);
+        expect(createdSaleItemAddOns[0]?.totalQuantity).toBe(2);
+        expect(createdSaleItemAddOns[0]?.lineTotal).toBe(36);
+        expect(response.data?.sale.grandTotal).toBe(1036);
+    });
+
+    test("different sold amounts stay distinct even when add-ons match", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    {
+                        productId,
+                        quantity: 1,
+                        soldQuantity: 250,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                    {
+                        productId,
+                        quantity: 1,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                ],
+            },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(2);
+        const byAmount = Object.fromEntries(
+            createdSaleItems.map((item) => [Number(item.soldQuantity), item]),
+        );
+        expect(byAmount[250]?.productNameSnapshot).toBe("Cake (250g)");
+        expect(byAmount[250]?.unitPriceSnapshot).toBe(250);
+        expect(byAmount[500]?.productNameSnapshot).toBe("Cake (500g)");
+        expect(byAmount[500]?.unitPriceSnapshot).toBe(500);
+        expect(createdSaleItemAddOns).toHaveLength(2);
+        expect(createdSaleItemAddOns.every((row) => row.lineTotal === 18)).toBe(true);
+        expect(response.data?.sale.grandTotal).toBe(786);
+    });
+
+    test("add-ons stay priced per sold portion while only the parent price scales with amount", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const created = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    {
+                        productId,
+                        quantity: 1,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                ],
+            },
+        );
+
+        expect(created.status).toBe("success");
+        expect(createdSaleItems[0]?.unitPriceSnapshot).toBe(500);
+        expect(createdSaleItems[0]?.lineTotal).toBe(500);
+        expect(createdSaleItemAddOns[0]?.unitPriceSnapshot).toBe(20);
+        expect(createdSaleItemAddOns[0]?.lineTotal).toBe(18);
+        expect(created.data?.sale.grandTotal).toBe(518);
+
+        const updated = await billingService.updateDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            created.data!.sale.id,
+            {
+                items: [
+                    {
+                        productId,
+                        quantity: 3,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                ],
+            },
+        );
+
+        expect(updated.status).toBe("success");
+        expect(updated.data?.sale.items[0]?.productNameSnapshot).toBe("Cake (500g)");
+        expect(updated.data?.sale.items[0]?.soldQuantity).toBe(500);
+        expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(500);
+        expect(updated.data?.sale.items[0]?.quantity).toBe(3);
+        expect(updated.data?.sale.items[0]?.lineTotal).toBe(1500);
+        expect(updated.data?.sale.items[0]?.addOns[0]?.quantityPerParent).toBe(1);
+        expect(updated.data?.sale.items[0]?.addOns[0]?.totalQuantity).toBe(3);
+        expect(updated.data?.sale.items[0]?.addOns[0]?.lineTotal).toBe(54);
+        expect(updated.data?.sale.grandTotal).toBe(1554);
+    });
+
+    test("draft restoration keeps a custom configured line after later catalogue changes", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const created = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    {
+                        productId,
+                        quantity: 1,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                ],
+            },
+        );
+        expect(created.status).toBe("success");
+
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Renamed Cake",
+            price: 400,
+            discount: 0,
+            defaultSellingQuantity: 200,
+            allowCustomSellingQuantity: false,
+            unitLabel: "g",
+        } as never);
+        getSelectableAttachmentSpy.mockResolvedValue(null);
+
+        const restored = await billingService.updateDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            created.data!.sale.id,
+            {
+                items: [
+                    {
+                        productId,
+                        quantity: 2,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                ],
+            },
+        );
+
+        expect(restored.status).toBe("success");
+        expect(restored.data?.sale.items[0]?.productNameSnapshot).toBe("Cake (500g)");
+        expect(restored.data?.sale.items[0]?.soldQuantity).toBe(500);
+        expect(restored.data?.sale.items[0]?.unitPriceSnapshot).toBe(500);
+        expect(restored.data?.sale.items[0]?.quantity).toBe(2);
+        expect(restored.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+        expect(restored.data?.sale.items[0]?.addOns[0]?.unitPriceSnapshot).toBe(20);
+        expect(restored.data?.sale.items[0]?.addOns[0]?.totalQuantity).toBe(2);
+        expect(restored.data?.sale.grandTotal).toBe(1036);
+    });
+
+    test("sale-level discount, payment, void, and history use the measured configured totals", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const discounted = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                requestId: "32323232-3232-4323-8323-323232323232",
+                items: [
+                    {
+                        productId,
+                        quantity: 1,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                ],
+                orderDiscountAmount: 18,
+                payments: [{ amount: 500, method: "cash" }],
+            },
+        );
+
+        expect(discounted.status).toBe("success");
+        expect(discounted.data?.sale.items[0]?.productNameSnapshot).toBe("Cake (500g)");
+        expect(discounted.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+        expect(discounted.data?.sale.subtotal).toBe(520);
+        expect(discounted.data?.sale.orderDiscountAmount).toBe(18);
+        expect(discounted.data?.sale.grandTotal).toBe(500);
+        expect(discounted.data?.sale.paymentStatus).toBe("paid");
+        expect(
+            createdPayments.find((payment) => payment.saleId === discounted.data?.sale.id)
+                ?.amount,
+        ).toBe(500);
+
+        const unpaid = await billingService.completeSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                requestId: "33333333-3333-4333-8333-333333333333",
+                items: [
+                    {
+                        productId,
+                        quantity: 1,
+                        soldQuantity: 500,
+                        addOns: [{ addOnId, quantity: 1 }],
+                    },
+                ],
+                payments: [],
+            },
+        );
+        expect(unpaid.status).toBe("success");
+        expect(unpaid.data?.sale.grandTotal).toBe(518);
+        expect(unpaid.data?.sale.paymentStatus).toBe("pending");
+
+        const voided = await billingService.voidSale(
+            userId,
+            organizationId,
+            storeId,
+            unpaid.data!.sale.id,
+            { reason: "Customer left" },
+        );
+        expect(voided.status).toBe("success");
+        expect(voided.data?.sale.status).toBe("voided");
+        expect(voided.data?.sale.grandTotal).toBe(518);
+        expect(voided.data?.sale.items[0]?.productNameSnapshot).toBe("Cake (500g)");
     });
 });

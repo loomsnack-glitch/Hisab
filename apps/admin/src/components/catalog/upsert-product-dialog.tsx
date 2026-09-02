@@ -50,7 +50,6 @@ import {
 import {
   Field,
   FieldContent,
-  FieldDescription,
   FieldError,
   FieldLabel,
 } from "@repo/ui/components/field";
@@ -748,7 +747,7 @@ const UpsertProductDialog = ({
                 name="defaultSellingQuantity"
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel required>Default selling quantity</FieldLabel>
+                    <FieldLabel required>Selling size</FieldLabel>
                     <FieldContent>
                       <Input
                         type="text"
@@ -775,18 +774,28 @@ const UpsertProductDialog = ({
               name="allowCustomSellingQuantity"
               render={({ field }) => (
                 <Field>
-                  <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/20 p-3 transition-colors hover:bg-muted/30"
+                    onClick={() => field.onChange(!field.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        field.onChange(!field.value);
+                      }
+                    }}
+                  >
                     <FieldContent>
-                      <FieldLabel>Custom selling quantity</FieldLabel>
-                      <FieldDescription>
-                        Let POS sell a measured amount different from the
-                        default selling quantity. Off by default.
-                      </FieldDescription>
+                      <FieldLabel className="cursor-pointer">
+                        Allow custom selling size
+                      </FieldLabel>
                     </FieldContent>
                     <Switch
                       checked={field.value}
                       onCheckedChange={field.onChange}
-                      aria-label="Enable Custom Selling Quantity"
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label="Allow custom selling size"
                     />
                   </div>
                 </Field>

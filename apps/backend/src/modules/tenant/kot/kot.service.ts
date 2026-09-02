@@ -6,6 +6,7 @@ import * as tableRepository from "@/modules/tenant/table-service/table-service.r
 import * as kotRepository from "./kot.repository";
 import {
     STATUS_CODES,
+    formatSoldAmount,
     type CheckoutTableOrderSVC,
     type CreateKotItemREPO,
     type CreateTableKotSVC,
@@ -33,7 +34,9 @@ const roundMoney = (value: number) =>
 const configurationKeyFor = (
   productId: string,
   configurationSignature: string,
-) => `${productId}::${configurationSignature}`;
+  soldQuantity?: number | string | null,
+) =>
+  `${productId}::${formatSoldAmount(Number(soldQuantity ?? 1))}::${configurationSignature}`;
 
 const bundleComponentKeyFor = (
     choiceGroupId: string | null | undefined,
@@ -47,6 +50,7 @@ const mergeKotItemsByConfiguration = (items: KotItemDTO[]): KotItemDTO[] => {
     const key = configurationKeyFor(
       item.productId,
       item.configurationSignature ?? "",
+      item.soldQuantity,
     );
         const existing = mergedByKey.get(key);
         if (!existing) {
