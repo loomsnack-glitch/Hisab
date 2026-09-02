@@ -617,7 +617,11 @@ describe("Atomic POS Payment Money Account Tracking", () => {
             organizationId,
             storeId,
             draft.data?.sale.id as string,
-            { payments: [{ amount: 90, method: "cash" }], generateKot: false } satisfies CommitSaleSVC,
+            {
+                requestId: "38383838-3838-4838-8838-383838383838",
+                payments: [{ amount: 90, method: "cash" }],
+                generateKot: false,
+            } satisfies CommitSaleSVC,
         );
 
         expect(committed.status).toBe("success");

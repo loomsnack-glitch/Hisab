@@ -1699,12 +1699,13 @@ const BillingPage = ({
         })),
     });
 
-    const buildCommitPayload = (): CommitSaleJSON => ({
+    const buildCommitPayload = (): Omit<CommitSaleJSON, "requestId"> => ({
         customerId: selectedCustomerId || null,
         orderDiscountAmount,
         notes: notes.trim() || null,
         serviceMode,
         items: buildDraftPayload().items,
+        generateKot: false,
         payments:
             settlementMode === "due"
                 ? []
@@ -1825,9 +1826,13 @@ const BillingPage = ({
             }
 
             if (activeDraftId) {
+                const commitPayload: CommitSaleJSON = {
+                    requestId,
+                    ...buildCommitPayload(),
+                };
                 const response = isDeviceMode
-                    ? await commitPosSale(activeDraftId, buildCommitPayload())
-                    : await commitSale(organizationId, selectedStoreId, activeDraftId, buildCommitPayload());
+                    ? await commitPosSale(activeDraftId, commitPayload)
+                    : await commitSale(organizationId, selectedStoreId, activeDraftId, commitPayload);
 
                 if (response.status !== "success" || !response.data?.sale) {
                     throw new Error(response.message || "Failed to complete bill");
@@ -1858,9 +1863,13 @@ const BillingPage = ({
                 throw new Error(draftResponse.message || "Failed to prepare bill");
             }
 
+            const commitPayload: CommitSaleJSON = {
+                requestId,
+                ...buildCommitPayload(),
+            };
             const commitResponse = isDeviceMode
-                ? await commitPosSale(draftResponse.data.sale.id, buildCommitPayload())
-                : await commitSale(organizationId, selectedStoreId, draftResponse.data.sale.id, buildCommitPayload());
+                ? await commitPosSale(draftResponse.data.sale.id, commitPayload)
+                : await commitSale(organizationId, selectedStoreId, draftResponse.data.sale.id, commitPayload);
 
             if (commitResponse.status !== "success" || !commitResponse.data?.sale) {
                 throw new Error(commitResponse.message || "Failed to complete bill");

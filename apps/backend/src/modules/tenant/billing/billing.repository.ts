@@ -414,6 +414,10 @@ export const updateSale = async (
             ),
             status = ${saleData.status},
             payment_status = ${saleData.paymentStatus},
+            completion_request_id = COALESCE(
+                ${saleData.completionRequestId ?? null},
+                completion_request_id
+            ),
             updated_by_device_id = ${saleData.updatedByDeviceId ?? null},
             subtotal = ${saleData.subtotal},
             discount_total = ${saleData.discountTotal},

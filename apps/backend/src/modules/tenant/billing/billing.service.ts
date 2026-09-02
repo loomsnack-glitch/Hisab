@@ -2724,6 +2724,25 @@ const commitSaleInStore = async (
   saleId: string,
   commitData: CommitSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const existingSaleIdForRequest =
+    await billingRepository.getSaleIdByCompletionRequestId(
+      organizationId,
+      storeId,
+      commitData.requestId,
+    );
+  if (existingSaleIdForRequest) {
+    if (existingSaleIdForRequest !== saleId) {
+      return {
+        status: "error",
+        message: "That completion request was already used for another Sale",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+
+    return getSaleDetailsInStore(organizationId, storeId, saleId);
+  }
+
   const existingSaleSnapshot = await buildSaleDetails(
     organizationId,
     storeId,
@@ -2870,6 +2889,35 @@ const commitSaleInStore = async (
       tx,
     );
     if (!draftLocked) {
+      const committedSaleId =
+        await billingRepository.getSaleIdByCompletionRequestId(
+          organizationId,
+          storeId,
+          commitData.requestId,
+        );
+      if (committedSaleId === saleId) {
+        return {
+          committed: false as const,
+          response: await getSaleDetailsInStore(
+            organizationId,
+            storeId,
+            saleId,
+          ),
+        };
+      }
+      if (committedSaleId) {
+        return {
+          committed: false as const,
+          response: {
+            status: "error" as const,
+            message:
+              "That completion request was already used for another Sale",
+            data: null,
+            code: STATUS_CODES.CONFLICT,
+          },
+        };
+      }
+
       return {
         committed: false as const,
         response: {
@@ -3007,6 +3055,7 @@ const commitSaleInStore = async (
         customerPhoneSnapshot: customerResult.customer?.phone ?? null,
         status: "completed",
         paymentStatus,
+        completionRequestId: commitData.requestId,
         updatedByDeviceId: actor.deviceId ?? null,
         subtotal: committedTotals.subtotal,
         discountTotal: committedTotals.discountTotal,
@@ -3089,6 +3138,25 @@ const commitSaleInStore = async (
     const trackingError = moneyAccountTrackingSetupResponse<SaleResponse>(error);
     if (trackingError) {
       return trackingError;
+    }
+    if (isUniqueViolation(error)) {
+      const committedSaleId =
+        await billingRepository.getSaleIdByCompletionRequestId(
+          organizationId,
+          storeId,
+          commitData.requestId,
+        );
+      if (committedSaleId === saleId) {
+        return getSaleDetailsInStore(organizationId, storeId, saleId);
+      }
+      if (committedSaleId) {
+        return {
+          status: "error",
+          message: "That completion request was already used for another Sale",
+          data: null,
+          code: STATUS_CODES.CONFLICT,
+        };
+      }
     }
     const recovered = await recoverStandaloneKotGenerationRace(
       error,

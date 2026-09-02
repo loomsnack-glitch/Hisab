@@ -17,6 +17,7 @@ import {
 describe("Configured sale billing contracts", () => {
     test("commit may carry the final draft items for atomic checkout", () => {
         const result = CommitSaleSchema.safeParse({
+            requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
             items: [
                 {
                     productId: "11111111-1111-4111-8111-111111111111",
@@ -31,6 +32,20 @@ describe("Configured sale billing contracts", () => {
             expect(result.data.items).toHaveLength(1);
             expect(result.data.items?.[0]?.quantity).toBe(2);
         }
+    });
+
+    test("requires a completion request id for Draft commit", () => {
+        const result = CommitSaleSchema.safeParse({
+            items: [
+                {
+                    productId: "11111111-1111-4111-8111-111111111111",
+                    quantity: 1,
+                },
+            ],
+            payments: [],
+        });
+
+        expect(result.success).toBe(false);
     });
 
     test("accepts an unassigned Due sale without adding an unpaid payment method", () => {

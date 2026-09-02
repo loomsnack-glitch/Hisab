@@ -455,6 +455,7 @@ export const CreatePaymentSchema = z.object({
 });
 
 export const CommitSaleSchema = z.object({
+  requestId: z.uuid("Invalid completion request id"),
   customerId: z
     .union([z.literal(""), z.uuid("Invalid customer id")])
     .nullable()

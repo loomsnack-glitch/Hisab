@@ -2165,13 +2165,16 @@ const BillingPage = ({
     ...buildKotGenerationFields(),
     });
 
-    const buildCommitPayload = (): CommitSaleJSON => ({
+    const buildCommitPayload = (): Omit<CommitSaleJSON, "requestId"> => {
+      const kotFields = buildKotGenerationFields();
+      return {
         customerId: selectedCustomerId || null,
         orderDiscountAmount,
         notes: notes.trim() || null,
         serviceMode,
         items: buildDraftPayload().items,
-    ...buildKotGenerationFields(),
+        ...kotFields,
+        generateKot: kotFields.generateKot,
         payments:
             settlementMode === "due"
                 ? []
@@ -2186,7 +2189,8 @@ const BillingPage = ({
                           notes: null,
                       },
                   ],
-    });
+      };
+    };
 
   const attachDraftKotRequestId = <
     T extends CreateDraftSaleJSON | UpdateDraftSaleJSON,
@@ -2380,8 +2384,11 @@ const BillingPage = ({
                 return response.data.sale;
             }
 
-            if (activeDraftId) {
-        const commitPayload = buildCommitPayload();
+      if (activeDraftId) {
+        const commitPayload: CommitSaleJSON = {
+          ...buildCommitPayload(),
+          requestId,
+        };
         if (commitPayload.generateKot && commitPayload.kotBatchItems?.length) {
           commitPayload.kotRequestId = requestId;
         }
@@ -2430,13 +2437,17 @@ const BillingPage = ({
                 throw new Error(draftResponse.message || "Failed to prepare bill");
             }
 
+            const commitPayload: CommitSaleJSON = {
+                requestId,
+                ...buildCommitPayload(),
+            };
             const commitResponse = isDeviceMode
-                ? await commitPosSale(draftResponse.data.sale.id, buildCommitPayload())
+                ? await commitPosSale(draftResponse.data.sale.id, commitPayload)
         : await commitSale(
             organizationId,
             selectedStoreId,
             draftResponse.data.sale.id,
-            buildCommitPayload(),
+            commitPayload,
           );
 
             if (commitResponse.status !== "success" || !commitResponse.data?.sale) {

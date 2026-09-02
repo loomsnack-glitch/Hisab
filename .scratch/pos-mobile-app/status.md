@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Planning in progress
+Status: Phase 0 completed with follow-ups
 
 Last updated: 2026-09-02
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md). No application implementation has started.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), and the Phase 0 audit is in [phase-0.md](./phase-0.md). No application implementation has started.
 
 ## Current scope
 
@@ -22,6 +22,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 ## Status meanings
 
 - `Completed`: planning or review work is finished.
+- `Completed with follow-up`: the planned audit is complete, but named implementation or human-validation items remain.
 - `Approved`: the product direction is accepted; implementation has not started.
 - `In progress`: the current planning or implementation work is active.
 - `Not started`: planned but not begun.
@@ -40,15 +41,15 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Localization | Approved | `i18next` + `react-i18next`; English, Gujarati, Hindi interface. |
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
-| API reuse strategy | Approved | Existing shared services/types first; contract audit pending. |
-| Implementation | Not started | Planning-only direction is active. |
+| API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
+| Mobile POS implementation | Not started | Feature implementation remains unstarted; only the scoped Draft commit idempotency follow-up was implemented. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
 
 | Phase | Goal | Subphases | Status | Exit condition |
 | --- | --- | --- | --- | --- |
-| 0. Planning and validation | Remove product, API, dependency, and device uncertainty. | 0.1–0.4 | In progress | Scope, API audit, dependency feasibility, and Android matrix are ready. |
+| 0. Planning and validation | Remove product, API, dependency, and device uncertainty. | 0.1–0.4 | Completed with follow-up | Scope and API/dependency findings are documented; exact physical devices and Draft-commit hardening remain follow-ups. |
 | 1. POS foundation | Establish the Android POS shell, session lifecycle, storage, localization, and UI system. | 1.1–1.8 | Not started | Store Device unlock reaches New Sale with Cart access. |
 | 2. Catalog and Product selection | Make Products searchable, scannable, configurable, and easy to add. | 2.1–2.5 | Not started | Product selection reliably adds the intended Product to Cart. |
 | 3. Cart and Draft Sale | Make Cart review and Draft Sale recovery safe and responsive. | 3.1–3.6 | Not started | Cart can be reviewed, saved, resumed, and discarded safely. |
@@ -65,9 +66,34 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
 | 0.1 Scope and decision baseline | Completed | Detailed spec records approved product behavior and exclusions. |
-| 0.2 Shared API contract audit | Not started | Verify existing auth, Catalog, Draft Sale, checkout, Payment, Bills, Customer, Report, Table, KOT, and WhatsApp invoice operations. |
-| 0.3 Native dependency feasibility | Not started | Validate MMKV encryption/key handling, i18next integration, and Android camera scanning approach. |
-| 0.4 Android verification matrix | Not started | Select emulator, modern phone, representative Store Device, and minimum Android test expectations. |
+| 0.2 Shared API contract audit | Completed | Existing coverage is sufficient; Draft commit now persists and replays a completion request ID. |
+| 0.3 Native dependency feasibility | Completed with follow-up | MMKV, i18next, Uniwind, and camera approach are compatible/plannable; native encryption and physical camera validation remain implementation gates. |
+| 0.4 Android verification matrix | Partially complete | Test categories and minimum checks are documented; exact physical Android and printer devices remain to be selected. |
+
+## Phase 0 findings and required fixes
+
+The detailed evidence is recorded in [phase-0.md](./phase-0.md). The key outcomes are:
+
+- Existing shared POS services and types cover Device authentication, Catalog, Customers, Draft Sales, Sales, Payments, Bills, Reports, restaurant operations, and focused WhatsApp invoice actions.
+- Direct new-Sale checkout already supports server replay by `requestId`.
+- Draft Sale commit now requires a completion request key, persists it on the completed Sale, replays the same Sale on retry, and rejects reuse for another Sale. Focused billing tests cover these behaviors.
+- The current mobile app still uses generic user authentication and `expo-secure-store`; Phase 1 must replace that with the approved POS Device Session boundary and encrypted MMKV storage.
+- `i18next`/`react-i18next`, mobile tests, and camera scanning are planned dependencies/workstreams that are not installed or validated yet.
+- The exact physical Android Store Device and Bluetooth printer remain pending selection. Printer hardware remains deferred to Phase 6.
+
+### Required fixes before later phases
+
+| Fix / decision | Target | Status |
+| --- | --- | --- |
+| POS-specific Device Session boot, unlock, expiry, and logout boundary | Phase 1 | Planned |
+| MMKV-only encrypted storage with Android Keystore-backed key strategy | Phase 1 | Planned |
+| `i18next` + `react-i18next` resources, fallback, and persistence | Phase 1 | Planned |
+| Focused mobile test harness and service-contract tests | Phase 1 | Planned |
+| Draft commit retry/idempotency behavior | Before Phase 4 | Implemented and focused-tested |
+| Camera dependency, permissions, and physical-device scan validation | Phase 2 | Planned |
+| Exact emulator, modern phone, and Store Device selection | Phase 0/8 | Pending input |
+
+Mobile POS feature implementation remains unstarted. The Draft commit idempotency follow-up changed the shared billing contract, backend persistence/replay path, and existing POS/Admin callers.
 
 ### Phase 1 — POS foundation
 
@@ -173,4 +199,4 @@ This file is the single status tracker for the POS mobile app effort. The detail
 
 ## Current next step
 
-Complete Phase 0 planning and technical validation, beginning with the shared API contract audit. This does not authorize application implementation; implementation begins only after the relevant slice is explicitly started and reviewed.
+Select the Android verification devices and review the Phase 1 implementation gates. Backend integration and real-database concurrency verification remain release checks. This does not authorize unrelated application implementation; implementation begins only after the relevant slice is explicitly started and reviewed.

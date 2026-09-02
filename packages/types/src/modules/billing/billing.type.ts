@@ -213,6 +213,7 @@ export type UpdateSaleREPO = Pick<
   | "discountTotal"
   | "grandTotal"
 > & {
+  completionRequestId?: string | null;
   updatedByDeviceId?: string | null;
   customerId?: string | null;
   serviceMode?: SaleServiceMode;

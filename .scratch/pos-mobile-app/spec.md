@@ -1126,6 +1126,19 @@ Goal: remove avoidable uncertainty before application work starts.
 
 Phase exit: approved scope, shared API audit, native dependency feasibility, and Android verification matrix are documented.
 
+The completed Phase 0 audit is recorded in [`phase-0.md`](./phase-0.md). It is the implementation reference for confirmed repository findings and named follow-ups. The scoped Draft commit idempotency follow-up has now been implemented; mobile POS feature implementation, native dependency installation, and printer selection remain separate work.
+
+#### Phase 0 findings that affect implementation
+
+- The existing shared service layer covers the approved Device authentication, Catalog, Customer, Draft Sale, Sale, Payment, Bills, Reports, Table, KOT, and focused WhatsApp invoice capabilities. Mobile screens should consume these services through a mobile-facing query/mutation boundary.
+- Direct new-Sale checkout already carries a server-persisted `requestId` and can replay a confirmed Sale after a retry.
+- Draft Sale commit now requires and persists a completion request key. A retry with the same Sale and request key replays the confirmed Sale; reusing the key for another Sale is rejected. Focused service tests cover replay and cross-Sale key reuse, while real-database concurrency remains a release gate.
+- The current mobile app still boots generic user authentication and stores the auth token and Device ID through `expo-secure-store`. Phase 1 must replace this with the approved POS Device Session boundary and encrypted MMKV storage; no SecureStore fallback is planned.
+- Uniwind is already configured and can be extended with the approved semantic POS tokens. `i18next`/`react-i18next`, mobile test infrastructure, and camera scanning dependencies are not currently installed and are Phase 1/2 work items.
+- The Android verification matrix is defined, but the exact physical Store Device, modern phone, emulator image, and later printer model still require selection. Bluetooth printer validation remains in Phase 6.
+
+Required Phase 1/2/4 follow-ups are tracked in [status.md](./status.md) and in the detailed [Phase 0 report](./phase-0.md). The Draft commit idempotency follow-up is implemented; only integration/release verification remains.
+
 #### 0.1 Scope and decision baseline
 
 - Keep this specification as the product baseline.

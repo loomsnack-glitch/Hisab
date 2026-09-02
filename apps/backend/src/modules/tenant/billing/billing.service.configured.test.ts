@@ -779,6 +779,7 @@ describe("Configured product billing with trusted snapshots", () => {
       deviceSession,
       saleId,
       {
+        requestId: "22222222-2222-4222-8222-222222222222",
         items: [{ productId, quantity: 1, addOns: [] }],
         payments: [],
         generateKot: true,
@@ -862,6 +863,7 @@ describe("Configured product billing with trusted snapshots", () => {
     expect(persistPreparedStandaloneKotBatch).toHaveBeenCalledTimes(1);
 
     const commitPayload = {
+      requestId: "23232323-2323-4232-8232-232323232323",
       items: [{ productId, quantity: 2, addOns: [] }],
       payments: [],
       generateKot: true,
@@ -883,6 +885,37 @@ describe("Configured product billing with trusted snapshots", () => {
     expect(committed.status).toBe("success");
     expect(retried.data?.sale.id).toBe(saleId);
     expect(persistPreparedStandaloneKotBatch).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not reuse a Draft completion request for another Sale", async () => {
+    const firstDraft = await billingService.createDraftSaleForDevice(
+      deviceSession,
+      { items: [{ productId, quantity: 1, addOns: [] }] },
+    );
+    const secondDraft = await billingService.createDraftSaleForDevice(
+      deviceSession,
+      { items: [{ productId, quantity: 1, addOns: [] }] },
+    );
+    const requestId = "42424242-4242-4242-8242-424242424242";
+
+    const firstCommit = await billingService.commitSaleForDevice(
+      deviceSession,
+      firstDraft.data!.sale.id,
+      { requestId, payments: [] },
+    );
+    const secondCommit = await billingService.commitSaleForDevice(
+      deviceSession,
+      secondDraft.data!.sale.id,
+      { requestId, payments: [] },
+    );
+
+    expect(firstCommit.status).toBe("success");
+    expect(secondCommit.status).toBe("error");
+    expect(secondCommit.code).toBe(409);
+    expect(secondDraft.data!.sale.id).not.toBe(firstCommit.data?.sale.id);
+    expect(createdSales.find((sale) => sale.id === secondDraft.data!.sale.id)?.status).toBe(
+      "draft",
+    );
   });
 
   test("enforces the Store KOT feature and generation request id on the server", async () => {
@@ -1000,6 +1033,7 @@ describe("Configured product billing with trusted snapshots", () => {
       storeId,
       dueDraft.data?.sale.id!,
       {
+            requestId: "31313131-3131-4313-8313-313131313131",
             payments: [],
       },
     );
@@ -1030,7 +1064,10 @@ describe("Configured product billing with trusted snapshots", () => {
             organizationId,
             storeId,
             partialDraft.data?.sale.id!,
-            { payments: [{ amount: 45, method: "cash" }] },
+            {
+                requestId: "32323232-3232-4323-8323-323232323232",
+                payments: [{ amount: 45, method: "cash" }],
+            },
         );
 
         expect(partialSale.status).toBe("success");
@@ -1133,6 +1170,7 @@ describe("Configured product billing with trusted snapshots", () => {
       storeId,
       saleId!,
       {
+            requestId: "33333333-3333-4333-8333-333333333333",
             payments: [],
       },
     );
@@ -1170,6 +1208,7 @@ describe("Configured product billing with trusted snapshots", () => {
       deviceSession,
       saleId!,
       {
+            requestId: "39393939-3939-4939-8939-393939393939",
             payments: [],
       },
     );
@@ -1196,6 +1235,7 @@ describe("Configured product billing with trusted snapshots", () => {
       deviceSession,
       saleId!,
       {
+            requestId: "40404040-4040-4040-8040-404040404040",
             items: [{ productId, quantity: 2, addOns: [] }],
             payments: [],
       },
@@ -1225,6 +1265,7 @@ describe("Configured product billing with trusted snapshots", () => {
       deviceSession,
       saleId!,
       {
+            requestId: "41414141-4141-4141-8141-414141414141",
             payments: [],
       },
     );
@@ -2046,6 +2087,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
       storeId,
       saleId,
       {
+            requestId: "34343434-3434-4434-8434-343434343434",
             payments: [
                 {
                     amount: grandTotal,
@@ -2083,6 +2125,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
       storeId,
       created.data?.sale.id!,
       {
+            requestId: "35353535-3535-4535-8535-353535353535",
             payments: [],
       },
     );
@@ -2112,6 +2155,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
       storeId,
       created.data?.sale.id!,
       {
+            requestId: "36363636-3636-4636-8636-363636363636",
             payments: [{ amount: grandTotal / 2, method: "cash" }],
       },
     );
@@ -2197,6 +2241,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
       storeId,
       saleId,
       {
+            requestId: "37373737-3737-4737-8737-373737373737",
             payments: [{ amount: grandTotal, method: "cash" }],
       },
     );
