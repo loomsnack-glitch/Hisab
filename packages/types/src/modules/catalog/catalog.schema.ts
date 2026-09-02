@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
+import { UnitStatusSchema } from "../units/units.schema";
 import {
   keepOutFitsStock,
   millimetreBoxesIntersect,
 } from "./label-template-geometry";
+import { isPositiveDefaultSellingQuantity } from "./sold-product-name";
 
 const nameSchema = z
   .string()
@@ -40,6 +42,19 @@ export const ProductAddOnAttachmentStatusSchema = z.enum([
 /** Remove only scanner transport terminators; Product Code text is otherwise opaque. */
 export const normalizeProductCodeInput = (value: string): string =>
   value.replace(/[\r\n]+$/g, "");
+
+export const defaultSellingQuantitySchema = z
+  .number({ error: "Default Selling Quantity is required" })
+  .gt(0, "Default Selling Quantity must be greater than 0")
+  .refine(isPositiveDefaultSellingQuantity, {
+    message: "Default Selling Quantity must have at most two decimal places",
+  });
+
+export const canAssignUnitToCatalogProduct = (input: {
+  unitStatus: z.infer<typeof UnitStatusSchema>;
+  currentlyAssigned?: boolean;
+}): boolean =>
+  input.currentlyAssigned === true || input.unitStatus === "active";
 
 /** Opaque Product Code text: no trim, no barcode-shape validation. Max length matches DB. */
 const productCodeValueSchema = z.preprocess(
@@ -216,6 +231,10 @@ const ProductDTOObjectSchema = z.object({
   productType: ProductTypeSchema,
   productCode: productCodeValueSchema.nullable(),
   productCodeKind: ProductCodeKindSchema.nullable(),
+  unitId: z.uuid("Invalid unit id"),
+  defaultSellingQuantity: defaultSellingQuantitySchema,
+  allowCustomSellingQuantity: z.boolean(),
+  unitLabel: z.string().min(1).max(32),
   status: ProductStatusSchema,
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
@@ -417,6 +436,8 @@ export const CreateProductObjectSchema = z.object({
   status: ProductStatusSchema.optional(),
   productCode: optionalProductCodeSchema,
   productCodeKind: ProductCodeKindSchema.nullable().optional(),
+  unitId: z.uuid("Invalid unit id").optional(),
+  defaultSellingQuantity: defaultSellingQuantitySchema.optional(),
 });
 
 export const CreateProductSchema = CreateProductObjectSchema.refine(
@@ -433,6 +454,8 @@ const UpdateProductObjectSchema = z.object({
   status: ProductStatusSchema.optional(),
   productCode: optionalProductCodeSchema,
   productCodeKind: ProductCodeKindSchema.nullable().optional(),
+  unitId: z.uuid("Invalid unit id").optional(),
+  defaultSellingQuantity: defaultSellingQuantitySchema.optional(),
 });
 
 export const UpdateProductSchema = UpdateProductObjectSchema.refine(
@@ -444,7 +467,9 @@ export const UpdateProductSchema = UpdateProductObjectSchema.refine(
     value.imagePath !== undefined ||
     value.status !== undefined ||
     value.productCode !== undefined ||
-    value.productCodeKind !== undefined,
+    value.productCodeKind !== undefined ||
+    value.unitId !== undefined ||
+    value.defaultSellingQuantity !== undefined,
   {
     message: "At least one field is required",
   },

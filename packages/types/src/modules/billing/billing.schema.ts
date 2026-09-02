@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dtoDateSchema, phoneSchema } from "../../common";
+import { defaultSellingQuantitySchema } from "../catalog/catalog.schema";
 
 export const SaleNumberResetPeriodSchema = z.enum([
   "never",
@@ -35,6 +36,12 @@ const nameSchema = z
   .trim()
   .min(1, "Name is required")
   .max(255, "Name must be at most 255 characters");
+
+const soldProductNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Name is required")
+  .max(320, "Name must be at most 320 characters");
 
 const optionalPhoneSchema = z
   .union([z.literal(""), phoneSchema])
@@ -218,7 +225,10 @@ export const SaleItemDTOSchema = z.object({
   productId: z.uuid("Invalid product id"),
   quantity: quantitySchema,
   configurationSignature: z.string(),
-  productNameSnapshot: nameSchema,
+  soldQuantity: defaultSellingQuantitySchema,
+  unitId: z.uuid("Invalid unit id"),
+  unitLabelSnapshot: z.string().min(1).max(32),
+  productNameSnapshot: soldProductNameSchema,
   unitPriceSnapshot: moneySchema,
   discountAmount: moneySchema,
   lineSubtotal: moneySchema,

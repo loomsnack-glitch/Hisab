@@ -7,6 +7,7 @@ import {
   generateInternalProductCode,
   getOrganizationCatalogSettings,
   getSignedURLForUpload,
+  getUnits,
   updateProduct,
   updateProductLabelProfile,
   uploadFileToSignedURL,
@@ -14,13 +15,18 @@ import {
 } from "@repo/services";
 import {
   CreateProductObjectSchema,
+  PIECE_PREDEFINED_UNIT_KEY,
   ProductStatusSchema,
+  canAssignUnitToCatalogProduct,
+  defaultSellingQuantitySchema,
+  formatSoldAmount,
   normalizeProductCodeInput,
   type CategoryDTO,
   type CreateProductJSON,
   type NutritionRow,
   type ProductResponseDTO,
   type ProductStatus,
+  type UnitDTO,
 } from "@repo/types";
 import { z } from "zod";
 import {
@@ -56,7 +62,7 @@ import {
 import { Plus, UploadCloud, Pencil, ImageOff, Package2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { catalogKeys, organizationKeys, unitKeys } from "@/lib/query-keys";
 import { safeRandomUUID } from "@/lib/uuid";
 
 type UpsertProductDialogProps = {
@@ -68,6 +74,7 @@ type UpsertProductDialogProps = {
 };
 
 const decimalAmountPattern = /^\d+(\.\d*)?$/;
+const twoDecimalAmountPattern = /^\d+(\.\d{0,2})?$/;
 
 const sanitizeDecimalInput = (value: string) => {
   const digitsAndDot = value.replace(/[^\d.]/g, "");
@@ -80,6 +87,20 @@ const sanitizeDecimalInput = (value: string) => {
   return (
     digitsAndDot.slice(0, dotIndex + 1) +
     digitsAndDot.slice(dotIndex + 1).replace(/\./g, "")
+  );
+};
+
+const sanitizeTwoDecimalInput = (value: string) => {
+  const digitsAndDot = value.replace(/[^\d.]/g, "");
+  const dotIndex = digitsAndDot.indexOf(".");
+
+  if (dotIndex === -1) {
+    return digitsAndDot;
+  }
+
+  return (
+    digitsAndDot.slice(0, dotIndex + 1) +
+    digitsAndDot.slice(dotIndex + 1).replace(/\./g, "").slice(0, 2)
   );
 };
 
@@ -99,6 +120,16 @@ const UpsertProductFormSchema = CreateProductObjectSchema.extend({
     .transform((value) => (value === "" ? 0 : Number(value)))
     .pipe(z.number().min(0, "Discount must be 0 or more"))
     .optional(),
+  unitId: z.uuid("Select a Unit"),
+  defaultSellingQuantity: z
+    .string()
+    .refine((value) => value.length > 0, "Default Selling Quantity is required")
+    .refine(
+      (value) => twoDecimalAmountPattern.test(value),
+      "Use at most two decimal places",
+    )
+    .transform((value) => Number(value))
+    .pipe(defaultSellingQuantitySchema),
   productCode: z
     .preprocess(
       (value) =>
@@ -118,7 +149,21 @@ const defaultValues: UpsertProductFormInput = {
   imagePath: "",
   status: "active",
   productCode: "",
+  unitId: "",
+  defaultSellingQuantity: "1",
 };
+
+const productFormValues = (product: ProductResponseDTO): UpsertProductFormInput => ({
+  categoryId: product.categoryId,
+  name: product.name,
+  price: String(product.price),
+  discount: product.discount ? String(product.discount) : "",
+  imagePath: product.imagePath ?? "",
+  status: product.status,
+  productCode: product.productCode ?? "",
+  unitId: product.unitId,
+  defaultSellingQuantity: formatSoldAmount(Number(product.defaultSellingQuantity)),
+});
 
 const statusSelectOptions = ProductStatusSchema.options.map((status) => ({
   label: status.charAt(0).toUpperCase() + status.slice(1),
@@ -201,6 +246,21 @@ const UpsertProductDialog = ({
     queryFn: () => getOrganizationCatalogSettings(organizationId),
     enabled: Boolean(organizationId),
   });
+  const unitsQuery = useQuery({
+    queryKey: unitKeys.list(organizationId),
+    queryFn: () => getUnits(organizationId),
+    enabled: Boolean(organizationId),
+  });
+  const units: UnitDTO[] = useMemo(
+    () =>
+      unitsQuery.data?.status === "success"
+        ? (unitsQuery.data.data?.units ?? [])
+        : [],
+    [unitsQuery.data],
+  );
+  const pieceUnitId =
+    units.find((unit) => unit.predefinedKey === PIECE_PREDEFINED_UNIT_KEY)?.id ??
+    "";
   const isEditMode = Boolean(product);
   const barcodeScanningEnabled =
     catalogSettingsQuery.data?.status === "success" &&
@@ -229,15 +289,7 @@ const UpsertProductDialog = ({
   useEffect(() => {
     if (open) {
       if (product) {
-        form.reset({
-          categoryId: product.categoryId,
-          name: product.name,
-          price: String(product.price),
-          discount: product.discount ? String(product.discount) : "",
-          imagePath: product.imagePath ?? "",
-          status: product.status,
-          productCode: product.productCode ?? "",
-        });
+        form.reset(productFormValues(product));
         setLabelProfileForm({
           ingredients: product.labelProfile?.ingredients ?? "",
           netWeight: product.labelProfile?.netWeight ?? "",
@@ -256,24 +308,18 @@ const UpsertProductDialog = ({
         form.reset({
           ...defaultValues,
           categoryId: resolveDefaultCategoryId(),
+          unitId: pieceUnitId,
         });
         setLabelProfileForm(emptyLabelProfileForm);
       }
     } else {
       form.reset(
         product
-          ? {
-              categoryId: product.categoryId,
-              name: product.name,
-              price: String(product.price),
-              discount: product.discount ? String(product.discount) : "",
-              imagePath: product.imagePath ?? "",
-              status: product.status,
-              productCode: product.productCode ?? "",
-            }
+          ? productFormValues(product)
           : {
               ...defaultValues,
               categoryId: resolveDefaultCategoryId(),
+              unitId: pieceUnitId,
             },
       );
       setSelectedFile(null);
@@ -286,7 +332,7 @@ const UpsertProductDialog = ({
       setReleasedInternalCode("");
       setLabelProfileForm(emptyLabelProfileForm);
     }
-  }, [categories, defaultCategoryId, form, open, product]);
+  }, [categories, defaultCategoryId, form, open, pieceUnitId, product]);
 
   const categoryOptions = useMemo(
     () =>
@@ -296,6 +342,37 @@ const UpsertProductDialog = ({
       })),
     [categories],
   );
+
+  const unitOptions = useMemo(
+    () =>
+      units
+        .filter((unit) =>
+          canAssignUnitToCatalogProduct({
+            unitStatus: unit.status,
+            currentlyAssigned: unit.id === product?.unitId,
+          }),
+        )
+        .map((unit) => ({
+          label:
+            unit.status === "inactive"
+              ? `${unit.name} (${unit.label}, inactive)`
+              : `${unit.name} (${unit.label})`,
+          value: unit.id,
+        })),
+    [product?.unitId, units],
+  );
+
+  const watchedUnitId = form.watch("unitId");
+  const watchedDefaultSellingQuantity = form.watch("defaultSellingQuantity");
+  const selectedUnitLabel = units.find((unit) => unit.id === watchedUnitId)
+    ?.label;
+  const sellingQuantityNumber = Number(watchedDefaultSellingQuantity);
+  const priceFieldLabel =
+    selectedUnitLabel &&
+    Number.isFinite(sellingQuantityNumber) &&
+    sellingQuantityNumber > 0
+      ? `Price for ${formatSoldAmount(sellingQuantityNumber)}${selectedUnitLabel} (₹)`
+      : "Price for this quantity (₹)";
 
   const selectedFilePreview = useMemo(() => {
     if (!selectedFile) {
@@ -432,6 +509,8 @@ const UpsertProductDialog = ({
         status: (data.status ?? "active") as ProductStatus,
         productCode: nextProductCode,
         productCodeKind: nextProductCodeKind,
+        unitId: data.unitId,
+        defaultSellingQuantity: Number(data.defaultSellingQuantity),
       };
 
       const response = product
@@ -632,10 +711,66 @@ const UpsertProductDialog = ({
             <div className="grid gap-4 sm:grid-cols-2">
               <Controller
                 control={form.control}
+                name="unitId"
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel required>Unit</FieldLabel>
+                    <FieldContent>
+                      <ReactSelect
+                        options={unitOptions}
+                        placeholder="Select an active Unit"
+                        value={
+                          unitOptions.find(
+                            (option) => option.value === field.value,
+                          ) ?? null
+                        }
+                        onChange={(option) =>
+                          field.onChange(option?.value ?? "")
+                        }
+                        classNames={{
+                          control: () => "!min-h-11 rounded-xl",
+                        }}
+                      />
+                      <FieldError errors={[fieldState.error]} />
+                    </FieldContent>
+                  </Field>
+                )}
+              />
+
+              <Controller
+                control={form.control}
+                name="defaultSellingQuantity"
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel required>Default selling quantity</FieldLabel>
+                    <FieldContent>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        className="h-11 rounded-xl"
+                        placeholder="1"
+                        value={field.value}
+                        onChange={(event) =>
+                          field.onChange(
+                            sanitizeTwoDecimalInput(event.target.value),
+                          )
+                        }
+                        onBlur={field.onBlur}
+                      />
+                      <FieldError errors={[fieldState.error]} />
+                    </FieldContent>
+                  </Field>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Controller
+                control={form.control}
                 name="price"
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel required>Price (₹)</FieldLabel>
+                    <FieldLabel required>{priceFieldLabel}</FieldLabel>
                     <FieldContent>
                       <Input
                         type="text"

@@ -1,3 +1,5 @@
+export const PIECE_PREDEFINED_UNIT_KEY = "piece";
+
 export type PredefinedUnitDefinition = {
   key: string;
   name: string;
@@ -5,7 +7,7 @@ export type PredefinedUnitDefinition = {
 };
 
 export const SEEDED_UNITS = [
-  { key: "piece", name: "piece", label: "pc" },
+  { key: PIECE_PREDEFINED_UNIT_KEY, name: "piece", label: "pc" },
   { key: "packet", name: "packet", label: "pkt" },
   { key: "box", name: "box", label: "box" },
   { key: "carton", name: "carton", label: "ctn" },

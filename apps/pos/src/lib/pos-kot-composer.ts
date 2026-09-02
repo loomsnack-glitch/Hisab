@@ -16,6 +16,8 @@ export type KotComposerItem = {
   unitPrice: number;
   unitDiscount: number;
   quantity: number;
+  soldQuantity: number;
+  unitLabel: string;
   configurationSignature?: string;
   addOns: KotComposerAddOn[];
   bundleComponents: Array<{
@@ -69,6 +71,8 @@ export const snapshotItemsToComposerItems = (
     unitPrice: Number(item.unitPriceSnapshot),
     unitDiscount: snapshotUnitDiscount(item),
     quantity: Number(item.quantity),
+    soldQuantity: Number(item.soldQuantity ?? 1),
+    unitLabel: item.unitLabelSnapshot ?? "pc",
     configurationSignature: item.configurationSignature ?? "",
     addOns: (item.addOns ?? []).map((addOn) => ({
       addOnId: addOn.addOnId,

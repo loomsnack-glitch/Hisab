@@ -53,6 +53,10 @@ const product = {
     productType: "single" as const,
     productCode: null,
     productCodeKind: null,
+    unitId: "98989898-9898-4989-8989-989898989898",
+    defaultSellingQuantity: 1,
+    allowCustomSellingQuantity: false,
+    unitLabel: "pc",
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -929,7 +933,7 @@ describe("Table Order KOT workflow", () => {
         expect(edited.data?.tableOrder?.kots[0]?.items).toHaveLength(1);
     expect(
       edited.data?.tableOrder?.kots[0]?.items[0]?.productNameSnapshot,
-    ).toBe("Misal Pav");
+    ).toBe("Misal Pav (1pc)");
 
     const checkedOut = await kotService.checkoutTableOrderForDevice(
       deviceSession,
@@ -942,7 +946,7 @@ describe("Table Order KOT workflow", () => {
 
         expect(checkedOut.data?.sale?.items).toHaveLength(1);
     expect(checkedOut.data?.sale?.items[0]?.productNameSnapshot).toBe(
-      "Misal Pav",
+      "Misal Pav (1pc)",
     );
         expect(checkedOut.data?.sale?.items[0]?.unitPriceSnapshot).toBe(80);
         expect(checkedOut.data?.sale?.grandTotal).toBe(80);
@@ -982,7 +986,7 @@ describe("Table Order KOT workflow", () => {
         expect(second.data?.tableOrder?.kots[1]?.kotNumber).toBe("KOT-002");
     expect(
       second.data?.tableOrder?.kots[1]?.items[0]?.productNameSnapshot,
-    ).toBe("Misal Pav");
+    ).toBe("Misal Pav (1pc)");
 
     getProductByIdSpy.mockResolvedValue({
       ...product,

@@ -363,6 +363,10 @@ describe("Product Code catalog contracts", () => {
       price: 100,
       discount: 0,
       productType: "single" as const,
+      unitId: "99999999-9999-4999-8999-999999999999",
+      defaultSellingQuantity: 1,
+      allowCustomSellingQuantity: false,
+      unitLabel: "pc",
       status: "active" as const,
       createdBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       createdAt: new Date("2026-08-10T12:00:00.000Z"),
@@ -401,6 +405,73 @@ describe("Product Code catalog contracts", () => {
         productCodeKind: null,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("Product selling unit catalog contracts", () => {
+  const categoryId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  const gramUnitId = "99999999-9999-4999-8999-999999999999";
+
+  test("create product accepts an active Unit and Default Selling Quantity", () => {
+    const result = CreateProductSchema.safeParse({
+      categoryId,
+      name: "Cake",
+      price: 250,
+      unitId: gramUnitId,
+      defaultSellingQuantity: 250,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.unitId).toBe(gramUnitId);
+      expect(result.data.defaultSellingQuantity).toBe(250);
+    }
+  });
+
+  test("create product still succeeds when Unit and Default Selling Quantity are omitted", () => {
+    const result = CreateProductSchema.safeParse({
+      categoryId,
+      name: "Water Bottle",
+      price: 20,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects a Default Selling Quantity that is not positive", () => {
+    expect(
+      CreateProductSchema.safeParse({
+        categoryId,
+        name: "Cake",
+        price: 250,
+        defaultSellingQuantity: 0,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateProductSchema.safeParse({
+        defaultSellingQuantity: -1,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects a Default Selling Quantity with more than two decimal places", () => {
+    expect(
+      CreateProductSchema.safeParse({
+        categoryId,
+        name: "Cake",
+        price: 250,
+        defaultSellingQuantity: 250.125,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("update product accepts Unit or Default Selling Quantity on their own", () => {
+    expect(
+      UpdateProductSchema.safeParse({ unitId: gramUnitId }).success,
+    ).toBe(true);
+    expect(
+      UpdateProductSchema.safeParse({ defaultSellingQuantity: 0.75 }).success,
+    ).toBe(true);
   });
 });
 

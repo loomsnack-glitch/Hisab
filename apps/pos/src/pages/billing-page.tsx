@@ -210,6 +210,7 @@ import {
     shouldCaptureDirectBarcodeScan,
     type ScanDiagnostic,
 } from "@/lib/barcode-scanning";
+import { composerFieldsFromDefaultPortion } from "@/lib/sold-product-portion";
 import { safeRandomUUID } from "@/lib/uuid";
 import {
   buildDirectKotGenerationFields,
@@ -265,6 +266,8 @@ type ComposerItem = {
     unitPrice: number;
     unitDiscount: number;
     quantity: number;
+    soldQuantity: number;
+    unitLabel: string;
     addOns: ComposerAddOn[];
     bundleComponents: ComposerBundleComponent[];
     comboSelections: ComposerComboSelection[];
@@ -333,9 +336,12 @@ const isSameComposerConfiguration = (
         productId: string;
         addOns: ComposerAddOn[];
         comboSelections?: ComposerComboSelection[];
+        soldQuantity?: number;
     },
 ) =>
     left.productId === right.productId &&
+    Number(left.soldQuantity ?? 1) ===
+        Number(right.soldQuantity ?? left.soldQuantity ?? 1) &&
   buildComposerConfigurationSignature(left.addOns) ===
     buildComposerConfigurationSignature(right.addOns) &&
     buildComboConfigurationSignature(left.comboSelections ?? []) ===
@@ -1857,10 +1863,12 @@ const BillingPage = ({
   const addPlainProductToBill = useCallback(
     (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
         setItems((current) => {
+            const portion = composerFieldsFromDefaultPortion(product);
             const existingPlainItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: product.id,
                     addOns: [],
+                    soldQuantity: portion.soldQuantity,
                 }),
             );
             if (existingPlainItem) {
@@ -1878,11 +1886,13 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: product.id,
-                    name: product.name,
+                    name: portion.name,
                     categoryId: product.categoryId,
-                    unitPrice: Number(product.price),
-                    unitDiscount: Number(product.discount ?? 0),
+                    unitPrice: portion.unitPrice,
+                    unitDiscount: portion.unitDiscount,
                     quantity: 1,
+                    soldQuantity: portion.soldQuantity,
+                    unitLabel: portion.unitLabel,
                     addOns: [],
                     bundleComponents: [],
                     comboSelections: [],
@@ -2159,10 +2169,12 @@ const BillingPage = ({
         }
 
         setItems((current) => {
+            const portion = composerFieldsFromDefaultPortion(product);
             const existingConfiguredItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: product.id,
                     addOns,
+                    soldQuantity: portion.soldQuantity,
                 }),
             );
 
@@ -2179,11 +2191,13 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: product.id,
-                    name: product.name,
+                    name: portion.name,
                     categoryId: product.categoryId,
-                    unitPrice: Number(product.price),
-                    unitDiscount: Number(product.discount ?? 0),
+                    unitPrice: portion.unitPrice,
+                    unitDiscount: portion.unitDiscount,
                     quantity: 1,
+                    soldQuantity: portion.soldQuantity,
+                    unitLabel: portion.unitLabel,
                     addOns,
                     bundleComponents: [],
                     comboSelections: [],
@@ -2197,11 +2211,13 @@ const BillingPage = ({
     selections: ComboDialogSelection[],
   ) => {
         setItems((current) => {
+            const portion = composerFieldsFromDefaultPortion(combo.product);
             const existing = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: combo.product.id,
                     addOns: [],
                     comboSelections: selections,
+                    soldQuantity: portion.soldQuantity,
                 }),
             );
             if (existing) {
@@ -2216,11 +2232,13 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: combo.product.id,
-                    name: combo.product.name,
+                    name: portion.name,
                     categoryId: combo.product.categoryId,
-                    unitPrice: Number(combo.product.price),
-                    unitDiscount: Number(combo.product.discount ?? 0),
+                    unitPrice: portion.unitPrice,
+                    unitDiscount: portion.unitDiscount,
                     quantity: 1,
+                    soldQuantity: portion.soldQuantity,
+                    unitLabel: portion.unitLabel,
                     addOns: [],
                     bundleComponents: [],
                     comboSelections: selections,
@@ -2951,6 +2969,8 @@ const BillingPage = ({
                 unitPrice: Number(item.unitPriceSnapshot),
                 unitDiscount: getComposerUnitDiscountFromSaleItem(item),
                 quantity: Number(item.quantity),
+                soldQuantity: Number(item.soldQuantity ?? 1),
+                unitLabel: item.unitLabelSnapshot ?? "pc",
                 addOns: (item.addOns ?? []).map((addOn) => ({
                     addOnId: addOn.addOnId,
                     name: addOn.addOnNameSnapshot,

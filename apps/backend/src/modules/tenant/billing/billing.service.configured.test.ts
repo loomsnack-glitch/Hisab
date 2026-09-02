@@ -61,6 +61,10 @@ const product = {
     productType: "single" as const,
     productCode: null,
     productCodeKind: null,
+    unitId: "98989898-9898-4989-8989-989898989898",
+    defaultSellingQuantity: 1,
+    allowCustomSellingQuantity: false,
+    unitLabel: "pc",
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -638,7 +642,7 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(createSaleItemAddOn).not.toHaveBeenCalled();
 
         const parent = createdSaleItems[0];
-        expect(parent?.productNameSnapshot).toBe("Burger");
+        expect(parent?.productNameSnapshot).toBe("Burger (1pc)");
         expect(parent?.unitPriceSnapshot).toBe(100);
         expect(parent?.discountAmount).toBe(20);
         expect(parent?.lineSubtotal).toBe(200);
@@ -1386,7 +1390,7 @@ describe("Configured product billing with trusted snapshots", () => {
 
         expect(response.status).toBe("success");
         const item = response.data?.sale.items[0];
-        expect(item?.productNameSnapshot).toBe("Burger");
+        expect(item?.productNameSnapshot).toBe("Burger (1pc)");
         expect(item?.addOns[0]).toMatchObject({
             addOnId,
             addOnNameSnapshot: "Extra Cheese",
@@ -1395,6 +1399,86 @@ describe("Configured product billing with trusted snapshots", () => {
             unitPriceSnapshot: 20,
             unitDiscountSnapshot: 2,
         });
+    });
+
+    test("ordinary default portion snapshots Sold Product Name, amount, Unit label, and one-portion rate", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            unitId: "97979797-9797-4979-8979-979797979797",
+            defaultSellingQuantity: 250,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [{ productId, quantity: 2, addOns: [] }],
+            },
+        );
+
+        expect(response.status).toBe("success");
+        const parent = createdSaleItems[0];
+        expect(parent?.productNameSnapshot).toBe("Cake (250g)");
+        expect(parent?.soldQuantity).toBe(250);
+        expect(parent?.unitLabelSnapshot).toBe("g");
+        expect(parent?.unitPriceSnapshot).toBe(250);
+        expect(parent?.quantity).toBe(2);
+        expect(parent?.lineTotal).toBe(500);
+        expect(response.data?.sale.items[0]?.productNameSnapshot).toBe("Cake (250g)");
+    });
+
+    test("preserves default portion snapshots after the Catalog Product Unit changes", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            unitId: "97979797-9797-4979-8979-979797979797",
+            defaultSellingQuantity: 250,
+            unitLabel: "g",
+        } as never);
+
+        const created = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [{ productId, quantity: 1, addOns: [] }],
+            },
+        );
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id!;
+
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Renamed Cake",
+            price: 400,
+            discount: 0,
+            unitId: "97979797-9797-4979-8979-979797979797",
+            defaultSellingQuantity: 500,
+            unitLabel: "g",
+        } as never);
+
+        const updated = await billingService.updateDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            saleId,
+            {
+                items: [{ productId, quantity: 1, addOns: [] }],
+            },
+        );
+
+        expect(updated.status).toBe("success");
+        expect(updated.data?.sale.items[0]?.productNameSnapshot).toBe("Cake (250g)");
+        expect(updated.data?.sale.items[0]?.soldQuantity).toBe(250);
+        expect(updated.data?.sale.items[0]?.unitLabelSnapshot).toBe("g");
+        expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(250);
     });
 });
 
@@ -1999,7 +2083,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
 
         expect(updated.status).toBe("success");
         expect(updated.data?.sale.items).toHaveLength(1);
-        expect(updated.data?.sale.items[0]?.productNameSnapshot).toBe("Burger");
+        expect(updated.data?.sale.items[0]?.productNameSnapshot).toBe("Burger (1pc)");
     expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(
       originalUnitPrice,
     );
@@ -2058,7 +2142,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
         expect(committed.status).toBe("success");
         expect(committed.data?.sale.status).toBe("completed");
         expect(committed.data?.sale.items[0]?.addOns).toHaveLength(1);
-        expect(committed.data?.sale.items[0]?.productNameSnapshot).toBe("Burger");
+        expect(committed.data?.sale.items[0]?.productNameSnapshot).toBe("Burger (1pc)");
     expect(committed.data?.sale.items[0]?.addOns[0]?.addOnNameSnapshot).toBe(
       "Extra Cheese",
     );
@@ -2203,7 +2287,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
 
         expect(committed.status).toBe("success");
         const parent = committed.data?.sale.items[0];
-        expect(parent?.productNameSnapshot).toBe("Burger");
+        expect(parent?.productNameSnapshot).toBe("Burger (1pc)");
         expect(
             parent?.addOns.map((addOn) => ({
                 name: addOn.addOnNameSnapshot,

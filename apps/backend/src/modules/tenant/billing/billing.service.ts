@@ -3,6 +3,7 @@ import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository"
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import {
   STATUS_CODES,
+  defaultCatalogSoldPortion,
   normalizePhoneNumber,
   type AddOnSalesRollupsListResponse,
   type BundleSalesRollupsListResponse,
@@ -357,6 +358,39 @@ type PreparedSaleLine = {
   bundleComponents: PreparedBundleComponent[];
 };
 
+const FALLBACK_PIECE_UNIT_ID = "00000000-0000-4000-8000-000000000001";
+
+const soldPortionFieldsFromProduct = (product: {
+  name: string;
+  unitId?: string | null;
+  defaultSellingQuantity?: number | string | null;
+  unitLabel?: string | null;
+}) => {
+  const portion = defaultCatalogSoldPortion(product);
+  return {
+    soldQuantity: portion.soldQuantity,
+    unitId: product.unitId ?? FALLBACK_PIECE_UNIT_ID,
+    unitLabelSnapshot: portion.unitLabel,
+    productNameSnapshot: portion.soldProductName,
+  };
+};
+
+const soldPortionFieldsFromSnapshot = (item: {
+  soldQuantity?: number | string | null;
+  unitId?: string | null;
+  unitLabelSnapshot?: string | null;
+  productNameSnapshot: string;
+}) => ({
+  soldQuantity: Number(item.soldQuantity ?? 1),
+  unitId: item.unitId ?? FALLBACK_PIECE_UNIT_ID,
+  unitLabelSnapshot:
+    typeof item.unitLabelSnapshot === "string" &&
+    item.unitLabelSnapshot.length > 0
+      ? item.unitLabelSnapshot
+      : "pc",
+  productNameSnapshot: item.productNameSnapshot,
+});
+
 const buildSalePricingTotals = (
   subtotal: number | string | null | undefined,
   lineDiscountTotal: number | string | null | undefined,
@@ -670,7 +704,7 @@ const rescaleFrozenConfiguredLine = (
       productId: frozen.productId,
       quantity: parentQuantity,
       configurationSignature: frozen.configurationSignature ?? "",
-      productNameSnapshot: frozen.productNameSnapshot,
+      ...soldPortionFieldsFromSnapshot(frozen),
       unitPriceSnapshot: unitPrice,
       discountAmount,
       lineSubtotal,
@@ -943,7 +977,7 @@ const prepareBundleSaleLine = async (
         productId: product.id,
         quantity: parentQuantity,
         configurationSignature: "",
-        productNameSnapshot: product.name,
+        ...soldPortionFieldsFromProduct(product),
         unitPriceSnapshot: unitPrice,
         discountAmount,
         lineSubtotal,
@@ -1193,7 +1227,7 @@ const prepareComboSaleLine = async (
         productId: product.id,
         quantity: parentQuantity,
         configurationSignature: buildComboConfigurationSignature(selections),
-        productNameSnapshot: product.name,
+        ...soldPortionFieldsFromProduct(product),
         unitPriceSnapshot: unitPrice,
         discountAmount,
         lineSubtotal,
@@ -1442,7 +1476,7 @@ const prepareSaleItems = async (
         productId: product.id,
         quantity: parentQuantity,
         configurationSignature,
-        productNameSnapshot: product.name,
+        ...soldPortionFieldsFromProduct(product),
         unitPriceSnapshot: unitPrice,
         discountAmount,
         lineSubtotal,
@@ -2383,7 +2417,7 @@ const updateSaleInStore = async (
                 productId: item.productId,
                 quantity: Number(item.quantity),
                 configurationSignature: item.configurationSignature ?? "",
-                productNameSnapshot: item.productNameSnapshot,
+                ...soldPortionFieldsFromSnapshot(item),
                 unitPriceSnapshot: Number(item.unitPriceSnapshot),
                 discountAmount: Number(item.discountAmount),
                 lineSubtotal: Number(item.lineSubtotal),

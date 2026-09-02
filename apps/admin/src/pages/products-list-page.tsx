@@ -19,6 +19,7 @@ import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-o
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { catalogSellingQuantityLabel } from "@/lib/sold-product-portion";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
 import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
 
@@ -404,13 +405,18 @@ const ProductsListPage = () => {
                                         </div>
 
                                         <div className="flex shrink-0 items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-border/30">
-                                            <ProductPriceDisplay
-                                                price={product.price}
-                                                discount={product.discount}
-                                                size="sm"
-                                                align="left"
-                                                singleTone="foreground"
-                                            />
+                                            <div className="flex flex-col items-start">
+                                                <ProductPriceDisplay
+                                                    price={product.price}
+                                                    discount={product.discount}
+                                                    size="sm"
+                                                    align="left"
+                                                    singleTone="foreground"
+                                                />
+                                                <span className="text-[10px] font-medium text-muted-foreground">
+                                                    {catalogSellingQuantityLabel(product)}
+                                                </span>
+                                            </div>
 
                                             <div className="flex items-center gap-0.5 border-l border-border/50 pl-2">
                                                 {product.productType === "single" ? (

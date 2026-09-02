@@ -107,6 +107,25 @@ describe("public invoice page", () => {
     expect(lines.some((line) => line.name.includes("Fries"))).toBe(true);
   });
 
+  it("renders the Sold Product Name amount suffix from the sale snapshot", () => {
+    const lines = flattenInvoiceLines({
+      ...sampleDocument.sale,
+      items: [{
+        productNameSnapshot: "Cake (250g)",
+        quantity: 2,
+        unitPriceSnapshot: 250,
+        lineTotal: 500,
+        addOns: [],
+        bundleComponents: [],
+      }],
+    } as never);
+
+    expect(lines[0]).toMatchObject({
+      name: "Cake (250g)",
+      quantity: "2",
+    });
+  });
+
   it("uses print mode without interactive actions for PDF preview", () => {
     const html = renderInvoiceHtml(sampleDocument, { mode: "print", viewport: "pdf" });
     expect(html).not.toContain("Download PDF");

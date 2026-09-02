@@ -104,6 +104,9 @@ export type CreateProductREPO = Pick<
     | "productType"
     | "productCode"
     | "productCodeKind"
+    | "unitId"
+    | "defaultSellingQuantity"
+    | "allowCustomSellingQuantity"
     | "status"
     | "createdBy"
 > & {
@@ -124,6 +127,9 @@ export type UpdateProductREPO = Pick<
     | "discount"
     | "productCode"
     | "productCodeKind"
+    | "unitId"
+    | "defaultSellingQuantity"
+    | "allowCustomSellingQuantity"
     | "status"
     | "updatedBy"
 > & {

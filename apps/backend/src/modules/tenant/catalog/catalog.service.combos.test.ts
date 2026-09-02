@@ -23,6 +23,7 @@ import {
     getProductById,
     organization,
     organizationId,
+    pieceUnitId,
     productNameExistsInCategory,
     userId,
 } from "./catalog.service.test-harness";
@@ -81,7 +82,12 @@ describe("Combo Product catalog service", () => {
 
         expect(response.status).toBe("success");
         expect(response.data?.product.productType).toBe("combo");
-        expect(createProductRepo).toHaveBeenCalledWith(expect.objectContaining({ productType: "combo" }), expect.anything());
+        expect(createProductRepo).toHaveBeenCalledWith(expect.objectContaining({
+            productType: "combo",
+            unitId: pieceUnitId,
+            defaultSellingQuantity: 1,
+            allowCustomSellingQuantity: false,
+        }), expect.anything());
         expect(createComboChoiceGroupRepo).toHaveBeenCalledWith(expect.objectContaining({ minSelections: 1, maxSelections: 2 }), expect.anything());
         expect(createComboChoiceOptionRepo).toHaveBeenCalledTimes(2);
     });

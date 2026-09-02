@@ -43,6 +43,23 @@ export const getUnitById = async (
     return result ? mapUnit(result) : null;
 };
 
+export const getUnitByPredefinedKey = async (
+    organizationId: string,
+    predefinedKey: string,
+    tx?: Bun.TransactionSQL,
+): Promise<UnitDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM units
+        WHERE organization_id = ${organizationId}
+          AND predefined_key = ${predefinedKey}
+        LIMIT 1
+    `;
+
+    return result ? mapUnit(result) : null;
+};
+
 export const unitTokenExistsInOrganization = async (
     organizationId: string,
     token: string,

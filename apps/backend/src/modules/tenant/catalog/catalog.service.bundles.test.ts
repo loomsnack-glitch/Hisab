@@ -40,6 +40,7 @@ import {
     organization,
     organizationId,
     otherBundleId,
+    pieceUnitId,
     productNameExistsInCategory,
     sauceAddOnId,
     sauceAttachment,
@@ -168,6 +169,9 @@ describe("Bundle Product catalog service", () => {
                 productType: "bundle",
                 name: "Burger Combo",
                 price: 99,
+                unitId: pieceUnitId,
+                defaultSellingQuantity: 1,
+                allowCustomSellingQuantity: false,
             }),
             expect.anything(),
         );
@@ -366,6 +370,9 @@ describe("Bundle Product catalog service", () => {
             expect.objectContaining({
                 id: bundleId,
                 status: "inactive",
+                unitId: pieceUnitId,
+                defaultSellingQuantity: 1,
+                allowCustomSellingQuantity: false,
             }),
             expect.anything(),
         );

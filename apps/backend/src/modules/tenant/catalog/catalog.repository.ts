@@ -33,6 +33,21 @@ import { SEEDED_LABEL_TEMPLATES } from "@repo/types";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 
+const mapProduct = (row: Record<string, unknown>): ProductDTO => {
+    const mapped = mapRow<ProductDTO>(row);
+    return {
+        ...mapped,
+        price: Number(mapped.price),
+        discount: Number(mapped.discount),
+        defaultSellingQuantity: Number(mapped.defaultSellingQuantity),
+        allowCustomSellingQuantity: Boolean(mapped.allowCustomSellingQuantity),
+        unitLabel:
+            typeof mapped.unitLabel === "string" && mapped.unitLabel.length > 0
+                ? mapped.unitLabel
+                : "",
+    };
+};
+
 const mapBundleComponent = (row: Record<string, unknown>): BundleProductComponentDTO => {
     const mapped = mapRow<BundleProductComponentDTO>(row);
     return {
@@ -228,13 +243,16 @@ export const createProduct = async (
         RETURNING *
     `;
 
-    return result ? snakeToCamel(result) : null;
+    return result ? mapProduct(result) : null;
 };
 
 export const getProductsByOrganizationId = async (organizationId: string): Promise<ProductDTO[]> => {
     const results = await pg`
-        SELECT p.*
+        SELECT p.*, u.label AS unit_label
         FROM products p
+        INNER JOIN units u
+            ON u.id = p.unit_id
+           AND u.organization_id = p.organization_id
         INNER JOIN categories c
             ON c.id = p.category_id
            AND c.organization_id = p.organization_id
@@ -242,7 +260,7 @@ export const getProductsByOrganizationId = async (organizationId: string): Promi
         ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
+    return results.map((result: Record<string, unknown>) => mapProduct(result));
 };
 
 export const getActiveProductAddOnCountsByOrganizationId = async (
@@ -274,18 +292,24 @@ export const getProductsByIds = async (organizationId: string, productIds: strin
     if (productIds.length === 0) return [];
 
     const results = await pg`
-        SELECT *
-        FROM products
-        WHERE organization_id = ${organizationId}
-          AND id IN ${pg(productIds)}
+        SELECT p.*, u.label AS unit_label
+        FROM products p
+        INNER JOIN units u
+            ON u.id = p.unit_id
+           AND u.organization_id = p.organization_id
+        WHERE p.organization_id = ${organizationId}
+          AND p.id IN ${pg(productIds)}
     `;
-    return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
+    return results.map((result: Record<string, unknown>) => mapProduct(result));
 };
 
 export const getActiveProductsByOrganizationId = async (organizationId: string): Promise<ProductDTO[]> => {
     const results = await pg`
-        SELECT p.*
+        SELECT p.*, u.label AS unit_label
         FROM products p
+        INNER JOIN units u
+            ON u.id = p.unit_id
+           AND u.organization_id = p.organization_id
         INNER JOIN categories c
             ON c.id = p.category_id
            AND c.organization_id = p.organization_id
@@ -294,30 +318,36 @@ export const getActiveProductsByOrganizationId = async (organizationId: string):
         ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
+    return results.map((result: Record<string, unknown>) => mapProduct(result));
 };
 
 export const getProductsByCategoryId = async (organizationId: string, categoryId: string): Promise<ProductDTO[]> => {
     const results = await pg`
-        SELECT *
-        FROM products
-        WHERE organization_id = ${organizationId}
-          AND category_id = ${categoryId}
-        ORDER BY sort_order ASC, created_at ASC, id ASC
+        SELECT p.*, u.label AS unit_label
+        FROM products p
+        INNER JOIN units u
+            ON u.id = p.unit_id
+           AND u.organization_id = p.organization_id
+        WHERE p.organization_id = ${organizationId}
+          AND p.category_id = ${categoryId}
+        ORDER BY p.sort_order ASC, p.created_at ASC, p.id ASC
     `;
 
-    return results.map((result: Record<string, unknown>) => mapRow<ProductDTO>(result));
+    return results.map((result: Record<string, unknown>) => mapProduct(result));
 };
 
 export const getProductById = async (organizationId: string, productId: string): Promise<ProductDTO | null> => {
     const [result] = await pg`
-        SELECT *
-        FROM products
-        WHERE id = ${productId}
-          AND organization_id = ${organizationId}
+        SELECT p.*, u.label AS unit_label
+        FROM products p
+        INNER JOIN units u
+            ON u.id = p.unit_id
+           AND u.organization_id = p.organization_id
+        WHERE p.id = ${productId}
+          AND p.organization_id = ${organizationId}
     `;
 
-    return result ? snakeToCamel(result) : null;
+    return result ? mapProduct(result) : null;
 };
 
 export const getNextProductSortOrder = async (
@@ -383,22 +413,28 @@ export const getProductByCode = async (
     const db = tx || pg;
     const [result] = excludeId
         ? await db`
-            SELECT *
-            FROM products
-            WHERE organization_id = ${organizationId}
-              AND product_code = ${productCode}
-              AND id <> ${excludeId}
+            SELECT p.*, u.label AS unit_label
+            FROM products p
+            INNER JOIN units u
+                ON u.id = p.unit_id
+               AND u.organization_id = p.organization_id
+            WHERE p.organization_id = ${organizationId}
+              AND p.product_code = ${productCode}
+              AND p.id <> ${excludeId}
             LIMIT 1
         `
         : await db`
-            SELECT *
-            FROM products
-            WHERE organization_id = ${organizationId}
-              AND product_code = ${productCode}
+            SELECT p.*, u.label AS unit_label
+            FROM products p
+            INNER JOIN units u
+                ON u.id = p.unit_id
+               AND u.organization_id = p.organization_id
+            WHERE p.organization_id = ${organizationId}
+              AND p.product_code = ${productCode}
             LIMIT 1
         `;
 
-    return result ? snakeToCamel(result) : null;
+    return result ? mapProduct(result) : null;
 };
 
 export const allocateNextInternalProductCodeSequence = async (
@@ -481,7 +517,7 @@ export const assignInternalProductCodeToUncodedProduct = async (
         RETURNING *
     `;
 
-    return result ? snakeToCamel(result) : null;
+    return result ? mapProduct(result) : null;
 };
 
 export const productNameExistsInCategory = async (
@@ -527,6 +563,9 @@ export const updateProduct = async (
             image_path = ${productData.imagePath ?? null},
             product_code = ${productData.productCode},
             product_code_kind = ${productData.productCodeKind},
+            unit_id = ${productData.unitId},
+            default_selling_quantity = ${productData.defaultSellingQuantity},
+            allow_custom_selling_quantity = ${productData.allowCustomSellingQuantity},
             status = ${productData.status},
             updated_by = ${productData.updatedBy},
             updated_at = NOW()
@@ -535,7 +574,7 @@ export const updateProduct = async (
         RETURNING *
     `;
 
-    return result ? snakeToCamel(result) : null;
+    return result ? mapProduct(result) : null;
 };
 
 export const deleteProduct = async (
@@ -551,7 +590,7 @@ export const deleteProduct = async (
         RETURNING *
     `;
 
-    return result ? snakeToCamel(result) : null;
+    return result ? mapProduct(result) : null;
 };
 
 export const createAddOn = async (addOnData: CreateAddOnREPO, tx?: Bun.TransactionSQL): Promise<AddOnDTO | null> => {
