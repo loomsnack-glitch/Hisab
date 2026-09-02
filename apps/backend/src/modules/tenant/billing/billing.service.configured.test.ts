@@ -1480,6 +1480,232 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(updated.data?.sale.items[0]?.unitLabelSnapshot).toBe("g");
         expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(250);
     });
+
+    test("custom 500 g of a Cake configured as 250 g for ₹250 saves Cake (500g) at ₹500", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            unitId: "97979797-9797-4979-8979-979797979797",
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [{ productId, quantity: 1, soldQuantity: 500, addOns: [] }],
+            },
+        );
+
+        expect(response.status).toBe("success");
+        const parent = createdSaleItems[0];
+        expect(parent?.productNameSnapshot).toBe("Cake (500g)");
+        expect(parent?.soldQuantity).toBe(500);
+        expect(parent?.unitLabelSnapshot).toBe("g");
+        expect(parent?.unitPriceSnapshot).toBe(500);
+        expect(parent?.quantity).toBe(1);
+        expect(parent?.lineTotal).toBe(500);
+    });
+
+    test("choosing the unchanged default amount merges with the ordinary default-portion Sale Item", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            unitId: "97979797-9797-4979-8979-979797979797",
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    { productId, quantity: 1, soldQuantity: 250, addOns: [] },
+                    { productId, quantity: 1, soldQuantity: 250, addOns: [] },
+                ],
+            },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(1);
+        expect(createdSaleItems[0]?.productNameSnapshot).toBe("Cake (250g)");
+        expect(createdSaleItems[0]?.soldQuantity).toBe(250);
+        expect(createdSaleItems[0]?.quantity).toBe(2);
+        expect(createdSaleItems[0]?.unitPriceSnapshot).toBe(250);
+        expect(createdSaleItems[0]?.lineTotal).toBe(500);
+    });
+
+    test("different sold amounts of the same Product stay on separate Sale Items", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            unitId: "97979797-9797-4979-8979-979797979797",
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    { productId, quantity: 1, soldQuantity: 250, addOns: [] },
+                    { productId, quantity: 1, soldQuantity: 500, addOns: [] },
+                    { productId, quantity: 1, soldQuantity: 500, addOns: [] },
+                ],
+            },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems).toHaveLength(2);
+        const byAmount = Object.fromEntries(
+            createdSaleItems.map((item) => [Number(item.soldQuantity), item]),
+        );
+        expect(byAmount[250]?.productNameSnapshot).toBe("Cake (250g)");
+        expect(byAmount[250]?.quantity).toBe(1);
+        expect(byAmount[250]?.unitPriceSnapshot).toBe(250);
+        expect(byAmount[500]?.productNameSnapshot).toBe("Cake (500g)");
+        expect(byAmount[500]?.quantity).toBe(2);
+        expect(byAmount[500]?.unitPriceSnapshot).toBe(500);
+        expect(byAmount[500]?.lineTotal).toBe(1000);
+    });
+
+    test("rounds a custom one-portion rate to the nearest paise before multiplying quantity", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 10,
+            discount: 0,
+            defaultSellingQuantity: 3,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [{ productId, quantity: 2, soldQuantity: 1, addOns: [] }],
+            },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems[0]?.unitPriceSnapshot).toBe(3.33);
+        expect(createdSaleItems[0]?.lineSubtotal).toBe(6.66);
+        expect(createdSaleItems[0]?.lineTotal).toBe(6.66);
+    });
+
+    test("rejects an invalid custom amount before writing a Sale Item", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [{ productId, quantity: 1, soldQuantity: 0, addOns: [] }],
+            },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(createSaleItem).not.toHaveBeenCalled();
+    });
+
+    test("rejects a custom amount when Custom Selling Quantity is disabled", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: false,
+            unitLabel: "g",
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [{ productId, quantity: 1, soldQuantity: 500, addOns: [] }],
+            },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.message).toContain("Custom Selling Quantity is not available");
+        expect(createSaleItem).not.toHaveBeenCalled();
+    });
+
+    test("preserves a custom portion snapshot after the Catalog Product changes", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            unitId: "97979797-9797-4979-8979-979797979797",
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const created = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [{ productId, quantity: 1, soldQuantity: 500, addOns: [] }],
+            },
+        );
+        expect(created.status).toBe("success");
+        const saleId = created.data?.sale.id!;
+
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Renamed Cake",
+            price: 400,
+            discount: 0,
+            defaultSellingQuantity: 200,
+            allowCustomSellingQuantity: false,
+            unitLabel: "g",
+        } as never);
+
+        const updated = await billingService.updateDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            saleId,
+            {
+                items: [{ productId, quantity: 1, soldQuantity: 500, addOns: [] }],
+            },
+        );
+
+        expect(updated.status).toBe("success");
+        expect(updated.data?.sale.items[0]?.productNameSnapshot).toBe("Cake (500g)");
+        expect(updated.data?.sale.items[0]?.soldQuantity).toBe(500);
+        expect(updated.data?.sale.items[0]?.unitPriceSnapshot).toBe(500);
+    });
 });
 
 describe("Configuration-aware Draft Sale behavior", () => {

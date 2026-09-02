@@ -106,6 +106,26 @@ describe("Default Product selling units", () => {
         expect(response.data?.product.defaultSellingQuantity).toBe(250);
     });
 
+    test("create product can enable Custom Selling Quantity for an eligible single Product", async () => {
+        const response = await catalogService.createProduct(userId, organizationId, {
+            categoryId,
+            name: "Cake",
+            price: 250,
+            unitId: gramUnitId,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+        });
+
+        expect(response.status).toBe("success");
+        expect(createProductRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                name: "Cake",
+                allowCustomSellingQuantity: true,
+            }),
+        );
+        expect(response.data?.product.allowCustomSellingQuantity).toBe(true);
+    });
+
     test("create product rejects a Unit from another Organization", async () => {
         getUnitById.mockResolvedValue(null);
 
@@ -160,6 +180,44 @@ describe("Default Product selling units", () => {
         );
         expect(response.data?.product.name).toBe("Burger");
         expect(response.data?.product.unitLabel).toBe("g");
+    });
+
+    test("update product can enable or disable Custom Selling Quantity without renaming the Product", async () => {
+        const enabled = await catalogService.updateProduct(
+            userId,
+            organizationId,
+            productId,
+            { allowCustomSellingQuantity: true },
+        );
+
+        expect(enabled.status).toBe("success");
+        expect(updateProductRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                name: "Burger",
+                allowCustomSellingQuantity: true,
+            }),
+        );
+        expect(enabled.data?.product.allowCustomSellingQuantity).toBe(true);
+
+        getProductById.mockResolvedValue({
+            ...product,
+            allowCustomSellingQuantity: true,
+        });
+
+        const disabled = await catalogService.updateProduct(
+            userId,
+            organizationId,
+            productId,
+            { allowCustomSellingQuantity: false },
+        );
+
+        expect(disabled.status).toBe("success");
+        expect(updateProductRepo).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                name: "Burger",
+                allowCustomSellingQuantity: false,
+            }),
+        );
     });
 
     test("update product rejects assigning an inactive Unit that is not already on the Product", async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ProductResponseDTO } from "@repo/types";
 
-import { getProductCardAction, getProductCardActionLabel } from "./product-card-interaction";
+import { getProductCardAction, getProductCardActionLabel, canEnterCustomSellingQuantity } from "./product-card-interaction";
 
 const product = (productType: ProductResponseDTO["productType"], status: ProductResponseDTO["status"] = "active") =>
     ({ productType, status } as Pick<ProductResponseDTO, "productType" | "status">);
@@ -30,5 +30,29 @@ describe("product card interaction", () => {
         expect(getProductCardActionLabel("add")).toBe("Add");
         expect(getProductCardActionLabel("customize")).toBe("Customize");
         expect(getProductCardActionLabel("configure")).toBe("Configure Combo");
+    });
+
+    test("offers a separate custom-amount action only for an enabled single Product", () => {
+        expect(
+            canEnterCustomSellingQuantity({
+                productType: "single",
+                allowCustomSellingQuantity: true,
+                status: "active",
+            }),
+        ).toBe(true);
+        expect(
+            canEnterCustomSellingQuantity({
+                productType: "single",
+                allowCustomSellingQuantity: false,
+                status: "active",
+            }),
+        ).toBe(false);
+        expect(
+            canEnterCustomSellingQuantity({
+                productType: "combo",
+                allowCustomSellingQuantity: true,
+                status: "active",
+            }),
+        ).toBe(false);
     });
 });

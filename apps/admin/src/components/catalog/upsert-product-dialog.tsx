@@ -50,11 +50,13 @@ import {
 import {
   Field,
   FieldContent,
+  FieldDescription,
   FieldError,
   FieldLabel,
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
+import { Switch } from "@repo/ui/components/switch";
 import {
   compressCatalogImage,
   formatCatalogImageSize,
@@ -130,6 +132,7 @@ const UpsertProductFormSchema = CreateProductObjectSchema.extend({
     )
     .transform((value) => Number(value))
     .pipe(defaultSellingQuantitySchema),
+  allowCustomSellingQuantity: z.boolean(),
   productCode: z
     .preprocess(
       (value) =>
@@ -151,6 +154,7 @@ const defaultValues: UpsertProductFormInput = {
   productCode: "",
   unitId: "",
   defaultSellingQuantity: "1",
+  allowCustomSellingQuantity: false,
 };
 
 const productFormValues = (product: ProductResponseDTO): UpsertProductFormInput => ({
@@ -163,6 +167,7 @@ const productFormValues = (product: ProductResponseDTO): UpsertProductFormInput 
   productCode: product.productCode ?? "",
   unitId: product.unitId,
   defaultSellingQuantity: formatSoldAmount(Number(product.defaultSellingQuantity)),
+  allowCustomSellingQuantity: product.allowCustomSellingQuantity,
 });
 
 const statusSelectOptions = ProductStatusSchema.options.map((status) => ({
@@ -511,6 +516,7 @@ const UpsertProductDialog = ({
         productCodeKind: nextProductCodeKind,
         unitId: data.unitId,
         defaultSellingQuantity: Number(data.defaultSellingQuantity),
+        allowCustomSellingQuantity: data.allowCustomSellingQuantity,
       };
 
       const response = product
@@ -763,6 +769,29 @@ const UpsertProductDialog = ({
                 )}
               />
             </div>
+
+            <Controller
+              control={form.control}
+              name="allowCustomSellingQuantity"
+              render={({ field }) => (
+                <Field>
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <FieldContent>
+                      <FieldLabel>Custom selling quantity</FieldLabel>
+                      <FieldDescription>
+                        Let POS sell a measured amount different from the
+                        default selling quantity. Off by default.
+                      </FieldDescription>
+                    </FieldContent>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      aria-label="Enable Custom Selling Quantity"
+                    />
+                  </div>
+                </Field>
+              )}
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Controller

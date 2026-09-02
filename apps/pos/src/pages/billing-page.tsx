@@ -77,7 +77,7 @@ import type {
     TableOrderDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
-import { normalizePhoneNumber } from "@repo/types";
+import { isSameSoldAmount, normalizePhoneNumber } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
@@ -144,6 +144,7 @@ import {
     User,
     X,
     Boxes,
+    Scale,
     SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -154,6 +155,7 @@ import CheckoutCustomerFields from "@/components/billing/checkout-customer-field
 import CustomizeProductDialog, {
   type CustomizeAddOnSelection,
 } from "@/components/billing/customize-product-dialog";
+import CustomSellingQuantityDialog from "@/components/billing/custom-selling-quantity-dialog";
 import ConfigureComboDialog, {
   type ComboDialogSelection,
 } from "@/components/billing/configure-combo-dialog";
@@ -198,6 +200,7 @@ import { printReceiptText } from "@/lib/print-receipt-text";
 import {
     getProductCardAction,
     getProductCardActionLabel,
+    canEnterCustomSellingQuantity,
     type ProductCardAction,
 } from "@/lib/product-card-interaction";
 import { shouldReturnToPosTablesAfterSale } from "@/lib/pos-service-table";
@@ -210,7 +213,7 @@ import {
     shouldCaptureDirectBarcodeScan,
     type ScanDiagnostic,
 } from "@/lib/barcode-scanning";
-import { composerFieldsFromDefaultPortion } from "@/lib/sold-product-portion";
+import { composerFieldsFromDefaultPortion, composerFieldsFromSoldAmount } from "@/lib/sold-product-portion";
 import { safeRandomUUID } from "@/lib/uuid";
 import {
   buildDirectKotGenerationFields,
@@ -340,8 +343,7 @@ const isSameComposerConfiguration = (
     },
 ) =>
     left.productId === right.productId &&
-    Number(left.soldQuantity ?? 1) ===
-        Number(right.soldQuantity ?? left.soldQuantity ?? 1) &&
+    isSameSoldAmount(left.soldQuantity, right.soldQuantity ?? left.soldQuantity) &&
   buildComposerConfigurationSignature(left.addOns) ===
     buildComposerConfigurationSignature(right.addOns) &&
     buildComboConfigurationSignature(left.comboSelections ?? []) ===
@@ -722,6 +724,9 @@ const BillingPage = ({
   const [customizeProductId, setCustomizeProductId] = useState<string | null>(
     null,
   );
+  const [customAmountProductId, setCustomAmountProductId] = useState<
+    string | null
+  >(null);
   const [configureComboProductId, setConfigureComboProductId] = useState<
     string | null
   >(null);
@@ -1401,6 +1406,8 @@ const BillingPage = ({
   const customizeAttachments = customizeProduct
     ? (attachmentsByProductId.get(customizeProduct.id) ?? [])
     : [];
+  const customAmountProduct =
+    products.find((product) => product.id === customAmountProductId) ?? null;
     const comboUnavailable = Boolean(
     configureComboProductId &&
     comboProductsQuery.data?.status === "success" &&
@@ -1941,6 +1948,46 @@ const BillingPage = ({
         ],
     );
 
+    const addCustomAmountToBill = useCallback(
+        (product: ProductResponseDTO, soldQuantity: number) => {
+            setItems((current) => {
+                const portion = composerFieldsFromSoldAmount(product, soldQuantity);
+                const existingItem = current.find((item) =>
+                    isSameComposerConfiguration(item, {
+                        productId: product.id,
+                        addOns: [],
+                        soldQuantity: portion.soldQuantity,
+                    }),
+                );
+                if (existingItem) {
+                    return (
+                        incrementPlainProductQuantity(current, existingItem.key) ??
+                        current
+                    );
+                }
+
+                return [
+                    ...current,
+                    {
+                        key: safeRandomUUID(),
+                        productId: product.id,
+                        name: portion.name,
+                        categoryId: product.categoryId,
+                        unitPrice: portion.unitPrice,
+                        unitDiscount: portion.unitDiscount,
+                        quantity: 1,
+                        soldQuantity: portion.soldQuantity,
+                        unitLabel: portion.unitLabel,
+                        addOns: [],
+                        bundleComponents: [],
+                        comboSelections: [],
+                    },
+                ];
+            });
+        },
+        [],
+    );
+
     const handleProductCardClick = useCallback(
         (product: ProductResponseDTO, action: ProductCardAction) => {
             if (action === "customize") {
@@ -2268,6 +2315,7 @@ const BillingPage = ({
     composerItems.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
+            soldQuantity: item.soldQuantity,
             addOns: item.addOns.map((addOn) => ({
                 addOnId: addOn.addOnId,
                 quantity: addOn.quantity,
@@ -3721,9 +3769,18 @@ const BillingPage = ({
                             cardAction === "loading";
 
                                                 return (
+                                                    <div
+                                                        key={product.id}
+                                                        className={cn(
+                                                            "group relative flex min-h-[76px] w-full items-center rounded-xl border transition-all duration-200",
+                                                            isInCart
+                                                                ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
+                                                                : "border-border/50 bg-card/80 hover:border-primary/30 hover:bg-card",
+                                                            cardDisabled && "opacity-60",
+                                                        )}
+                                                    >
                                                     <button
                                                         type="button"
-                                                        key={product.id}
                                                         disabled={cardDisabled}
                                                         onClick={() => {
                                                             if (cardAction === "retry") {
@@ -3734,12 +3791,7 @@ const BillingPage = ({
                                                             handleProductCardClick(product, cardAction);
                                                         }}
                                                         aria-label={`${cardActionLabel} ${product.name}`}
-                                                        className={cn(
-                                                            "group relative flex min-h-[76px] w-full cursor-pointer touch-[pan-y_pinch-zoom] items-center gap-2 rounded-xl border px-2 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
-                                                            isInCart
-                                                                ? "border-primary/40 bg-primary/5 shadow-md shadow-primary/10"
-                                                                : "border-border/50 bg-card/80 hover:border-primary/30 hover:bg-card",
-                                                        )}
+                                                        className="flex min-h-[76px] min-w-0 flex-1 cursor-pointer touch-[pan-y_pinch-zoom] items-center gap-2 px-2 py-3 text-left disabled:cursor-not-allowed"
                                                     >
                                                         {isInCart && (
                                                             <span className="absolute -top-2 -right-2 z-10 flex min-h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-center text-xs font-bold leading-none text-primary-foreground shadow-md shadow-primary/25">
@@ -3793,6 +3845,22 @@ const BillingPage = ({
                                                             </span>
                                                         ) : null}
                                                     </button>
+                                                    {canEnterCustomSellingQuantity(product) ? (
+                                                        <button
+                                                            type="button"
+                                                            className="mr-2 inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/5 text-primary/80 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                                                            aria-label={`Enter custom amount for ${product.name}`}
+                                                            onClick={() =>
+                                                                setCustomAmountProductId(product.id)
+                                                            }
+                                                        >
+                                                            <Scale
+                                                                className="size-[18px]"
+                                                                aria-hidden="true"
+                                                            />
+                                                        </button>
+                                                    ) : null}
+                                                    </div>
                                                 );
                                             })}
                                         </div>
@@ -5681,6 +5749,19 @@ const BillingPage = ({
                 product={customizeProduct}
                 attachments={customizeAttachments}
                 onConfirm={addConfiguredProductToBill}
+            />
+
+            <CustomSellingQuantityDialog
+                key={`${customAmountProductId ?? "custom-amount-dialog"}-${customAmountProductId ? "open" : "closed"}`}
+                open={Boolean(customAmountProductId)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setCustomAmountProductId(null);
+                        focusScanField();
+                    }
+                }}
+                product={customAmountProduct}
+                onConfirm={addCustomAmountToBill}
             />
 
             <ConfigureComboDialog

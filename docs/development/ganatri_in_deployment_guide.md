@@ -7,15 +7,17 @@ integration and has no additional runtime process or port.
 The previous host is retired. Do not rsync new builds into
 `/var/www/ganatri.loomsnack.com`.
 
-| Piece | Stack | Server path | Port |
-|-------|-------|-------------|------|
-| Admin web | Vite static (`apps/admin`) | `/var/www/ganatri.in/admin/` | — |
-| POS web | Vite static (`apps/pos`) | `/var/www/ganatri.in/pos/` | — |
-| Console web | Vite static (`apps/console`) | `/var/www/ganatri.in/console/` | — |
-| Backend | Bun + Hono (PM2 `ganatri-in-backend`) | `/var/www/ganatri.in/backend/` | **8181** |
-| Canonical API | nginx | `https://ganatri.in/api` → `127.0.0.1:8181` | — |
-| WhatsApp | Meta Cloud API through the backend | — | — |
-| Google Contacts worker | Bun (PM2 `ganatri-in-google-contacts-worker`) | `/var/www/ganatri.in/backend/apps/google-contacts-worker/` | — |
+
+| Piece                  | Stack                                         | Server path                                                | Port     |
+| ---------------------- | --------------------------------------------- | ---------------------------------------------------------- | -------- |
+| Admin web              | Vite static (`apps/admin`)                    | `/var/www/ganatri.in/admin/`                               | —        |
+| POS web                | Vite static (`apps/pos`)                      | `/var/www/ganatri.in/pos/`                                 | —        |
+| Console web            | Vite static (`apps/console`)                  | `/var/www/ganatri.in/console/`                             | —        |
+| Backend                | Bun + Hono (PM2 `ganatri-in-backend`)         | `/var/www/ganatri.in/backend/`                             | **8181** |
+| Canonical API          | nginx                                         | `https://ganatri.in/api` → `127.0.0.1:8181`                | —        |
+| WhatsApp               | Meta Cloud API through the backend            | —                                                          | —        |
+| Google Contacts worker | Bun (PM2 `ganatri-in-google-contacts-worker`) | `/var/www/ganatri.in/backend/apps/google-contacts-worker/` | —        |
+
 
 **Ports on this VPS:** `boxmap-backend` uses **8000**. ganatri.in uses
 **8181**. WhatsApp uses the Backend service and has no separate port.
@@ -256,7 +258,7 @@ After certbot, `https://ganatri.in/api` still proxies to `127.0.0.1:8181`, and
 
 
 
-## 4. Backend `.env` on the new stack
+## 4. Backend `.env` on the new stackv
 
 Do not commit production secrets. Copy the **already-live** env from the old
 path, then change only the port:
@@ -272,7 +274,7 @@ cp /var/www/ganatri.loomsnack.com/backend/apps/backend/.env \
 nano /var/www/ganatri.in/backend/apps/backend/.env
 ```
 
-Set:
+Set: 
 
 ```env
 BASE_PATH="/api"
@@ -376,8 +378,8 @@ pm2 save
 `apps/google-contacts-worker` and its `.env` must exist before this first
 `pm2 start`, or `ganatri-in-google-contacts-worker` will fail to boot.
 
-`pm2 list` must show **`ganatri-in-backend`** and
-**`ganatri-in-google-contacts-worker`**, plus whatever else already runs
+`pm2 list` must show `ganatri-in-backend` and
+`ganatri-in-google-contacts-worker`, plus whatever else already runs
 (boxmap, etc.). The Google Contacts worker runs
 `bun --env-file=.env src/index.ts` from `apps/google-contacts-worker`.
 
@@ -589,6 +591,8 @@ bun run owner:create
 
 ---
 
+
+
 ## Stop the retired Ganatri.loomsnack.com host
 
 Do this after Admin, POS, Console, `https://ganatri.in/api`, and Google
@@ -634,20 +638,22 @@ a rollback. Do not rsync `--delete` into the old tree.
 
 ## Quick reference
 
-| Task | Command |
-|------|---------|
-| SSH | `ssh loomsnack` |
-| Full local build | `bun i && bun run build && bun turbo prune --scope=backend && cp apps/backend/.env out/apps/backend/.env && cp apps/google-contacts-worker/.env out/apps/google-contacts-worker/.env && cd out && bun install --ignore-scripts && cd apps/backend && bun run build && cd ../../..` |
-| Sync Admin | rsync `--delete` `apps/admin/dist/` → `/var/www/ganatri.in/admin/` |
-| Sync POS | rsync `--delete` `apps/pos/dist/` → `/var/www/ganatri.in/pos/` |
-| Sync Console | rsync `--delete` `apps/console/dist/` → `/var/www/ganatri.in/console/` |
-| Sync backend | rsync `out/` → `/var/www/ganatri.in/backend/` (exclude `node_modules`; includes Google Contacts worker) |
-| Sync Google Contacts worker env | scp `apps/google-contacts-worker/.env` if it was not copied into `out/`; set API URL to `http://127.0.0.1:8181/api` |
-| Install on server | `cd /var/www/ganatri.in/backend/apps/backend && bun install --ignore-scripts` |
-| Restart API | `pm2 restart ganatri-in-backend` |
-| Restart Google Contacts worker | `pm2 restart ganatri-in-google-contacts-worker` |
-| Stop old stack | `pm2 delete ganatri-backend && pm2 save` |
-| nginx test | `nginx -t && systemctl reload nginx` |
+
+| Task                            | Command                                                                                                                                                                                                                                                                            |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSH                             | `ssh loomsnack`                                                                                                                                                                                                                                                                    |
+| Full local build                | `bun i && bun run build && bun turbo prune --scope=backend && cp apps/backend/.env out/apps/backend/.env && cp apps/google-contacts-worker/.env out/apps/google-contacts-worker/.env && cd out && bun install --ignore-scripts && cd apps/backend && bun run build && cd ../../..` |
+| Sync Admin                      | rsync `--delete` `apps/admin/dist/` → `/var/www/ganatri.in/admin/`                                                                                                                                                                                                                 |
+| Sync POS                        | rsync `--delete` `apps/pos/dist/` → `/var/www/ganatri.in/pos/`                                                                                                                                                                                                                     |
+| Sync Console                    | rsync `--delete` `apps/console/dist/` → `/var/www/ganatri.in/console/`                                                                                                                                                                                                             |
+| Sync backend                    | rsync `out/` → `/var/www/ganatri.in/backend/` (exclude `node_modules`; includes Google Contacts worker)                                                                                                                                                                            |
+| Sync Google Contacts worker env | scp `apps/google-contacts-worker/.env` if it was not copied into `out/`; set API URL to `http://127.0.0.1:8181/api`                                                                                                                                                                |
+| Install on server               | `cd /var/www/ganatri.in/backend/apps/backend && bun install --ignore-scripts`                                                                                                                                                                                                      |
+| Restart API                     | `pm2 restart ganatri-in-backend`                                                                                                                                                                                                                                                   |
+| Restart Google Contacts worker  | `pm2 restart ganatri-in-google-contacts-worker`                                                                                                                                                                                                                                    |
+| Stop old stack                  | `pm2 delete ganatri-backend && pm2 save`                                                                                                                                                                                                                                           |
+| nginx test                      | `nginx -t && systemctl reload nginx`                                                                                                                                                                                                                                               |
+
 
 ---
 
@@ -655,16 +661,18 @@ a rollback. Do not rsync `--delete` into the old tree.
 
 ## What was updated in the repo for this host
 
-| File | Why |
-|------|-----|
-| `apps/backend/src/app.ts` | Production CORS allows `ganatri.in`, `admin`, `pos`, `console` |
-| `packages/services/src/api.ts` | Fallback API URL is now `https://ganatri.in/api` |
-| `apps/admin/.env.production` | Same-origin `/api`; POS link is `https://pos.ganatri.in` |
-| `apps/pos/.env.production` | Same-origin `/api`; Admin link is `https://admin.ganatri.in` |
-| `apps/console/.env.production` | Same-origin `/api` |
-| nginx files in this folder | New hosts proxy `/api` to **8181** |
-| `ecosystem.config.ganatri-in.js` | PM2 apps `ganatri-in-backend` (8181) and `ganatri-in-google-contacts-worker` |
-| `apps/backend/package.json` | Workspace dep on `google-contacts-worker` so `turbo prune --scope=backend` includes it |
+
+| File                             | Why                                                                                    |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| `apps/backend/src/app.ts`        | Production CORS allows `ganatri.in`, `admin`, `pos`, `console`                         |
+| `packages/services/src/api.ts`   | Fallback API URL is now `https://ganatri.in/api`                                       |
+| `apps/admin/.env.production`     | Same-origin `/api`; POS link is `https://pos.ganatri.in`                               |
+| `apps/pos/.env.production`       | Same-origin `/api`; Admin link is `https://admin.ganatri.in`                           |
+| `apps/console/.env.production`   | Same-origin `/api`                                                                     |
+| nginx files in this folder       | New hosts proxy `/api` to **8181**                                                     |
+| `ecosystem.config.ganatri-in.js` | PM2 apps `ganatri-in-backend` (8181) and `ganatri-in-google-contacts-worker`           |
+| `apps/backend/package.json`      | Workspace dep on `google-contacts-worker` so `turbo prune --scope=backend` includes it |
+
 
 Cookies stay host-only (no `Domain=.ganatri.in`). That is intentional: Admin,
 POS, and Console sessions must not leak across subdomains.

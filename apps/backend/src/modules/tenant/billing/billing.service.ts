@@ -4,7 +4,12 @@ import * as organizationRepository from "@/modules/tenant/organization/organizat
 import {
   STATUS_CODES,
   defaultCatalogSoldPortion,
+  formatSoldAmount,
+  formatSoldProductName,
+  isPositiveDefaultSellingQuantity,
+  isSameSoldAmount,
   normalizePhoneNumber,
+  proportionalProductPrice,
   type AddOnSalesRollupsListResponse,
   type BundleSalesRollupsListResponse,
   type CommitSaleSVC,
@@ -313,11 +318,27 @@ const mergeSaleItemInputsByConfiguration = (
     if (normalizedComboSelections.error)
       return { error: normalizedComboSelections.error };
 
+    const soldQuantityProvided = item.soldQuantity !== undefined;
+    if (soldQuantityProvided && !isPositiveDefaultSellingQuantity(Number(item.soldQuantity))) {
+      return {
+        error: {
+          status: "error",
+          message:
+            "Sold quantity must be a positive amount with at most two decimal places",
+          data: null,
+          code: STATUS_CODES.BAD_REQUEST,
+        },
+      };
+    }
+
     const configurationSignature =
       normalizedComboSelections.selections.length > 0
         ? buildComboConfigurationSignature(normalizedComboSelections.selections)
         : buildConfigurationSignature(normalizedAddOns.addOns);
-    const configurationKey = `${item.productId}::${configurationSignature}`;
+    const soldQuantityKey = soldQuantityProvided
+      ? formatSoldAmount(Number(item.soldQuantity))
+      : "*";
+    const configurationKey = `${item.productId}::${soldQuantityKey}::${configurationSignature}`;
     const existing = mergedByKey.get(configurationKey);
 
     if (existing) {
@@ -331,6 +352,7 @@ const mergeSaleItemInputsByConfiguration = (
     mergedByKey.set(configurationKey, {
       productId: item.productId,
       quantity: parentQuantity,
+      soldQuantity: item.soldQuantity,
       addOns: normalizedAddOns.addOns,
       comboSelections: normalizedComboSelections.selections,
     });
@@ -360,18 +382,26 @@ type PreparedSaleLine = {
 
 const FALLBACK_PIECE_UNIT_ID = "00000000-0000-4000-8000-000000000001";
 
-const soldPortionFieldsFromProduct = (product: {
-  name: string;
-  unitId?: string | null;
-  defaultSellingQuantity?: number | string | null;
-  unitLabel?: string | null;
-}) => {
+const soldPortionFieldsFromProduct = (
+  product: {
+    name: string;
+    unitId?: string | null;
+    defaultSellingQuantity?: number | string | null;
+    unitLabel?: string | null;
+  },
+  soldQuantity?: number,
+) => {
   const portion = defaultCatalogSoldPortion(product);
+  const amount = soldQuantity ?? portion.soldQuantity;
   return {
-    soldQuantity: portion.soldQuantity,
+    soldQuantity: amount,
     unitId: product.unitId ?? FALLBACK_PIECE_UNIT_ID,
     unitLabelSnapshot: portion.unitLabel,
-    productNameSnapshot: portion.soldProductName,
+    productNameSnapshot: formatSoldProductName(
+      product.name,
+      amount,
+      portion.unitLabel,
+    ),
   };
 };
 
@@ -669,7 +699,9 @@ const buildSaleDetails = async (
 const configurationKeyFor = (
   productId: string,
   configurationSignature: string,
-) => `${productId}::${configurationSignature}`;
+  soldQuantity?: number | string | null,
+) =>
+  `${productId}::${formatSoldAmount(Number(soldQuantity ?? 1))}::${configurationSignature}`;
 
 const rescaleFrozenConfiguredLine = (
   frozen: SaleItemDTO,
@@ -1260,14 +1292,21 @@ const prepareSaleItems = async (
   }
 
   const frozenByConfiguration = new Map<string, SaleItemDTO>();
+  const frozenByProductConfiguration = new Map<string, SaleItemDTO[]>();
   for (const existingItem of existingItems) {
+    const existingSignature = existingItem.configurationSignature ?? "";
     frozenByConfiguration.set(
       configurationKeyFor(
         existingItem.productId,
-        existingItem.configurationSignature ?? "",
+        existingSignature,
+        existingItem.soldQuantity,
       ),
       existingItem,
     );
+    const productConfigurationKey = `${existingItem.productId}::${existingSignature}`;
+    const group = frozenByProductConfiguration.get(productConfigurationKey) ?? [];
+    group.push(existingItem);
+    frozenByProductConfiguration.set(productConfigurationKey, group);
   }
 
   const preparedLines: PreparedSaleLine[] = [];
@@ -1289,14 +1328,29 @@ const prepareSaleItems = async (
           )
         : buildConfigurationSignature(selectedAddOns);
     const parentQuantity = Number(item.quantity);
-    const frozen = frozenByConfiguration.get(
-      configurationKeyFor(item.productId, configurationSignature),
-    );
+    const explicitSoldQuantity =
+      item.soldQuantity === undefined ? undefined : Number(item.soldQuantity);
+    const frozenCandidates =
+      frozenByProductConfiguration.get(
+        `${item.productId}::${configurationSignature}`,
+      ) ?? [];
+    const frozenFromInput =
+      explicitSoldQuantity !== undefined
+        ? frozenByConfiguration.get(
+            configurationKeyFor(
+              item.productId,
+              configurationSignature,
+              explicitSoldQuantity,
+            ),
+          )
+        : frozenCandidates.length === 1
+          ? frozenCandidates[0]
+          : undefined;
 
-    if (frozen) {
+    if (frozenFromInput) {
       preparedLines.push(
         rescaleFrozenConfiguredLine(
-          frozen,
+          frozenFromInput,
           parentQuantity,
           organizationId,
           storeId,
@@ -1330,6 +1384,58 @@ const prepareSaleItems = async (
           code: STATUS_CODES.BAD_REQUEST,
         },
       };
+    }
+
+    const defaultPortion = defaultCatalogSoldPortion(product);
+    const resolvedSoldQuantity =
+      explicitSoldQuantity ?? defaultPortion.soldQuantity;
+
+    if (!isPositiveDefaultSellingQuantity(resolvedSoldQuantity)) {
+      return {
+        error: {
+          status: "error",
+          message:
+            "Sold quantity must be a positive amount with at most two decimal places",
+          data: null,
+          code: STATUS_CODES.BAD_REQUEST,
+        },
+      };
+    }
+
+    if (!isSameSoldAmount(resolvedSoldQuantity, defaultPortion.soldQuantity)) {
+      if (
+        product.productType !== "single" ||
+        product.allowCustomSellingQuantity !== true
+      ) {
+        return {
+          error: {
+            status: "error",
+            message: `Custom Selling Quantity is not available for product "${product.name}"`,
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+          },
+        };
+      }
+    }
+
+    const frozen = frozenByConfiguration.get(
+      configurationKeyFor(
+        item.productId,
+        configurationSignature,
+        resolvedSoldQuantity,
+      ),
+    );
+    if (frozen) {
+      preparedLines.push(
+        rescaleFrozenConfiguredLine(
+          frozen,
+          parentQuantity,
+          organizationId,
+          storeId,
+          saleId,
+        ),
+      );
+      continue;
     }
 
     const saleItemId = crypto.randomUUID();
@@ -1450,11 +1556,18 @@ const prepareSaleItems = async (
       });
     }
 
-    const unitPrice = moneyFrom(product.price);
-    const lineSubtotal = roundMoney(parentQuantity * unitPrice);
-    const discountAmount = roundMoney(
-      moneyFrom(product.discount) * parentQuantity,
+    const unitPrice = proportionalProductPrice(
+      moneyFrom(product.price),
+      resolvedSoldQuantity,
+      defaultPortion.soldQuantity,
     );
+    const unitDiscount = proportionalProductPrice(
+      moneyFrom(product.discount),
+      resolvedSoldQuantity,
+      defaultPortion.soldQuantity,
+    );
+    const lineSubtotal = roundMoney(parentQuantity * unitPrice);
+    const discountAmount = roundMoney(unitDiscount * parentQuantity);
 
     if (discountAmount > lineSubtotal) {
       return {
@@ -1476,7 +1589,7 @@ const prepareSaleItems = async (
         productId: product.id,
         quantity: parentQuantity,
         configurationSignature,
-        ...soldPortionFieldsFromProduct(product),
+        ...soldPortionFieldsFromProduct(product, resolvedSoldQuantity),
         unitPriceSnapshot: unitPrice,
         discountAmount,
         lineSubtotal,

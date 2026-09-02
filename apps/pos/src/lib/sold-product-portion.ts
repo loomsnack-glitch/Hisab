@@ -1,8 +1,26 @@
 import {
+  catalogSoldPortionForAmount,
   defaultCatalogSoldPortion,
   formatSoldAmount,
   type ProductResponseDTO,
 } from "@repo/types";
+
+export const composerFieldsFromSoldAmount = (
+  product: Pick<
+    ProductResponseDTO,
+    "name" | "price" | "discount" | "defaultSellingQuantity" | "unitLabel"
+  >,
+  soldQuantity: number,
+) => {
+  const portion = catalogSoldPortionForAmount(product, soldQuantity);
+  return {
+    name: portion.soldProductName,
+    soldQuantity: portion.soldQuantity,
+    unitLabel: portion.unitLabel,
+    unitPrice: portion.unitPrice,
+    unitDiscount: portion.unitDiscount,
+  };
+};
 
 export const composerFieldsFromDefaultPortion = (
   product: Pick<
@@ -11,13 +29,7 @@ export const composerFieldsFromDefaultPortion = (
   >,
 ) => {
   const portion = defaultCatalogSoldPortion(product);
-  return {
-    name: portion.soldProductName,
-    soldQuantity: portion.soldQuantity,
-    unitLabel: portion.unitLabel,
-    unitPrice: Number(product.price),
-    unitDiscount: Number(product.discount ?? 0),
-  };
+  return composerFieldsFromSoldAmount(product, portion.soldQuantity);
 };
 
 export const catalogSellingQuantityLabel = (
@@ -25,4 +37,21 @@ export const catalogSellingQuantityLabel = (
 ) => {
   const portion = defaultCatalogSoldPortion({ name: "", ...product });
   return `${formatSoldAmount(portion.soldQuantity)}${portion.unitLabel}`;
+};
+
+export const customSellingQuantityDialogDefaults = (
+  product: Pick<
+    ProductResponseDTO,
+    "name" | "price" | "discount" | "defaultSellingQuantity" | "unitLabel"
+  >,
+) => {
+  const defaultPortion = defaultCatalogSoldPortion(product);
+  const amountInput = formatSoldAmount(defaultPortion.soldQuantity);
+  return {
+    amountInput,
+    unitLabel: defaultPortion.unitLabel,
+    amountFieldLabel: `Amount (${defaultPortion.unitLabel})`,
+    defaultHint: `Default ${amountInput}${defaultPortion.unitLabel}`,
+    preview: composerFieldsFromSoldAmount(product, defaultPortion.soldQuantity),
+  };
 };

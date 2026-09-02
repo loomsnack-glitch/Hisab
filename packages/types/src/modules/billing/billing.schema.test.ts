@@ -172,6 +172,36 @@ describe("Configured sale billing contracts", () => {
         }
     });
 
+    test("sale item input accepts a Custom Selling Quantity amount", () => {
+        const result = SaleItemInputSchema.safeParse({
+            productId: "11111111-1111-4111-8111-111111111111",
+            quantity: 1,
+            soldQuantity: 500,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.soldQuantity).toBe(500);
+        }
+    });
+
+    test("sale item input rejects an invalid Custom Selling Quantity amount", () => {
+        expect(
+            SaleItemInputSchema.safeParse({
+                productId: "11111111-1111-4111-8111-111111111111",
+                quantity: 1,
+                soldQuantity: 0,
+            }).success,
+        ).toBe(false);
+        expect(
+            SaleItemInputSchema.safeParse({
+                productId: "11111111-1111-4111-8111-111111111111",
+                quantity: 1,
+                soldQuantity: 1.234,
+            }).success,
+        ).toBe(false);
+    });
+
     test("sale detail nests add-ons under parent product rows", () => {
         const now = new Date("2026-07-11T12:00:00.000Z");
         const result = SaleDetailDTOSchema.safeParse({

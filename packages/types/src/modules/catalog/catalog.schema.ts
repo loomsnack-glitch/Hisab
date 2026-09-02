@@ -438,6 +438,7 @@ export const CreateProductObjectSchema = z.object({
   productCodeKind: ProductCodeKindSchema.nullable().optional(),
   unitId: z.uuid("Invalid unit id").optional(),
   defaultSellingQuantity: defaultSellingQuantitySchema.optional(),
+  allowCustomSellingQuantity: z.boolean().optional(),
 });
 
 export const CreateProductSchema = CreateProductObjectSchema.refine(
@@ -456,6 +457,7 @@ const UpdateProductObjectSchema = z.object({
   productCodeKind: ProductCodeKindSchema.nullable().optional(),
   unitId: z.uuid("Invalid unit id").optional(),
   defaultSellingQuantity: defaultSellingQuantitySchema.optional(),
+  allowCustomSellingQuantity: z.boolean().optional(),
 });
 
 export const UpdateProductSchema = UpdateProductObjectSchema.refine(
@@ -469,7 +471,8 @@ export const UpdateProductSchema = UpdateProductObjectSchema.refine(
     value.productCode !== undefined ||
     value.productCodeKind !== undefined ||
     value.unitId !== undefined ||
-    value.defaultSellingQuantity !== undefined,
+    value.defaultSellingQuantity !== undefined ||
+    value.allowCustomSellingQuantity !== undefined,
   {
     message: "At least one field is required",
   },

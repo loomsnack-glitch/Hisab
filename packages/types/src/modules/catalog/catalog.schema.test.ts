@@ -473,6 +473,20 @@ describe("Product selling unit catalog contracts", () => {
       UpdateProductSchema.safeParse({ defaultSellingQuantity: 0.75 }).success,
     ).toBe(true);
   });
+
+  test("create and update product accept Custom Selling Quantity for a single Product", () => {
+    expect(
+      CreateProductSchema.safeParse({
+        categoryId,
+        name: "Cake",
+        price: 250,
+        allowCustomSellingQuantity: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateProductSchema.safeParse({ allowCustomSellingQuantity: true }).success,
+    ).toBe(true);
+  });
 });
 
 describe("Label Template catalog contracts", () => {

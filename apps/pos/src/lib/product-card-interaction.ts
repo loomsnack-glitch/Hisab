@@ -1,4 +1,4 @@
-import type { ProductResponseDTO } from "@repo/types";
+import { canOfferCustomSellingQuantity, type ProductResponseDTO } from "@repo/types";
 
 export type ProductCardAction = "add" | "customize" | "configure" | "loading" | "retry" | "disabled";
 
@@ -57,3 +57,10 @@ export const getProductCardActionLabel = (action: ProductCardAction) => {
             return "Add";
     }
 };
+
+export const canEnterCustomSellingQuantity = (
+    product: Pick<
+        ProductResponseDTO,
+        "productType" | "allowCustomSellingQuantity" | "status"
+    >,
+) => canOfferCustomSellingQuantity(product);

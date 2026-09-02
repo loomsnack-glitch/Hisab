@@ -399,6 +399,7 @@ export const ComboSelectionInputSchema = z.object({
 export const SaleItemInputSchema = z.object({
   productId: z.uuid("Invalid product id"),
   quantity: quantitySchema,
+  soldQuantity: defaultSellingQuantitySchema.optional(),
   addOns: z.array(SaleItemAddOnInputSchema).optional().default([]),
   comboSelections: z.array(ComboSelectionInputSchema).optional(),
 });

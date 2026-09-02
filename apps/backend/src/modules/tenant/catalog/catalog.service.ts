@@ -1018,7 +1018,7 @@ export const createProduct = async (
       productCodeKind: codeAssignment.productCodeKind,
       unitId: sellingUnit.unit.id,
       defaultSellingQuantity: sellingUnit.defaultSellingQuantity,
-      allowCustomSellingQuantity: false,
+      allowCustomSellingQuantity: productData.allowCustomSellingQuantity === true,
       status: productData.status ?? "active",
       sortOrder,
       createdBy: userId,
@@ -1273,7 +1273,9 @@ export const updateProduct = async (
       productCodeKind: nextProductCodeKind,
       unitId: sellingUnit.unit.id,
       defaultSellingQuantity: sellingUnit.defaultSellingQuantity,
-      allowCustomSellingQuantity: false,
+      allowCustomSellingQuantity:
+        productData.allowCustomSellingQuantity ??
+        Boolean(existingProduct.allowCustomSellingQuantity),
       status: nextStatus,
       sortOrder: nextSortOrder,
       updatedBy: userId,

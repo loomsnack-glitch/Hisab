@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ProductResponseDTO } from "@repo/types";
+import { parseCustomSellingQuantityInput } from "@repo/types";
 
 import {
   catalogSellingQuantityLabel,
   composerFieldsFromDefaultPortion,
+  composerFieldsFromSoldAmount,
+  customSellingQuantityDialogDefaults,
 } from "./sold-product-portion";
 
 const product = (
@@ -76,5 +79,52 @@ describe("POS default selling portion", () => {
         product({ defaultSellingQuantity: 1, unitLabel: "pc" }),
       ),
     ).toBe("1pc");
+  });
+});
+
+describe("POS custom selling portion", () => {
+  test("a 500 g selection uses Cake (500g) at the proportional ₹500 rate", () => {
+    expect(composerFieldsFromSoldAmount(product(), 500)).toEqual({
+      name: "Cake (500g)",
+      soldQuantity: 500,
+      unitLabel: "g",
+      unitPrice: 500,
+      unitDiscount: 0,
+    });
+  });
+
+  test("accepting the prefilled default amount matches the ordinary tap so those cart lines merge", () => {
+    expect(composerFieldsFromSoldAmount(product(), 250)).toEqual(
+      composerFieldsFromDefaultPortion(product()),
+    );
+  });
+
+  test("250 g and 500 g remain distinct cart identities", () => {
+    expect(composerFieldsFromSoldAmount(product(), 250).soldQuantity).toBe(250);
+    expect(composerFieldsFromSoldAmount(product(), 500).soldQuantity).toBe(500);
+    expect(composerFieldsFromSoldAmount(product(), 250).name).toBe("Cake (250g)");
+    expect(composerFieldsFromSoldAmount(product(), 500).name).toBe("Cake (500g)");
+  });
+
+  test("the custom-amount action prefills the Default Selling Quantity and Unit label", () => {
+    expect(customSellingQuantityDialogDefaults(product())).toMatchObject({
+      amountInput: "250",
+      unitLabel: "g",
+      amountFieldLabel: "Amount (g)",
+      defaultHint: "Default 250g",
+      preview: {
+        name: "Cake (250g)",
+        soldQuantity: 250,
+        unitPrice: 250,
+      },
+    });
+  });
+
+  test("blank, zero, negative, and over-precise amounts are rejected before the cart changes", () => {
+    expect(parseCustomSellingQuantityInput("")).toBeNull();
+    expect(parseCustomSellingQuantityInput("0")).toBeNull();
+    expect(parseCustomSellingQuantityInput("-1")).toBeNull();
+    expect(parseCustomSellingQuantityInput("1.234")).toBeNull();
+    expect(parseCustomSellingQuantityInput("500")).toBe(500);
   });
 });
