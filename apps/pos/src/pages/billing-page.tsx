@@ -77,7 +77,11 @@ import type {
     TableOrderDTO,
     UpdateDraftSaleJSON,
 } from "@repo/types";
-import { isSameSoldAmount, normalizePhoneNumber } from "@repo/types";
+import {
+  catalogDefaultSellingPortion,
+  isSameSoldAmount,
+  normalizePhoneNumber,
+} from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
@@ -213,7 +217,7 @@ import {
     shouldCaptureDirectBarcodeScan,
     type ScanDiagnostic,
 } from "@/lib/barcode-scanning";
-import { composerFieldsFromDefaultPortion, composerFieldsFromSoldAmount } from "@/lib/sold-product-portion";
+import { composerFieldsFromSoldAmount } from "@/lib/sold-product-portion";
 import { safeRandomUUID } from "@/lib/uuid";
 import {
   buildDirectKotGenerationFields,
@@ -1870,7 +1874,7 @@ const BillingPage = ({
   const addPlainProductToBill = useCallback(
     (product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
         setItems((current) => {
-            const portion = composerFieldsFromDefaultPortion(product);
+            const portion = catalogDefaultSellingPortion(product);
             const existingPlainItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: product.id,
@@ -1893,7 +1897,7 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: product.id,
-                    name: portion.name,
+                    name: portion.soldProductName,
                     categoryId: product.categoryId,
                     unitPrice: portion.unitPrice,
                     unitDiscount: portion.unitDiscount,
@@ -2216,7 +2220,7 @@ const BillingPage = ({
         }
 
         setItems((current) => {
-            const portion = composerFieldsFromDefaultPortion(product);
+            const portion = catalogDefaultSellingPortion(product);
             const existingConfiguredItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: product.id,
@@ -2238,7 +2242,7 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: product.id,
-                    name: portion.name,
+                    name: portion.soldProductName,
                     categoryId: product.categoryId,
                     unitPrice: portion.unitPrice,
                     unitDiscount: portion.unitDiscount,
@@ -2258,7 +2262,7 @@ const BillingPage = ({
     selections: ComboDialogSelection[],
   ) => {
         setItems((current) => {
-            const portion = composerFieldsFromDefaultPortion(combo.product);
+            const portion = catalogDefaultSellingPortion(combo.product);
             const existing = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: combo.product.id,
@@ -2279,7 +2283,7 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: combo.product.id,
-                    name: portion.name,
+                    name: portion.soldProductName,
                     categoryId: combo.product.categoryId,
                     unitPrice: portion.unitPrice,
                     unitDiscount: portion.unitDiscount,

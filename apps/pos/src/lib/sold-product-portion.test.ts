@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ProductResponseDTO } from "@repo/types";
-import { parseCustomSellingQuantityInput } from "@repo/types";
+import {
+  catalogDefaultSellingPortion,
+  catalogSellingQuantityLabel,
+  parseCustomSellingQuantityInput,
+} from "@repo/types";
 
 import {
-  catalogSellingQuantityLabel,
-  composerFieldsFromDefaultPortion,
   composerFieldsFromSoldAmount,
   customSellingQuantityDialogDefaults,
 } from "./sold-product-portion";
@@ -38,8 +40,8 @@ const product = (
 
 describe("POS default selling portion", () => {
   test("ordinary tap fields use the Sold Product Name and one-portion rate", () => {
-    expect(composerFieldsFromDefaultPortion(product())).toEqual({
-      name: "Cake (250g)",
+    expect(catalogDefaultSellingPortion(product())).toEqual({
+      soldProductName: "Cake (250g)",
       soldQuantity: 250,
       unitLabel: "g",
       unitPrice: 250,
@@ -49,7 +51,7 @@ describe("POS default selling portion", () => {
 
   test("a product-code scan of a 1pc Product uses the same default portion as a tap", () => {
     expect(
-      composerFieldsFromDefaultPortion(
+      catalogDefaultSellingPortion(
         product({
           name: "Water Bottle",
           price: 20,
@@ -58,7 +60,7 @@ describe("POS default selling portion", () => {
         }),
       ),
     ).toEqual({
-      name: "Water Bottle (1pc)",
+        soldProductName: "Water Bottle (1pc)",
       soldQuantity: 1,
       unitLabel: "pc",
       unitPrice: 20,
@@ -67,8 +69,8 @@ describe("POS default selling portion", () => {
   });
 
   test("repeated equal default portions share Sold Product Name and amount so quantity can increase", () => {
-    expect(composerFieldsFromDefaultPortion(product())).toEqual(
-      composerFieldsFromDefaultPortion(product()),
+    expect(catalogDefaultSellingPortion(product())).toEqual(
+      catalogDefaultSellingPortion(product()),
     );
   });
 
@@ -94,9 +96,12 @@ describe("POS custom selling portion", () => {
   });
 
   test("accepting the prefilled default amount matches the ordinary tap so those cart lines merge", () => {
-    expect(composerFieldsFromSoldAmount(product(), 250)).toEqual(
-      composerFieldsFromDefaultPortion(product()),
-    );
+    const customDefault = composerFieldsFromSoldAmount(product(), 250);
+    const ordinary = catalogDefaultSellingPortion(product());
+
+    expect(customDefault.name).toBe(ordinary.soldProductName);
+    expect(customDefault.soldQuantity).toBe(ordinary.soldQuantity);
+    expect(customDefault.unitPrice).toBe(ordinary.unitPrice);
   });
 
   test("250 g and 500 g remain distinct cart identities", () => {

@@ -779,7 +779,7 @@ export const getProductSalesSummary = async (
     const results = await pg`
         SELECT
             si.product_id,
-            p.name AS product_name,
+            si.product_name_snapshot AS product_name,
             c.name AS category_name,
             SUM(si.quantity)::int AS quantity_sold
         FROM sale_items si
@@ -798,7 +798,7 @@ export const getProductSalesSummary = async (
           AND s.status = 'completed'
           AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
           AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)
-        GROUP BY si.product_id, p.name, c.name
+        GROUP BY si.product_id, si.product_name_snapshot, c.name
         ORDER BY quantity_sold DESC, product_name ASC
     `;
 

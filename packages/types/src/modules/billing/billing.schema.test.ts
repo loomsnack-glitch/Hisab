@@ -453,6 +453,21 @@ describe("Configured sale billing contracts", () => {
         expect(response.success).toBe(true);
     });
 
+    test("product sales summary accepts the persisted Sold Product Name length", () => {
+        const response = ProductSalesSummaryResponseSchema.safeParse({
+            products: [
+                {
+                    productId: "11111111-1111-4111-8111-111111111111",
+                    productName: `${"C".repeat(310)} (1pc)`,
+                    categoryName: "Beverages",
+                    quantitySold: 1,
+                },
+            ],
+        });
+
+        expect(response.success).toBe(true);
+    });
+
     test("sales list query accepts multiple payment methods", () => {
         const fromArray = SalesListQuerySchema.safeParse({
             paymentMethods: ["cash", "upi"],

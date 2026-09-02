@@ -274,7 +274,7 @@ cp /var/www/ganatri.loomsnack.com/backend/apps/backend/.env \
 nano /var/www/ganatri.in/backend/apps/backend/.env
 ```
 
-Set: 
+Set:
 
 ```env
 BASE_PATH="/api"

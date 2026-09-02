@@ -1584,6 +1584,46 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(byAmount[500]?.lineTotal).toBe(1000);
     });
 
+    test("rejects an ambiguous draft update that omits sold amounts", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            unitId: "97979797-9797-4979-8979-979797979797",
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        const created = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            {
+                items: [
+                    { productId, quantity: 1, soldQuantity: 250, addOns: [] },
+                    { productId, quantity: 1, soldQuantity: 500, addOns: [] },
+                ],
+            },
+        );
+        expect(created.status).toBe("success");
+
+        const updated = await billingService.updateDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            created.data!.sale.id,
+            {
+                items: [{ productId, quantity: 1, addOns: [] }],
+            },
+        );
+
+        expect(updated.status).toBe("error");
+        expect(updated.message).toContain("Sold quantity is required");
+        expect(createdSaleItems).toHaveLength(2);
+    });
+
     test("rounds a custom one-portion rate to the nearest paise before multiplying quantity", async () => {
         getProductByIdSpy.mockResolvedValue({
             ...product,

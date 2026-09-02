@@ -1,3 +1,5 @@
+import type { ProductStatus, ProductType } from "./catalog.type";
+
 export const FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY = 1;
 
 const CUSTOM_SELLING_QUANTITY_INPUT_PATTERN =
@@ -26,11 +28,15 @@ export const isSameSoldAmount = (
   right: number | string | null | undefined,
 ): boolean => formatSoldAmount(Number(left ?? 1)) === formatSoldAmount(Number(right ?? 1));
 
-export const canOfferCustomSellingQuantity = (product: {
-  productType?: string | null;
-  allowCustomSellingQuantity?: boolean | null;
-  status?: string | null;
-}): boolean =>
+export type CustomSellingQuantityEligibleProduct = {
+  productType: ProductType;
+  allowCustomSellingQuantity: boolean;
+  status: ProductStatus;
+};
+
+export const canOfferCustomSellingQuantity = (
+  product: CustomSellingQuantityEligibleProduct,
+): boolean =>
   product.productType === "single" &&
   product.allowCustomSellingQuantity === true &&
   product.status !== "inactive";
@@ -115,4 +121,27 @@ export const catalogSoldPortionForAmount = (
       defaultPortion.soldQuantity,
     ),
   };
+};
+
+export const catalogDefaultSellingPortion = (
+  product: {
+    name: string;
+    price?: number | string | null;
+    discount?: number | string | null;
+    defaultSellingQuantity?: number | string | null;
+    unitLabel?: string | null;
+  },
+) => {
+  const defaultPortion = defaultCatalogSoldPortion(product);
+  return catalogSoldPortionForAmount(product, defaultPortion.soldQuantity);
+};
+
+export const catalogSellingQuantityLabel = (
+  product: {
+    defaultSellingQuantity?: number | string | null;
+    unitLabel?: string | null;
+  },
+): string => {
+  const portion = defaultCatalogSoldPortion({ name: "", ...product });
+  return `${formatSoldAmount(portion.soldQuantity)}${portion.unitLabel}`;
 };

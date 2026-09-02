@@ -19,7 +19,7 @@ import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-o
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
-import { catalogSellingQuantityLabel } from "@/lib/sold-product-portion";
+import { catalogSellingQuantityLabel } from "@repo/types";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
 import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
 

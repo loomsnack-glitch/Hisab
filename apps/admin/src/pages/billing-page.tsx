@@ -153,7 +153,7 @@ import {
     shouldCaptureDirectBarcodeScan,
     type ScanDiagnostic,
 } from "@/lib/barcode-scanning";
-import { composerFieldsFromDefaultPortion } from "@/lib/sold-product-portion";
+import { catalogDefaultSellingPortion } from "@repo/types";
 import { safeRandomUUID } from "@/lib/uuid";
 import { useOptionalPosPrinter } from "@/providers/pos-printer-provider";
 
@@ -1460,7 +1460,7 @@ const BillingPage = ({
 
     const addPlainProductToBill = useCallback((product: ProductResponseDTO, onAdded?: (quantity: number) => void) => {
         setItems((current) => {
-            const portion = composerFieldsFromDefaultPortion(product);
+            const portion = catalogDefaultSellingPortion(product);
             const existingPlainItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: product.id,
@@ -1480,7 +1480,7 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: product.id,
-                    name: portion.name,
+                    name: portion.soldProductName,
                     categoryId: product.categoryId,
                     unitPrice: portion.unitPrice,
                     unitDiscount: portion.unitDiscount,
@@ -1719,7 +1719,7 @@ const BillingPage = ({
         }
 
         setItems((current) => {
-            const portion = composerFieldsFromDefaultPortion(product);
+            const portion = catalogDefaultSellingPortion(product);
             const existingConfiguredItem = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: product.id,
@@ -1739,7 +1739,7 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: product.id,
-                    name: portion.name,
+                    name: portion.soldProductName,
                     categoryId: product.categoryId,
                     unitPrice: portion.unitPrice,
                     unitDiscount: portion.unitDiscount,
@@ -1756,7 +1756,7 @@ const BillingPage = ({
 
     const addConfiguredComboToBill = (combo: ComboProductResponse, selections: ComboDialogSelection[]) => {
         setItems((current) => {
-            const portion = composerFieldsFromDefaultPortion(combo.product);
+            const portion = catalogDefaultSellingPortion(combo.product);
             const existing = current.find((item) =>
                 isSameComposerConfiguration(item, {
                     productId: combo.product.id,
@@ -1775,7 +1775,7 @@ const BillingPage = ({
                 {
                     key: safeRandomUUID(),
                     productId: combo.product.id,
-                    name: portion.name,
+                    name: portion.soldProductName,
                     categoryId: combo.product.categoryId,
                     unitPrice: portion.unitPrice,
                     unitDiscount: portion.unitDiscount,
@@ -1814,9 +1814,11 @@ const BillingPage = ({
         orderDiscountAmount,
         notes: notes.trim() || null,
         serviceMode,
+        generateKot: false,
         items: items.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
+            soldQuantity: item.soldQuantity,
             addOns: item.addOns.map((addOn) => ({
                 addOnId: addOn.addOnId,
                 quantity: addOn.quantity,
@@ -1840,6 +1842,7 @@ const BillingPage = ({
         orderDiscountAmount,
         notes: notes.trim() || null,
         serviceMode,
+        generateKot: false,
         items: buildDraftPayload(customerId).items,
         payments:
             settlementMode === "due"

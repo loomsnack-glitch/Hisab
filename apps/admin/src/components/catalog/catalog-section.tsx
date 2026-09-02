@@ -18,7 +18,7 @@ import ManageCategoriesDialog from "@/components/catalog/manage-categories-dialo
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import { catalogKeys } from "@/lib/query-keys";
-import { catalogSellingQuantityLabel } from "@/lib/sold-product-portion";
+import { catalogSellingQuantityLabel } from "@repo/types";
 
 type CatalogSectionProps = {
     organizationId: string;

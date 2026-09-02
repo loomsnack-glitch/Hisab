@@ -548,7 +548,7 @@ export const ProductSalesSummaryAdminQuerySchema =
 
 export const ProductSalesSummaryDTOSchema = z.object({
   productId: z.uuid("Invalid product id"),
-  productName: nameSchema,
+  productName: soldProductNameSchema,
   categoryName: nameSchema.nullable(),
   quantitySold: z.number().int().min(0),
 });

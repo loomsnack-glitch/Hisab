@@ -22,23 +22,6 @@ export const composerFieldsFromSoldAmount = (
   };
 };
 
-export const composerFieldsFromDefaultPortion = (
-  product: Pick<
-    ProductResponseDTO,
-    "name" | "price" | "discount" | "defaultSellingQuantity" | "unitLabel"
-  >,
-) => {
-  const portion = defaultCatalogSoldPortion(product);
-  return composerFieldsFromSoldAmount(product, portion.soldQuantity);
-};
-
-export const catalogSellingQuantityLabel = (
-  product: Pick<ProductResponseDTO, "defaultSellingQuantity" | "unitLabel">,
-) => {
-  const portion = defaultCatalogSoldPortion({ name: "", ...product });
-  return `${formatSoldAmount(portion.soldQuantity)}${portion.unitLabel}`;
-};
-
 export const customSellingQuantityDialogDefaults = (
   product: Pick<
     ProductResponseDTO,

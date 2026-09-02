@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   canOfferCustomSellingQuantity,
+  catalogDefaultSellingPortion,
+  catalogSellingQuantityLabel,
   catalogSoldPortionForAmount,
   defaultCatalogSoldPortion,
   formatSoldAmount,
@@ -38,6 +40,25 @@ describe("Sold Product Name", () => {
       unitLabel: "g",
       soldProductName: "Cake (250g)",
     });
+  });
+
+  test("provides one shared priced portion and label for Catalog Product displays", () => {
+    const product = {
+      name: "Cake",
+      price: 250,
+      discount: 10,
+      defaultSellingQuantity: 250,
+      unitLabel: "g",
+    };
+
+    expect(catalogDefaultSellingPortion(product)).toEqual({
+      soldQuantity: 250,
+      unitLabel: "g",
+      soldProductName: "Cake (250g)",
+      unitPrice: 250,
+      unitDiscount: 10,
+    });
+    expect(catalogSellingQuantityLabel(product)).toBe("250g");
   });
 
   test("treats an omitted Unit as one piece so existing Products keep a 1pc portion", () => {

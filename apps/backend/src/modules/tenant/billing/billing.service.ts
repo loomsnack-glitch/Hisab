@@ -380,12 +380,10 @@ type PreparedSaleLine = {
   bundleComponents: PreparedBundleComponent[];
 };
 
-const FALLBACK_PIECE_UNIT_ID = "00000000-0000-4000-8000-000000000001";
-
 const soldPortionFieldsFromProduct = (
   product: {
     name: string;
-    unitId?: string | null;
+    unitId: string;
     defaultSellingQuantity?: number | string | null;
     unitLabel?: string | null;
   },
@@ -395,7 +393,7 @@ const soldPortionFieldsFromProduct = (
   const amount = soldQuantity ?? portion.soldQuantity;
   return {
     soldQuantity: amount,
-    unitId: product.unitId ?? FALLBACK_PIECE_UNIT_ID,
+    unitId: product.unitId,
     unitLabelSnapshot: portion.unitLabel,
     productNameSnapshot: formatSoldProductName(
       product.name,
@@ -407,12 +405,12 @@ const soldPortionFieldsFromProduct = (
 
 const soldPortionFieldsFromSnapshot = (item: {
   soldQuantity?: number | string | null;
-  unitId?: string | null;
+  unitId: string;
   unitLabelSnapshot?: string | null;
   productNameSnapshot: string;
 }) => ({
   soldQuantity: Number(item.soldQuantity ?? 1),
-  unitId: item.unitId ?? FALLBACK_PIECE_UNIT_ID,
+  unitId: item.unitId,
   unitLabelSnapshot:
     typeof item.unitLabelSnapshot === "string" &&
     item.unitLabelSnapshot.length > 0
@@ -1334,6 +1332,17 @@ const prepareSaleItems = async (
       frozenByProductConfiguration.get(
         `${item.productId}::${configurationSignature}`,
       ) ?? [];
+    if (explicitSoldQuantity === undefined && frozenCandidates.length > 1) {
+      return {
+        error: {
+          status: "error",
+          message:
+            "Sold quantity is required when a Draft Sale has multiple portions of the same Product configuration",
+          data: null,
+          code: STATUS_CODES.BAD_REQUEST,
+        },
+      };
+    }
     const frozenFromInput =
       explicitSoldQuantity !== undefined
         ? frozenByConfiguration.get(
