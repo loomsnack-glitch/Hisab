@@ -5,7 +5,7 @@ Hisab is a multi-tenant retail/POS system for managing stores, products, sales, 
 ## Language
 
 **Platform Administrator**:
-A Ganatri owner or internal operator authorized to inspect cross-organization platform data. A Platform Administrator is represented by a separate Owner User, is distinct from an Organization's administrators, and has read-only access in Ganatri Console.
+A Ganatri owner or internal operator authorized to manage the Commercial Catalog and inspect cross-organization platform data. A Platform Administrator is represented by a separate Owner User and is distinct from an Organization's administrators.
 _Avoid_: Organization admin, tenant admin, superuser
 
 **Owner User**:
@@ -13,7 +13,7 @@ An internal Ganatri identity stored separately from customer Users and used to s
 _Avoid_: Organization user, tenant user, customer administrator
 
 **Active Owner User**:
-An Owner User permitted to authenticate to Ganatri Console and use its read-only capabilities. An inactive Owner User is denied console access, including from an already-open session on its next authenticated request. Owner Users cannot deactivate themselves, and the final active Owner User cannot be deactivated.
+A Owner User permitted to authenticate to Ganatri Console and use its commercial-catalog management and read-only inspection capabilities. An inactive Owner User is denied console access, including from an already-open session on its next authenticated request. Owner Users cannot deactivate themselves, and the final active Owner User cannot be deactivated.
 _Avoid_: Enabled Organization User, active store device
 
 **Seed Owner User**:
@@ -21,8 +21,52 @@ The first Owner User, created through a secure operator-run CLI command rather t
 _Avoid_: Public owner signup, organization registration
 
 **Ganatri Console**:
-The read-only internal Ganatri application at `console.ganatri.in` used by Platform Administrators to analyze Organization adoption and operational activity across the platform.
+The internal Ganatri application at `console.ganatri.in` used by Platform Administrators to manage the Commercial Catalog and analyze Organization adoption and operational activity across the platform. Its Organization Inspection Workspaces remain read-only.
 _Avoid_: Organization admin, customer dashboard, POS back office
+
+**Commercial Catalog**:
+The platform-owned configuration of sellable Plans, Modules, and Features, managed only by Platform Administrators in Ganatri Console. It does not contain Organization business data or payment transactions.
+_Avoid_: Organization catalog, tenant configuration, subscription ledger
+
+**Feature**:
+A stable platform capability that may be made available to a Store only through a Module. A Feature may be included in multiple Modules and is never directly included in a Plan or directly purchased.
+_Avoid_: Module, plan item, directly purchasable add-on
+
+**Module**:
+A reusable Commercial Catalog bundle of one or more Features, composed by Platform Administrators according to the workflow they choose to offer. A Module may be included in multiple Plans and may be offered as a separately purchasable add-on to a Store with an active Plan; Ganatri Console does not enforce Feature-dependency completeness.
+_Avoid_: Feature, plan, arbitrary feature selection
+
+**Plan**:
+A sellable Commercial Catalog offering with a price and duration that includes one or more Modules but no direct Feature memberships. A Store obtains access through a Plan before it can obtain separately purchasable Modules.
+_Avoid_: Module, subscription record, feature bundle
+
+**Store License**:
+The future Store-specific commercial access record through which one Store receives a Plan and separately purchased Modules for a bounded period. Stores in the same Organization may have different Store Licenses and therefore different available Features.
+_Avoid_: Organization-wide subscription, user license, shared tenant plan
+
+**Co-Term Add-On**:
+A separately purchased Module on a Store License whose access ends on the same date as that Store's active Plan. Its initial charge is prorated from its catalog price by the exact remaining calendar days in that Plan term, rounded to the nearest paise; it never creates a later expiry date than its base Plan.
+_Avoid_: Independently expiring module, full-year add-on charge, plan extension
+
+**Store-Scoped Commercial Access**:
+The rule that a Store License controls whether a Store may use a paid workflow, even where that workflow uses Organization-owned shared data such as Catalog Products, Units, or Vendors. Shared setup is created once for the Organization; each Store independently needs the relevant commercial access to operate with it.
+_Avoid_: Per-store data copy, Organization-wide feature unlock, user-based access
+
+**Trial Plan**:
+A zero-price Plan with a standard seven-day duration and access to all Modules selected by Ganatri. It is a Plan type, not a separate trial subsystem.
+_Avoid_: Trial-only architecture, free module, permanent free plan
+
+**Store Access Grant**:
+A future Store-specific commercial access record that grants time-bounded access to a Plan or Module under terms that may differ from the reusable Commercial Catalog, such as a trial extension, complimentary period, custom date range, or special price. It is not a Commercial Catalog definition.
+_Avoid_: One-off global plan, catalog exception, payment transaction
+
+**Commercial Catalog Revision**:
+An immutable published version of a Plan, Module, or Feature definition, including its sellable configuration and memberships. Revisions are created as Drafts, become Active for future use, and are Retired when no longer available; definitions that have been Active are retained rather than deleted or edited in place.
+_Avoid_: Live overwrite, deleted plan, mutable historical catalog row
+
+**Commercial Catalog Key**:
+The unique, immutable lowercase identifier of a Plan, Module, or Feature, used by access checks and historical records instead of its editable display name. A key cannot be reused for a different commercial concept.
+_Avoid_: Display name as identifier, renamed access code, recycled catalog key
 
 **Ganatri Admin**:
 The user-authenticated Ganatri application used by an Organization's administrators to manage that Organization's settings and business data. It is separate from Ganatri Console and Ganatri POS.
@@ -372,8 +416,12 @@ An Active Table Order intentionally abandoned before checkout because the guests
 _Avoid_: Discarded Table Draft, void completed sale, unpaid cancellation, retained abandoned cart
 
 **KOT System**:
-An optional Store feature that enables KOT generation. KOTs may be used for table service only when the Store also enables Table Management.
+An optional Store feature that enables KOT generation. KOTs may be used without Table Management, but Table Management requires KOT System; table service is available only when the Store enables both.
 _Avoid_: Table Management, required restaurant workflow, table-only KOT feature
+
+**Table Management**:
+An optional Store feature that enables Service Tables and Table Orders for table service. It requires KOT System and is therefore not offered as a standalone Module in the initial Commercial Catalog.
+_Avoid_: Standalone table module, table-only workflow, KOT System
 
 **Table Order**:
 The non-financial parent record for a seated party's service, which collects one or more KOTs before checkout. A Table Order belongs to exactly one Service Table and produces at most one final Sale.
