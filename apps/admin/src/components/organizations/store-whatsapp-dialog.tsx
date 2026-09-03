@@ -85,8 +85,15 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
 
     return (
         <>
-            <Button variant="outline" className="pointer-events-auto relative z-10 rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4" onClick={() => setOpen(true)}>
-                <WhatsAppIcon className="size-3.5 sm:size-4" /> WhatsApp
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="pointer-events-auto relative z-10 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                onClick={() => setOpen(true)}
+                aria-label={`${storeName} WhatsApp`}
+            >
+                <WhatsAppIcon className="size-4" />
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent className="max-h-[90dvh] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto rounded-2xl p-4 sm:p-6">

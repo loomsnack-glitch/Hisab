@@ -2,10 +2,8 @@ import { useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-    Bell,
     ChevronLeft,
     ChevronRight,
-    HelpCircle,
     Settings2,
 } from "lucide-react";
 import { getOrganizations } from "@repo/services";
@@ -16,14 +14,15 @@ import { cn } from "@repo/ui/lib/utils";
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
-import { getVisibleAdminMainDestinations, type AdminNavDestination } from "@/components/dashboard/admin-nav-items";
+import {
+    getGroupedAdminMainDestinations,
+    type AdminNavDestination,
+} from "@/components/dashboard/admin-nav-items";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
 const secondaryNavItems = [
-    { label: "Notifications", icon: Bell, disabled: true },
     { label: "Appearance", icon: Settings2, to: "/appearance" },
-    { label: "Help", icon: HelpCircle, disabled: true },
 ] as const;
 
 type AppSidebarProps = {
@@ -83,8 +82,8 @@ const AppSidebar = ({
     const collapsedNavRowClass = "relative mx-auto flex h-10 w-10 items-center justify-center";
 
     const hasOrganization = organizations.length > 0 && Boolean(effectiveOrgId);
-    const mainNavItems = useMemo(
-        () => getVisibleAdminMainDestinations({ hasOrganization, organizationId: effectiveOrgId }),
+    const groupedSections = useMemo(
+        () => getGroupedAdminMainDestinations({ hasOrganization, organizationId: effectiveOrgId }),
         [hasOrganization, effectiveOrgId],
     );
 
@@ -154,74 +153,44 @@ const AppSidebar = ({
     const renderSecondaryItem = (item: (typeof secondaryNavItems)[number]) => {
         const Icon = item.icon;
         const collapsed = !isMobile && isCollapsed;
-        const isActive = "to" in item && item.to ? location.pathname === item.to : false;
+        const isActive = location.pathname === item.to;
 
-        if ("to" in item && item.to) {
-            const link = (
-                <button
-                    type="button"
-                    onClick={() => goTo(item.to)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                        "sidebar-nav-link group cursor-pointer appearance-none rounded-xl border-0 bg-transparent text-sm font-medium transition-all duration-200",
-                        collapsed ? collapsedNavRowClass : expandedNavRowClassNoTrail,
-                        isActive
-                            ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                        collapsed && "sidebar-nav-link--collapsed",
-                    )}
-                >
-                    {collapsed && isActive ? <span className="sidebar-active-rail" aria-hidden /> : null}
-                    <Icon
-                        className={cn(
-                            "size-[18px] transition-colors duration-200",
-                            isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-                        )}
-                        strokeWidth={isActive ? 2.25 : 2}
-                    />
-                    {!collapsed ? <span className="sidebar-label truncate text-left">{item.label}</span> : null}
-                </button>
-            );
-
-            if (!collapsed) {
-                return link;
-            }
-
-            return (
-                <Tooltip>
-                    <TooltipTrigger render={link} />
-                    <TooltipContent side="right" className="border border-border bg-popover text-popover-foreground">
-                        {item.label}
-                    </TooltipContent>
-                </Tooltip>
-            );
-        }
-
-        const button = (
+        const link = (
             <button
                 type="button"
-                disabled={"disabled" in item && item.disabled}
+                onClick={() => goTo(item.to)}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
-                    "group rounded-xl text-sm font-medium text-muted-foreground transition-all duration-200",
+                    "sidebar-nav-link group cursor-pointer appearance-none rounded-xl border-0 bg-transparent text-sm font-medium transition-all duration-200",
                     collapsed ? collapsedNavRowClass : expandedNavRowClassNoTrail,
-                    "disabled" in item && item.disabled
-                        ? "cursor-not-allowed opacity-45"
-                        : "hover:bg-muted/70 hover:text-foreground",
+                    isActive
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                    collapsed && "sidebar-nav-link--collapsed",
                 )}
             >
-                <Icon className="size-[18px]" strokeWidth={2} />
+                {collapsed && isActive ? <span className="sidebar-active-rail" aria-hidden /> : null}
+                <Icon
+                    className={cn(
+                        "size-[18px] transition-colors duration-200",
+                        isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                    )}
+                    strokeWidth={isActive ? 2.25 : 2}
+                />
                 {!collapsed ? <span className="sidebar-label truncate text-left">{item.label}</span> : null}
             </button>
         );
 
         if (!collapsed) {
-            return button;
+            return link;
         }
 
         return (
             <Tooltip>
-                <TooltipTrigger render={button} />
-                <TooltipContent side="right">{item.label}</TooltipContent>
+                <TooltipTrigger render={link} />
+                <TooltipContent side="right" className="border border-border bg-popover text-popover-foreground">
+                    {item.label}
+                </TooltipContent>
             </Tooltip>
         );
     };
@@ -265,10 +234,30 @@ const AppSidebar = ({
                     ) : null}
                 </div>
 
-                <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
-                    {mainNavItems.map((item) =>
-                        renderNavItem(item, item.id === "organizations" ? organizations.length : undefined),
-                    )}
+                <nav className="flex-1 overflow-y-auto px-2 py-4">
+                    {groupedSections.map((section, sectionIdx) => {
+                        const collapsed = !isMobile && isCollapsed;
+
+                        return (
+                            <div key={section.group} className={cn(sectionIdx > 0 && "mt-4")}>
+                                {collapsed ? (
+                                    <div className="mx-auto my-1 h-px w-6 bg-border/60" />
+                                ) : (
+                                    <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                                        {section.label}
+                                    </p>
+                                )}
+                                <div className="space-y-0.5">
+                                    {section.items.map((item) =>
+                                        renderNavItem(
+                                            item,
+                                            item.id === "organizations" ? organizations.length : undefined,
+                                        ),
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
 
                     <div className="my-3 h-px bg-border/60" />
 

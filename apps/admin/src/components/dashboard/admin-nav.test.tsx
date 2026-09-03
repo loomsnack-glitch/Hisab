@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav";
 import {
+    getGroupedAdminMainDestinations,
     getVisibleAdminMainDestinations,
     getVisibleAdminPrimaryMobileDestinations,
     getVisibleAdminWorkspaceDestinations,
@@ -15,24 +16,46 @@ const withOrg = { organizationId, hasOrganization: true };
 const withoutOrg = { organizationId: "", hasOrganization: false };
 
 describe("Admin mobile navigation", () => {
-    test("orders main sidebar destinations as Organizations through Google Contacts", () => {
+    test("orders main sidebar destinations grouped by Organization, Catalog, Sales, Reports, Finance, Integrations", () => {
         const mainIds = getVisibleAdminMainDestinations(withOrg).map((destination) => destination.id);
 
         expect(mainIds).toEqual([
             "organizations",
             "stores",
             "products",
+            "units",
             "billing",
-            "reports",
             "tables",
             "customers",
-            "whatsapp",
+            "reports",
             "money-accounts",
             "vendors",
             "purchases",
             "expenses",
-            "units",
+            "whatsapp",
             "google-contacts",
+        ]);
+    });
+
+    test("groups destinations into six named sections", () => {
+        const sections = getGroupedAdminMainDestinations(withOrg);
+
+        expect(sections.map((s) => s.group)).toEqual([
+            "organization",
+            "catalog",
+            "sales",
+            "reports",
+            "finance",
+            "integrations",
+        ]);
+
+        expect(sections.map((s) => s.label)).toEqual([
+            "Organization",
+            "Catalog",
+            "Sales & Service",
+            "Reports",
+            "Finance",
+            "Integrations",
         ]);
     });
 

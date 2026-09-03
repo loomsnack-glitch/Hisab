@@ -7,7 +7,7 @@ import { cn } from "@repo/ui/lib/utils";
 
 import {
     getVisibleAdminPrimaryMobileDestinations,
-    getVisibleAdminWorkspaceDestinations,
+    getGroupedAdminMainDestinations,
     isAdminMoreDestinationActive,
     type VisibleAdminNavArgs,
 } from "@/components/dashboard/admin-nav-items";
@@ -42,7 +42,7 @@ const AdminMobileBottomNav = ({
     const navArgs = { organizationId, hasOrganization };
     const isMoreActive = isAdminMoreDestinationActive(location.pathname, navArgs) || moreOpen;
     const primaryDestinations = getVisibleAdminPrimaryMobileDestinations(navArgs);
-    const workspaceDestinations = getVisibleAdminWorkspaceDestinations(navArgs);
+    const groupedSections = getGroupedAdminMainDestinations(navArgs);
     const orgInitials = getOrgInitials(activeOrgName);
 
     const navButtonClassName = (isActive: boolean) =>
@@ -99,9 +99,9 @@ const AdminMobileBottomNav = ({
             <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
                 <SheetContent
                     side="bottom"
-                    className="gap-0 rounded-t-2xl px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4"
+                    className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pb-0 pt-4"
                 >
-                    <SheetHeader className="space-y-0 px-0 pb-4 pt-0 pr-10 text-left">
+                    <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
                         <SheetTitle className="sr-only">Pages and organization</SheetTitle>
                         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                             Organization
@@ -136,35 +136,48 @@ const AdminMobileBottomNav = ({
                         </div>
                     </SheetHeader>
 
-                    <div className="grid grid-cols-3 gap-3 border-t border-border/50 pt-4">
-                        {workspaceDestinations.map((destination) => {
-                            const Icon = destination.icon;
-                            const isActive = destination.isActive(location.pathname);
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4">
+                        <div className="space-y-5 px-6">
+                            {groupedSections.map((section) => (
+                                <div key={section.group}>
+                                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                        {section.label}
+                                    </p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {section.items.map((destination) => {
+                                            const Icon = destination.icon;
+                                            const isActive = destination.isActive(location.pathname);
 
-                            return (
-                                <Link
-                                    key={destination.id}
-                                    to={destination.path}
-                                    onClick={() => setMoreOpen(false)}
-                                    className={cn(
-                                        "flex flex-col items-center gap-2 rounded-2xl border px-3 py-4 text-center transition-colors",
-                                        isActive
-                                            ? "border-primary/40 bg-primary/10 text-primary"
-                                            : "border-border/60 bg-card/70 text-foreground hover:bg-muted/50",
-                                    )}
-                                >
-                                    <span
-                                        className={cn(
-                                            "flex size-11 items-center justify-center rounded-xl",
-                                            isActive ? "bg-primary text-primary-foreground" : "bg-muted/70 text-muted-foreground",
-                                        )}
-                                    >
-                                        <Icon className="size-5" strokeWidth={isActive ? 2.25 : 2} />
-                                    </span>
-                                    <span className="text-xs font-semibold">{destination.label}</span>
-                                </Link>
-                            );
-                        })}
+                                            return (
+                                                <Link
+                                                    key={destination.id}
+                                                    to={destination.path}
+                                                    onClick={() => setMoreOpen(false)}
+                                                    className={cn(
+                                                        "flex flex-col items-center gap-2 rounded-2xl border px-3 py-4 text-center transition-colors",
+                                                        isActive
+                                                            ? "border-primary/40 bg-primary/10 text-primary"
+                                                            : "border-border/60 bg-card/70 text-foreground hover:bg-muted/50",
+                                                    )}
+                                                >
+                                                    <span
+                                                        className={cn(
+                                                            "flex size-11 items-center justify-center rounded-xl",
+                                                            isActive
+                                                                ? "bg-primary text-primary-foreground"
+                                                                : "bg-muted/70 text-muted-foreground",
+                                                        )}
+                                                    >
+                                                        <Icon className="size-5" strokeWidth={isActive ? 2.25 : 2} />
+                                                    </span>
+                                                    <span className="text-xs font-semibold">{destination.label}</span>
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </SheetContent>
             </Sheet>
