@@ -51,8 +51,8 @@ Not included in this phase:
 | 1.2 | MMKV storage boundary | 1.1 | Separate storage areas and encrypted session adapter tested | `7a040cd` |
 | 1.3 | Localization foundation | 1.2 | Three bundled languages, English fallback, persisted selection | `2cb9d87` |
 | 1.4 | Uniwind design foundation | 1.3 | Semantic tokens and reusable POS primitives | `50a5be9` |
-| 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | `Pending commit` |
-| 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | Pending |
+| 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | `011ec05` |
+| 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | `Pending commit` |
 | 1.7 | POS navigation shell | 1.5, 1.6 | Shared and capability-gated destinations are reachable | Pending |
 | 1.8 | New Sale shell | 1.7, 1.4 | Unlock opens New Sale with Cart entry | Pending |
 
@@ -488,6 +488,125 @@ cleanup behavior, and current root navigator on 2026-09-05.
 - Credential cleanup is limited to the session boundary and does not clear the
   language preference.
 - The slice does not invent a backend contract or move Unlock UI forward.
+
+## 1.6 — POS Unlock screen
+
+### Plan
+
+User-facing outcome: a Store Device user can unlock Ganatri POS with
+Organization username, Device username, and Device secret. The screen is
+simple, validates before submission, remembers no secret, and clearly handles
+loading, invalid credentials, inactive devices, and network failure.
+
+Implementation scope:
+
+- Add the POS Unlock screen and make it the only auth entry selected by the POS
+  root navigator.
+- Use the shared `DeviceLoginSchema` and `deviceLogin` service.
+- On successful login, persist the returned token and Device Session through
+  MMKV, then transition the shared POS session state to active.
+- Add a compact language selector using `setAppLanguage`.
+- Add localized labels, validation/recovery messages, loading state, and a
+  retryable unlock action.
+- Remember only non-secret identifiers in the form/persistence boundary; do
+  not persist the Device secret.
+- Remove the generic Register route from the POS navigation selection without
+  deleting legacy files in this slice.
+
+Acceptance criteria:
+
+1. Unlock form contains all three approved credential fields and a clear
+   primary Unlock POS action.
+2. Invalid or incomplete fields do not submit and show field-level feedback.
+3. Successful Device Auth stores token/session and enters the active POS flow.
+4. Invalid credentials and inactive-device responses remain on Unlock with a
+   localized recovery message.
+5. Network failure remains retryable and does not erase existing credentials.
+6. Device secret is not stored or prefilled after leaving the screen.
+7. Language selection changes the interface and persists the supported code.
+
+Non-goals:
+
+- Generic User login, registration, or profile behavior.
+- Device management, credential rotation, or secret recovery workflow.
+- Session refresh, idle locking, or feature navigation beyond the active
+  transition; those are covered by adjacent session/navigation slices.
+
+Public seams and effects:
+
+- `PosUnlockScreen` owns the form and calls shared `deviceLogin`.
+- Shared POS session store/action receives `UNLOCK_STARTED`, success, and
+  failure transitions so the root remains the single navigation owner.
+- MMKV stores the token and Device Session; form secret exists only in memory.
+
+Test and verification plan:
+
+- Pure session transition tests for unlock failure and success.
+- Static scan confirming no Device secret storage key is introduced.
+- Mobile TypeScript check and focused Bun tests only; no Android build command.
+- `git diff --check` and review of root route selection.
+
+Risks and rollback:
+
+- A successful login must write token and session before advertising active;
+  otherwise a restart could appear unlocked with incomplete state.
+- Server messages may be English; map known status/error classes to localized
+  user-facing messages and keep raw server details out of the primary UI.
+- The slice can be reverted independently before navigation destinations depend
+  on the new auth route.
+
+### Internal plan review
+
+Reviewed against the Device Auth service/schema, MMKV session seam, approved
+language list, and 1.5 state owner on 2026-09-05.
+
+- Existing API and schema are sufficient; no backend change is needed.
+- Secret persistence is explicitly excluded.
+- The shared session store is required so the screen and root navigator observe
+  the same unlock transition.
+- Generic auth files remain untouched as legacy code, but are removed from the
+  selected POS route.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added `PosUnlockScreen` with Organization username, Device username, and
+  Device secret fields.
+- Reused shared `DeviceLoginSchema` validation and `deviceLogin` service.
+- Persisted the successful token and Device Session through the MMKV boundary
+  before dispatching `UNLOCK_SUCCEEDED` to the shared session store.
+- Added English, Gujarati, and Hindi language controls using the localization
+  seam.
+- Added localized field, invalid-credential, inactive-device, network-failure,
+  and generic unlock recovery messages.
+- Changed the root auth selection to expose only `PosUnlock`; legacy User Login
+  and Register components are no longer part of the POS route.
+- Kept the Device secret out of storage and out of any remembered form state.
+
+Standards/spec review findings and fixes:
+
+- The first success branch allowed an optional response token to transition to
+  active; it now fails closed with a localized error when the token is absent.
+- The screen and root now share the Zustand-backed POS session dispatch, so a
+  successful login updates navigation without a second independent bootstrap.
+- Known server status classes are mapped to user-safe localized messages;
+  server details are not shown as the primary error UI.
+- No generic registration, Catalog, Cart, Payment, printer, or backend work was
+  pulled into this slice.
+- No Android build command was run, as requested by the user.
+
+Verification:
+
+- Focused mobile tests — 15 passed across storage, localization, UI, and
+  session suites.
+- Mobile TypeScript check — only the known WhatsApp asset import baseline
+  remains.
+- Static secret-storage scan — no Device secret persistence path introduced.
+- `git diff --check` — passed.
+
+1.6 status: Completed. Real Device Auth, Keystore/MMKV, and language-layout
+behavior require the user’s Android development-build/device validation.
 
 ### Implementation and review result
 

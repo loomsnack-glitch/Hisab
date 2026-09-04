@@ -1,12 +1,8 @@
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { clearAuthToken, deviceAuthenticate, hydrateAuthToken } from "@repo/services";
 import { posStorage } from "../lib/storage";
-import {
-    initialPosSession,
-    transitionPosSession,
-    type PosSessionSnapshot,
-} from "../lib/pos-session";
+import { usePosSessionDispatch, usePosSessionSnapshot } from "../store/pos-session.store";
 
 const getErrorCode = (error: unknown): number | undefined => {
     if (!error || typeof error !== "object" || !("code" in error)) {
@@ -39,7 +35,8 @@ export const usePosSession = () => {
     const [hydrated, setHydrated] = useState(false);
     const [hasToken, setHasToken] = useState(false);
     const [hasStoredSession, setHasStoredSession] = useState(false);
-    const [snapshot, dispatch] = useReducer(transitionPosSession, initialPosSession);
+    const snapshot = usePosSessionSnapshot();
+    const dispatch = usePosSessionDispatch();
 
     useEffect(() => {
         let mounted = true;
@@ -107,5 +104,5 @@ export const usePosSession = () => {
         ...snapshot,
         isPending: snapshot.state === "starting" && !snapshot.canRetry,
         retry,
-    } satisfies PosSessionSnapshot & { isPending: boolean; retry: () => void };
+    };
 };

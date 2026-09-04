@@ -25,6 +25,7 @@ export type PosSessionEvent =
     | { type: "SESSION_ACTIVE"; session: DeviceSessionDTO }
     | { type: "SESSION_EXPIRED"; message?: string }
     | { type: "UNLOCK_STARTED" }
+    | { type: "UNLOCK_FAILED"; message: string }
     | { type: "UNLOCK_SUCCEEDED"; session: DeviceSessionDTO }
     | { type: "LOGOUT_STARTED" }
     | { type: "LOGOUT_COMPLETED" }
@@ -57,6 +58,8 @@ export const transitionPosSession = (
             return { state: "expired", session: null, message: event.message ?? null, canRetry: false };
         case "UNLOCK_STARTED":
             return { ...snapshot, state: "unlocking", message: null, canRetry: false };
+        case "UNLOCK_FAILED":
+            return { ...snapshot, state: "locked", message: event.message, canRetry: false };
         case "LOGOUT_STARTED":
             return { ...snapshot, state: "logging-out", message: null, canRetry: false };
         case "LOGOUT_COMPLETED":

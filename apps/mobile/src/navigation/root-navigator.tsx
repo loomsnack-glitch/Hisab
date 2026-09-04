@@ -4,8 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { usePosSession } from "../hooks/use-pos-session";
 import type { RootStackParamList } from "./types";
 import LoadingScreen from "../screens/loading-screen";
-import LoginScreen from "../screens/login-screen";
-import RegisterScreen from "../screens/register-screen";
+import PosUnlockScreen from "../screens/pos-unlock-screen";
 import PosNavigator from "./pos-navigator";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -23,10 +22,7 @@ const RootNavigator = () => {
                 {posSession.state === "active" ? (
                     <Stack.Screen name="Pos" component={PosNavigator} />
                 ) : (
-                    <>
-                        <Stack.Screen name="Login" component={LoginScreen} />
-                        <Stack.Screen name="Register" component={RegisterScreen} />
-                    </>
+                    <Stack.Screen name="PosUnlock" component={PosUnlockScreen} />
                 )}
             </Stack.Navigator>
         </NavigationContainer>
