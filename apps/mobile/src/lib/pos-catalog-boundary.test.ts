@@ -7,6 +7,7 @@ import type {
 import {
     getCategoriesFromResponse,
     getProductsFromResponse,
+    filterCatalogProducts,
     posCatalogKeys,
     unwrapCatalogResponse,
 } from "./pos-catalog-boundary";
@@ -59,5 +60,16 @@ describe("POS catalog boundary", () => {
         } as ServiceResponse<null>;
 
         expect(() => unwrapCatalogResponse(response, "Catalog failed")).toThrow("Catalog unavailable");
+    });
+
+    it("filters Products by name/code and Category", () => {
+        const products = [
+            { id: "product-1", categoryId: "category-1", name: "Masala Tea", productCode: "TEA-1" },
+            { id: "product-2", categoryId: "category-2", name: "Samosa", productCode: null },
+        ] as unknown as import("@repo/types").ProductResponseDTO[];
+
+        expect(filterCatalogProducts(products, "tea", null).map((product) => product.id)).toEqual(["product-1"]);
+        expect(filterCatalogProducts(products, "", "category-2").map((product) => product.id)).toEqual(["product-2"]);
+        expect(filterCatalogProducts(products, "tea", "category-2")).toEqual([]);
     });
 });

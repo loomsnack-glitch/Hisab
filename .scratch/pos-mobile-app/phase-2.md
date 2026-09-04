@@ -176,3 +176,122 @@ Verification:
   environment validation remains a follow-up.
 
 2.1 status: Completed with native/API follow-up. Focused commit: pending.
+
+## 2.2 — Product search and Categories
+
+### Plan
+
+User-facing outcome: the New Sale screen makes ordinary Product selection fast
+without opening another screen. A user can search by Product name/code, switch
+between compact Category filters, tap an ordinary Product to add it, and open
+Cart while keeping the current browsing context.
+
+Implementation scope:
+
+- Filter the already-loaded server Product list by case-insensitive name or
+  Product code.
+- Add an All Categories option and horizontally scrollable Category chips.
+- Render touch-friendly Product cards with stored Product name and current
+  server price/discount data.
+- Add ordinary `single` Products directly to a small in-memory Cart handoff and
+  merge repeated taps by Product ID.
+- Show the Cart item count and keep the Cart action available from New Sale.
+- Keep bundle/combo Products visible but disabled with a clear configuration
+  message until 2.5 owns their configuration flow.
+- Scope the in-memory Cart handoff to the active Organization/Store/Device
+  session so a session change cannot reuse another Store's items.
+
+Acceptance criteria:
+
+1. Product search is immediately available on New Sale and matches Product
+   names or Product codes without translating business data.
+2. Category chips filter the loaded Products and All Categories restores the
+   full list.
+3. Tapping an ordinary Product adds it to Cart immediately.
+4. Repeated taps merge quantity for the same ordinary Product.
+5. Cart item count updates immediately and opens the existing Cart route.
+6. Products requiring configuration are not added before 2.5.
+7. Focused pure tests cover search/category filtering and quantity merging.
+
+Non-goals:
+
+- Camera barcode scanning.
+- Combo or Add-on configuration.
+- Removing/editing Cart lines, totals, Draft Sale persistence, or checkout.
+- Recent/Pinned Product persistence.
+
+Public seams and effects:
+
+- New Sale consumes the 2.1 catalog query boundary and a mobile-owned Cart
+  handoff boundary.
+- Product identity, name, price, discount, status, and type remain server data.
+- No Product or Cart data is written to MMKV in this subphase.
+
+Test and verification plan:
+
+- Pure tests for search/category filtering and ordinary Product quantity merge.
+- Mobile focused test suite.
+- Mobile TypeScript check, separating the known WhatsApp asset baseline.
+- `git diff --check` and staged-scope review.
+- No Android build or device command in this environment.
+
+Risks and rollback:
+
+- Cart behavior must not become a second server Catalog source of truth; only
+  the minimal Product handoff is introduced here.
+- A session-scoped Cart prevents stale Store data but must be extended by Phase
+  3 before persistence or Draft Sale recovery is added.
+- The subphase can be rolled back without affecting the query/cache boundary.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against `spec.md`, the completed 2.1 boundary, the
+existing POS billing Product behavior, and ADRs 0002, 0004, and 0006.
+
+- The plan satisfies 2.2's direct ordinary-Product action while leaving
+  configuration-required Products to 2.5.
+- Product and Category values come only from the active device-scoped query.
+- Search and Category filtering stay local presentation concerns and do not
+  change server authority.
+- No new API or product decision is required.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added case-insensitive Product name/code filtering and Category selection to
+  New Sale.
+- Added horizontally scrollable All Categories and Category actions.
+- Added touch-friendly Product cards showing the server Product name and
+  current INR price after the server discount.
+- Added direct add-to-Cart behavior for ordinary `single` Products, merging
+  repeated taps by Product ID.
+- Kept bundle/combo Products visible but disabled until the 2.5 configuration
+  slice is implemented.
+- Added a session-scoped in-memory Cart handoff and immediate item count.
+- Updated the Cart shell to show handed-off Product lines while reserving
+  editing, totals, and Draft Sale behavior for Phase 3.
+- Added focused tests for Product filtering and Cart quantity merging.
+
+Standards/spec review:
+
+- Search and Category filtering consume only the active server Catalog query.
+- Product names remain untouched business data and are not localized.
+- Cart scope includes Organization, Store, and Device context.
+- The initial review found and fixed the contradictory empty-Cart display after
+  a Product was added.
+- The final review found and fixed Cart retention across logout/session expiry;
+  the mobile Cart store now clears at the session boundary.
+- Added a regression test for clearing the Cart store at that boundary.
+- No actionable standards or spec findings remain within 2.2.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 24 passed.
+- Mobile TypeScript check — no new errors; the known WhatsApp asset import
+  remains the only baseline error.
+- `git diff --check` — passed.
+- Android build/device/API validation — intentionally not run; native and live
+  environment validation remains a follow-up.
+
+2.2 status: Completed with native/API follow-up. Focused commit: pending.

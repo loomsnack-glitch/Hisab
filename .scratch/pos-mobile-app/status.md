@@ -113,7 +113,7 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
 | 2.1 Catalog query and cache | Completed with follow-up | Product/Category queries, Store/Device-scoped cache keys, and recoverable New Sale states are implemented; native/API validation remains pending. |
-| 2.2 Product search and Categories | Not started | Products can be browsed and added directly to Cart. |
+| 2.2 Product search and Categories | Completed with follow-up | Product search, Category filtering, ordinary Product add-to-Cart, and immediate Cart handoff are implemented; native/API validation remains pending. |
 | 2.3 Camera barcode scanning | Not started | Android camera scan, permission, unknown-barcode, and fallback states work. |
 | 2.4 Recent and Pinned Products | Not started | Local convenience actions do not replace server Catalog authority. |
 | 2.5 Combos and Add-ons | Not started | Required Product configuration is preserved in Cart and Draft Sale data. |

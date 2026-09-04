@@ -1,6 +1,7 @@
 import type {
     CategoriesListResponse,
     ProductsListResponse,
+    ProductResponseDTO,
     ServiceResponse,
 } from "@repo/types";
 
@@ -36,3 +37,21 @@ export const getCategoriesFromResponse = (
 export const getProductsFromResponse = (
     response: ServiceResponse<ProductsListResponse | null>,
 ) => (response.status === "success" ? response.data?.products ?? [] : []);
+
+export const filterCatalogProducts = (
+    products: readonly ProductResponseDTO[],
+    search: string,
+    categoryId: string | null,
+) => {
+    const normalizedSearch = search.trim().toLocaleLowerCase();
+
+    return products.filter((product) => {
+        const matchesCategory = !categoryId || product.categoryId === categoryId;
+        const matchesSearch =
+            !normalizedSearch ||
+            product.name.toLocaleLowerCase().includes(normalizedSearch) ||
+            product.productCode?.toLocaleLowerCase().includes(normalizedSearch);
+
+        return matchesCategory && matchesSearch;
+    });
+};
