@@ -44,21 +44,61 @@ _Avoid_: Module, subscription record, feature bundle
 The future Store-specific commercial access record through which one Store receives a Plan and separately purchased Modules for a bounded period. Stores in the same Organization may have different Store Licenses and therefore different available Features.
 _Avoid_: Organization-wide subscription, user license, shared tenant plan
 
+**Subscription Checkout**:
+An Organization administrator's self-service purchase flow in Ganatri Admin for one Store's Plan or Co-Term Add-Ons. It obtains payment through Razorpay but does not itself grant access.
+_Avoid_: Ganatri Console sale, browser-return activation, Organization-wide checkout
+
+**Verified Subscription Payment**:
+A Razorpay payment for a server-created Razorpay Order, confirmed by a signature-verified webhook for a Subscription Checkout. It is the event that activates or changes the Store License; a checkout redirect or client-side payment claim is not sufficient.
+_Avoid_: Browser payment success, unverified callback, payment intent
+
+**Commercial Quote**:
+An immutable server-calculated selection of Commercial Catalog Revisions, terms, dates, and final amounts for one intended Store License change. It creates the corresponding Razorpay Order and is the only source from which that Order may be fulfilled; an unpaid Quote expires after 30 minutes.
+_Avoid_: Client-supplied amount, mutable cart, live catalog lookup after payment, indefinite payment link
+
+**Commercial Payment Event**:
+A signature-verified, durably retained Razorpay `order.paid` webhook for a Commercial Quote. It is processed idempotently by its Razorpay event ID; related payment events never independently change access.
+_Avoid_: Browser callback, duplicate fulfillment, payment.captured fulfillment
+
+**Term Purchase**:
+A one-time paid checkout that charges the Plan's snapshotted final GST-inclusive price and starts or renews a Store License for its fixed term. It does not create a recurring Razorpay mandate; the next term requires a new checkout.
+_Avoid_: Auto-renewal, recurring subscription, open-ended entitlement
+
+**Scheduled Store License**:
+A paid Store License created by a successful Term Purchase while another Store License is active, whose term begins when the active term ends. A Store may have only one Scheduled Store License, preserving its current access without allowing stacked prepaid years.
+_Avoid_: Immediate trial replacement, shortened paid term, stacked prepaid years, payment-only record
+
+**Plan Upgrade**:
+An immediate change from a Store's active paid Plan to a higher Plan that keeps the existing term end. The payment credits the unused portion of the original purchased price and charges the new Plan's price for the same exact remaining calendar days; downgrades take effect only at renewal.
+_Avoid_: Mid-term downgrade, restarted annual term, forfeited unused term
+
+**License Revocation**:
+A Platform Administrator's recorded termination of a paid Store License after a corresponding Razorpay refund. A scheduled License is revoked before it starts; an active License ends on the administrator-selected date, without automatic prorated refunds.
+_Avoid_: Self-service cancellation, deleted purchase, automatic refund calculation
+
 **Co-Term Add-On**:
-A separately purchased Module on a Store License whose access ends on the same date as that Store's active Plan. Its initial charge is prorated from its catalog price by the exact remaining calendar days in that Plan term, rounded to the nearest paise; it never creates a later expiry date than its base Plan.
+A separately purchased Module whose catalog term matches the Store's active base Plan term, and whose access ends at the same Asia/Kolkata local timestamp as that Plan. Its initial charge is prorated from its catalog price by the exact remaining local-calendar-time fraction in that Plan term, rounded to the nearest paise; it never creates a later expiry date than its base Plan.
 _Avoid_: Independently expiring module, full-year add-on charge, plan extension
+
+**Commercial Term Clock**:
+The Asia/Kolkata local timestamp arithmetic that starts a Trial Plan, Term Purchase, or Store Access Grant immediately and ends it at the corresponding local day, month, or year boundary. It supplies the exact remaining-term fraction used by commercial proration.
+_Avoid_: UTC-midnight expiry, whole-day truncation, browser-local timezone
 
 **Store-Scoped Commercial Access**:
 The rule that a Store License controls whether a Store may use a paid workflow, even where that workflow uses Organization-owned shared data such as Catalog Products, Units, or Vendors. Shared setup is created once for the Organization; each Store independently needs the relevant commercial access to operate with it.
 _Avoid_: Per-store data copy, Organization-wide feature unlock, user-based access
 
+**Feature Entitlement**:
+A Store's currently available Feature, derived as the union of active Store License Plan Modules, paid Co-Term Add-Ons, and Store Access Grants. Each source independently grants access using its own catalog-revision snapshot and expiry; no source denies another.
+_Avoid_: Mutable global feature flag, entitlement override, Organization-wide unlock
+
 **Trial Plan**:
-A zero-price Plan with a standard seven-day duration and access to all Modules selected by Ganatri. It is a Plan type, not a separate trial subsystem.
-_Avoid_: Trial-only architecture, free module, permanent free plan
+A zero-price, standard seven-day Plan that an Organization administrator may start once for each newly created Store, with access to the Modules selected by Ganatri. It is a Plan type, not a separate trial subsystem or a Console exception.
+_Avoid_: Console complimentary grant, trial-only architecture, free module, permanent free plan
 
 **Store Access Grant**:
-A future Store-specific commercial access record that grants time-bounded access to a Plan or Module under terms that may differ from the reusable Commercial Catalog, such as a trial extension, complimentary period, custom date range, or special price. It is not a Commercial Catalog definition.
-_Avoid_: One-off global plan, catalog exception, payment transaction
+A Store-specific commercial access record that a Platform Administrator may grant at any time, with time-bounded Plan or Module access that differs from the reusable Commercial Catalog, such as a seven-day trial, trial extension, complimentary period, custom date range, or special price. It is not a Commercial Catalog definition.
+_Avoid_: Standard Trial Plan, one-off global plan, catalog exception, payment transaction
 
 **Commercial Catalog Revision**:
 An immutable published version of a Plan, Module, or Feature definition, including its sellable configuration and memberships. Revisions are created as Drafts, become Active for future use, and are Retired when no longer available; definitions that have been Active are retained rather than deleted or edited in place.
