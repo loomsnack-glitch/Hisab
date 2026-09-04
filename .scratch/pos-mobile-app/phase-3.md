@@ -145,7 +145,7 @@ Plan review result: approved for implementation.
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
 | 3.1 Local Cart state | Completed with follow-up | `66479e3`; native/device validation remains pending |
-| 3.2 Cart Review screen | In progress | Plan approved; implementation pending |
+| 3.2 Cart Review screen | Ready to commit | Implementation and review complete; focused checks pass |
 | 3.3 Customer picker and Walk-in | Not started | Depends on 3.2 |
 | 3.4 Quick Customer creation | Not started | Depends on 3.3 |
 | 3.5 Discounts | Not started | Depends on 3.2 |
@@ -267,3 +267,41 @@ identity, and uses current server data for optional configuration display. No
 new product, API, security, or release decision is required.
 
 Plan review result: approved for implementation.
+
+## 3.2 Implementation and review result
+
+Completed on 2026-09-05.
+
+- Turned the Cart shell into a focused Cart Review surface with Product lines,
+  unit prices, local display line totals, quantity controls, removal, and
+  subtotal/discount/display-total rows.
+- Resolved preserved direct Add-on and Combo selection IDs to current server
+  configuration names, while keeping unknown IDs visible as a safe fallback.
+- Added the translated Continue to Payment primary action as a guarded
+  Phase 4 placeholder; it does not create a Sale or initiate Payment.
+- Kept the final-total server-authority note visible and preserved the New Sale
+  context through the existing navigation back action.
+- Added focused configuration-display mapping tests and retained the 3.1 Cart
+  mutation/store coverage.
+
+Standards/spec review:
+
+- Configuration display uses the existing Cart ID/quantity model and current
+  server configuration data; no names or prices are persisted in the Cart.
+- Cart controls continue to target `lineId`, so separate configurations remain
+  separate lines.
+- Continue to Payment is disabled for an empty Cart and remains a non-mutating
+  placeholder until Phase 4's approved checkout path exists.
+- English, Gujarati, and Hindi review labels are included.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 46 passed, 102 expectations.
+- Mobile TypeScript check — only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` declaration remains.
+- `git diff --check` — passed.
+- Android build, emulator, device, and live API checks — intentionally not run;
+  these remain user-owned validation steps.
+
+3.2 status: Ready to commit. Implementation commit reference is recorded after
+the commit gate.

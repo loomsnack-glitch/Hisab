@@ -92,6 +92,9 @@ export const appResources = {
             catalogDiscount: "Product discount",
             cartDisplayTotal: "Display total",
             cartDisplayTotalNote: "Final total is confirmed by the server before completion.",
+            configurationDetails: "Configuration",
+            continueToPayment: "Continue to Payment",
+            paymentComingSoon: "Payment will be available in the next phase.",
         },
     },
     gu: {
@@ -181,6 +184,9 @@ export const appResources = {
             catalogDiscount: "પ્રોડક્ટ ડિસ્કાઉન્ટ",
             cartDisplayTotal: "ડિસ્પ્લે કુલ",
             cartDisplayTotalNote: "પૂર્ણ કરતા પહેલાં અંતિમ કુલ સર્વર દ્વારા નક્કી થશે.",
+            configurationDetails: "કન્ફિગરેશન",
+            continueToPayment: "ચુકવણી પર જાઓ",
+            paymentComingSoon: "આગામી તબક્કામાં ચુકવણી ઉપલબ્ધ થશે.",
         },
     },
     hi: {
@@ -270,6 +276,9 @@ export const appResources = {
             catalogDiscount: "उत्पाद छूट",
             cartDisplayTotal: "दिखाया गया कुल",
             cartDisplayTotalNote: "पूरा करने से पहले अंतिम कुल सर्वर द्वारा तय किया जाएगा।",
+            configurationDetails: "कॉन्फ़िगरेशन",
+            continueToPayment: "भुगतान पर जाएँ",
+            paymentComingSoon: "भुगतान अगले चरण में उपलब्ध होगा।",
         },
     },
 } as const;

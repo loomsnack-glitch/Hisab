@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -6,6 +7,8 @@ import { PosButton, PosCard } from "../components/pos-ui";
 import type { PosStackParamList } from "../navigation/pos-navigator";
 import { usePosCart } from "../hooks/use-pos-cart";
 import { getCartLineDisplayTotals } from "../lib/pos-cart-boundary";
+import { usePosConfiguration } from "../hooks/use-pos-configuration";
+import { resolvePosCartConfiguration } from "../lib/pos-cart-review-boundary";
 
 type CartShellScreenProps = NativeStackScreenProps<PosStackParamList, "Cart">;
 
@@ -13,7 +16,17 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation("pos");
     const cart = usePosCart();
+    const configuration = usePosConfiguration();
+    const [showPaymentNotice, setShowPaymentNotice] = useState(false);
     const formatCurrency = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(value);
+    const configurationLookup = {
+        addOnNames: new Map(configuration.attachments.map((attachment) => [attachment.addOnId, attachment.addOn.name])),
+        comboGroups: configuration.combos.flatMap((combo) => combo.choiceGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            options: group.options.map((option) => ({ optionProductId: option.optionProductId, name: option.product.name })),
+        }))),
+    };
 
     return (
         <ScrollView
@@ -59,6 +72,31 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                                     <PosButton label="+" variant="secondary" onPress={() => cart.changeQuantity(item.lineId, 1)} />
                                     <PosButton label={t("removeCartItem")} variant="destructive" onPress={() => cart.removeItem(item.lineId)} />
                                 </View>
+                                {item.configuration ? (() => {
+                                    const details = resolvePosCartConfiguration(item.configuration, configurationLookup);
+                                    return details.addOns.length > 0 || details.comboSelections.length > 0 ? (
+                                        <View className="gap-1 border-t border-pos-border pt-2 dark:border-pos-border-dark">
+                                            <Text className="text-xs font-semibold text-pos-muted dark:text-pos-muted-dark">{t("configurationDetails")}</Text>
+                                            {details.addOns.map((addOn) => (
+                                                <Text key={addOn.addOnId} className="text-sm text-pos-muted dark:text-pos-muted-dark">
+                                                    + {addOn.name} × {addOn.quantity}
+                                                </Text>
+                                            ))}
+                                            {details.comboSelections.map((selection) => (
+                                                <View key={`${selection.groupId}:${selection.optionProductId}`} className="gap-1">
+                                                    <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
+                                                        {selection.groupName}: {selection.optionName} × {selection.quantity}
+                                                    </Text>
+                                                    {selection.addOns.map((addOn) => (
+                                                        <Text key={`${selection.groupId}:${selection.optionProductId}:${addOn.addOnId}`} className="pl-3 text-xs text-pos-muted dark:text-pos-muted-dark">
+                                                            + {addOn.name} × {addOn.quantity}
+                                                        </Text>
+                                                    ))}
+                                                </View>
+                                            ))}
+                                        </View>
+                                    ) : null;
+                                })() : null}
                             </View>
                         ))}
                         <View className="gap-1 border-t border-pos-border pt-3 dark:border-pos-border-dark">
@@ -76,8 +114,14 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                             </View>
                         </View>
                         <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("cartDisplayTotalNote")}</Text>
+                        {showPaymentNotice ? (
+                            <Text className="text-sm leading-6 text-pos-warning dark:text-pos-warning-dark">{t("paymentComingSoon")}</Text>
+                        ) : null}
                     </View>
                 )}
+                {cart.itemCount > 0 ? (
+                    <PosButton label={t("continueToPayment")} onPress={() => setShowPaymentNotice(true)} />
+                ) : null}
                 <PosButton label={t("back")} variant="secondary" onPress={() => navigation.goBack()} />
             </PosCard>
         </ScrollView>
