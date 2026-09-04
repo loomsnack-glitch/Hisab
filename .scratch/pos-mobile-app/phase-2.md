@@ -760,3 +760,34 @@ Completed on 2026-09-05 after the 2.5 closeout.
 
 Phase 2 final status: Completed with native/API follow-up. Bundle details are a
 named API follow-up and are not silently treated as supported.
+
+## Phase 2 review follow-up
+
+Reviewed on 2026-09-05 against the Phase 1 hardening checkpoint
+`6003a9489646b0d4d21dfb7243c7924c13881265` through the Phase 2 closeout.
+The standards review found no documented standards breaches. The spec review
+found and the follow-up patch fixed these correctness issues:
+
+- Ordinary Cart additions no longer merge into an already configured line.
+- Combo validation now rejects unknown or inactive options, non-positive or
+  fractional quantities, and quantities above an option's maximum.
+- A Combo with required choices cannot be confirmed with an empty selection.
+- An ordinary Product selected while Add-on data is loading is added directly
+  once the loaded configuration confirms that it has no Add-ons; failed
+  configuration data never causes an unconfigured add.
+- Unknown or ambiguous barcode fallback resets the quick filter so manual
+  search covers the full Catalog.
+- Recent Product cards are excluded from the following full Catalog list so
+  search-empty New Sale does not render the same Product twice.
+- Removing a Combo option clears its hidden nested Add-on quantities.
+
+Verification after the follow-up:
+
+- `bun run --cwd apps/mobile test` — 41 passed, 92 expectations.
+- Mobile TypeScript check — only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` declaration remains.
+- `git diff --check` — passed.
+- Android build, emulator, device, and live API checks — intentionally not run;
+  these remain user-owned validation steps.
+
+Review follow-up status: Completed. Bundle details remain a named API follow-up.

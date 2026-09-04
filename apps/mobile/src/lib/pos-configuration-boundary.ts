@@ -42,7 +42,39 @@ export const countGroupSelections = (
 export const isComboConfigurationValid = (
     groups: readonly ComboChoiceGroupResponseDTO[],
     selections: readonly PosConfigurationSelection[],
-) => groups.every((group) => {
-    const count = countGroupSelections(selections, group.id);
-    return count >= group.minSelections && count <= group.maxSelections;
-});
+) => {
+    const activeOptionsByGroup = new Map(
+        groups.map((group) => [
+            group.id,
+            new Map(
+                group.options
+                    .filter((option) => option.product.status === "active")
+                    .map((option) => [option.optionProductId, option.maxQuantity]),
+            ),
+        ]),
+    );
+    const quantitiesByOption = new Map<string, number>();
+
+    for (const selection of selections) {
+        const options = activeOptionsByGroup.get(selection.groupId);
+        const optionCap = options?.get(selection.optionProductId);
+        if (optionCap === undefined || selection.quantity <= 0 || !Number.isInteger(selection.quantity)) {
+            return false;
+        }
+
+        const key = `${selection.groupId}:${selection.optionProductId}`;
+        const quantity = (quantitiesByOption.get(key) ?? 0) + selection.quantity;
+        if (quantity > optionCap) {
+            return false;
+        }
+        quantitiesByOption.set(key, quantity);
+    }
+
+    return groups.every((group) => {
+        const count = countGroupSelections(selections, group.id);
+        const hasAvailableOptions = activeOptionsByGroup.get(group.id)?.size !== 0;
+        return hasAvailableOptions
+            ? count >= group.minSelections && count <= group.maxSelections
+            : group.minSelections === 0 && count === 0;
+    });
+};

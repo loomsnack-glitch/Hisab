@@ -26,8 +26,12 @@ export type PosCartItem = Pick<
     configuration?: PosCartConfiguration;
 };
 
-export const posCartConfigurationSignature = (configuration?: PosCartConfiguration) =>
-    JSON.stringify({
+export const posCartConfigurationSignature = (configuration?: PosCartConfiguration) => {
+    if (!configuration) {
+        return "unconfigured";
+    }
+
+    return JSON.stringify({
         addOns: [...(configuration?.addOns ?? [])]
             .filter((addOn) => addOn.quantity > 0)
             .sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
@@ -41,6 +45,7 @@ export const posCartConfigurationSignature = (configuration?: PosCartConfigurati
                     .sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
             })),
     });
+};
 
 export const addProductToCart = (
     items: readonly PosCartItem[],
@@ -49,10 +54,10 @@ export const addProductToCart = (
         "id" | "categoryId" | "name" | "price" | "discount" | "productType"
     >,
 ): PosCartItem[] => {
-    const existing = items.find((item) => item.id === product.id);
+    const existing = items.find((item) => item.id === product.id && !item.configuration);
     if (existing) {
         return items.map((item) =>
-            item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
+            item.lineId === existing.lineId ? { ...item, quantity: item.quantity + 1 } : item,
         );
     }
 

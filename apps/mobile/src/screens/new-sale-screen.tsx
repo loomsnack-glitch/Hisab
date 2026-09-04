@@ -69,6 +69,8 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const recentProducts = search.trim() === "" && productQuickFilter === "all"
         ? filterCatalogProducts(convenience.recentProducts, "", selectedCategoryId)
         : [];
+    const recentProductIds = new Set(recentProducts.map((product) => product.id));
+    const catalogProductsToRender = filteredProducts.filter((product) => !recentProductIds.has(product.id));
     const configuredProduct = catalog.products.find((product) => product.id === configuredProductId) ?? null;
     const configuredCombo = configuration.combos.find((combo) => combo.product.id === configuredProductId) ?? null;
     const configuredChoiceGroups = configuredCombo ? getActiveChoiceGroups(configuredCombo.choiceGroups) : [];
@@ -93,13 +95,16 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
         }),
     );
     const configurationPending = configuredProduct?.productType === "combo"
-        ? configuration.combosPending
+        ? configuration.combosPending || configuration.addOnsPending
         : configuration.addOnsPending;
     const configurationError = configuredProduct?.productType === "combo"
-        ? configuration.combosError
+        ? configuration.combosError || configuration.addOnsError
         : configuration.addOnsError;
     const canConfirmConfiguration = configuredProduct?.productType === "combo"
-        ? !configuration.combosPending && !configuration.combosError && Boolean(configuredCombo) && isComboConfigurationValid(configuredChoiceGroups, selectedComboSelections)
+        ? !configurationPending && !configurationError && configuredCombo !== null && (
+            configuredCombo.choiceGroups.length === 0 ||
+            isComboConfigurationValid(configuredCombo.choiceGroups, selectedComboSelections)
+        )
         : Boolean(configuredProduct) && !configuration.addOnsPending && !configuration.addOnsError;
 
     useEffect(
@@ -169,12 +174,14 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
         const resolution = resolvePosProductCode(normalizedData, catalog.products);
         if (resolution.kind === "unknown") {
             setSearch(resolution.productCode);
+            setProductQuickFilter("all");
             setScanFeedback("scannerUnknownCode");
             return;
         }
 
         if (resolution.kind === "ambiguous") {
             setSearch(resolution.productCode);
+            setProductQuickFilter("all");
             setScanFeedback("scannerAmbiguousCode");
             return;
         }
@@ -214,6 +221,21 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
         convenience.recordRecent(product.id);
     };
 
+    useEffect(() => {
+        if (
+            !configuredProduct ||
+            configuredProduct.productType !== "single" ||
+            configuration.addOnsPending ||
+            configuration.addOnsError ||
+            configuredAddOns.length > 0
+        ) {
+            return;
+        }
+
+        addProduct(configuredProduct);
+        resetConfiguration();
+    }, [configuredAddOns, configuredProduct, configuration.addOnsError, configuration.addOnsPending]);
+
     const handleProductPress = (product: (typeof catalog.products)[number]) => {
         const productAddOns = getActiveProductAddOns(configuration.attachments, product.id);
         const productCombo = configuration.combos.find((combo) => combo.product.id === product.id);
@@ -222,7 +244,7 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
             return;
         }
 
-        if (product.productType === "combo" && productCombo && getActiveChoiceGroups(productCombo.choiceGroups).length === 0) {
+        if (product.productType === "combo" && productCombo && productCombo.choiceGroups.length === 0) {
             cart.addConfiguredProduct(product, { addOns: [], comboSelections: [] });
             convenience.recordRecent(product.id);
             return;
@@ -255,10 +277,18 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
         );
         const groupRemaining = Math.max(0, group.maxSelections - currentGroupCount);
         const cap = delta > 0 ? Math.min(optionCap, current + groupRemaining) : optionCap;
+        const nextQuantity = clampSelectionQuantity(current, delta, cap);
         setComboQuantities((state) => ({
             ...state,
-            [key]: clampSelectionQuantity(current, delta, cap),
+            [key]: nextQuantity,
         }));
+        if (nextQuantity === 0) {
+            setComboAddOnQuantities((state) =>
+                Object.fromEntries(
+                    Object.entries(state).filter(([addOnKey]) => !addOnKey.startsWith(`${groupId}:${optionProductId}:`)),
+                ),
+            );
+        }
     };
 
     const updateComboAddOnQuantity = (key: string, cap: number, delta: number) => {
@@ -288,7 +318,9 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const renderProductCard = (product: (typeof catalog.products)[number]) => {
         const hasAddOns = getActiveProductAddOns(configuration.attachments, product.id).length > 0;
         const isInteractive = product.productType === "single" || product.productType === "combo";
-        const quantity = cart.items.find((item) => item.id === product.id)?.quantity ?? 0;
+        const quantity = cart.items
+            .filter((item) => item.id === product.id)
+            .reduce((total, item) => total + item.quantity, 0);
         const price = Math.max(0, Number(product.price) - Number(product.discount ?? 0));
         const isPinned = convenience.isPinned(product.id);
 
@@ -551,10 +583,10 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
                                 <View className="gap-3">{recentProducts.map(renderProductCard)}</View>
                             </View>
                         ) : null}
-                        {filteredProducts.length === 0 ? (
+                        {catalogProductsToRender.length === 0 && recentProducts.length === 0 ? (
                             <Text className="text-sm leading-5 text-pos-muted dark:text-pos-muted-dark">{t("noProductsFound")}</Text>
                         ) : (
-                            filteredProducts.map(renderProductCard)
+                            catalogProductsToRender.map(renderProductCard)
                         )}
                     </View>
                 ) : null}

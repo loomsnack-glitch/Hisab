@@ -56,6 +56,21 @@ describe("mobile POS configuration boundary", () => {
         expect(isComboConfigurationValid(required, [{ groupId: "group-1", optionProductId: "side-1", quantity: 1 }])).toBe(true);
     });
 
+    it("rejects inactive, unknown, and over-cap Combo selections", () => {
+        const configured = [group({
+            options: [
+                { ...group().options[0], maxQuantity: 2 },
+                { ...group().options[0], id: "option-2", optionProductId: "inactive-side", product: { id: "inactive-side", status: "inactive" } },
+            ],
+            maxSelections: 3,
+        })] as never;
+
+        expect(isComboConfigurationValid(configured, [{ groupId: "group-1", optionProductId: "side-1", quantity: 3 }])).toBe(false);
+        expect(isComboConfigurationValid(configured, [{ groupId: "group-1", optionProductId: "unknown", quantity: 1 }])).toBe(false);
+        expect(isComboConfigurationValid(configured, [{ groupId: "group-1", optionProductId: "inactive-side", quantity: 1 }])).toBe(false);
+        expect(isComboConfigurationValid(configured, [{ groupId: "group-1", optionProductId: "side-1", quantity: 2 }])).toBe(true);
+    });
+
     it("filters Add-on attachments by Product and active statuses", () => {
         const attachments = [
             { id: "attachment-1", productId: "product-1", addOnId: "addon-1", status: "active", addOn: { id: "addon-1", status: "active" } },

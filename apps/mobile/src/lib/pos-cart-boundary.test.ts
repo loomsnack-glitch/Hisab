@@ -46,4 +46,15 @@ describe("POS Cart handoff", () => {
         expect(different[0]?.configuration).toEqual(firstConfiguration);
         expect(different[1]?.configuration).toEqual(secondConfiguration);
     });
+
+    it("does not merge an unconfigured add into a configured line", () => {
+        const configured = addConfiguredProductToCart([], product, {
+            addOns: [{ addOnId: "extra-sugar", quantity: 1 }],
+            comboSelections: [],
+        });
+        const items = addProductToCart(configured, product);
+
+        expect(items).toHaveLength(2);
+        expect(items.map((item) => item.quantity)).toEqual([1, 1]);
+    });
 });
