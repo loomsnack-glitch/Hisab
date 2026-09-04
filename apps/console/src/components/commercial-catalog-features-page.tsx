@@ -632,6 +632,26 @@ const FeatureDetail = ({
 
             <Card>
                 <CardHeader>
+                    <CardTitle>Referencing Modules</CardTitle>
+                    <CardDescription>Modules whose current revision includes this Feature.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {feature.referencingModules.length === 0 ? (
+                        <p>No Modules currently include this Feature.</p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {feature.referencingModules.map((moduleItem) => (
+                                <li key={moduleItem.revisionId}>
+                                    {moduleItem.displayName} · <code>{moduleItem.key}</code> · revision {moduleItem.revisionNumber}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
                     <CardTitle>Revision history</CardTitle>
                     <CardDescription>Who created, published, retired, or discarded each revision.</CardDescription>
                 </CardHeader>

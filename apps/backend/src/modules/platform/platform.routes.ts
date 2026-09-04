@@ -3,8 +3,10 @@ import { deleteCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import {
     CreateCommercialFeatureSchema,
+    CreateCommercialModuleSchema,
     CreateOwnerUserSchema,
     CommercialFeatureListQuerySchema,
+    CommercialModuleListQuerySchema,
     OwnerLoginSchema,
     OwnerUserActiveStateSchema,
     PlatformDashboardQuerySchema,
@@ -19,6 +21,7 @@ import {
     PlatformStoreInspectionQuerySchema,
     STATUS_CODES,
     UpdateCommercialFeatureDraftSchema,
+    UpdateCommercialModuleDraftSchema,
     type PlatformEntryResponse,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
@@ -51,11 +54,19 @@ export const createPlatformRoutes = (
     const ownerUserIdSchema = z.uuid("Invalid Owner User id");
     const featureIdSchema = z.uuid("Invalid Feature id");
     const revisionIdSchema = z.uuid("Invalid Feature revision id");
+    const moduleIdSchema = z.uuid("Invalid Module id");
+    const moduleRevisionIdSchema = z.uuid("Invalid Module revision id");
 
     const parseFeatureIds = (c: { req: { param: (name: string) => string } }) => {
         const featureId = featureIdSchema.safeParse(c.req.param("featureId"));
         const revisionId = revisionIdSchema.safeParse(c.req.param("revisionId"));
         return { featureId, revisionId };
+    };
+
+    const parseModuleIds = (c: { req: { param: (name: string) => string } }) => {
+        const moduleId = moduleIdSchema.safeParse(c.req.param("moduleId"));
+        const revisionId = moduleRevisionIdSchema.safeParse(c.req.param("revisionId"));
+        return { moduleId, revisionId };
     };
 
     router.post("/auth/login", validateSchema("json", OwnerLoginSchema), async (c) => {
@@ -748,6 +759,154 @@ export const createPlatformRoutes = (
             );
         } catch (error) {
             return handleError("platform.routes", "createCommercialFeatureSuccessor", c, error);
+        }
+    });
+
+    router.get("/catalog/modules", validateSchema("query", CommercialModuleListQuerySchema), async (c) => {
+        try {
+            return handleServiceResponse(c, await commercialCatalogService.listModules(c.req.valid("query")));
+        } catch (error) {
+            return handleError("platform.routes", "listCommercialModules", c, error);
+        }
+    });
+
+    router.post("/catalog/modules", validateSchema("json", CreateCommercialModuleSchema), async (c) => {
+        try {
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createModule(c.get("authOwner"), c.req.valid("json")),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialModule", c, error);
+        }
+    });
+
+    router.get("/catalog/modules/:moduleId", async (c) => {
+        try {
+            const moduleId = moduleIdSchema.safeParse(c.req.param("moduleId"));
+            if (!moduleId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid Module id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(c, await commercialCatalogService.getModule(moduleId.data));
+        } catch (error) {
+            return handleError("platform.routes", "getCommercialModule", c, error);
+        }
+    });
+
+    router.patch(
+        "/catalog/modules/:moduleId/revisions/:revisionId",
+        validateSchema("json", UpdateCommercialModuleDraftSchema),
+        async (c) => {
+            try {
+                const { moduleId, revisionId } = parseModuleIds(c);
+                if (!moduleId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Module id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!revisionId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Module revision id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                return handleServiceResponse(
+                    c,
+                    await commercialCatalogService.updateModuleDraft(moduleId.data, revisionId.data, c.req.valid("json")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "updateCommercialModuleDraft", c, error);
+            }
+        },
+    );
+
+    router.post("/catalog/modules/:moduleId/revisions/:revisionId/publish", async (c) => {
+        try {
+            const { moduleId, revisionId } = parseModuleIds(c);
+            if (!moduleId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !moduleId.success ? "Invalid Module id" : "Invalid Module revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.publishModuleRevision(c.get("authOwner"), moduleId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "publishCommercialModuleRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/modules/:moduleId/revisions/:revisionId/retire", async (c) => {
+        try {
+            const { moduleId, revisionId } = parseModuleIds(c);
+            if (!moduleId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !moduleId.success ? "Invalid Module id" : "Invalid Module revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.retireModuleRevision(c.get("authOwner"), moduleId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "retireCommercialModuleRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/modules/:moduleId/revisions/:revisionId/discard", async (c) => {
+        try {
+            const { moduleId, revisionId } = parseModuleIds(c);
+            if (!moduleId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !moduleId.success ? "Invalid Module id" : "Invalid Module revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.discardModuleRevision(c.get("authOwner"), moduleId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "discardCommercialModuleRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/modules/:moduleId/revisions/:revisionId/successor", async (c) => {
+        try {
+            const { moduleId, revisionId } = parseModuleIds(c);
+            if (!moduleId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !moduleId.success ? "Invalid Module id" : "Invalid Module revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createModuleSuccessor(c.get("authOwner"), moduleId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialModuleSuccessor", c, error);
         }
     });
 

@@ -58,6 +58,7 @@ const billingFeature = (revision: CommercialFeatureRevisionDTO = billingRevision
     key: revision.key,
     currentRevision: extra[0] ?? revision,
     revisions: extra.length > 0 ? extra : [revision],
+    referencingModules: [],
 });
 
 const billingListItem = (overrides: Partial<CommercialFeatureListItemDTO> = {}): CommercialFeatureListItemDTO => ({
@@ -156,6 +157,7 @@ describe("Commercial Catalog Features console destination", () => {
     test("searches Features by name or key", async () => {
         const requested: Array<{ search?: string }> = [];
         const view = renderPage({
+            initialSearch: "bill",
             listCommercialFeatures: async (query) => {
                 requested.push(query);
                 if (query.search === "bill") return successList([billingListItem()]);
@@ -163,11 +165,10 @@ describe("Commercial Catalog Features console destination", () => {
             },
         });
 
-        await view.findByText("Units");
-        fireEvent.change(view.getByLabelText("Search Features by name or key"), { target: { value: "bill" } });
-        await waitFor(() => expect(requested.some((query) => query.search === "bill")).toBe(true));
         expect(await view.findByText("Billing")).toBeTruthy();
+        await waitFor(() => expect(requested.some((query) => query.search === "bill")).toBe(true));
         await waitFor(() => expect(view.queryByText("Units")).toBeNull());
+        expect(view.getByLabelText("Search Features by name or key")).toHaveProperty("value", "bill");
     });
 
     test("creates a Draft Feature with key, display name, and description", async () => {
@@ -261,6 +262,7 @@ describe("Commercial Catalog Features console destination", () => {
                 key: "billing",
                 currentRevision: second,
                 revisions: [second, first],
+                referencingModules: [],
             }),
         });
 

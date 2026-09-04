@@ -106,13 +106,197 @@ export const CommercialFeatureListDTOSchema = z.object({
     features: z.array(CommercialFeatureListItemDTOSchema),
 });
 
+export const CommercialCatalogListStatusFilterSchema = CommercialFeatureListStatusFilterSchema;
+
+export const CommercialCatalogPriceInrSchema = z
+    .number({ error: "Price is required" })
+    .min(0, "Price must be 0 or more")
+    .refine((value) => Number.isFinite(value) && Math.abs(Math.round(value * 100) - value * 100) < 1e-6, {
+        message: "Price must have at most two decimal places",
+    });
+
+export const CommercialCatalogTermUnitSchema = z.enum(["day", "month", "year"]);
+
+export const CommercialCatalogTermSchema = z
+    .object({
+        count: z
+            .number({ error: "Term count is required" })
+            .int("Term count must be a whole number")
+            .min(1, "Term must be at least 1"),
+        unit: CommercialCatalogTermUnitSchema,
+    })
+    .strict();
+
+export const CommercialCatalogReferenceDTOSchema = z.object({
+    id: z.uuid("Invalid catalog id"),
+    key: CommercialCatalogKeySchema,
+    revisionId: z.uuid("Invalid catalog revision id"),
+    revisionNumber: z.number().int().min(1),
+    status: CommercialCatalogRevisionStatusSchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+});
+
 export const CommercialFeatureDetailDTOSchema = z.object({
     id: z.uuid("Invalid Feature id"),
     key: CommercialCatalogKeySchema,
     currentRevision: CommercialFeatureRevisionDTOSchema,
     revisions: z.array(CommercialFeatureRevisionDTOSchema),
+    referencingModules: z.array(CommercialCatalogReferenceDTOSchema),
 });
 
 export const CommercialFeatureDetailResponseSchema = z.object({
     feature: CommercialFeatureDetailDTOSchema,
 });
+
+const uniqueFeatureRevisionIds = (ids: string[]) => new Set(ids).size === ids.length;
+
+export const CommercialModuleFeatureMembershipDTOSchema = z.object({
+    featureId: z.uuid("Invalid Feature id"),
+    featureRevisionId: z.uuid("Invalid Feature revision id"),
+    key: CommercialCatalogKeySchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+    revisionNumber: z.number().int().min(1),
+    status: CommercialCatalogRevisionStatusSchema,
+});
+
+export const CommercialModuleRevisionDTOSchema = z.object({
+    id: z.uuid("Invalid Module revision id"),
+    moduleId: z.uuid("Invalid Module id"),
+    key: CommercialCatalogKeySchema,
+    revisionNumber: z.number().int().min(1),
+    status: CommercialCatalogRevisionStatusSchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+    description: z.string(),
+    isSeparatelyPurchasable: z.boolean(),
+    priceInr: CommercialCatalogPriceInrSchema.nullable(),
+    term: CommercialCatalogTermSchema.nullable(),
+    features: z.array(CommercialModuleFeatureMembershipDTOSchema).min(1),
+    createdBy: CommercialCatalogAuditActorDTOSchema,
+    createdAt: dtoDateSchema,
+    publishedBy: CommercialCatalogAuditActorDTOSchema.nullable(),
+    publishedAt: dtoDateSchema.nullable(),
+    retiredBy: CommercialCatalogAuditActorDTOSchema.nullable(),
+    retiredAt: dtoDateSchema.nullable(),
+    discardedBy: CommercialCatalogAuditActorDTOSchema.nullable(),
+    discardedAt: dtoDateSchema.nullable(),
+});
+
+export const CommercialModuleListItemDTOSchema = z.object({
+    id: z.uuid("Invalid Module id"),
+    key: CommercialCatalogKeySchema,
+    currentRevisionId: z.uuid("Invalid Module revision id"),
+    revisionNumber: z.number().int().min(1),
+    status: CommercialCatalogRevisionStatusSchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+    description: z.string(),
+    isSeparatelyPurchasable: z.boolean(),
+    priceInr: CommercialCatalogPriceInrSchema.nullable(),
+    term: CommercialCatalogTermSchema.nullable(),
+});
+
+export const CommercialModuleListDTOSchema = z.object({
+    modules: z.array(CommercialModuleListItemDTOSchema),
+});
+
+export const CommercialModuleDetailDTOSchema = z.object({
+    id: z.uuid("Invalid Module id"),
+    key: CommercialCatalogKeySchema,
+    currentRevision: CommercialModuleRevisionDTOSchema,
+    revisions: z.array(CommercialModuleRevisionDTOSchema),
+    referencingPlans: z.array(CommercialCatalogReferenceDTOSchema),
+});
+
+export const CommercialModuleDetailResponseSchema = z.object({
+    module: CommercialModuleDetailDTOSchema,
+});
+
+export const CommercialModuleListQuerySchema = z.object({
+    search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    status: CommercialCatalogListStatusFilterSchema.default("all"),
+});
+
+const commercialModuleFeatureRevisionIdsSchema = z
+    .array(z.uuid("Invalid Feature revision id"))
+    .min(1, "A Module must include at least one Feature revision")
+    .refine(uniqueFeatureRevisionIds, {
+        message: "A Module can include a Feature revision only once",
+    });
+
+const commercialModuleWritableFields = {
+    displayName: CommercialCatalogDisplayNameSchema,
+    description: CommercialCatalogDescriptionSchema,
+    featureRevisionIds: commercialModuleFeatureRevisionIdsSchema,
+    isSeparatelyPurchasable: z.boolean(),
+    priceInr: CommercialCatalogPriceInrSchema.nullable().optional(),
+    term: CommercialCatalogTermSchema.nullable().optional(),
+};
+
+const refineModuleCommercialFields = (
+    value: {
+        isSeparatelyPurchasable: boolean;
+        priceInr?: number | null;
+        term?: { count: number; unit: "day" | "month" | "year" } | null;
+    },
+    ctx: z.RefinementCtx,
+) => {
+    if (value.isSeparatelyPurchasable) {
+        if (value.priceInr === undefined || value.priceInr === null) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["priceInr"],
+                message: "Separately purchasable Modules require a price in INR",
+            });
+        }
+        if (value.term === undefined || value.term === null) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["term"],
+                message: "Separately purchasable Modules require a calendar term",
+            });
+        }
+        return;
+    }
+    if (value.priceInr != null) {
+        ctx.addIssue({
+            code: "custom",
+            path: ["priceInr"],
+            message: "A Module that is not separately purchasable cannot have a price",
+        });
+    }
+    if (value.term != null) {
+        ctx.addIssue({
+            code: "custom",
+            path: ["term"],
+            message: "A Module that is not separately purchasable cannot have a calendar term",
+        });
+    }
+};
+
+const normalizeModuleCommercialFields = <
+    T extends {
+        isSeparatelyPurchasable: boolean;
+        priceInr?: number | null;
+        term?: { count: number; unit: "day" | "month" | "year" } | null;
+    },
+>(
+    value: T,
+) =>
+    value.isSeparatelyPurchasable
+        ? { ...value, priceInr: value.priceInr ?? null, term: value.term ?? null }
+        : { ...value, priceInr: null, term: null };
+
+export const CreateCommercialModuleSchema = z
+    .object({
+        key: CommercialCatalogKeySchema,
+        ...commercialModuleWritableFields,
+        description: CommercialCatalogDescriptionSchema.default(""),
+    })
+    .strict()
+    .superRefine(refineModuleCommercialFields)
+    .transform(normalizeModuleCommercialFields);
+
+export const UpdateCommercialModuleDraftSchema = z
+    .object(commercialModuleWritableFields)
+    .strict()
+    .superRefine(refineModuleCommercialFields)
+    .transform(normalizeModuleCommercialFields);

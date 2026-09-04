@@ -3,7 +3,7 @@ import { ShieldCheck } from "lucide-react";
 import type { OwnerUserDTO, PlatformDashboardQueryJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 
-import CommercialCatalogFeaturesPage, { type CommercialCatalogFeaturesPageProps } from "@/components/commercial-catalog-features-page";
+import CommercialCatalogPage, { type CommercialCatalogPageProps } from "@/components/commercial-catalog-page";
 import ConsoleLayout from "@/components/console-layout";
 import {
     consoleDestinationPaths,
@@ -19,17 +19,7 @@ type ConsoleEntryProps = {
     onLogout: () => Promise<void>;
     onUnauthorized?: () => Promise<void>;
     ownerUsersPageProps?: Pick<OwnerUsersPageProps, "listOwnerUsers" | "createOwnerUser" | "setOwnerUserActiveState">;
-    commercialCatalogPageProps?: Pick<
-        CommercialCatalogFeaturesPageProps,
-        | "listCommercialFeatures"
-        | "getCommercialFeature"
-        | "createCommercialFeature"
-        | "updateCommercialFeatureDraft"
-        | "publishCommercialFeatureRevision"
-        | "retireCommercialFeatureRevision"
-        | "discardCommercialFeatureRevision"
-        | "createCommercialFeatureSuccessor"
-    >;
+    commercialCatalogPageProps?: CommercialCatalogPageProps;
     dashboardPageProps?: Pick<PlatformDashboardPageProps, "getPlatformDashboard" | "initialQuery" | "initialCustomValues">;
     organizationsPageProps?: Pick<
         PlatformOrganizationsPageProps,
@@ -97,7 +87,7 @@ const ConsoleEntry = ({
 
         if (destination === "commercial-catalog") {
             return (
-                <CommercialCatalogFeaturesPage
+                <CommercialCatalogPage
                     onUnauthorized={onUnauthorized}
                     {...commercialCatalogPageProps}
                 />

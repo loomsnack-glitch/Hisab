@@ -44,6 +44,13 @@ import type {
     CreateCommercialFeatureSVC,
     UpdateCommercialFeatureDraftJSON,
     UpdateCommercialFeatureDraftSVC,
+    CommercialModuleDetailResponse,
+    CommercialModuleListQueryJSON,
+    CommercialModuleListResponse,
+    CreateCommercialModuleJSON,
+    CreateCommercialModuleSVC,
+    UpdateCommercialModuleDraftJSON,
+    UpdateCommercialModuleDraftSVC,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -417,6 +424,103 @@ export const createCommercialFeatureSuccessor = async (
 ): Promise<ServiceResponse<CommercialFeatureDetailResponse | null>> => {
     try {
         const response = await api.post(`/platform/catalog/features/${featureId}/revisions/${revisionId}/successor`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const listCommercialModules = async (
+    query: CommercialModuleListQueryJSON = {},
+): Promise<ServiceResponse<CommercialModuleListResponse | null>> => {
+    try {
+        const response = await api.get("/platform/catalog/modules", { params: query });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getCommercialModule = async (
+    moduleId: string,
+): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+    try {
+        const response = await api.get(`/platform/catalog/modules/${moduleId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createCommercialModule = async (
+    data: CreateCommercialModuleJSON,
+): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+    try {
+        const response = await api.post("/platform/catalog/modules", data as CreateCommercialModuleSVC);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateCommercialModuleDraft = async (
+    moduleId: string,
+    revisionId: string,
+    data: UpdateCommercialModuleDraftJSON,
+): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/platform/catalog/modules/${moduleId}/revisions/${revisionId}`,
+            data as UpdateCommercialModuleDraftSVC,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const publishCommercialModuleRevision = async (
+    moduleId: string,
+    revisionId: string,
+): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+    try {
+        const response = await api.post(`/platform/catalog/modules/${moduleId}/revisions/${revisionId}/publish`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const retireCommercialModuleRevision = async (
+    moduleId: string,
+    revisionId: string,
+): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+    try {
+        const response = await api.post(`/platform/catalog/modules/${moduleId}/revisions/${revisionId}/retire`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const discardCommercialModuleRevision = async (
+    moduleId: string,
+    revisionId: string,
+): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+    try {
+        const response = await api.post(`/platform/catalog/modules/${moduleId}/revisions/${revisionId}/discard`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createCommercialModuleSuccessor = async (
+    moduleId: string,
+    revisionId: string,
+): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+    try {
+        const response = await api.post(`/platform/catalog/modules/${moduleId}/revisions/${revisionId}/successor`);
         return response.data;
     } catch (error) {
         return handleApiError(error);

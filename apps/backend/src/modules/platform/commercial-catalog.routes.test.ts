@@ -96,6 +96,7 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             key: feature.key,
             currentRevision: currentRevisionOf(featureRevisions),
             revisions: featureRevisions,
+            referencingModules: [],
         };
     };
 
@@ -253,6 +254,14 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             });
             return { status: "created" as const, feature: detailOf(input.featureId)! };
         },
+        listModules: async () => [],
+        getModuleDetail: async () => null,
+        createDraftModule: async () => ({ status: "duplicate-key" as const }),
+        updateDraftModuleRevision: async () => ({ status: "not-found" as const }),
+        publishModuleRevision: async () => ({ status: "not-found" as const }),
+        retireModuleRevision: async () => ({ status: "not-found" as const }),
+        discardModuleRevision: async () => ({ status: "not-found" as const }),
+        createSuccessorModuleRevision: async () => ({ status: "not-found" as const }),
     };
 };
 
