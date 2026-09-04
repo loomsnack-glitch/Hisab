@@ -2717,6 +2717,34 @@ const deleteDraftSaleInStore = async (
   };
 };
 
+const getCommitReplayResponse = async (
+  organizationId: string,
+  storeId: string,
+  saleId: string,
+  requestId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<ServiceResponse<SaleResponse | null> | null> => {
+  const committedSaleId =
+    await billingRepository.getSaleIdByCompletionRequestId(
+      organizationId,
+      storeId,
+      requestId,
+      tx,
+    );
+  if (!committedSaleId) return null;
+
+  if (committedSaleId !== saleId) {
+    return {
+      status: "error",
+      message: "That completion request was already used for another Sale",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  return getSaleDetailsInStore(organizationId, storeId, saleId);
+};
+
 const commitSaleInStore = async (
   actor: SaleWriteActor,
   organizationId: string,
@@ -2724,24 +2752,13 @@ const commitSaleInStore = async (
   saleId: string,
   commitData: CommitSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
-  const existingSaleIdForRequest =
-    await billingRepository.getSaleIdByCompletionRequestId(
-      organizationId,
-      storeId,
-      commitData.requestId,
-    );
-  if (existingSaleIdForRequest) {
-    if (existingSaleIdForRequest !== saleId) {
-      return {
-        status: "error",
-        message: "That completion request was already used for another Sale",
-        data: null,
-        code: STATUS_CODES.CONFLICT,
-      };
-    }
-
-    return getSaleDetailsInStore(organizationId, storeId, saleId);
-  }
+  const replayResponse = await getCommitReplayResponse(
+    organizationId,
+    storeId,
+    saleId,
+    commitData.requestId,
+  );
+  if (replayResponse) return replayResponse;
 
   const existingSaleSnapshot = await buildSaleDetails(
     organizationId,
@@ -2857,6 +2874,20 @@ const commitSaleInStore = async (
         table.id !== saleSnapshot.serviceTableId ||
         table.currentSaleId !== saleId
       ) {
+        const replayResponse = await getCommitReplayResponse(
+          organizationId,
+          storeId,
+          saleId,
+          commitData.requestId,
+          tx,
+        );
+        if (replayResponse) {
+          return {
+            committed: false as const,
+            response: replayResponse,
+          };
+        }
+
         return {
           committed: false as const,
           response: {
@@ -2869,6 +2900,20 @@ const commitSaleInStore = async (
         };
       }
       if (table.state !== "engaged" && table.state !== "ready_to_bill") {
+        const replayResponse = await getCommitReplayResponse(
+          organizationId,
+          storeId,
+          saleId,
+          commitData.requestId,
+          tx,
+        );
+        if (replayResponse) {
+          return {
+            committed: false as const,
+            response: replayResponse,
+          };
+        }
+
         return {
           committed: false as const,
           response: {
@@ -2889,32 +2934,17 @@ const commitSaleInStore = async (
       tx,
     );
     if (!draftLocked) {
-      const committedSaleId =
-        await billingRepository.getSaleIdByCompletionRequestId(
-          organizationId,
-          storeId,
-          commitData.requestId,
-        );
-      if (committedSaleId === saleId) {
+      const replayResponse = await getCommitReplayResponse(
+        organizationId,
+        storeId,
+        saleId,
+        commitData.requestId,
+        tx,
+      );
+      if (replayResponse) {
         return {
           committed: false as const,
-          response: await getSaleDetailsInStore(
-            organizationId,
-            storeId,
-            saleId,
-          ),
-        };
-      }
-      if (committedSaleId) {
-        return {
-          committed: false as const,
-          response: {
-            status: "error" as const,
-            message:
-              "That completion request was already used for another Sale",
-            data: null,
-            code: STATUS_CODES.CONFLICT,
-          },
+          response: replayResponse,
         };
       }
 
@@ -3140,23 +3170,13 @@ const commitSaleInStore = async (
       return trackingError;
     }
     if (isUniqueViolation(error)) {
-      const committedSaleId =
-        await billingRepository.getSaleIdByCompletionRequestId(
-          organizationId,
-          storeId,
-          commitData.requestId,
-        );
-      if (committedSaleId === saleId) {
-        return getSaleDetailsInStore(organizationId, storeId, saleId);
-      }
-      if (committedSaleId) {
-        return {
-          status: "error",
-          message: "That completion request was already used for another Sale",
-          data: null,
-          code: STATUS_CODES.CONFLICT,
-        };
-      }
+      const replayResponse = await getCommitReplayResponse(
+        organizationId,
+        storeId,
+        saleId,
+        commitData.requestId,
+      );
+      if (replayResponse) return replayResponse;
     }
     const recovered = await recoverStandaloneKotGenerationRace(
       error,

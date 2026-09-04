@@ -65,3 +65,23 @@ describe("Sale Service Mode updates", () => {
     expect(sql).not.toContain("service_mode = ?");
   });
 });
+
+describe("Sale completion request reads", () => {
+  test("uses the reserved connection when provided", async () => {
+    let queryRanOnTransaction = false;
+    const tx = (_strings: TemplateStringsArray) => {
+      queryRanOnTransaction = true;
+      return Promise.resolve([{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }]);
+    };
+
+    const saleId = await billingRepository.getSaleIdByCompletionRequestId(
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      tx as never,
+    );
+
+    expect(queryRanOnTransaction).toBe(true);
+    expect(saleId).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  });
+});

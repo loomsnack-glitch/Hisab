@@ -1218,6 +1218,44 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(getServiceTableState()).toBe("payment_due");
     });
 
+    test("replays a table draft commit when the first request completes during table locking", async () => {
+        const created = await billingService.createDraftSaleForDevice(
+            deviceSession,
+            {
+                items: [{ productId, quantity: 1, addOns: [] }],
+            },
+        );
+        const saleId = created.data?.sale.id;
+        const requestId = "45454545-4545-4454-8454-454545454545";
+        expect(created.status).toBe("success");
+        expect(saleId).toBeTruthy();
+
+        createdSales[0]!.serviceTableId = tableId;
+        serviceTableState = "engaged";
+        lockServiceTableForSale.mockImplementationOnce(async () => {
+            createdSales[0]!.status = "completed";
+            createdSales[0]!.completionRequestId = requestId;
+            createdSales[0]!.committedAt = now;
+            serviceTableState = "payment_due";
+            return {
+                id: tableId,
+                state: "payment_due",
+                currentSaleId: saleId,
+            };
+        });
+
+        const response = await billingService.commitSaleForDevice(
+            deviceSession,
+            saleId!,
+            { requestId, payments: [] },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.sale.id).toBe(saleId);
+        expect(response.data?.sale.status).toBe("completed");
+        expect(lockDraftSale).not.toHaveBeenCalled();
+    });
+
     test("atomically saves the final cart while committing an engaged table order", async () => {
     const created = await billingService.createDraftSaleForDevice(
       deviceSession,

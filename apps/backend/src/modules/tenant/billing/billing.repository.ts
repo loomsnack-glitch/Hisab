@@ -887,8 +887,10 @@ export const getSaleIdByCompletionRequestId = async (
     organizationId: string,
     storeId: string,
     completionRequestId: string,
+    tx?: Bun.TransactionSQL,
 ): Promise<string | null> => {
-    const [result] = await pg`
+    const db = tx || pg;
+    const [result] = await db`
         SELECT id
         FROM sales
         WHERE organization_id = ${organizationId}
