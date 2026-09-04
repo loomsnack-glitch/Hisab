@@ -1,4 +1,14 @@
-import type { ProductResponseDTO } from "@repo/types";
+import type { CustomerDTO, ProductResponseDTO } from "@repo/types";
+
+export type PosCartCustomer = Pick<CustomerDTO, "id" | "name" | "phone">;
+
+export const normalizePosCartCustomer = (
+    customer: Pick<CustomerDTO, "id" | "name" | "phone">,
+): PosCartCustomer => ({
+    id: customer.id,
+    name: customer.name,
+    phone: customer.phone ?? null,
+});
 
 export type PosCartAddOnSelection = {
     addOnId: string;

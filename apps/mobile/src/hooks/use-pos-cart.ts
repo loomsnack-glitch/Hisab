@@ -1,5 +1,5 @@
 import { usePosSessionSnapshot } from "../store/pos-session.store";
-import { getCartDisplayTotals, getCartItemCount, type PosCartConfiguration } from "../lib/pos-cart-boundary";
+import { getCartDisplayTotals, getCartItemCount, normalizePosCartCustomer, type PosCartConfiguration } from "../lib/pos-cart-boundary";
 import type { ProductResponseDTO } from "@repo/types";
 import { usePosCartStore } from "../store/pos-cart.store";
 
@@ -9,9 +9,11 @@ export const usePosCart = () => {
         ? `${session.organization.id}:${session.store.id}:${session.device.id}`
         : null;
     const items = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.items : []));
+    const customer = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.customer : null));
 
     return {
         items,
+        customer,
         itemCount: getCartItemCount(items),
         displayTotals: getCartDisplayTotals(items),
         addProduct: (product: ProductResponseDTO) => {
@@ -32,6 +34,19 @@ export const usePosCart = () => {
         removeItem: (lineId: string) => {
             if (scopeKey) {
                 usePosCartStore.getState().removeItem(scopeKey, lineId);
+            }
+        },
+        selectCustomer: (selectedCustomer: Parameters<typeof normalizePosCartCustomer>[0] | null) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setCustomer(
+                    scopeKey,
+                    selectedCustomer ? normalizePosCartCustomer(selectedCustomer) : null,
+                );
+            }
+        },
+        clearCustomer: () => {
+            if (scopeKey) {
+                usePosCartStore.getState().clearCustomer(scopeKey);
             }
         },
         clear: () => usePosCartStore.getState().clear(),

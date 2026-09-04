@@ -6,6 +6,7 @@ import {
     changeCartItemQuantity,
     getCartDisplayTotals,
     getCartItemCount,
+    normalizePosCartCustomer,
     removeCartItem,
     type PosCartItem,
 } from "./pos-cart-boundary";
@@ -86,5 +87,13 @@ describe("POS Cart handoff", () => {
         const twice = addProductToCart(items, { ...product, price: 40, discount: 5 });
 
         expect(getCartDisplayTotals(twice)).toEqual({ subtotal: 80, discount: 10, total: 70 });
+    });
+
+    it("normalizes selected Customer context without retaining unrelated fields", () => {
+        expect(normalizePosCartCustomer({ id: "customer-1", name: "Asha", phone: undefined })).toEqual({
+            id: "customer-1",
+            name: "Asha",
+            phone: null,
+        });
     });
 });

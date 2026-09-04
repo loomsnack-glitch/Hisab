@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
-import { PosButton, PosCard } from "../components/pos-ui";
+import { PosButton, PosCard, PosTextField } from "../components/pos-ui";
 import type { PosStackParamList } from "../navigation/pos-navigator";
 import { usePosCart } from "../hooks/use-pos-cart";
 import { getCartLineDisplayTotals } from "../lib/pos-cart-boundary";
 import { usePosConfiguration } from "../hooks/use-pos-configuration";
 import { resolvePosCartConfiguration } from "../lib/pos-cart-review-boundary";
+import { usePosCustomers } from "../hooks/use-pos-customers";
 
 type CartShellScreenProps = NativeStackScreenProps<PosStackParamList, "Cart">;
 
@@ -18,6 +19,10 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const cart = usePosCart();
     const configuration = usePosConfiguration();
     const [showPaymentNotice, setShowPaymentNotice] = useState(false);
+    const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+    const [customerSearch, setCustomerSearch] = useState("");
+    const deferredCustomerSearch = useDeferredValue(customerSearch);
+    const customersQuery = usePosCustomers(deferredCustomerSearch, customerPickerOpen);
     const formatCurrency = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(value);
     const configurationLookup = {
         addOnNames: new Map(configuration.attachments.map((attachment) => [attachment.addOnId, attachment.addOn.name])),
@@ -26,6 +31,11 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
             name: group.name,
             options: group.options.map((option) => ({ optionProductId: option.optionProductId, name: option.product.name })),
         }))),
+    };
+    const selectCustomer = (customer: Parameters<typeof cart.selectCustomer>[0]) => {
+        cart.selectCustomer(customer);
+        setCustomerSearch("");
+        setCustomerPickerOpen(false);
     };
 
     return (
@@ -43,6 +53,60 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                     <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("emptyCart")}</Text>
                 ) : (
                     <View className="gap-2">
+                        <View className="gap-2 rounded-2xl border border-pos-border bg-pos-surface-muted px-4 py-3 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark">
+                            <View className="flex-row items-center justify-between gap-3">
+                                <View className="min-w-0 flex-1">
+                                    <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">
+                                        {cart.customer?.name ?? t("walkInCustomer")}
+                                    </Text>
+                                    {cart.customer?.phone ? (
+                                        <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{cart.customer.phone}</Text>
+                                    ) : null}
+                                </View>
+                                <View className="flex-row flex-wrap justify-end gap-2">
+                                    <PosButton
+                                        label={cart.customer ? t("changeCustomer") : t("selectCustomer")}
+                                        variant="secondary"
+                                        onPress={() => setCustomerPickerOpen((open) => !open)}
+                                    />
+                                    {cart.customer ? (
+                                        <PosButton label={t("clearCustomer")} variant="secondary" onPress={() => selectCustomer(null)} />
+                                    ) : null}
+                                </View>
+                            </View>
+                            {customerPickerOpen ? (
+                                <View className="gap-3 border-t border-pos-border pt-3 dark:border-pos-border-dark">
+                                    <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("customerPickerTitle")}</Text>
+                                    <PosTextField
+                                        label={t("customerSearch")}
+                                        value={customerSearch}
+                                        onChangeText={setCustomerSearch}
+                                        placeholder={t("searchCustomersPlaceholder")}
+                                        autoCapitalize="none"
+                                    />
+                                    {customersQuery.isPending ? (
+                                        <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("customersLoading")}</Text>
+                                    ) : null}
+                                    {customersQuery.isError ? (
+                                        <View className="gap-2">
+                                            <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("customersLoadFailed")}</Text>
+                                            <PosButton label={t("retry", { ns: "common" })} variant="secondary" onPress={customersQuery.retry} />
+                                        </View>
+                                    ) : null}
+                                    {!customersQuery.isPending && !customersQuery.isError && customersQuery.customers.length === 0 ? (
+                                        <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("noCustomersFound")}</Text>
+                                    ) : null}
+                                    {customersQuery.customers.map((customer) => (
+                                        <PosButton
+                                            key={customer.id}
+                                            label={customer.phone ? `${customer.name} · ${customer.phone}` : customer.name}
+                                            variant="secondary"
+                                            onPress={() => selectCustomer(customer)}
+                                        />
+                                    ))}
+                                </View>
+                            ) : null}
+                        </View>
                         {cart.items.map((item) => (
                             <View
                                 key={item.lineId}

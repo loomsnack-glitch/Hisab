@@ -146,7 +146,7 @@ Plan review result: approved for implementation.
 | --- | --- | --- |
 | 3.1 Local Cart state | Completed with follow-up | `66479e3`; native/device validation remains pending |
 | 3.2 Cart Review screen | Completed with follow-up | `0a16c2b`; native/device validation remains pending |
-| 3.3 Customer picker and Walk-in | In progress | Plan approved; implementation pending |
+| 3.3 Customer picker and Walk-in | Ready to commit | Implementation and review complete; focused checks pass |
 | 3.4 Quick Customer creation | Not started | Depends on 3.3 |
 | 3.5 Discounts | Not started | Depends on 3.2 |
 | 3.6 Server Draft Sale persistence | Not started | Depends on 3.1–3.5 |
@@ -304,6 +304,42 @@ Verification:
   these remain user-owned validation steps.
 
 3.2 status: Completed with follow-up. Implementation commit: `0a16c2b`.
+
+## 3.3 Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added a Store/Device-scoped React Query boundary for server-backed active
+  Customer search by name or phone.
+- Added minimal Cart Customer context containing only ID, name, and phone;
+  switching Customer or returning to Walk-in preserves all Cart lines.
+- Added inline Cart Review Customer selection with search, loading, empty,
+  error/retry, selection, change, and clear states.
+- Kept Customer selection optional and non-blocking for Continue to Payment.
+- Added focused tests for Customer normalization, scope isolation, and Cart
+  preservation.
+
+Standards/spec review:
+
+- The picker uses the existing `getPosCustomers` POS service and does not
+  construct an ad-hoc endpoint or load an unbounded local directory.
+- Walk-in is represented by `null`; no fake Customer record or Customer data is
+  persisted in MMKV.
+- Customer selection is scoped and cannot clear or mutate Cart lines.
+- Quick Customer creation remains correctly deferred to 3.4.
+- English, Gujarati, and Hindi labels cover the Customer states and actions.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 48 passed, 107 expectations.
+- Mobile TypeScript check — only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` declaration remains.
+- `git diff --check` — passed.
+- Android build, emulator, device, and live API checks — intentionally not run;
+  these remain user-owned validation steps.
+
+3.3 status: Ready to commit. Implementation commit reference is recorded after
+the commit gate.
 
 ## 3.3 — Customer picker and Walk-in
 

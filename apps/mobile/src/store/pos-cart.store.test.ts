@@ -27,6 +27,25 @@ describe("POS Cart store", () => {
         expect(usePosCartStore.getState().items).toEqual([]);
     });
 
+    it("keeps Customer selection scoped and preserves Cart lines", () => {
+        usePosCartStore.getState().clear();
+        usePosCartStore.getState().addProduct("org-1:store-1:device-1", product);
+        usePosCartStore.getState().setCustomer("org-1:store-1:device-1", {
+            id: "customer-1",
+            name: "Asha",
+            phone: null,
+        });
+
+        expect(usePosCartStore.getState().customer?.name).toBe("Asha");
+        expect(usePosCartStore.getState().items).toHaveLength(1);
+
+        usePosCartStore.getState().clearCustomer("other-scope");
+        expect(usePosCartStore.getState().customer?.id).toBe("customer-1");
+
+        usePosCartStore.getState().clearCustomer("org-1:store-1:device-1");
+        expect(usePosCartStore.getState().customer).toBeNull();
+    });
+
     it("clears handed-off items at the session boundary", () => {
         usePosCartStore.getState().clear();
         usePosCartStore.getState().addProduct("org-1:store-1:device-1", product);
